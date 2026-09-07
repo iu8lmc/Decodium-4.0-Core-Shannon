@@ -107,6 +107,19 @@ public:
       , level_ {0}
       , power_ {0}
       , swr_ {0}
+      , alc_ {0}
+      , alc_valid_ {false}
+      , level_valid_ {false}
+      , vd_ {0}
+      , vd_valid_ {false}
+      , id_ {0}
+      , id_valid_ {false}
+      , pa_temp_ {0}
+      , pa_temp_valid_ {false}
+      , comp_ {0}
+      , comp_valid_ {false}
+      , rfpower_ {0}
+      , rfpower_valid_ {false}
       , jtmode_ {"FT8"}  //w3sz tci
       , fastmode_ {false}  //w3sz tci
     {
@@ -138,6 +151,25 @@ public:
     int level () const {return level_;}
     unsigned int power () const {return power_;}
     unsigned int swr () const {return swr_;}
+    unsigned int alc () const {return alc_;}
+    bool alc_valid () const {return alc_valid_;}
+    // 1.0.581 — strumenti del finale. Ognuno con il suo "valido": una radio che
+    // non ha il sensore non deve far comparire uno zero, che su una tensione di
+    // alimentazione vorrebbe dire alimentatore spento.
+    unsigned int vd () const {return vd_;}                 // centesimi di volt
+    bool vd_valid () const {return vd_valid_;}
+    unsigned int id () const {return id_;}                 // centesimi di ampere
+    bool id_valid () const {return id_valid_;}
+    int pa_temp () const {return pa_temp_;}                // decimi di grado
+    bool pa_temp_valid () const {return pa_temp_valid_;}
+    unsigned int comp () const {return comp_;}             // decimi di dB
+    bool comp_valid () const {return comp_valid_;}
+    unsigned int rfpower () const {return rfpower_;}       // millesimi di frazione
+    bool rfpower_valid () const {return rfpower_valid_;}
+    // Un S-meter mai letto vale 0, che sulla scala di Hamlib e' S9: senza
+    // questa bandiera un rig che l'S-meter non ce l'ha sembrerebbe ricevere
+    // un segnale pieno.
+    bool level_valid () const {return level_valid_;}
     QString jtmode () const {return jtmode_;}  //w3sz tci
     bool fastmode () const {return fastmode_;}  //w3sz tci
 
@@ -164,9 +196,22 @@ public:
     void nsym (int nsym) {nsym_ = nsym;}
     void volume (qreal volume) {volume_ = volume;}
     void txvolume (qreal txvolume) {txvolume_ = txvolume;}
-    void level (int strength) {level_ = strength;}
+    void level (int strength) {level_ = strength; level_valid_ = true;}
+    void level_invalid () {level_ = 0; level_valid_ = false;}
     void power (unsigned int mwpower) {power_ = mwpower;}
     void swr (unsigned int mswr) {swr_ = mswr;}
+    void alc (unsigned int malc) {alc_ = malc;}
+    void alc_valid (bool valid) {alc_valid_ = valid;}
+    void vd (unsigned int hundredths) {vd_ = hundredths; vd_valid_ = true;}
+    void vd_invalid () {vd_ = 0; vd_valid_ = false;}
+    void id (unsigned int hundredths) {id_ = hundredths; id_valid_ = true;}
+    void id_invalid () {id_ = 0; id_valid_ = false;}
+    void pa_temp (int tenths) {pa_temp_ = tenths; pa_temp_valid_ = true;}
+    void pa_temp_invalid () {pa_temp_ = 0; pa_temp_valid_ = false;}
+    void comp (unsigned int tenths) {comp_ = tenths; comp_valid_ = true;}
+    void comp_invalid () {comp_ = 0; comp_valid_ = false;}
+    void rfpower (unsigned int thousandths) {rfpower_ = thousandths; rfpower_valid_ = true;}
+    void rfpower_invalid () {rfpower_ = 0; rfpower_valid_ = false;}
     void jtmode(QString jtmode) {jtmode_ = jtmode;}  //w3sz tci
     void fastmode(bool fastmode) {fastmode_ = fastmode;}  //w3sz tci
 
@@ -197,6 +242,19 @@ public:
     int level_;
     unsigned int power_;
     unsigned int swr_;
+    unsigned int alc_;  // 1.0.323 — ALC meter 0..100 (TX)
+    bool alc_valid_ {false};
+    bool level_valid_ {false};
+    unsigned int vd_ {0};       // 1.0.581 — tensione di finale, centesimi di V
+    bool vd_valid_ {false};
+    unsigned int id_ {0};       // corrente di finale, centesimi di A
+    bool id_valid_ {false};
+    int pa_temp_ {0};           // temperatura del finale, decimi di grado
+    bool pa_temp_valid_ {false};
+    unsigned int comp_ {0};     // compressione, decimi di dB
+    bool comp_valid_ {false};
+    unsigned int rfpower_ {0};  // manopola della potenza, millesimi di frazione
+    bool rfpower_valid_ {false};
     QString jtmode_;  //w3sz tci
     bool fastmode_;  //w3sz tci
 
@@ -227,6 +285,10 @@ public:
   // Connect and disconnect.
   Q_SLOT virtual void start (unsigned sequence_number) noexcept = 0;
   Q_SLOT virtual void stop () noexcept = 0;
+
+  // Trasmissione CW: invia 'text' al keyer della radio a 'wpm' parole/min.
+  // Default no-op: i transceiver che non supportano il keying CAT lo ignorano.
+  Q_SLOT virtual void send_morse (QString const& /*text*/, int /*wpm*/) noexcept {}
 
   //
   // asynchronous status updates

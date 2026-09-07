@@ -1,0 +1,4733 @@
+#pragma once
+#include <QObject>
+#include <QStringList>
+#include <QVariantList>
+#include <QVariantMap>
+#include "DecodeUiFilterPolicy.h"
+#include <QString>
+#include <QByteArray>
+#include <QVector>
+#include <QTimer>
+#include <QThread>
+#include <QElapsedTimer>
+#include <QHash>
+#include <QMap>
+#include <QMetaObject>
+#include <QPointer>
+#include <QQueue>
+#include <QSet>
+#include <QDateTime>
+#include <QMutex>
+#include <QFutureWatcher>
+#include <QFont>
+#include <QAudioDevice>
+#include <QAudioFormat>
+#include <atomic>
+#include <cstdint>
+#include <functional>
+#include <memory>
+
+#include "DecodiumThemeManager.h"
+#include "DecodiumSubManagers.h"
+#include "DecodiumCatManager.h"
+#include "DecodiumCat4OmManager.h"
+#include "DecodiumOmniRigManager.h"
+#include "DecodiumTransceiverManager.h"
+#include "DecodiumCatShare.h"
+#include "DecodiumAmplifier.h"
+#include "StationTelemetryCodec.hpp"
+#include "DecodeListModel.h"
+#include "Network/DecoSyncTime.hpp"
+#include "FtRuntimeAdaptivePolicy.hpp"
+#include "PttTransitionPolicy.h"
+
+class ActiveStationsModel;
+class DecodiumAlertManager;
+class DecodiumDecoPortGateway;
+class DecoPortDiscovery;
+class DecoPortLink;
+class DecoPortRigDriver;
+#include "DecodiumDxCluster.h"
+#include "DecodiumSpotShare.h"
+class DecodiumPskReporterLite;
+class DecodiumCloudlogLite;
+class DecodiumQrzLogbookLite;
+class DecodiumWsprUploader;
+class DxccLookup;
+class DecodiumLegacyBackend;
+#include "DecodiumDiagnostics.h"
+#include "lib/persistence/HashedCallsignCache.h"  // AP hashed-callsign cache for FT2 rescue/audit
+#include "Sequencer/QsoSequencerState.hpp"  // 1.0.498 step B strangler: stato sequencer raggruppato
+class DecodiumPropagationManager;
+class MapIntelligenceService;
+class CallsignIntelligenceService;
+class SatelliteTrackingService;
+class MessageClient;
+class UsStateDataManager;
+
+Q_DECLARE_OPAQUE_POINTER(DecodiumDxCluster*)
+
+// Forward declarations
+struct ParsedAdifRecord;
+struct DecodeUserFilterConfig;
+class SoundInput;
+class SoundOutput;
+class DecodiumAudioSink;
+class RtlSdrInput;
+class RtlSdrAudioOutput;
+class DecodiumSstvAudioRelay;
+class Modulator;
+class QAudioSink;
+class QBuffer;
+class QIODevice;
+class QMediaDevices;
+class QThreadPool;
+class NtpClient;
+class DecoSyncTime;
+class DecodiumWebServer;
+class PanadapterItem;
+Q_DECLARE_OPAQUE_POINTER(DecoSyncTime*)
+class QDialog;
+class QImage;
+class QUrl;
+namespace decodium {
+  namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
+  namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; }
+  namespace ft4     { class FT4DecodeWorker;       struct DecodeRequest; }
+  namespace q65     { class Q65DecodeWorker;       struct DecodeRequest; }
+  namespace msk144  { class MSK144DecodeWorker;    struct DecodeRequest; }
+  namespace wspr    { class WSPRDecodeWorker;      struct DecodeRequest; }
+  namespace legacyjt{ class LegacyJtDecodeWorker;  struct DecodeRequest; }
+  namespace fst4    { class FST4DecodeWorker;      struct DecodeRequest; }
+  namespace sstv {
+    class SstvDiagnosticsController;
+    class SstvGalleryModel;
+    class SstvRxAudioJobController;
+    class SstvRxRuntime;
+    class SstvShareController;
+    class SstvStorageWorker;
+    class SstvStudioController;
+    class SstvThumbnailProvider;
+    class SstvTxAudioDevice;
+    class SstvTxCoordinator;
+    class SstvPcm16Source;
+    class SstvWavReplayController;
+    struct SstvQsoLogRequest;
+    struct SstvTxCoordinatorResult;
+    struct SstvImageRecord;
+    struct SstvImageSnapshot;
+    enum class SstvAudioSourceKind : std::uint8_t;
+    namespace hamdrm {
+      class HamDrmController;
+      struct HamDrmStatus;
+      namespace waveform {
+        class HamDrmNativeRxBackend;
+        class HamDrmNativeTxBackend;
+      }
+    }
+  }
+}
+
+class RemoteCommandServer;
+class DecodeHistoryWorker;  // 1.0.238 Phase 5.2 perf roadmap: write-behind SQLite
+class QSqlDatabase;          // 1.0.268 Phase 5.3 query API (forward decl)
+
+// Detector/fastldpc/decodium_dispatch.cpp: accende o spegne il decoder LDPC
+// veloce per FT2. Il dispatcher seleziona NEON su ARM64, AVX2/FMA su x86 o il
+// fallback generico. Il decoder gira nel thread di FT2DecodeWorker e la
+// funzione scrive una variabile atomica.
+extern "C" void fastldpc_set_enabled_c(int on);
+extern "C" int  fastldpc_is_enabled_c();
+
+class DecodiumBridge : public QObject
+{
+    Q_OBJECT
+
+    // === STATION ===
+    Q_PROPERTY(QString callsign READ callsign WRITE setCallsign NOTIFY callsignChanged)
+    Q_PROPERTY(QString grid READ grid WRITE setGrid NOTIFY gridChanged)
+    Q_PROPERTY(double frequency READ frequency WRITE setFrequency NOTIFY frequencyChanged)
+    Q_PROPERTY(double displayFrequency READ displayFrequency NOTIFY displayFrequencyChanged)
+    Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged)
+    Q_PROPERTY(bool ft2LinkAccessUnlocked READ ft2LinkAccessUnlocked NOTIFY ft2LinkAccessChanged)
+
+    // === RX/TX STATE ===
+    Q_PROPERTY(bool monitoring READ monitoring WRITE setMonitoring NOTIFY monitoringChanged)
+    Q_PROPERTY(bool transmitting READ transmitting NOTIFY transmittingChanged)
+    Q_PROPERTY(bool txRequested READ txRequested NOTIFY txRequestedChanged)
+    Q_PROPERTY(bool pttPending READ pttPending NOTIFY pttPendingChanged)
+    Q_PROPERTY(bool pttConfirmed READ pttConfirmed NOTIFY pttConfirmedChanged)
+    Q_PROPERTY(bool tuning READ tuning NOTIFY tuningChanged)
+    Q_PROPERTY(bool decoding READ decoding NOTIFY decodingChanged)
+
+    // === NATIVE SSTV ===
+    // SSTV is an in-process Decodium workspace backed by the existing RX
+    // audio source. It remains separate from bridge.mode so the weak-signal
+    // period scheduler and CAT mode mapping are not disturbed. Opening the
+    // workspace replaces the normal decoder generation with a visual-only
+    // audio capture: the panadapter keeps running, while FT/JT/WSPR decode and
+    // automatic slot work remain suspended. Closing restores the normal
+    // monitor state that was active before entry.
+    Q_PROPERTY(bool sstvAvailable READ sstvAvailable CONSTANT)
+    Q_PROPERTY(bool sstvRxRequested READ sstvRxRequested NOTIFY sstvRxStateChanged)
+    Q_PROPERTY(bool sstvRxActive READ sstvRxActive NOTIFY sstvRxStateChanged)
+    Q_PROPERTY(QString sstvRxSource READ sstvRxSource NOTIFY sstvRxStateChanged)
+    Q_PROPERTY(QString sstvRxSourceDevice READ sstvRxSourceDevice
+               NOTIFY sstvRxSourceDeviceChanged)
+    Q_PROPERTY(QString sstvRxState READ sstvRxState NOTIFY sstvRxStateChanged)
+    Q_PROPERTY(QString sstvDetectedMode READ sstvDetectedMode NOTIFY sstvRxSnapshotChanged)
+    Q_PROPERTY(QString sstvRxImageSource READ sstvRxImageSource NOTIFY sstvRxSnapshotChanged)
+    Q_PROPERTY(QVariantMap sstvRxDiagnostics READ sstvRxDiagnostics NOTIFY sstvRxSnapshotChanged)
+    Q_PROPERTY(QVariantMap sstvRxControls READ sstvRxControls NOTIFY sstvRxSnapshotChanged)
+    Q_PROPERTY(QVariantList sstvRxModeChoices READ sstvRxModeChoices CONSTANT)
+    Q_PROPERTY(bool sstvRxAudioJobBusy READ sstvRxAudioJobBusy NOTIFY sstvRxAudioJobChanged)
+    Q_PROPERTY(QString sstvRxAudioJobState READ sstvRxAudioJobState NOTIFY sstvRxAudioJobChanged)
+    Q_PROPERTY(QString sstvRxAudioJobError READ sstvRxAudioJobError NOTIFY sstvRxAudioJobChanged)
+    Q_PROPERTY(QString sstvRxRawAudioPath READ sstvRxRawAudioPath NOTIFY sstvRxAudioJobChanged)
+    Q_PROPERTY(bool sstvStorageReady READ sstvStorageReady NOTIFY sstvStorageStateChanged)
+    Q_PROPERTY(bool sstvRxAutoSaveEnabled READ sstvRxAutoSaveEnabled WRITE setSstvRxAutoSaveEnabled NOTIFY sstvRxAutoSaveChanged)
+    Q_PROPERTY(QString sstvRxSaveState READ sstvRxSaveState NOTIFY sstvRxSaveStateChanged)
+    Q_PROPERTY(QString sstvRxSaveError READ sstvRxSaveError NOTIFY sstvRxSaveStateChanged)
+    Q_PROPERTY(bool sstvWavReplayActive READ sstvWavReplayActive NOTIFY sstvWavReplayChanged)
+    Q_PROPERTY(QString sstvWavReplayState READ sstvWavReplayState NOTIFY sstvWavReplayChanged)
+    Q_PROPERTY(double sstvWavReplayProgress READ sstvWavReplayProgress NOTIFY sstvWavReplayChanged)
+    Q_PROPERTY(QString sstvWavReplayFileName READ sstvWavReplayFileName NOTIFY sstvWavReplayChanged)
+    Q_PROPERTY(QString sstvWavReplayError READ sstvWavReplayError NOTIFY sstvWavReplayChanged)
+    Q_PROPERTY(QObject* sstvStudio READ sstvStudio CONSTANT)
+    Q_PROPERTY(QObject* sstvGallery READ sstvGallery CONSTANT)
+    Q_PROPERTY(QObject* sstvShare READ sstvShare CONSTANT)
+    Q_PROPERTY(QObject* sstvDigital READ sstvDigital CONSTANT)
+    Q_PROPERTY(QObject* sstvDiagnostics READ sstvDiagnostics CONSTANT)
+    Q_PROPERTY(bool sstvTxCanStart READ sstvTxCanStart NOTIFY sstvTxStateChanged)
+    Q_PROPERTY(QVariantMap sstvTxDiagnostics READ sstvTxDiagnostics NOTIFY sstvTxStateChanged)
+    Q_PROPERTY(bool sstvTxActive READ sstvTxActive NOTIFY sstvTxStateChanged)
+    Q_PROPERTY(QString sstvTxState READ sstvTxState NOTIFY sstvTxStateChanged)
+    Q_PROPERTY(double sstvTxProgress READ sstvTxProgress NOTIFY sstvTxStateChanged)
+    Q_PROPERTY(QString sstvTxError READ sstvTxError NOTIFY sstvTxStateChanged)
+    Q_PROPERTY(int sstvPttLeadMs READ sstvPttLeadMs WRITE setSstvPttLeadMs NOTIFY sstvTxTimingChanged)
+    Q_PROPERTY(int sstvPttTailMs READ sstvPttTailMs WRITE setSstvPttTailMs NOTIFY sstvTxTimingChanged)
+    Q_PROPERTY(int sstvPttReleaseRetryMs READ sstvPttReleaseRetryMs WRITE setSstvPttReleaseRetryMs NOTIFY sstvTxTimingChanged)
+    Q_PROPERTY(int sstvVoxPreKeyMs READ sstvVoxPreKeyMs WRITE setSstvVoxPreKeyMs NOTIFY sstvTxTimingChanged)
+    Q_PROPERTY(int sstvVoxHangMs READ sstvVoxHangMs WRITE setSstvVoxHangMs NOTIFY sstvTxTimingChanged)
+    Q_PROPERTY(double sstvVoxToneFrequencyHz READ sstvVoxToneFrequencyHz WRITE setSstvVoxToneFrequencyHz NOTIFY sstvTxTimingChanged)
+    Q_PROPERTY(double sstvVoxToneLevel READ sstvVoxToneLevel WRITE setSstvVoxToneLevel NOTIFY sstvTxTimingChanged)
+
+    // === AUDIO FREQUENCIES ===
+    Q_PROPERTY(int rxFrequency READ rxFrequency WRITE setRxFrequency NOTIFY rxFrequencyChanged)
+    Q_PROPERTY(int txFrequency READ txFrequency WRITE setTxFrequency NOTIFY txFrequencyChanged)
+
+    // === AUDIO LEVELS ===
+    Q_PROPERTY(double audioLevel READ audioLevel NOTIFY audioLevelChanged)
+    Q_PROPERTY(double sMeter READ sMeter NOTIFY sMeterChanged)
+    Q_PROPERTY(bool legacyBackendActive READ legacyBackendActive CONSTANT)
+    Q_PROPERTY(double rxInputLevel READ rxInputLevel WRITE setRxInputLevel NOTIFY rxInputLevelChanged)
+    Q_PROPERTY(bool autoRxInputLevel READ autoRxInputLevel WRITE setAutoRxInputLevel NOTIFY autoRxInputLevelChanged)
+    Q_PROPERTY(double txOutputLevel READ txOutputLevel WRITE setTxOutputLevel NOTIFY txOutputLevelChanged)
+    Q_PROPERTY(QStringList audioInputDevices READ audioInputDevices NOTIFY audioInputDevicesChanged)
+    Q_PROPERTY(QStringList audioOutputDevices READ audioOutputDevices NOTIFY audioOutputDevicesChanged)
+    Q_PROPERTY(QString audioInputDevice READ audioInputDevice WRITE setAudioInputDevice NOTIFY audioInputDeviceChanged)
+    Q_PROPERTY(QString audioOutputDevice READ audioOutputDevice WRITE setAudioOutputDevice NOTIFY audioOutputDeviceChanged)
+    Q_PROPERTY(int audioInputChannel READ audioInputChannel WRITE setAudioInputChannel NOTIFY audioInputChannelChanged)
+    Q_PROPERTY(int audioOutputChannel READ audioOutputChannel WRITE setAudioOutputChannel NOTIFY audioOutputChannelChanged)
+    Q_PROPERTY(bool rtlSdrSupported READ rtlSdrSupported CONSTANT)
+    Q_PROPERTY(QStringList rtlSdrDevices READ rtlSdrDevices NOTIFY rtlSdrDevicesChanged)
+    Q_PROPERTY(bool rtlSdrRunning READ rtlSdrRunning NOTIFY rtlSdrRunningChanged)
+    Q_PROPERTY(QString rtlSdrStatus READ rtlSdrStatus NOTIFY rtlSdrStatusChanged)
+    Q_PROPERTY(bool rtlSdrRfView READ rtlSdrRfView NOTIFY rtlSdrRfViewChanged)
+    Q_PROPERTY(int rtlSdrRfSampleRate READ rtlSdrRfSampleRate NOTIFY rtlSdrRfSampleRateChanged)
+    Q_PROPERTY(double rtlSdrRfCenterFrequency READ rtlSdrRfCenterFrequency NOTIFY rtlSdrRfCenterFrequencyChanged)
+    Q_PROPERTY(double rtlSdrRfSelectedFrequency READ rtlSdrRfSelectedFrequency NOTIFY rtlSdrRfSelectedFrequencyChanged)
+
+    // === DECODE ===
+    Q_PROPERTY(QVariantList decodeList READ decodeList NOTIFY decodeListChanged)
+    // 1.0.233 — DevOverlay metrics (Phase 7 roadmap performance Sprint 2).
+    // Tutte le sample/contatori sono no-op quando m_devOverlayActive == false.
+    Q_PROPERTY(double lastFrameTimeMs READ lastFrameTimeMs NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double meanFrameTimeMs READ meanFrameTimeMs NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double p99FrameTimeMs READ p99FrameTimeMs NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double decodeRateReceivedHz READ decodeRateReceivedHz NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double decodeRateCommittedHz READ decodeRateCommittedHz NOTIFY perfMetricsChanged)
+    Q_PROPERTY(QString activeRhiBackend READ activeRhiBackend CONSTANT)
+    Q_PROPERTY(bool devOverlayActive READ devOverlayActive WRITE setDevOverlayActive NOTIFY devOverlayActiveChanged)
+    Q_PROPERTY(QVariantList frameTimeSamples READ frameTimeSamples NOTIFY perfMetricsChanged)
+    // 1.0.245 debug: cumulativi NON resettati, diagnosi gate.
+    Q_PROPERTY(qint64 totalFrameSamples READ totalFrameSamples NOTIFY perfMetricsChanged)
+    Q_PROPERTY(qint64 totalDecodesReceived READ totalDecodesReceived NOTIFY perfMetricsChanged)
+    Q_PROPERTY(qint64 totalDecodesCommitted READ totalDecodesCommitted NOTIFY perfMetricsChanged)
+    // 1.0.143 fase 2: model nativi per le 2 ListView. Sostituiscono i JS-filter
+    // array (filteredDecodeEntries, currentRxDecodes) con QAbstractListModel +
+    // diff incrementale → elimina rebuild totale ad ogni decodeListChanged.
+    Q_PROPERTY(DecodeListModel* bandActivityModel READ bandActivityModel CONSTANT)
+    Q_PROPERTY(DecodeListModel* fullSpectrumModel READ fullSpectrumModel CONSTANT)
+    Q_PROPERTY(DecodeListModel* rxDecodeModel READ rxDecodeModel CONSTANT)
+    Q_PROPERTY(QVariantList rxDecodeList READ rxDecodeList NOTIFY rxDecodeListChanged)
+    Q_PROPERTY(int periodProgress READ periodProgress NOTIFY periodProgressChanged)
+    Q_PROPERTY(int periodMilliseconds READ periodMilliseconds NOTIFY periodMillisecondsChanged)
+    Q_PROPERTY(QString utcTime READ utcTime NOTIFY utcTimeChanged)
+
+    // === TX MESSAGES ===
+    Q_PROPERTY(QString tx1 READ tx1 WRITE setTx1 NOTIFY tx1Changed)
+    Q_PROPERTY(QString tx2 READ tx2 WRITE setTx2 NOTIFY tx2Changed)
+    Q_PROPERTY(QString tx3 READ tx3 WRITE setTx3 NOTIFY tx3Changed)
+    Q_PROPERTY(QString tx4 READ tx4 WRITE setTx4 NOTIFY tx4Changed)
+    Q_PROPERTY(QString tx5 READ tx5 WRITE setTx5 NOTIFY tx5Changed)
+    Q_PROPERTY(QString tx6 READ tx6 WRITE setTx6 NOTIFY tx6Changed)
+    Q_PROPERTY(int currentTx READ currentTx WRITE setCurrentTx NOTIFY currentTxChanged)
+    Q_PROPERTY(QString dxCall READ dxCall WRITE setDxCall NOTIFY dxCallChanged)
+    Q_PROPERTY(QString dxGrid READ dxGrid WRITE setDxGrid NOTIFY dxGridChanged)
+    // txMessages/currentTxMessage: usati da TxPanel (engine = bridge)
+    Q_PROPERTY(QStringList txMessages READ txMessages NOTIFY txMessagesChanged)
+    Q_PROPERTY(QString currentTxMessage READ currentTxMessage NOTIFY currentTxMessageChanged)
+
+    // === APPENGINE STUB PROPERTIES (TxPanel/Main.qml usa engine = bridge) ===
+    Q_PROPERTY(bool swlMode READ swlMode WRITE setSwlMode NOTIFY swlModeChanged)
+    Q_PROPERTY(bool splitMode READ splitMode WRITE setSplitMode NOTIFY splitModeChanged)
+    Q_PROPERTY(int txWatchdogMode READ txWatchdogMode WRITE setTxWatchdogMode NOTIFY txWatchdogModeChanged)
+    Q_PROPERTY(int txWatchdogTime READ txWatchdogTime WRITE setTxWatchdogTime NOTIFY txWatchdogTimeChanged)
+    Q_PROPERTY(int txWatchdogCount READ txWatchdogCount WRITE setTxWatchdogCount NOTIFY txWatchdogCountChanged)
+    Q_PROPERTY(bool filterCqOnly READ filterCqOnly WRITE setFilterCqOnly NOTIFY filterCqOnlyChanged)
+    // 1.0.383 — livello di inclusione del filtro "CQ Only": 0=solo CQ, 1=CQ+73, 2=CQ+73+RR73, 3=CQ+73+RR73+RRR.
+    // Attivo solo quando filterCqOnly e' ON. Default 0 = comportamento storico (solo CQ).
+    Q_PROPERTY(int cqFilterLevel READ cqFilterLevel WRITE setCqFilterLevel NOTIFY cqFilterLevelChanged)
+    Q_PROPERTY(bool filterMyCallOnly READ filterMyCallOnly WRITE setFilterMyCallOnly NOTIFY filterMyCallOnlyChanged)
+    Q_PROPERTY(bool filtersBypassed READ filtersBypassed WRITE setFiltersBypassed NOTIFY filtersBypassedChanged)
+    Q_PROPERTY(int contestType READ contestType WRITE setContestType NOTIFY contestTypeChanged)
+    Q_PROPERTY(bool zapEnabled READ zapEnabled WRITE setZapEnabled NOTIFY zapEnabledChanged)
+    Q_PROPERTY(bool deepSearchEnabled READ deepSearchEnabled WRITE setDeepSearchEnabled NOTIFY deepSearchEnabledChanged)
+
+    // === QSO PROGRESS ===
+    // QSOProgress: 0=IDLE, 1=CALLING_CQ, 2=REPLYING, 3=REPORT, 4=ROGER_REPORT, 5=SIGNOFF, 6=IDLE_QSO
+    Q_PROPERTY(int qsoProgress READ qsoProgress NOTIFY qsoProgressChanged)
+    Q_PROPERTY(QString reportSent     READ reportSent     NOTIFY reportSentChanged)
+    Q_PROPERTY(QString reportReceived READ reportReceived WRITE setReportReceived NOTIFY reportReceivedChanged)
+    Q_PROPERTY(bool    sendRR73       READ sendRR73       WRITE setSendRR73       NOTIFY sendRR73Changed)
+    Q_PROPERTY(bool multiAnswerMode READ multiAnswerMode WRITE setMultiAnswerMode NOTIFY multiAnswerModeChanged)
+
+    // === TX CONTROL ===
+    Q_PROPERTY(bool autoSeq          READ autoSeq          WRITE setAutoSeq          NOTIFY autoSeqChanged)
+    Q_PROPERTY(bool waitPounceActive READ waitPounceActive WRITE setWaitPounceActive NOTIFY waitPounceActiveChanged)
+    Q_PROPERTY(bool txEnabled        READ txEnabled        WRITE setTxEnabled        NOTIFY txEnabledChanged)
+    Q_PROPERTY(bool holdTxFreq       READ holdTxFreq       WRITE setHoldTxFreq       NOTIFY holdTxFreqChanged)
+    Q_PROPERTY(bool autoCqRepeat     READ autoCqRepeat     WRITE setAutoCqRepeat     NOTIFY autoCqRepeatChanged)
+    Q_PROPERTY(int  maxCallerRetries READ maxCallerRetries WRITE setMaxCallerRetries NOTIFY maxCallerRetriesChanged)
+    // 1.0.388 — priorità processo Windows scelta dall'utente: 0=Normale, 1=Sopra il normale
+    // (default, = profilo interattivo attuale), 2=Alta, 3=Tempo reale (⚠️ rischioso, serve admin).
+    Q_PROPERTY(int processPriority READ processPriority WRITE setProcessPriority NOTIFY processPriorityChanged)
+    Q_PROPERTY(int  txDisabledMask   READ txDisabledMask   NOTIFY txDisabledMaskChanged)
+    Q_PROPERTY(int  autoCqMaxCycles  READ autoCqMaxCycles  WRITE setAutoCqMaxCycles  NOTIFY autoCqMaxCyclesChanged)
+    Q_PROPERTY(int  autoCqPauseSec   READ autoCqPauseSec   WRITE setAutoCqPauseSec   NOTIFY autoCqPauseSecChanged)
+    // WSJT-Z-style Auto Call: automatically answer eligible CQ callers.
+    Q_PROPERTY(bool autoCallEnabled READ autoCallEnabled WRITE setAutoCallEnabled NOTIFY autoCallEnabledChanged)
+    Q_PROPERTY(int autoCallMaxQsos READ autoCallMaxQsos WRITE setAutoCallMaxQsos NOTIFY autoCallMaxQsosChanged)
+    Q_PROPERTY(int autoCallQsoCount READ autoCallQsoCount NOTIFY autoCallQsoCountChanged)
+    Q_PROPERTY(int autoCallPriority READ autoCallPriority WRITE setAutoCallPriority NOTIFY autoCallPriorityChanged)
+    Q_PROPERTY(bool avgDecodeEnabled READ avgDecodeEnabled WRITE setAvgDecodeEnabled NOTIFY avgDecodeEnabledChanged)
+    Q_PROPERTY(bool ft8ApEnabled READ ft8ApEnabled WRITE setFt8ApEnabled NOTIFY ft8ApEnabledChanged)
+    Q_PROPERTY(int  txPeriod         READ txPeriod         WRITE setTxPeriod         NOTIFY txPeriodChanged)
+    Q_PROPERTY(bool alt12Enabled     READ alt12Enabled     WRITE setAlt12Enabled     NOTIFY alt12EnabledChanged)
+
+    // === TARGET CALL (CALL feature, fork-only 1.0.262) ===
+    // Chiamata diretta verso uno specifico callsign con retry/timeout, coesiste con autoCqRepeat (CALL ha priorità).
+    Q_PROPERTY(bool    targetCallActive     READ targetCallActive     NOTIFY targetCallActiveChanged)
+    Q_PROPERTY(QString targetCallSign       READ targetCallSign       WRITE setTargetCallSign       NOTIFY targetCallSignChanged)
+    Q_PROPERTY(int     targetCallMaxRetries READ targetCallMaxRetries WRITE setTargetCallMaxRetries NOTIFY targetCallMaxRetriesChanged)
+    Q_PROPERTY(int     targetCallTimeoutS   READ targetCallTimeoutS   WRITE setTargetCallTimeoutS   NOTIFY targetCallTimeoutSChanged)
+    Q_PROPERTY(int     targetCallPeriod     READ targetCallPeriod     WRITE setTargetCallPeriod     NOTIFY targetCallPeriodChanged)
+    Q_PROPERTY(int     targetCallPauseS     READ targetCallPauseS     WRITE setTargetCallPauseS     NOTIFY targetCallPauseSChanged)
+    Q_PROPERTY(int     targetCallRetryCount READ targetCallRetryCount NOTIFY targetCallRetryCountChanged)
+    Q_PROPERTY(bool    armedWatchEnabled      READ armedWatchEnabled      WRITE setArmedWatchEnabled      NOTIFY armedWatchEnabledChanged)
+    Q_PROPERTY(bool    armedReArm             READ armedReArm             WRITE setArmedReArm             NOTIFY armedReArmChanged)
+    Q_PROPERTY(bool    targetCallArmedWaiting READ targetCallArmedWaiting NOTIFY targetCallArmedWaitingChanged)
+
+    // FT2-specific: async TX (no period sync) e dual carrier
+    Q_PROPERTY(bool asyncTxEnabled     READ asyncTxEnabled     WRITE setAsyncTxEnabled     NOTIFY asyncTxEnabledChanged)
+    Q_PROPERTY(bool asyncDecodeEnabled READ asyncDecodeEnabled WRITE setAsyncDecodeEnabled NOTIFY asyncDecodeEnabledChanged)
+    Q_PROPERTY(bool dualCarrierEnabled READ dualCarrierEnabled WRITE setDualCarrierEnabled NOTIFY dualCarrierEnabledChanged)
+    Q_PROPERTY(bool quickQsoEnabled    READ quickQsoEnabled    WRITE setQuickQsoEnabled    NOTIFY quickQsoEnabledChanged)
+    Q_PROPERTY(bool resumeQsoOnReply   READ resumeQsoOnReply   WRITE setResumeQsoOnReply   NOTIFY resumeQsoOnReplyChanged)
+    Q_PROPERTY(int  asyncSnrDb         READ asyncSnrDb                                     NOTIFY asyncSnrDbChanged)
+
+    // === CAT/TRANSCEIVER ===
+    // CAT condivisa: il server rigctld esposto ai pannelli QML.
+    Q_PROPERTY(QObject* catShare READ catShareObject CONSTANT)
+    // DecoPort: la radio pubblicata in rete (gateway), l'ascolto degli annunci
+    // (scoperta) e il collegamento a una radio altrui. Vedi
+    // doc/DECOPORT_PROTOCOL.md. Creati alla prima richiesta: chi non li apre
+    // non li paga.
+    Q_PROPERTY(QObject* decoPortGateway READ decoPortGatewayObject CONSTANT)
+    Q_PROPERTY(QObject* decoPortDiscovery READ decoPortDiscoveryObject CONSTANT)
+    Q_PROPERTY(QObject* decoPortLink READ decoPortLinkObject CONSTANT)
+    // Quando e' acceso, l'audio del decoder viene dalla radio remota invece che
+    // dalla scheda locale, e la frequenza mostrata e' la sua.
+    Q_PROPERTY(bool decoPortUseRemote READ decoPortUseRemote WRITE setDecoPortUseRemote NOTIFY decoPortUseRemoteChanged)
+    // L'ascolto in altoparlante e' un'altra cosa dal decodificare: si puo'
+    // volere l'uno senza l'altro.
+    Q_PROPERTY(bool decoPortMonitor READ decoPortMonitor WRITE setDecoPortMonitor NOTIFY decoPortMonitorChanged)
+    // Spot condivisi: il gemello della CAT condivisa, per gli spot del
+    // cluster invece che per la radio.
+    Q_PROPERTY(QObject* spotShare READ spotShareObject CONSTANT)
+    // Amplificatore: sorgente di misura indipendente dalla radio.
+    Q_PROPERTY(QObject* amplifier READ amplifierObject CONSTANT)
+    Q_PROPERTY(bool catConnected READ catConnected NOTIFY catConnectedChanged)
+    Q_PROPERTY(QString catRigName READ catRigName NOTIFY catRigNameChanged)
+    Q_PROPERTY(QString catMode READ catMode NOTIFY catModeChanged)
+    Q_PROPERTY(double rigPowerWatts READ rigPowerWatts NOTIFY rigTelemetryChanged)
+    Q_PROPERTY(double rigSwr READ rigSwr NOTIFY rigTelemetryChanged)
+    Q_PROPERTY(double rigAlc READ rigAlc NOTIFY rigTelemetryChanged)  // 1.0.323 — ALC meter 0..100
+    Q_PROPERTY(bool rigAlcValid READ rigAlcValid NOTIFY rigTelemetryChanged)
+    // 1.0.324 — ALC auto-calibration (Fase 2)
+    Q_PROPERTY(int    alcTarget              READ alcTarget              WRITE setAlcTarget              NOTIFY alcTargetChanged)
+    Q_PROPERTY(bool   alcCalibrating         READ alcCalibrating                                         NOTIFY alcCalibratingChanged)
+    Q_PROPERTY(QString alcCalibrationStatus  READ alcCalibrationStatus                                   NOTIFY alcCalibrationStatusChanged)
+    Q_PROPERTY(double processCpuUsage READ processCpuUsage NOTIFY processCpuUsageChanged)
+    Q_PROPERTY(double processGpuUsage READ processGpuUsage NOTIFY processGpuUsageChanged)
+    Q_PROPERTY(QString processGpuUsageSource READ processGpuUsageSource NOTIFY processGpuUsageChanged)
+    Q_PROPERTY(bool panadapterGpuFftActive READ panadapterGpuFftActive NOTIFY panadapterGpuFftActiveChanged)
+    Q_PROPERTY(QString panadapterGpuFftBackend READ panadapterGpuFftBackend NOTIFY panadapterGpuFftActiveChanged)
+    Q_PROPERTY(QString lastCatError READ lastCatError NOTIFY lastCatErrorChanged)
+
+    // === LED STATUS INDICATORS ===
+    Q_PROPERTY(bool   ledCoherentAveraging READ ledCoherentAveraging NOTIFY ledCoherentAveragingChanged)
+    Q_PROPERTY(bool   ledNeuralSync        READ ledNeuralSync        NOTIFY ledNeuralSyncChanged)
+    Q_PROPERTY(bool   ledTurboFeedback     READ ledTurboFeedback     NOTIFY ledTurboFeedbackChanged)
+    Q_PROPERTY(int    coherentCount        READ coherentCount        NOTIFY coherentCountChanged)
+    Q_PROPERTY(double neuralScore          READ neuralScore          NOTIFY neuralScoreChanged)
+    Q_PROPERTY(int    turboIterations      READ turboIterations      NOTIFY turboIterationsChanged)
+    Q_PROPERTY(bool   coherentAvgEnabled   READ coherentAvgEnabled   WRITE setCoherentAvgEnabled   NOTIFY coherentAvgEnabledChanged)
+    Q_PROPERTY(bool   neuralSyncEnabled    READ neuralSyncEnabled    WRITE setNeuralSyncEnabled    NOTIFY neuralSyncEnabledChanged)
+    Q_PROPERTY(bool   turboFeedbackEnabled READ turboFeedbackEnabled WRITE setTurboFeedbackEnabled NOTIFY turboFeedbackEnabledChanged)
+    Q_PROPERTY(bool   fastLdpcEnabled     READ fastLdpcEnabled     WRITE setFastLdpcEnabled     NOTIFY fastLdpcEnabledChanged)
+    // AUTO master: quando ON, le 3 feature si attivano in base a condizioni runtime
+    // (decode count rolling, SNR Q65) ignorando i toggle manuali sopra.
+    Q_PROPERTY(bool   advAutoModeEnabled   READ advAutoModeEnabled   WRITE setAdvAutoModeEnabled   NOTIFY advAutoModeEnabledChanged)
+    // Stato effettivo (read-only) — riflette ciò che il decoder usa veramente
+    // a ogni slot (manuale o calcolato dall'auto-mode).
+    Q_PROPERTY(bool   advNeuralSyncActive  READ advNeuralSyncActive  NOTIFY advNeuralSyncActiveChanged)
+    Q_PROPERTY(bool   advTurboFeedbackActive READ advTurboFeedbackActive NOTIFY advTurboFeedbackActiveChanged)
+    Q_PROPERTY(bool   advCoherentAvgActive READ advCoherentAvgActive NOTIFY advCoherentAvgActiveChanged)
+    Q_PROPERTY(int    ftThreads            READ ftThreads            WRITE setFtThreads NOTIFY ftThreadsChanged)
+    Q_PROPERTY(bool   ftThreadsAuto        READ ftThreadsAuto        WRITE setFtThreadsAuto NOTIFY ftThreadsChanged)
+    Q_PROPERTY(bool   lowCpuModeEnabled    READ lowCpuModeEnabled    WRITE setLowCpuModeEnabled NOTIFY lowCpuModeEnabledChanged)
+    // 1.0.497 — Modalità PC lento: master toggle che orchestra le leve runtime
+    // (grafica OpenGL all'avvio, lowCpuMode, thread bassi, priorità normale,
+    // profilo cpu). La grafica richiede riavvio (letta in main_qml).
+    Q_PROPERTY(bool   lowEndMode           READ lowEndMode           WRITE setLowEndMode NOTIFY lowEndModeChanged)
+
+    // === PSK REPORTER ===
+    Q_PROPERTY(bool       pskSearchFound      READ pskSearchFound      NOTIFY pskSearchFoundChanged)
+    Q_PROPERTY(QString    pskSearchCallsign   READ pskSearchCallsign   NOTIFY pskSearchCallsignChanged)
+    Q_PROPERTY(bool       pskSearching        READ pskSearching        NOTIFY pskSearchingChanged)
+    Q_PROPERTY(QStringList pskSearchBands     READ pskSearchBands      NOTIFY pskSearchBandsChanged)
+    // DX-Pedition Mode Fase 3 — PSK Reporter "heard-by" (chi mi riceve nel mondo).
+    Q_PROPERTY(QVariantList pskHeardByList    READ pskHeardByList      NOTIFY pskHeardByChanged)
+    Q_PROPERTY(int        pskHeardByCount     READ pskHeardByCount     NOTIFY pskHeardByChanged)
+    Q_PROPERTY(int        pskHeardByDxccCount READ pskHeardByDxccCount NOTIFY pskHeardByChanged)
+    Q_PROPERTY(double     pskHeardByMaxKm     READ pskHeardByMaxKm     NOTIFY pskHeardByChanged)
+    Q_PROPERTY(bool       pskHeardByFetching  READ pskHeardByFetching  NOTIFY pskHeardByFetchingChanged)
+    Q_PROPERTY(int        pskReporterTimeSpanMinutes READ pskReporterTimeSpanMinutes WRITE setPskReporterTimeSpanMinutes NOTIFY pskReporterTimeSpanMinutesChanged)
+    Q_PROPERTY(bool       pskMapSpotFetching READ pskMapSpotFetching NOTIFY pskMapSpotFetchingChanged)
+    Q_PROPERTY(int        pskMapSpotWindowMinutes READ pskMapSpotWindowMinutes WRITE setPskMapSpotWindowMinutes NOTIFY pskMapSpotWindowMinutesChanged)
+    Q_PROPERTY(bool       pskReporterEnabled  READ pskReporterEnabled  WRITE setPskReporterEnabled  NOTIFY pskReporterEnabledChanged)
+    Q_PROPERTY(bool       pskReporterConnected READ pskReporterConnected NOTIFY pskReporterConnectedChanged)
+
+    // === EXTRA FEATURES (appEngine migration) ===
+    Q_PROPERTY(bool    alertOnCq         READ alertOnCq         WRITE setAlertOnCq         NOTIFY alertOnCqChanged)
+    Q_PROPERTY(bool    alertOnMyCall     READ alertOnMyCall     WRITE setAlertOnMyCall     NOTIFY alertOnMyCallChanged)
+    Q_PROPERTY(bool    recordRxEnabled   READ recordRxEnabled   WRITE setRecordRxEnabled   NOTIFY recordRxEnabledChanged)
+    Q_PROPERTY(bool    recordTxEnabled   READ recordTxEnabled   WRITE setRecordTxEnabled   NOTIFY recordTxEnabledChanged)
+    Q_PROPERTY(QString stationName       READ stationName       WRITE setStationName       NOTIFY stationNameChanged)
+    Q_PROPERTY(QString stationQth        READ stationQth        WRITE setStationQth        NOTIFY stationQthChanged)
+    Q_PROPERTY(QString stationRigInfo    READ stationRigInfo    WRITE setStationRigInfo    NOTIFY stationRigInfoChanged)
+    Q_PROPERTY(QString stationAntenna    READ stationAntenna    WRITE setStationAntenna    NOTIFY stationAntennaChanged)
+    Q_PROPERTY(int     stationPowerWatts READ stationPowerWatts WRITE setStationPowerWatts NOTIFY stationPowerWattsChanged)
+    Q_PROPERTY(int     wsprPowerDbm      READ wsprPowerDbm      WRITE setWsprPowerDbm      NOTIFY wsprPowerDbmChanged)
+    Q_PROPERTY(bool    autoStartMonitorOnStartup READ autoStartMonitorOnStartup WRITE setAutoStartMonitorOnStartup NOTIFY autoStartMonitorOnStartupChanged)
+    Q_PROPERTY(bool    startFromTx2      READ startFromTx2      WRITE setStartFromTx2      NOTIFY startFromTx2Changed)
+    Q_PROPERTY(bool    vhfUhfFeatures    READ vhfUhfFeatures    WRITE setVhfUhfFeatures    NOTIFY vhfUhfFeaturesChanged)
+    Q_PROPERTY(bool    directLogQso      READ directLogQso      WRITE setDirectLogQso      NOTIFY directLogQsoChanged)
+    Q_PROPERTY(bool    confirm73         READ confirm73         WRITE setConfirm73         NOTIFY confirm73Changed)
+    Q_PROPERTY(QString contestExchange   READ contestExchange   WRITE setContestExchange   NOTIFY contestExchangeChanged)
+    Q_PROPERTY(int     contestNumber     READ contestNumber     WRITE setContestNumber     NOTIFY contestNumberChanged)
+    Q_PROPERTY(QStringList contestTypeNames READ contestTypeNames CONSTANT)
+    Q_PROPERTY(QString logAllTxtPath     READ logAllTxtPath     CONSTANT)
+    Q_PROPERTY(QString activeLogbookName READ activeLogbookName NOTIFY activeLogbookChanged)
+    Q_PROPERTY(QString activeLogbookPath READ activeLogbookPath NOTIFY activeLogbookChanged)
+    Q_PROPERTY(QObject* logManager READ logManager CONSTANT)
+    Q_PROPERTY(QObject* propagationManager READ propagationManager CONSTANT)
+    Q_PROPERTY(QObject* satelliteTracking READ satelliteTracking CONSTANT)
+    // FT2-Link satellite half-duplex is a distinct CAT state machine: it uses
+    // absolute RX/downlink and TX/uplink VFOs and never reuses the ordinary
+    // small audio-offset split path.
+    Q_PROPERTY(QVariantMap ft2LinkSatelliteHalfDuplexStatus
+               READ ft2LinkSatelliteHalfDuplexStatus
+               NOTIFY ft2LinkSatelliteHalfDuplexStatusChanged)
+    Q_PROPERTY(QObject* mapIntelligenceService READ mapIntelligenceService CONSTANT)
+    Q_PROPERTY(QObject* mapLayerService READ mapIntelligenceService CONSTANT)
+    Q_PROPERTY(bool offlineMode READ offlineMode NOTIFY offlineModeChanged)
+    Q_PROPERTY(QObject* callsignIntelligence READ callsignIntelligence CONSTANT)
+    Q_PROPERTY(QObject* diagnostics READ diagnostics CONSTANT)
+    Q_PROPERTY(int qsoCount READ qsoCount NOTIFY qsoCountChanged)
+    Q_PROPERTY(bool adifImportInProgress READ adifImportInProgress NOTIFY adifImportProgressChanged)
+    Q_PROPERTY(int adifImportProgress READ adifImportProgress NOTIFY adifImportProgressChanged)
+    Q_PROPERTY(QString adifImportStatus READ adifImportStatus NOTIFY adifImportProgressChanged)
+
+    // === ADIF / LOTW ===
+    Q_PROPERTY(int  workedCount  READ workedCount  NOTIFY workedCountChanged)
+    Q_PROPERTY(bool lotwEnabled  READ lotwEnabled  WRITE setLotwEnabled  NOTIFY lotwEnabledChanged)
+    Q_PROPERTY(bool lotwUpdating READ lotwUpdating NOTIFY lotwUpdatingChanged)
+    Q_PROPERTY(int lotwUserCount READ lotwUserCount NOTIFY lotwUsersChanged)
+    Q_PROPERTY(bool showUsState READ showUsState WRITE setShowUsState NOTIFY showUsStateChanged)
+    Q_PROPERTY(bool usStateDataReady READ usStateDataReady NOTIFY usStateDataChanged)
+    Q_PROPERTY(bool usStateDataUpdating READ usStateDataUpdating NOTIFY usStateDataChanged)
+    Q_PROPERTY(int usStateGridCount READ usStateGridCount NOTIFY usStateDataChanged)
+    Q_PROPERTY(int usStateLocatorCount READ usStateLocatorCount NOTIFY usStateDataChanged)
+
+    // === CLOUDLOG ===
+    Q_PROPERTY(bool    cloudlogEnabled READ cloudlogEnabled WRITE setCloudlogEnabled NOTIFY cloudlogEnabledChanged)
+    Q_PROPERTY(QString cloudlogUrl     READ cloudlogUrl     WRITE setCloudlogUrl     NOTIFY cloudlogUrlChanged)
+    Q_PROPERTY(QString cloudlogApiKey  READ cloudlogApiKey  WRITE setCloudlogApiKey  NOTIFY cloudlogApiKeyChanged)
+
+    // === QRZ LOGBOOK ===
+    Q_PROPERTY(bool    qrzLogbookEnabled READ qrzLogbookEnabled WRITE setQrzLogbookEnabled NOTIFY qrzLogbookEnabledChanged)
+    Q_PROPERTY(QString qrzLogbookApiKey  READ qrzLogbookApiKey  WRITE setQrzLogbookApiKey  NOTIFY qrzLogbookApiKeyChanged)
+    Q_PROPERTY(bool    qrzLogbookReplaceDuplicates READ qrzLogbookReplaceDuplicates WRITE setQrzLogbookReplaceDuplicates NOTIFY qrzLogbookReplaceDuplicatesChanged)
+
+    // === THEME / UI ===
+    Q_PROPERTY(DecodiumThemeManager* themeManager READ themeManager CONSTANT)
+    Q_PROPERTY(double fontScale READ fontScale NOTIFY fontScaleChanged)
+
+    // === SUB-MANAGERS ===
+    Q_PROPERTY(WavManager*          wavManager      READ wavManager      CONSTANT)
+    Q_PROPERTY(MacroManager*        macroManager    READ macroManager    CONSTANT)
+    Q_PROPERTY(BandManager*         bandManager     READ bandManager     CONSTANT)
+    // catManager ritorna QObject* (può essere DecodiumCatManager o DecodiumTransceiverManager)
+    Q_PROPERTY(QObject*                      catManager      READ catManagerObj   NOTIFY catManagerChanged)
+    Q_PROPERTY(QString                       catBackend      READ catBackend      WRITE setCatBackend NOTIFY catBackendChanged)
+    Q_PROPERTY(QString                       activeCatProfile READ activeCatProfile NOTIFY activeCatProfileChanged)
+    Q_PROPERTY(QStringList                   catProfileList READ catProfileList NOTIFY catProfilesChanged)
+    Q_PROPERTY(DecodiumCatManager*           nativeCat       READ nativeCat       CONSTANT)
+    Q_PROPERTY(DecodiumCat4OmManager*        cat4OmCat       READ cat4OmCat       CONSTANT)
+    Q_PROPERTY(DecodiumOmniRigManager*       omniRigCat      READ omniRigCat      CONSTANT)
+    Q_PROPERTY(DecodiumTransceiverManager*   hamlibCat       READ hamlibCat       CONSTANT)
+    Q_PROPERTY(DecodiumDxCluster*   dxCluster       READ dxCluster       CONSTANT)
+    Q_PROPERTY(bool dxClusterConnected READ dxClusterConnected NOTIFY dxClusterConnectedChanged)
+    Q_PROPERTY(QVariantList dxClusterSpots READ dxClusterSpots NOTIFY dxClusterSpotsChanged)
+    Q_PROPERTY(QString dxClusterHost READ dxClusterHost WRITE setDxClusterHost NOTIFY dxClusterHostChanged)
+    Q_PROPERTY(int dxClusterPort READ dxClusterPort WRITE setDxClusterPort NOTIFY dxClusterPortChanged)
+    Q_PROPERTY(bool autoSpotEnabled READ autoSpotEnabled WRITE setAutoSpotEnabled NOTIFY autoSpotEnabledChanged)
+    // WSPR upload
+    Q_PROPERTY(bool wsprUploadEnabled READ wsprUploadEnabled WRITE setWsprUploadEnabled NOTIFY wsprUploadEnabledChanged)
+
+    // ── UI persistence properties (saved via saveSettings) ─────────────
+    Q_PROPERTY(int   uiSpectrumHeight  READ uiSpectrumHeight  WRITE setUiSpectrumHeight  NOTIFY uiSpectrumHeightChanged)
+    Q_PROPERTY(int   uiPaletteIndex    READ uiPaletteIndex    WRITE setUiPaletteIndex    NOTIFY uiPaletteIndexChanged)
+    Q_PROPERTY(double uiZoomFactor     READ uiZoomFactor      WRITE setUiZoomFactor      NOTIFY uiZoomFactorChanged)
+    Q_PROPERTY(int   uiWaterfallHeight READ uiWaterfallHeight WRITE setUiWaterfallHeight NOTIFY uiWaterfallHeightChanged)
+    Q_PROPERTY(int   uiDecodeWinX      READ uiDecodeWinX      WRITE setUiDecodeWinX      NOTIFY uiDecodeWinXChanged)
+    Q_PROPERTY(int   uiDecodeWinY      READ uiDecodeWinY      WRITE setUiDecodeWinY      NOTIFY uiDecodeWinYChanged)
+    Q_PROPERTY(int   uiDecodeWinWidth  READ uiDecodeWinWidth  WRITE setUiDecodeWinWidth  NOTIFY uiDecodeWinWidthChanged)
+    Q_PROPERTY(int   uiDecodeWinHeight READ uiDecodeWinHeight WRITE setUiDecodeWinHeight NOTIFY uiDecodeWinHeightChanged)
+
+    // === DECODER SETTINGS ===
+    Q_PROPERTY(int nfa READ nfa WRITE setNfa NOTIFY nfaChanged)
+    Q_PROPERTY(int nfb READ nfb WRITE setNfb NOTIFY nfbChanged)
+    Q_PROPERTY(int ndepth READ ndepth WRITE setNdepth NOTIFY ndepthChanged)
+    Q_PROPERTY(bool singleDecode READ singleDecode WRITE setSingleDecode NOTIFY singleDecodeChanged)
+    Q_PROPERTY(int ncontest READ ncontest WRITE setNcontest NOTIFY ncontestChanged)
+    Q_PROPERTY(int specialOperationActivity READ specialOperationActivity WRITE setSpecialOperationActivity NOTIFY specialOperationActivityChanged)
+
+    // === SPECTRUM / WATERFALL ===
+    Q_PROPERTY(int   spectrumColorPalette READ spectrumColorPalette WRITE setSpectrumColorPalette NOTIFY spectrumColorPaletteChanged)
+    Q_PROPERTY(double spectrumRefLevel    READ spectrumRefLevel    WRITE setSpectrumRefLevel    NOTIFY spectrumRefLevelChanged)
+    Q_PROPERTY(double spectrumDynRange    READ spectrumDynRange    WRITE setSpectrumDynRange    NOTIFY spectrumDynRangeChanged)
+    Q_PROPERTY(bool  spectrumVisible      READ spectrumVisible     WRITE setSpectrumVisible     NOTIFY spectrumVisibleChanged)
+    // Vero quando la finestra RTTY e' aperta. E' il rubinetto dell'audio verso
+    // il decodificatore RTTY: a finestra chiusa il demodulatore non deve
+    // girare, perche' nessuno ne leggerebbe il risultato e il costo lo
+    // pagherebbe la decodifica dei modi digitali, che gira sullo stesso PC.
+    Q_PROPERTY(bool  rttyInAscolto       READ rttyInAscolto       WRITE setRttyInAscolto       NOTIFY rttyInAscoltoChanged)
+
+    // === B6 — cty.dat AUTO-UPDATE ===
+    Q_PROPERTY(bool    ctyDatUpdating  READ ctyDatUpdating  NOTIFY ctyDatUpdatingChanged)
+    Q_PROPERTY(bool    call3TxtUpdating READ call3TxtUpdating NOTIFY call3TxtUpdatingChanged)
+    Q_PROPERTY(QVariantMap ctyDatState READ ctyDatState NOTIFY localDataStateChanged)
+    Q_PROPERTY(QVariantMap call3TxtState READ call3TxtState NOTIFY localDataStateChanged)
+
+    // === B7 — COLOR HIGHLIGHTING ===
+    Q_PROPERTY(QString colorCQ        READ colorCQ        WRITE setColorCQ        NOTIFY colorCQChanged)
+    Q_PROPERTY(QString colorMyCall    READ colorMyCall    WRITE setColorMyCall    NOTIFY colorMyCallChanged)
+    Q_PROPERTY(QString colorDXEntity  READ colorDXEntity  WRITE setColorDXEntity  NOTIFY colorDXEntityChanged)
+    Q_PROPERTY(QString color73        READ color73        WRITE setColor73        NOTIFY color73Changed)
+    Q_PROPERTY(QString colorB4        READ colorB4        WRITE setColorB4        NOTIFY colorB4Changed)
+    Q_PROPERTY(QString colorDecodeText READ colorDecodeText WRITE setColorDecodeText NOTIFY colorDecodeTextChanged)
+
+    // === WSJT-X background highlight colors ===
+    Q_PROPERTY(QString colorTxMessage         READ colorTxMessage         WRITE setColorTxMessage         NOTIFY colorTxMessageChanged)
+    Q_PROPERTY(QString colorNewDxcc           READ colorNewDxcc           WRITE setColorNewDxcc           NOTIFY colorNewDxccChanged)
+    Q_PROPERTY(QString colorNewDxccBand       READ colorNewDxccBand       WRITE setColorNewDxccBand       NOTIFY colorNewDxccBandChanged)
+    Q_PROPERTY(QString colorNewContinent      READ colorNewContinent      WRITE setColorNewContinent      NOTIFY colorNewContinentChanged)
+    Q_PROPERTY(QString colorNewContinentBand  READ colorNewContinentBand  WRITE setColorNewContinentBand  NOTIFY colorNewContinentBandChanged)
+    Q_PROPERTY(QString colorNewCqZone         READ colorNewCqZone         WRITE setColorNewCqZone         NOTIFY colorNewCqZoneChanged)
+    Q_PROPERTY(QString colorNewCqZoneBand     READ colorNewCqZoneBand     WRITE setColorNewCqZoneBand     NOTIFY colorNewCqZoneBandChanged)
+    Q_PROPERTY(QString colorNewItuZone        READ colorNewItuZone        WRITE setColorNewItuZone        NOTIFY colorNewItuZoneChanged)
+    Q_PROPERTY(QString colorNewItuZoneBand    READ colorNewItuZoneBand    WRITE setColorNewItuZoneBand    NOTIFY colorNewItuZoneBandChanged)
+    Q_PROPERTY(QString colorNewGrid           READ colorNewGrid           WRITE setColorNewGrid           NOTIFY colorNewGridChanged)
+    Q_PROPERTY(QString colorNewGridBand       READ colorNewGridBand       WRITE setColorNewGridBand       NOTIFY colorNewGridBandChanged)
+    Q_PROPERTY(QString colorNewCall           READ colorNewCall           WRITE setColorNewCall           NOTIFY colorNewCallChanged)
+    Q_PROPERTY(QString colorNewCallBand       READ colorNewCallBand       WRITE setColorNewCallBand       NOTIFY colorNewCallBandChanged)
+    Q_PROPERTY(QString colorLotwUser          READ colorLotwUser          WRITE setColorLotwUser          NOTIFY colorLotwUserChanged)
+    Q_PROPERTY(QString decodeColorFallback    READ decodeColorFallback    CONSTANT)
+    Q_PROPERTY(bool    b4Strikethrough READ b4Strikethrough WRITE setB4Strikethrough NOTIFY b4StrikethroughChanged)
+    // Alias usato da DecodeList.qml
+    Q_PROPERTY(bool    showB4Strikethrough READ b4Strikethrough NOTIFY b4StrikethroughChanged)
+
+    // === B8 — ALERT SOUNDS ===
+    Q_PROPERTY(bool alertSoundsEnabled READ alertSoundsEnabled WRITE setAlertSoundsEnabled NOTIFY alertSoundsEnabledChanged)
+
+    // === C16 — UPDATE CHECKER ===
+    Q_PROPERTY(bool    updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
+    Q_PROPERTY(QString latestVersion   READ latestVersion   NOTIFY latestVersionChanged)
+
+    // === A2 — SOUNDCARD DRIFT (C13/A2) ===
+    Q_PROPERTY(double  soundcardDriftPpm        READ soundcardDriftPpm        NOTIFY soundcardDriftChanged)
+    Q_PROPERTY(double  soundcardDriftMsPerPeriod READ soundcardDriftMsPerPeriod NOTIFY soundcardDriftChanged)
+    Q_PROPERTY(QString driftSeverity            READ driftSeverity            NOTIFY soundcardDriftChanged)
+
+    // === A3 — TIME SYNC ===
+    // 1.0.159 — DecoSyncTime fase 1: nuovo servizio centrale, espone API
+    // wallclockMs() unificato al QML.
+    Q_PROPERTY(DecoSyncTime* decoSyncTime READ decoSyncTime CONSTANT)
+    Q_PROPERTY(bool   ntpEnabled     READ ntpEnabled     NOTIFY ntpEnabledChanged)
+    Q_PROPERTY(double ntpOffsetMs    READ ntpOffsetMs    NOTIFY ntpOffsetMsChanged)
+    Q_PROPERTY(bool   ntpSynced      READ ntpSynced      NOTIFY ntpSyncedChanged)
+    Q_PROPERTY(double avgDt          READ avgDt          NOTIFY avgDtChanged)
+    Q_PROPERTY(double decodeLatencyMs READ decodeLatencyMs NOTIFY decodeLatencyMsChanged)
+    Q_PROPERTY(int    timeSyncSampleCount READ timeSyncSampleCount NOTIFY timeSyncSampleCountChanged)
+
+    // === A4 — FOX/HOUND MODE ===
+    Q_PROPERTY(bool        foxMode        READ foxMode        WRITE setFoxMode        NOTIFY foxModeChanged)
+    Q_PROPERTY(bool        houndMode      READ houndMode      WRITE setHoundMode      NOTIFY houndModeChanged)
+    Q_PROPERTY(QStringList callerQueue    READ callerQueue    NOTIFY callerQueueChanged)
+    Q_PROPERTY(int         callerQueueSize READ callerQueueSize NOTIFY callerQueueChanged)
+
+    // === B9 — ACTIVE STATIONS MODEL ===
+    Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
+
+    // 1.0.174 — FT2 Weak-Signal Pack master flag
+    Q_PROPERTY(bool ft2Conservative READ ft2Conservative WRITE setFt2Conservative NOTIFY ft2ConservativeChanged)
+    // 1.0.311 — quante volte ripetere il 73/RR73 in FT2 prima di chiudere (cap deferred signoff)
+    Q_PROPERTY(int ft2SignoffRetryCap READ ft2SignoffRetryCap WRITE setFt2SignoffRetryCap NOTIFY ft2SignoffRetryCapChanged)
+    // 1.0.314 — opt-in: TX immediato al click (stile 1.0.283). Rilassa period-gate FT2/FT8/FT4. Default OFF (= upstream sicuro)
+    Q_PROPERTY(bool ftxImmediateClickTx READ ftxImmediateClickTx WRITE setFtxImmediateClickTx NOTIFY ftxImmediateClickTxChanged)
+    Q_PROPERTY(bool ft2LogRr73OnPartnerLeft READ ft2LogRr73OnPartnerLeft WRITE setFt2LogRr73OnPartnerLeft NOTIFY ft2LogRr73OnPartnerLeftChanged)
+    // 1.0.315 — ripetizioni signoff (73/RR73) regolabili anche per FT4 e FT8 (oltre a FT2)
+    Q_PROPERTY(int ft4SignoffRetryCap READ ft4SignoffRetryCap WRITE setFt4SignoffRetryCap NOTIFY ft4SignoffRetryCapChanged)
+    Q_PROPERTY(int ft8SignoffRetryCap READ ft8SignoffRetryCap WRITE setFt8SignoffRetryCap NOTIFY ft8SignoffRetryCapChanged)
+    // 1.0.321 — opt-in: FT2 manual one-shot disarm (Salvatore 1.0.300 ed7ffeb).
+    // OFF (default fork) = TX1 manuale ripete fino a maxCallerRetries (weak-signal friendly).
+    // ON = comportamento upstream (disarm dopo TX1, re-arm solo a decode partner).
+    Q_PROPERTY(bool ft2ManualOneShotEnabled READ ft2ManualOneShotEnabled WRITE setFt2ManualOneShotEnabled NOTIFY ft2ManualOneShotEnabledChanged)
+    // 1.0.317 — opt-in: FT8 sequenze veloci (grace 1200→400ms + accetta decode tardivi entro d3Cap)
+    Q_PROPERTY(bool ft8FastSequence READ ft8FastSequence WRITE setFt8FastSequence NOTIFY ft8FastSequenceChanged)
+    Q_PROPERTY(bool ft2ConservativeTiming READ ft2ConservativeTiming WRITE setFt2ConservativeTiming NOTIFY ft2ConservativeTimingChanged)
+    // 1.0.289 — FT2 enhancement toggles (opt-in, default OFF = comportamento 1.0.288)
+    Q_PROPERTY(bool ft2FullDecodeInAutoCq READ ft2FullDecodeInAutoCq WRITE setFt2FullDecodeInAutoCq NOTIFY ft2FullDecodeInAutoCqChanged)
+    Q_PROPERTY(bool ft8DeepDecodeInTx READ ft8DeepDecodeInTx WRITE setFt8DeepDecodeInTx NOTIFY ft8DeepDecodeInTxChanged)
+    Q_PROPERTY(bool ft8SubpassHarvest READ ft8SubpassHarvest WRITE setFt8SubpassHarvest NOTIFY ft8SubpassHarvestChanged)
+    Q_PROPERTY(bool ft2QuickGiveUpStrong READ ft2QuickGiveUpStrong WRITE setFt2QuickGiveUpStrong NOTIFY ft2QuickGiveUpStrongChanged)
+    Q_PROPERTY(bool ftxWeakSignoffBoost READ ftxWeakSignoffBoost WRITE setFtxWeakSignoffBoost NOTIFY ftxWeakSignoffBoostChanged)
+    Q_PROPERTY(int ftxWeakSnrThreshold READ ftxWeakSnrThreshold WRITE setFtxWeakSnrThreshold NOTIFY ftxWeakSnrThresholdChanged)
+    Q_PROPERTY(int ftxWeakSignoffBonus READ ftxWeakSignoffBonus WRITE setFtxWeakSignoffBonus NOTIFY ftxWeakSignoffBonusChanged)
+    Q_PROPERTY(bool ft2PostLogReengageGuard READ ft2PostLogReengageGuard WRITE setFt2PostLogReengageGuard NOTIFY ft2PostLogReengageGuardChanged)
+    Q_PROPERTY(int ft2PostLogReengageMax READ ft2PostLogReengageMax WRITE setFt2PostLogReengageMax NOTIFY ft2PostLogReengageMaxChanged)
+    Q_PROPERTY(bool txWatchdogLogOnClose READ txWatchdogLogOnClose WRITE setTxWatchdogLogOnClose NOTIFY txWatchdogLogOnCloseChanged)
+    Q_PROPERTY(bool callerRetriesAlwaysHard READ callerRetriesAlwaysHard WRITE setCallerRetriesAlwaysHard NOTIFY callerRetriesAlwaysHardChanged)
+    Q_PROPERTY(bool ft2TransitionCensus READ ft2TransitionCensus WRITE setFt2TransitionCensus NOTIFY ft2TransitionCensusChanged)
+    Q_PROPERTY(bool ft2AdaptiveTxGates READ ft2AdaptiveTxGates WRITE setFt2AdaptiveTxGates NOTIFY ft2AdaptiveTxGatesChanged)
+    Q_PROPERTY(bool ft2AdaptiveDecode READ ft2AdaptiveDecode WRITE setFt2AdaptiveDecode NOTIFY ft2AdaptiveDecodeChanged)
+    Q_PROPERTY(bool ft2NarrowAsyncDecode READ ft2NarrowAsyncDecode WRITE setFt2NarrowAsyncDecode NOTIFY ft2NarrowAsyncDecodeChanged)
+    Q_PROPERTY(bool ft2ApHashCache READ ft2ApHashCache WRITE setFt2ApHashCache NOTIFY ft2ApHashCacheChanged)
+    // 1.0.355 — opt-in: salta decode sync di fine-slot quando l'async ha gia' coperto lo slot
+    Q_PROPERTY(bool ft2AsyncSkipRedundantSyncDecode READ ft2AsyncSkipRedundantSyncDecode WRITE setFt2AsyncSkipRedundantSyncDecode NOTIFY ft2AsyncSkipRedundantSyncDecodeChanged)
+    // 1.0.364+ — MAM multi-stream (MSHV) FASE 3: toggle opt-in + cap stream + lista
+    // slot attivi per la UI. Default OFF: comportamento MAM seriale invariato.
+    Q_PROPERTY(bool mamMultiStream READ mamMultiStream WRITE setMamMultiStream NOTIFY mamMultiStreamChanged)
+    Q_PROPERTY(int mamMaxStreams READ mamMaxStreams WRITE setMamMaxStreams NOTIFY mamMaxStreamsChanged)
+    Q_PROPERTY(QVariantList mamActiveSlots READ mamActiveSlots NOTIFY mamActiveSlotsChanged)
+    Q_PROPERTY(int mamActiveSlotCount READ mamActiveSlotCount NOTIFY mamActiveSlotsChanged)
+    // 1.0.569+ - DX-Pedition multi-slot: coda chiamanti in attesa di uno slot
+    // libero (m_callerQueue) e stato del modo corrente rispetto al multi-stream.
+    Q_PROPERTY(int mamQueueCount READ callerQueueSize NOTIFY callerQueueChanged)
+    Q_PROPERTY(bool mamCqSlots READ mamCqSlots WRITE setMamCqSlots NOTIFY mamCqSlotsChanged)
+    Q_PROPERTY(bool mamModeSupported READ mamModeSupported NOTIFY modeChanged)
+    Q_PROPERTY(bool mamModeExperimental READ mamModeExperimental NOTIFY modeChanged)
+    // 1.0.187 — FT2 Weak-Signal Pack F (v2): partner-memory opt-in.
+    // Diversamente dalla 1.0.186 revertita, qui e' default OFF e ha gate molto
+    // piu' stretti + log immediato di ogni invocazione (anche se guardrail rifiuta).
+    Q_PROPERTY(bool ft2PartnerMemoryEnabled READ ft2PartnerMemoryEnabled WRITE setFt2PartnerMemoryEnabled NOTIFY ft2PartnerMemoryEnabledChanged)
+    // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback.
+    // Quando sei in TX3 (R+report) e il partner non ack in 2 periodi, ri-trasmette TX2
+    // invece di mollare. Gated su Conservative+FT2. Default ON sotto Conservative.
+    Q_PROPERTY(bool ft2Tx2ResendOnStall READ ft2Tx2ResendOnStall WRITE setFt2Tx2ResendOnStall NOTIFY ft2Tx2ResendOnStallChanged)
+
+    // 1.0.179 — Smooth Decode Flow scheduler
+    Q_PROPERTY(bool smoothDecodeFlow READ smoothDecodeFlow WRITE setSmoothDecodeFlow NOTIFY smoothDecodeFlowChanged)
+
+    // 1.0.384 — Profili pronti: applicano in blocco un set coerente di toggle FT2/decode.
+    // activeReadyProfile = id del profilo attualmente in vigore ("" = personalizzato/nessuno,
+    // si svuota appena l'utente cambia manualmente un toggle gestito dal profilo).
+    Q_PROPERTY(QString activeReadyProfile READ activeReadyProfile NOTIFY activeReadyProfileChanged)
+
+    // 1.0.180 — UI Revolution: gate per effetti UI moderni
+    Q_PROPERTY(QString uiQuality READ uiQuality WRITE setUiQuality NOTIFY uiQualityChanged)
+    Q_PROPERTY(bool uiFramelessPopouts READ uiFramelessPopouts WRITE setUiFramelessPopouts NOTIFY uiFramelessPopoutsChanged)
+    Q_PROPERTY(QString uiStyle READ uiStyle WRITE setUiStyle NOTIFY uiStyleChanged)
+    // 1.0.186 — Full Spectrum auto-detach: pop-out opzionale per isolare il
+    // scene-graph del Waterfall e degli ListView period1/period2 dal Main,
+    // ottenendo render thread separato (Pasquale-pattern).
+    Q_PROPERTY(bool autoDetachFullSpectrum READ autoDetachFullSpectrum WRITE setAutoDetachFullSpectrum NOTIFY autoDetachFullSpectrumChanged)
+    // 1.0.186 — Cap FPS panadapter (15/20/30); default 20 integrato/30 detached
+    Q_PROPERTY(int spectrumFpsCap READ spectrumFpsCap WRITE setSpectrumFpsCap NOTIFY spectrumFpsCapChanged)
+    // 1.0.189 — Telemetria diagnostica: contatori eventi cpuPressure (anche
+    // severe) della sessione corrente. Visibili da Settings per capire se il
+    // PC sta soffrendo i preset attuali (UI Quality, Detach, FPS cap).
+    Q_PROPERTY(int cpuPressureEventCount READ cpuPressureEventCount NOTIFY cpuPressureEventCountChanged)
+    Q_PROPERTY(int cpuPressureSevereEventCount READ cpuPressureSevereEventCount NOTIFY cpuPressureSevereEventCountChanged)
+
+public:
+    explicit DecodiumBridge(QObject* parent = nullptr);
+    ~DecodiumBridge();
+
+    static void noteDecodeReadySlotStart();
+    static void noteDecodeReadySlotEnd();
+    static void noteDecodeModelEmitStart();
+    static void noteDecodeModelEmitEnd();
+    static qint64 msSinceLastDecodeReadySlotStart();
+    static qint64 msSinceLastDecodeReadySlotEnd();
+    static qint64 msSinceLastDecodeModelEmitStart();
+    static qint64 msSinceLastDecodeModelEmitEnd();
+
+    // Station
+    QString callsign() const;
+    void setCallsign(const QString&);
+    QString grid() const;
+    void setGrid(const QString&);
+    double frequency() const;
+    double displayFrequency() const;
+    void setFrequency(double);
+    QString mode() const;
+    void setMode(const QString&);
+    bool ft2LinkAccessUnlocked() const;
+
+    // RX/TX State
+    bool monitoring() const;
+    void setMonitoring(bool);
+    bool transmitting() const;
+    bool txRequested() const { return m_txRequested; }
+    bool pttPending() const { return m_pttPending; }
+    bool pttConfirmed() const { return m_pttConfirmed; }
+    bool tuning() const { return m_tuning; }
+    bool decoding() const;
+
+    // Native analog SSTV RX. Starting the workspace reuses the active
+    // Decodium monitor, or starts it and records ownership so stopSstvRx()
+    // only stops monitoring when SSTV was the component that started it.
+    bool sstvAvailable() const;
+    bool sstvRxRequested() const;
+    bool sstvRxActive() const;
+    QString sstvRxSource() const;
+    QString sstvRxSourceDevice() const;
+    QString sstvRxState() const;
+    QString sstvDetectedMode() const;
+    QString sstvRxImageSource() const;
+    QVariantMap sstvRxDiagnostics() const;
+    QVariantMap sstvRxControls() const;
+    QVariantList sstvRxModeChoices() const;
+    bool sstvRxAudioJobBusy() const noexcept;
+    QString sstvRxAudioJobState() const;
+    QString sstvRxAudioJobError() const;
+    QString sstvRxRawAudioPath() const;
+    bool sstvStorageReady() const noexcept;
+    bool sstvRxAutoSaveEnabled() const noexcept;
+    void setSstvRxAutoSaveEnabled(bool enabled);
+    QString sstvRxSaveState() const;
+    QString sstvRxSaveError() const;
+    bool sstvWavReplayActive() const;
+    QString sstvWavReplayState() const;
+    double sstvWavReplayProgress() const noexcept;
+    QString sstvWavReplayFileName() const;
+    QString sstvWavReplayError() const;
+    QObject* sstvStudio() const;
+    QObject* sstvGallery() const;
+    QObject* sstvShare() const;
+    QObject* sstvDigital() const;
+    QObject* sstvDiagnostics() const;
+    bool sstvTxCanStart() const;
+    QVariantMap sstvTxDiagnostics() const;
+    bool sstvTxActive() const;
+    QString sstvTxState() const;
+    double sstvTxProgress() const noexcept;
+    QString sstvTxError() const;
+    int sstvPttLeadMs() const;
+    void setSstvPttLeadMs(int value);
+    int sstvPttTailMs() const;
+    void setSstvPttTailMs(int value);
+    int sstvPttReleaseRetryMs() const;
+    void setSstvPttReleaseRetryMs(int value);
+    int sstvVoxPreKeyMs() const;
+    void setSstvVoxPreKeyMs(int value);
+    int sstvVoxHangMs() const;
+    void setSstvVoxHangMs(int value);
+    double sstvVoxToneFrequencyHz() const;
+    void setSstvVoxToneFrequencyHz(double value);
+    double sstvVoxToneLevel() const;
+    void setSstvVoxToneLevel(double value);
+#if DECODIUM_HAS_SSTV
+    // QQmlEngine owns the provider. The bridge and model retain guarded,
+    // non-owning pointers so engine teardown can happen before bridge teardown.
+    void setSstvThumbnailProvider(
+        decodium::sstv::SstvThumbnailProvider* provider);
+#endif
+    // Native-only renderer handoff. The shared immutable snapshot can be read
+    // from Qt Quick's asynchronous image-loading thread without copying pixel
+    // storage or retaining a lock owned by the DSP worker.
+    std::shared_ptr<const decodium::sstv::SstvImageSnapshot>
+    sstvRxImageSnapshot() const noexcept;
+    std::shared_ptr<const QImage> sstvTxSourceImageSnapshot() const noexcept;
+    std::shared_ptr<const QImage> sstvTxPreparedImageSnapshot() const noexcept;
+    Q_INVOKABLE bool enterSstvWorkspace();
+    Q_INVOKABLE void leaveSstvWorkspace();
+    Q_INVOKABLE bool startSstvRx();
+    Q_INVOKABLE void stopSstvRx();
+    Q_INVOKABLE bool resetSstvRx();
+    Q_INVOKABLE bool abortSstvRxFrame();
+    Q_INVOKABLE bool updateSstvRxControls(const QVariantMap& controls);
+    Q_INVOKABLE void resetSstvRxAfc();
+    Q_INVOKABLE void resetSstvRxSlant();
+    Q_INVOKABLE bool redecodeRecentSstv(
+        const QVariantMap& parameters = {});
+    Q_INVOKABLE bool saveSstvRxRawAudio();
+    Q_INVOKABLE void cancelSstvRxAudioJob();
+    Q_INVOKABLE bool saveSstvRxImage();
+    // Bounded view of the active native logbook for the explicit Gallery
+    // "associate existing QSO" workflow. Each returned row includes the
+    // deterministic local qsoId; no attachment data is exported to ADIF.
+    Q_INVOKABLE QVariantList sstvExistingQsoChoices(
+        const QString& search = {}, int maximumRows = 50);
+    // Starts an explicit, two-stage native operation: preflight the Gallery
+    // record on its storage worker, then either append a validated MODE=SSTV
+    // QSO or use a QSO selected from sstvExistingQsoChoices(), and finally
+    // persist the local image association. The returned map contains
+    // accepted/requestId/error; completion is reported asynchronously by
+    // sstvQsoLogFinished(). No local file path is accepted by this API.
+    Q_INVOKABLE QVariantMap logSstvQso(const QVariantMap& request);
+    Q_INVOKABLE bool startSstvWavReplay(const QUrl& localFile);
+    Q_INVOKABLE void cancelSstvWavReplay();
+    Q_INVOKABLE bool startSstvTx(const QString& fskId = QString());
+    Q_INVOKABLE bool startSstvCalibrationTone(const QString& toneId);
+    Q_INVOKABLE void cancelSstvTx();
+
+    // Audio frequencies
+    int rxFrequency() const { return m_rxFrequency; }
+    void setRxFrequency(int f);
+    int txFrequency() const { return m_txFrequency; }
+    void setTxFrequency(int f);
+
+    // Audio levels
+    double audioLevel() const;
+    double sMeter() const;
+    bool legacyBackendActive() const { return usingLegacyBackendForTx(); }
+    double rxInputLevel() const { return m_rxInputLevel; }
+    void setRxInputLevel(double v);
+    bool autoRxInputLevel() const { return m_autoRxInputLevel; }
+    void setAutoRxInputLevel(bool enabled);
+    double txOutputLevel() const { return m_txOutputLevel; }
+    void setTxOutputLevel(double v);
+    QStringList audioInputDevices() const;
+    QStringList audioOutputDevices() const;
+    QString audioInputDevice() const;
+    void setAudioInputDevice(const QString&);
+    QString audioOutputDevice() const;
+    void setAudioOutputDevice(const QString&);
+    int audioInputChannel() const;
+    void setAudioInputChannel(int);
+    int audioOutputChannel() const;
+    void setAudioOutputChannel(int);
+    bool rtlSdrSupported() const;
+    QStringList rtlSdrDevices() const;
+    bool rtlSdrRunning() const;
+    QString rtlSdrStatus() const;
+    bool rtlSdrRfView() const;
+    int rtlSdrRfSampleRate() const;
+    double rtlSdrRfCenterFrequency() const;
+    double rtlSdrRfSelectedFrequency() const;
+    Q_INVOKABLE void refreshRtlSdrDevices();
+    Q_INVOKABLE bool rtlSdrDirectSamplingAvailable(int deviceIndex) const;
+
+    // Decode
+    QVariantList decodeList() const;
+    QVariantList rxDecodeList() const;
+    int periodProgress() const;
+    int periodMilliseconds() const;
+    QString utcTime() const;
+
+    // TX Messages
+    QString tx1() const; void setTx1(const QString&);
+    QString tx2() const; void setTx2(const QString&);
+    QString tx3() const; void setTx3(const QString&);
+    QString tx4() const; void setTx4(const QString&);
+    QString tx5() const; void setTx5(const QString&);
+    QString tx6() const; void setTx6(const QString&);
+    int currentTx() const; void setCurrentTx(int);
+    QString dxCall() const; void setDxCall(const QString&);
+    QString dxGrid() const; void setDxGrid(const QString&);
+    // txMessages / currentTxMessage — usati da TxPanel (engine alias)
+    QStringList txMessages() const { return {m_tx1, m_tx2, m_tx3, m_tx4, m_tx5, m_tx6}; }
+    QString currentTxMessage() const { return buildCurrentTxMessage(); }
+
+    // QSO progress
+    int qsoProgress() const { return m_qsoProgress; }
+    QString reportSent() const { return m_reportSent; }
+    void setReportSent(const QString& v);
+    QString reportReceived() const { return m_reportReceived; }
+    void setReportReceived(const QString& v);
+    bool sendRR73() const { return m_sendRR73; }
+    void setSendRR73(bool v);
+    bool multiAnswerMode() const { return m_multiAnswerMode; }
+    void setMultiAnswerMode(bool v);
+
+    bool autoSeq()           const { return m_autoSeq; }
+    void setAutoSeq(bool v);
+    bool waitPounceActive()  const { return m_waitPounceActive; }
+    void setWaitPounceActive(bool v);
+    bool txEnabled()         const { return m_txEnabled; }
+    void setTxEnabled(bool v);
+    bool holdTxFreq()        const { return m_holdTxFreq; }
+    void setHoldTxFreq(bool v);
+    bool autoCqRepeat()      const { return m_autoCqRepeat; }
+    void setAutoCqRepeat(bool v);
+    int  processPriority() const { return m_processPriority; }
+    void setProcessPriority(int v);          // 1.0.388 — implementato in .cpp (SetPriorityClass)
+    void applyProcessPriority();             // 1.0.388 — applica m_processPriority al processo
+    int  maxCallerRetries()  const { return m_maxCallerRetries; }
+    Q_INVOKABLE void setMaxCallerRetries(int v); // 1.0.326 B2: persist Decodium3. Q_INVOKABLE: il QML lo chiama come metodo (1.0.383 fix TypeError silenzioso). 1.0.493: impl in .cpp, profile-aware
+    int  txDisabledMask() const { return m_txDisabledMask; }
+    Q_INVOKABLE bool isTxDisabled(int n) const { return n >= 1 && n <= 6 && (m_txDisabledMask & (1 << (n - 1))); }
+    Q_INVOKABLE void setTxDisabled(int n, bool disabled);
+    int  autoCqMaxCycles()   const { return m_autoCqMaxCycles; }
+    void setAutoCqMaxCycles(int v) { if (m_autoCqMaxCycles != v) { m_autoCqMaxCycles = qBound(0, v, 999); emit autoCqMaxCyclesChanged(); } }
+    int  autoCqPauseSec()    const { return m_autoCqPauseSec; }
+    void setAutoCqPauseSec(int v) { if (m_autoCqPauseSec != v) { m_autoCqPauseSec = qBound(0, v, 300); emit autoCqPauseSecChanged(); } }
+    bool autoCallEnabled() const { return m_autoCallEnabled; }
+    void setAutoCallEnabled(bool v);
+    int autoCallMaxQsos() const { return m_autoCallMaxQsos; }
+    void setAutoCallMaxQsos(int v);
+    int autoCallQsoCount() const { return m_autoCallQsoCount; }
+    int autoCallPriority() const { return m_autoCallPriority; }
+    void setAutoCallPriority(int v);
+    Q_INVOKABLE void resetAutoCallQsoCount();
+    bool avgDecodeEnabled()  const { return m_avgDecodeEnabled; }
+    void setAvgDecodeEnabled(bool v){ if (m_avgDecodeEnabled != v) { m_avgDecodeEnabled = v; emit avgDecodeEnabledChanged(); } }
+    bool ft8ApEnabled() const { return m_ft8ApEnabled; }
+    void setFt8ApEnabled(bool v) { if (m_ft8ApEnabled != v) { m_ft8ApEnabled = v; emit ft8ApEnabledChanged(); } }
+    int  txPeriod()          const { return m_txPeriod; }
+    void setTxPeriod(int v);
+    bool alt12Enabled()      const { return m_alt12Enabled; }
+    void setAlt12Enabled(bool v);
+
+    // === TARGET CALL feature (fork-only 1.0.262) ===
+    bool    targetCallActive()     const { return m_targetCallActive; }
+    QString targetCallSign()       const { return m_targetCallSign; }
+    void    setTargetCallSign(const QString &v);
+    int     targetCallMaxRetries() const { return m_targetCallMaxRetries; }
+    void    setTargetCallMaxRetries(int v);
+    int     targetCallTimeoutS()   const { return m_targetCallTimeoutS; }
+    void    setTargetCallTimeoutS(int v);
+    int     targetCallPeriod()     const { return m_targetCallPeriod; }
+    void    setTargetCallPeriod(int v);
+    int     targetCallPauseS()     const { return m_targetCallPauseS; }
+    void    setTargetCallPauseS(int v);
+    int     targetCallRetryCount() const { return m_targetCallRetryCount; }
+    Q_INVOKABLE void startTargetCall();
+    Q_INVOKABLE void stopTargetCall();
+    bool    armedWatchEnabled()      const { return m_armedWatchEnabled; }
+    void    setArmedWatchEnabled(bool v);
+    bool    armedReArm()             const { return m_armedReArm; }
+    void    setArmedReArm(bool v);
+    bool    targetCallArmedWaiting() const { return m_targetCallArmedWaiting; }
+
+    bool asyncTxEnabled()      const { return m_asyncTxEnabled; }
+    void setAsyncTxEnabled(bool /*v*/) { /* FT2 async TX PERMANENTE: sempre ON, non disattivabile.
+                                            Elimina del tutto il path FT2 sync (e il suo bug di
+                                            QSO-completion: grace 250ms < settle 1000ms) rendendolo
+                                            irraggiungibile. Qualsiasi richiesta di disattivazione e' ignorata. */
+                                        if (!m_asyncTxEnabled)          { m_asyncTxEnabled = true;   emit asyncTxEnabledChanged(); } }
+    bool asyncDecodeEnabled()  const { return m_asyncDecodeEnabled; }
+    void setAsyncDecodeEnabled(bool v){ if (m_asyncDecodeEnabled != v)  { m_asyncDecodeEnabled = v;  emit asyncDecodeEnabledChanged(); } }
+    bool dualCarrierEnabled()  const { return m_dualCarrierEnabled; }
+    void setDualCarrierEnabled(bool v){ if (m_dualCarrierEnabled!=v){ m_dualCarrierEnabled=v; emit dualCarrierEnabledChanged(); } }
+    bool quickQsoEnabled()     const { return m_quickQsoEnabled; }
+    void setQuickQsoEnabled(bool v)   { if (m_quickQsoEnabled != v) { m_quickQsoEnabled = v; emit quickQsoEnabledChanged(); } }
+    bool resumeQsoOnReply()    const { return m_resumeQsoOnReply; }
+    void setResumeQsoOnReply(bool v);  // 1.0.304: resume-on-reply opt-in (persist Decodium3)
+    int  asyncSnrDb()          const { return m_asyncSnrDb; }
+    void setAsyncSnrDb(int v)         { if (m_asyncSnrDb != v)          { m_asyncSnrDb = v;          emit asyncSnrDbChanged(); } }
+
+    // appEngine migrated Q_PROPERTY declarations (keep together for MOC)
+    // (actual getters/setters above; Q_PROPERTYs below for QML binding)
+
+    // appEngine stub properties
+    bool swlMode() const { return m_swlMode; }
+    void setSwlMode(bool v) { if (m_swlMode!=v){m_swlMode=v;emit swlModeChanged();} }
+    bool splitMode() const { return m_splitMode; }
+    void setSplitMode(bool v) { if (m_splitMode!=v){m_splitMode=v;emit splitModeChanged();} }
+    int txWatchdogMode() const { return m_txWatchdogMode; }
+    void setTxWatchdogMode(int v);
+    int txWatchdogTime() const { return m_txWatchdogTime; }
+    void setTxWatchdogTime(int v);
+    int txWatchdogCount() const { return m_txWatchdogCount; }
+    void setTxWatchdogCount(int v);
+    bool filterCqOnly() const { return m_filterCqOnly; }
+    void setFilterCqOnly(bool v) { if (m_filterCqOnly!=v){m_filterCqOnly=v;emit filterCqOnlyChanged();} }
+    // 1.0.384 — Profili pronti
+    QString activeReadyProfile() const { return m_activeReadyProfile; }
+    Q_INVOKABLE void applyReadyProfile(const QString& id);
+    void clearActiveReadyProfileOnManualChange();  // 1.0.384 — vedi connect in costruttore
+    int  cqFilterLevel() const { return m_cqFilterLevel; }
+    void setCqFilterLevel(int v) { int const c = qBound(0, v, 3); if (m_cqFilterLevel!=c){m_cqFilterLevel=c;emit cqFilterLevelChanged();} }
+    // 1.0.383 — true se l'entry deve passare il filtro CQ secondo m_cqFilterLevel.
+    // CQ passa sempre; i livelli aggiungono progressivamente 73 / RR73 / RRR (match esatto ultimo token).
+    bool passesCqFilter(bool isCQ, const QString& msg) const {
+        if (isCQ) return true;
+        if (m_cqFilterLevel <= 0) return false;
+        QString const t = msg.trimmed();
+        int const sp = t.lastIndexOf(QLatin1Char(' '));
+        QString const last = (sp >= 0 ? t.mid(sp + 1) : t).toUpper();
+        if (m_cqFilterLevel >= 1 && last == QLatin1String("73"))   return true;
+        if (m_cqFilterLevel >= 2 && last == QLatin1String("RR73")) return true;
+        if (m_cqFilterLevel >= 3 && last == QLatin1String("RRR"))  return true;
+        return false;
+    }
+    bool filterMyCallOnly() const { return m_filterMyCallOnly; }
+    void setFilterMyCallOnly(bool v) { if (m_filterMyCallOnly!=v){m_filterMyCallOnly=v;emit filterMyCallOnlyChanged();} }
+    bool filtersBypassed() const { return m_filtersBypassed; }
+    void setFiltersBypassed(bool v);
+    int contestType() const { return m_contestType; }
+    void setContestType(int v) { if (m_contestType!=v){m_contestType=v;emit contestTypeChanged();} }
+    bool zapEnabled() const { return m_zapEnabled; }
+    void setZapEnabled(bool v) { if (m_zapEnabled!=v){m_zapEnabled=v;emit zapEnabledChanged();} }
+    bool deepSearchEnabled() const { return m_deepSearchEnabled; }
+    void setDeepSearchEnabled(bool v) { if (m_deepSearchEnabled!=v){m_deepSearchEnabled=v;emit deepSearchEnabledChanged();} }
+
+    // CAT
+    QObject* catShareObject() const;
+    QObject* decoPortGatewayObject() const;
+    QObject* decoPortDiscoveryObject() const;
+    QObject* decoPortLinkObject() const;
+    Q_INVOKABLE bool startDecoPortGateway(int port = 5559);
+    // Cosa il gateway e' riuscito ad aprire da solo, da mostrare nella finestra.
+    Q_INVOKABLE QVariantMap decoPortRigDriverState() const;
+    Q_INVOKABLE void stopDecoPortGateway();
+    // Un PC di stazione deve pubblicare la radio da solo all'avvio: la finestra
+    // DecoPort serve a guardare, non a tenere acceso il servizio.
+    // La password si chiede UNA volta (installazione o finestra DecoPort) e non
+    // si ripresenta piu': quello che resta salvato e' la chiave derivata, mai la
+    // parola scritta dall'utente.
+    bool decoPortUseRemote() const { return m_decoPortUseRemote; }
+    Q_INVOKABLE void setDecoPortUseRemote(bool on);
+    bool decoPortMonitor() const { return m_decoPortMonitor; }
+    Q_INVOKABLE void setDecoPortMonitor(bool on);
+    Q_INVOKABLE bool hasDecoPortPassword() const;
+    Q_INVOKABLE bool setDecoPortPassword(const QString& password);
+    Q_INVOKABLE void clearDecoPortPassword();
+    Q_INVOKABLE bool decoPortAutoStart() const;
+    Q_INVOKABLE void setDecoPortAutoStart(bool on);
+    Q_INVOKABLE int  decoPortConfiguredPort() const;
+    QObject* spotShareObject() const;
+    QObject* amplifierObject() const;
+    // Cerca l'amplificatore sulle porte libere e, se lo trova, lo configura da
+    // se': porta, velocita' e interrogazione attiva. Restituisce cosa ha
+    // trovato, perche' l'interfaccia possa dirlo invece di limitarsi a
+    // cambiare un campo sotto gli occhi dell'operatore.
+    //
+    // Le porte del CAT sono escluse dalla ricerca: aprirle anche solo per
+    // chiedere strapperebbe la radio a chi la sta governando.
+    Q_INVOKABLE QVariantMap cercaAmplificatore();
+
+    Q_INVOKABLE void configureAmplifier(bool enabled, const QString& port,
+                                        int baud, bool passive, int pollMs);
+    Q_INVOKABLE void configureCatShare(bool enabled, int port,
+                                       bool allowControl, bool allowPtt);
+    // Spot condivisi in rete locale. Nessun permesso da concedere come per la
+    // CAT: qui non c'e' niente da comandare, si legge e basta.
+    Q_INVOKABLE void configureSpotShare(bool enabled, int port);
+    // Apre una seconda istanza su un profilo suo. Torna stringa vuota se e'
+    // partita, altrimenti il motivo - da mostrare, non da ingoiare.
+    Q_INVOKABLE QString launchSecondInstance(const QString& profileName,
+                                             bool useSharedCat);
+    bool catConnected() const;
+    QString catRigName() const;
+    QString catMode() const;
+    double rigPowerWatts() const { return m_rigPowerWatts; }
+    double rigSwr() const { return m_rigSwr; }
+    double rigAlc() const { return m_rigAlc; }
+    bool rigAlcValid() const { return m_rigAlcValid; }
+    // 1.0.324 — ALC auto-calibration getters
+    int     alcTarget()             const { return m_alcTarget; }
+    bool    alcCalibrating()        const { return m_alcCalibrating; }
+    QString alcCalibrationStatus()  const { return m_alcCalStatus; }
+    Q_INVOKABLE void setAlcTarget(int v);
+    double processCpuUsage() const { return m_processCpuUsage; }
+    double processGpuUsage() const { return m_processGpuUsage; }
+    QString processGpuUsageSource() const { return m_processGpuUsageSource; }
+    bool panadapterGpuFftActive() const { return m_panadapterGpuFftActive; }
+    QString panadapterGpuFftBackend() const { return m_panadapterGpuFftBackend; }
+    bool openGlGpuPanadapterFftEnabled() const
+    {
+        return m_openGlGpuPanadapterFftEnabled.load(std::memory_order_relaxed);
+    }
+    QString lastCatError() const { return m_lastCatError; }
+
+    // LED status
+    bool   ledCoherentAveraging() const { return m_ledCoherentAveraging; }
+    bool   ledNeuralSync()        const { return m_ledNeuralSync; }
+    bool   ledTurboFeedback()     const { return m_ledTurboFeedback; }
+    int    coherentCount()        const { return m_coherentCount; }
+    double neuralScore()          const { return m_neuralScore; }
+    int    turboIterations()      const { return m_turboIterations; }
+    bool   coherentAvgEnabled()   const { return m_coherentAvgEnabled; }
+    void   setCoherentAvgEnabled(bool v) { if (m_coherentAvgEnabled != v) { m_coherentAvgEnabled = v; emit coherentAvgEnabledChanged(); } }
+    bool   neuralSyncEnabled()    const { return m_neuralSyncEnabled; }
+    void   setNeuralSyncEnabled(bool v)  { if (m_neuralSyncEnabled != v)  { m_neuralSyncEnabled = v;  emit neuralSyncEnabledChanged(); } }
+    bool   turboFeedbackEnabled() const { return m_turboFeedbackEnabled; }
+    void   setTurboFeedbackEnabled(bool v) { if (m_turboFeedbackEnabled != v) { m_turboFeedbackEnabled = v; emit turboFeedbackEnabledChanged(); } }
+    bool   fastLdpcEnabled() const { return m_fastLdpcEnabled; }
+    void   setFastLdpcEnabled(bool v) { if (m_fastLdpcEnabled != v) { m_fastLdpcEnabled = v; fastldpc_set_enabled_c(v ? 1 : 0); emit fastLdpcEnabledChanged(); } }
+    bool   advAutoModeEnabled()   const { return m_advAutoModeEnabled; }
+    void   setAdvAutoModeEnabled(bool v);
+    bool   advNeuralSyncActive()  const { return m_advNeuralSyncActive; }
+    bool   advTurboFeedbackActive() const { return m_advTurboFeedbackActive; }
+    bool   advCoherentAvgActive() const { return m_advCoherentAvgActive; }
+    // Effective flags da consumare nei worker FT8/Q65; tengono conto di auto-mode.
+    Q_INVOKABLE bool effectiveNeuralSync();
+    Q_INVOKABLE bool effectiveTurboFeedback();
+    Q_INVOKABLE bool effectiveCoherentAvg(double snr_db_avg);
+    // Hook chiamato dopo ogni slot FT8 per aggiornare la rolling window.
+    Q_INVOKABLE void recordFt8DecodeCount(int count);
+    int    ftThreads()            const { return m_ftThreads; }
+    bool   ftThreadsAuto()        const { return m_ftThreadsAuto; }
+    // Shared with the embedded FT4/FT8 workers.  Those workers used to read
+    // only the legacy FT8threads setting and could therefore consume every
+    // logical core even though the QML bridge had reserved cores for the UI.
+    Q_INVOKABLE int effectiveFtThreadLimitForDecode() const;
+    void noteMainThreadMicroStall(qint64 deltaMs);
+    Q_INVOKABLE void setFtThreads(int v);
+    Q_INVOKABLE void setFtThreadsAuto(bool enabled);
+    Q_INVOKABLE void cycleFtThreads();
+    bool   lowCpuModeEnabled()    const { return m_lowCpuModeEnabled; }
+    bool   lowEndMode()           const { return m_lowEndMode; }
+    Q_INVOKABLE void setLowEndMode(bool enabled);
+    Q_INVOKABLE void setLowCpuModeEnabled(bool enabled);
+
+    // PSK Reporter
+    bool        pskSearchFound()       const { return m_pskSearchFound; }
+    QString     pskSearchCallsign()    const { return m_pskSearchCallsign; }
+    bool        pskSearching()         const { return m_pskSearching; }
+    QStringList pskSearchBands()       const { return m_pskSearchBands; }
+    QVariantList pskHeardByList()      const { return m_pskHeardByList; }
+    int         pskHeardByCount()      const { return m_pskHeardByCount; }
+    int         pskHeardByDxccCount()  const { return m_pskHeardByDxccCount; }
+    double      pskHeardByMaxKm()      const { return m_pskHeardByMaxKm; }
+    bool        pskHeardByFetching()   const { return m_pskHeardByFetching; }
+    int         pskReporterTimeSpanMinutes() const { return m_pskReporterTimeSpanMinutes; }
+    void setPskReporterTimeSpanMinutes(int minutes);
+    bool        pskMapSpotFetching() const { return m_pskMapSpotFetching; }
+    int         pskMapSpotWindowMinutes() const { return m_pskMapSpotWindowMinutes; }
+    void setPskMapSpotWindowMinutes(int minutes);
+    bool        pskReporterEnabled()   const { return m_pskReporterEnabled; }
+    void setPskReporterEnabled(bool v);
+    bool        pskReporterConnected() const;
+
+    // Theme
+    DecodiumThemeManager* themeManager() const { return m_themeManager; }
+    double fontScale() const { return m_fontScale; }
+
+    // Sub-managers
+    WavManager*          wavManager()   const { return m_wavManager; }
+    MacroManager*        macroManager() const { return m_macroManager; }
+    BandManager*         bandManager()  const { return m_bandManager; }
+    QObject*                     catManagerObj() const {
+        if (m_catBackend == "native")   return (QObject*)m_nativeCat;
+        if (m_catBackend == "cat4om")   return (QObject*)m_cat4OmCat;
+        if (m_catBackend == "omnirig")  return (QObject*)m_omniRigCat;
+        return (QObject*)m_hamlibCat;
+    }
+    QString                      catBackend()    const { return m_catBackend; }
+    void                         setCatBackend(const QString& v);
+    QString                      activeCatProfile() const;
+    QStringList                  catProfileList() const;
+    DecodiumCatManager*          nativeCat()     const { return m_nativeCat; }
+    DecodiumCat4OmManager*       cat4OmCat()     const { return m_cat4OmCat; }
+    DecodiumOmniRigManager*      omniRigCat()    const { return m_omniRigCat; }
+    DecodiumTransceiverManager*  hamlibCat()     const { return m_hamlibCat; }
+    DecodiumDxCluster*   dxCluster()    const { return m_dxCluster; }
+    bool wsprUploadEnabled() const { return m_wsprUploadEnabled; }
+    void setWsprUploadEnabled(bool v) { if (m_wsprUploadEnabled!=v){m_wsprUploadEnabled=v;emit wsprUploadEnabledChanged();} }
+
+    // UI persistence getters/setters
+    int    uiSpectrumHeight()  const { return m_uiSpectrumHeight; }
+    void   setUiSpectrumHeight(int v)   { if(m_uiSpectrumHeight!=v){m_uiSpectrumHeight=v;emit uiSpectrumHeightChanged();} }
+    int    uiPaletteIndex()    const { return m_uiPaletteIndex; }
+    void   setUiPaletteIndex(int v);
+    double uiZoomFactor()      const { return m_uiZoomFactor; }
+    void   setUiZoomFactor(double v)    { if(m_uiZoomFactor!=v){m_uiZoomFactor=v;emit uiZoomFactorChanged();} }
+    int    uiWaterfallHeight() const { return m_uiWaterfallHeight; }
+    void   setUiWaterfallHeight(int v)  { if(m_uiWaterfallHeight!=v){m_uiWaterfallHeight=v;emit uiWaterfallHeightChanged();} }
+    int    uiDecodeWinX()      const { return m_uiDecodeWinX; }
+    void   setUiDecodeWinX(int v)       { if(m_uiDecodeWinX!=v){m_uiDecodeWinX=v;emit uiDecodeWinXChanged();} }
+    int    uiDecodeWinY()      const { return m_uiDecodeWinY; }
+    void   setUiDecodeWinY(int v)       { if(m_uiDecodeWinY!=v){m_uiDecodeWinY=v;emit uiDecodeWinYChanged();} }
+    int    uiDecodeWinWidth()  const { return m_uiDecodeWinWidth; }
+    void   setUiDecodeWinWidth(int v)   { if(m_uiDecodeWinWidth!=v){m_uiDecodeWinWidth=v;emit uiDecodeWinWidthChanged();} }
+    int    uiDecodeWinHeight() const { return m_uiDecodeWinHeight; }
+    void   setUiDecodeWinHeight(int v)  { if(m_uiDecodeWinHeight!=v){m_uiDecodeWinHeight=v;emit uiDecodeWinHeightChanged();} }
+
+    // appEngine-migrated properties (stub — saved in settings)
+    bool    alertOnCq()      const { return m_alertOnCq; }
+    void    setAlertOnCq(bool v)    { if (m_alertOnCq!=v){m_alertOnCq=v;emit alertOnCqChanged();} }
+    bool    alertOnMyCall()  const { return m_alertOnMyCall; }
+    void    setAlertOnMyCall(bool v){ if (m_alertOnMyCall!=v){m_alertOnMyCall=v;emit alertOnMyCallChanged();} }
+    bool    recordRxEnabled()const;
+    void    setRecordRxEnabled(bool v);
+    bool    recordTxEnabled()const { return m_recordTxEnabled; }
+    void    setRecordTxEnabled(bool v){ if (m_recordTxEnabled!=v){m_recordTxEnabled=v;emit recordTxEnabledChanged();} }
+    QString stationName() const { return m_stationName; }
+    void    setStationName(const QString& v){ if (m_stationName!=v){m_stationName=v;emit stationNameChanged();} }
+    QString stationQth() const { return m_stationQth; }
+    void    setStationQth(const QString& v){ if (m_stationQth!=v){m_stationQth=v;emit stationQthChanged();} }
+    QString stationRigInfo() const { return m_stationRigInfo; }
+    void    setStationRigInfo(const QString& v);
+    QString stationAntenna() const { return m_stationAntenna; }
+    void    setStationAntenna(const QString& v);
+    int     stationPowerWatts() const { return m_stationPowerWatts; }
+    void    setStationPowerWatts(int v){ v = qBound(0, v, 9999); if (m_stationPowerWatts!=v){m_stationPowerWatts=v;emit stationPowerWattsChanged(); if (m_mode.trimmed().compare(QStringLiteral("WSPR"), Qt::CaseInsensitive) == 0) regenerateTxMessages();} }
+    int     wsprPowerDbm() const { return m_wsprPowerDbm; }
+    void    setWsprPowerDbm(int v);
+    Q_INVOKABLE QVariantList wsprPowerOptions() const;
+    bool    autoStartMonitorOnStartup() const { return m_autoStartMonitorOnStartup; }
+    void    setAutoStartMonitorOnStartup(bool){ if (!m_autoStartMonitorOnStartup){m_autoStartMonitorOnStartup=true;emit autoStartMonitorOnStartupChanged();} }
+    bool    startFromTx2()   const { return m_startFromTx2; }
+    void    setStartFromTx2(bool v) { if (m_startFromTx2!=v){m_startFromTx2=v;emit startFromTx2Changed();} }
+    bool    vhfUhfFeatures() const { return m_vhfUhfFeatures; }
+    void    setVhfUhfFeatures(bool v);
+    bool    directLogQso()   const { return m_directLogQso; }
+    void    setDirectLogQso(bool v) { if (m_directLogQso!=v){m_directLogQso=v;emit directLogQsoChanged();} }
+    bool    confirm73()      const { return m_confirm73; }
+    void    setConfirm73(bool v)    { if (m_confirm73!=v){m_confirm73=v;emit confirm73Changed();} }
+    QString contestExchange()const { return m_contestExchange; }
+    void    setContestExchange(const QString& v){ if (m_contestExchange!=v){m_contestExchange=v;emit contestExchangeChanged();} }
+    int     contestNumber()  const { return m_contestNumber; }
+    void    setContestNumber(int v) { if (m_contestNumber!=v){m_contestNumber=v;emit contestNumberChanged();} }
+    QStringList contestTypeNames() const {
+        return {"None","ARRL DX","CQ WW","WAE","IARU HF","DARC","FD","SOTA","Custom","Ft2.it Award 2026"};
+    }
+    QString logAllTxtPath()  const; // implementato in .cpp
+
+    // Settings
+    int nfa() const; void setNfa(int);
+    int nfb() const; void setNfb(int);
+    int ndepth() const; void setNdepth(int);
+    bool singleDecode() const; void setSingleDecode(bool);
+    int ncontest() const; void setNcontest(int);
+    int specialOperationActivity() const { return m_specialOperationActivity; }
+    void setSpecialOperationActivity(int activity);
+
+    // Spectrum
+    int    spectrumColorPalette() const { return m_spectrumColorPalette; }
+    void   setSpectrumColorPalette(int v) { if (m_spectrumColorPalette!=v){m_spectrumColorPalette=v;emit spectrumColorPaletteChanged();} }
+    double spectrumRefLevel()    const { return m_spectrumRefLevel; }
+    void   setSpectrumRefLevel(double v) { if (m_spectrumRefLevel!=v){m_spectrumRefLevel=v;emit spectrumRefLevelChanged();} }
+    double spectrumDynRange()    const { return m_spectrumDynRange; }
+    void   setSpectrumDynRange(double v) { if (m_spectrumDynRange!=v){m_spectrumDynRange=v;emit spectrumDynRangeChanged();} }
+    bool   spectrumVisible()     const { return m_spectrumVisible; }
+    bool   rttyInAscolto()       const { return m_rttyInAscolto; }
+    // Vero quando il PTT e' stato alzato per conto di un client DecoPort o
+    // della finestra RTTY. Non e' m_transmitting, che riguarda solo il
+    // sequencer dei modi digitali: chi trasmette da qui deve poterlo sapere,
+    // altrimenti crede che la radio non sia in aria e smette subito.
+    bool   decoPortRemoteKeyed() const { return m_decoPortRemoteKeyed; }
+
+    // Il ponte per la trasmissione RTTY. Sotto ci sono i metodi di DecoPort,
+    // che sono privati e restano tali: RTTY ha bisogno di due cose sole —
+    // alzare il PTT e mandare l'audio — e le chiede con un nome che dice
+    // chi le sta chiedendo, invece di aprire tutta l'interfaccia del gateway.
+    // I ritegni sono quelli di DecoPort e valgono identici: niente audio e
+    // niente PTT mentre il sequencer dei modi digitali trasmette o accorda.
+    void   rttyAlzaPtt(bool on);
+    void   rttyMandaAudioTx(const QVector<short>& campioni12k);
+    void   setSpectrumVisible(bool v);
+    void   setRttyInAscolto(bool v);
+
+    // B6 — cty.dat
+    bool ctyDatUpdating() const { return m_ctyDatUpdating; }
+    bool call3TxtUpdating() const { return m_call3TxtUpdating; }
+    QVariantMap ctyDatState() const;
+    QVariantMap call3TxtState() const;
+
+    // B7 — Color highlighting
+    QString colorCQ()       const { return m_colorCQ; }
+    void setColorCQ(const QString& v)       { if (m_colorCQ!=v){m_colorCQ=v;emit colorCQChanged();} }
+    QString colorMyCall()   const { return m_colorMyCall; }
+    void setColorMyCall(const QString& v)   { if (m_colorMyCall!=v){m_colorMyCall=v;emit colorMyCallChanged();} }
+    QString colorDXEntity() const { return m_colorDXEntity; }
+    void setColorDXEntity(const QString& v) { if (m_colorDXEntity!=v){m_colorDXEntity=v;emit colorDXEntityChanged();} }
+    QString color73()       const { return m_color73; }
+    void setColor73(const QString& v)       { if (m_color73!=v){m_color73=v;emit color73Changed();} }
+    QString colorB4()       const { return m_colorB4; }
+    void setColorB4(const QString& v)       { if (m_colorB4!=v){m_colorB4=v;emit colorB4Changed();} }
+    QString colorDecodeText() const { return m_colorDecodeText; }
+    void setColorDecodeText(const QString& v) { if (m_colorDecodeText!=v){m_colorDecodeText=v;emit colorDecodeTextChanged();} }
+
+    // WSJT-X color getters/setters (inline, trivial)
+    QString colorTxMessage() const { return m_colorTxMessage; }
+    void setColorTxMessage(const QString& v) { if (m_colorTxMessage!=v){m_colorTxMessage=v;emit colorTxMessageChanged();} }
+    QString colorNewDxcc() const { return m_colorNewDxcc; }
+    void setColorNewDxcc(const QString& v) { if (m_colorNewDxcc!=v){m_colorNewDxcc=v;emit colorNewDxccChanged();} }
+    QString colorNewDxccBand() const { return m_colorNewDxccBand; }
+    void setColorNewDxccBand(const QString& v) { if (m_colorNewDxccBand!=v){m_colorNewDxccBand=v;emit colorNewDxccBandChanged();} }
+    QString colorNewContinent() const { return m_colorNewContinent; }
+    void setColorNewContinent(const QString& v) { if (m_colorNewContinent!=v){m_colorNewContinent=v;emit colorNewContinentChanged();} }
+    QString colorNewContinentBand() const { return m_colorNewContinentBand; }
+    void setColorNewContinentBand(const QString& v) { if (m_colorNewContinentBand!=v){m_colorNewContinentBand=v;emit colorNewContinentBandChanged();} }
+    QString colorNewCqZone() const { return m_colorNewCqZone; }
+    void setColorNewCqZone(const QString& v) { if (m_colorNewCqZone!=v){m_colorNewCqZone=v;emit colorNewCqZoneChanged();} }
+    QString colorNewCqZoneBand() const { return m_colorNewCqZoneBand; }
+    void setColorNewCqZoneBand(const QString& v) { if (m_colorNewCqZoneBand!=v){m_colorNewCqZoneBand=v;emit colorNewCqZoneBandChanged();} }
+    QString colorNewItuZone() const { return m_colorNewItuZone; }
+    void setColorNewItuZone(const QString& v) { if (m_colorNewItuZone!=v){m_colorNewItuZone=v;emit colorNewItuZoneChanged();} }
+    QString colorNewItuZoneBand() const { return m_colorNewItuZoneBand; }
+    void setColorNewItuZoneBand(const QString& v) { if (m_colorNewItuZoneBand!=v){m_colorNewItuZoneBand=v;emit colorNewItuZoneBandChanged();} }
+    QString colorNewGrid() const { return m_colorNewGrid; }
+    void setColorNewGrid(const QString& v) { if (m_colorNewGrid!=v){m_colorNewGrid=v;emit colorNewGridChanged();} }
+    QString colorNewGridBand() const { return m_colorNewGridBand; }
+    void setColorNewGridBand(const QString& v) { if (m_colorNewGridBand!=v){m_colorNewGridBand=v;emit colorNewGridBandChanged();} }
+    QString colorNewCall() const { return m_colorNewCall; }
+    void setColorNewCall(const QString& v) { if (m_colorNewCall!=v){m_colorNewCall=v;emit colorNewCallChanged();} }
+    QString colorNewCallBand() const { return m_colorNewCallBand; }
+    void setColorNewCallBand(const QString& v) { if (m_colorNewCallBand!=v){m_colorNewCallBand=v;emit colorNewCallBandChanged();} }
+    QString colorLotwUser() const { return m_colorLotwUser; }
+    void setColorLotwUser(const QString& v) { if (m_colorLotwUser!=v){m_colorLotwUser=v;emit colorLotwUserChanged();} }
+    QString decodeColorFallback() const { return QStringLiteral("#AFC4D8"); }
+    Q_INVOKABLE bool decodeColorEnabled(const QString& prop) const;
+    Q_INVOKABLE void setDecodeColorEnabled(const QString& prop, bool enabled);
+    Q_INVOKABLE bool decodeColorBold(const QString& prop) const;
+    Q_INVOKABLE void setDecodeColorBold(const QString& prop, bool bold);
+    Q_INVOKABLE QString effectiveDecodeColor(const QString& prop) const;
+
+    // Returns the priority-ranked WSJT-X background color for a decode entry,
+    // or empty string when no highlight applies.
+    Q_INVOKABLE QString decodeHighlightBg(const QVariantMap& entry) const;
+    // 1.0.416 (fork iu8lmc) — colore di SFONDO riga scelto dall'utente, per categoria.
+    Q_INVOKABLE QString decodeHighlightUserBg(const QVariantMap& entry) const;
+    Q_INVOKABLE QString decodeColorBgValue(const QString& prop) const;
+    Q_INVOKABLE bool decodeColorBgEnabled(const QString& prop) const;
+    Q_INVOKABLE void setDecodeColorBg(const QString& prop, const QString& hex);
+    Q_INVOKABLE void setDecodeColorBgEnabled(const QString& prop, bool enabled);
+    bool b4Strikethrough()  const { return m_b4Strikethrough; }
+    void setB4Strikethrough(bool v);
+
+    // B8 — Alert sounds
+    bool alertSoundsEnabled() const { return m_alertSoundsEnabled; }
+    void setAlertSoundsEnabled(bool v) { if (m_alertSoundsEnabled!=v){m_alertSoundsEnabled=v;emit alertSoundsEnabledChanged();} }
+
+    // C16 — Update checker
+    bool    updateAvailable() const { return m_updateAvailable; }
+    QString latestVersion()   const { return m_latestVersion; }
+
+    // A2 — Soundcard Drift
+    double  soundcardDriftPpm() const { return m_soundcardDriftPpm; }
+    double  soundcardDriftMsPerPeriod() const {
+        return m_soundcardDriftPpm * periodMsForMode(m_mode) / 1.0e6;
+    }
+    QString driftSeverity() const {
+        double a = qAbs(m_soundcardDriftPpm);
+        if (a < 10.0) return QStringLiteral("green");
+        if (a < 50.0) return QStringLiteral("yellow");
+        return QStringLiteral("red");
+    }
+
+    // A3 — Time Sync
+    DecoSyncTime* decoSyncTime() const { return m_decoSyncTime; }
+    bool   ntpEnabled()      const { return m_ntpEnabled; }
+    double ntpOffsetMs()     const { return m_ntpOffsetMs; }
+    bool   ntpSynced()       const { return m_ntpSynced; }
+    double avgDt()           const { return m_avgDt; }
+    double decodeLatencyMs() const { return m_decodeLatencyMs; }
+    int    timeSyncSampleCount() const { return m_dtLastSampleCount; }
+
+    // A4 — Fox/Hound
+    bool        foxMode()        const { return m_foxMode; }
+    void        setFoxMode(bool v);
+    bool        houndMode()      const { return m_houndMode; }
+    void        setHoundMode(bool v);
+    QStringList callerQueue()    const { return m_callerQueue; }
+    int         callerQueueSize()const { return m_callerQueue.size(); }
+    QObject*    logManager() { return this; }
+    QObject*    propagationManager() const;
+    QObject*    satelliteTracking() const;
+    QObject*    mapIntelligenceService() const;
+    bool        offlineMode() const;
+    QObject*    callsignIntelligence() const;
+    QObject*    diagnostics() const { return m_diagnostics; }
+    int         qsoCount() const;
+
+    // B9 — Active Stations
+    QObject* activeStations() const;
+
+    // Modes
+    Q_INVOKABLE QStringList availableModes() const;
+    Q_INVOKABLE bool ft2LinkAccessPasswordConfigured() const;
+    Q_INVOKABLE bool verifyFt2LinkAccessPassword(const QString& password);
+    Q_INVOKABLE void lockFt2LinkAccess();
+    Q_INVOKABLE void requestSatelliteTrackingWindow();
+
+public slots:
+    // Notify hooks chiamabili dai DecodeWorker (thread-safe via QueuedConnection)
+    void notifyCoherentAveraging(int signalsInCache);
+    void notifyNeuralSyncHit(double score);
+    void notifyTurboIterations(int itersUsed);
+
+    // Monitor / TX
+    Q_INVOKABLE void startRx();
+    Q_INVOKABLE void stopRx();
+    Q_INVOKABLE void startMonitor() { startRx(); }
+    Q_INVOKABLE void stopMonitor()  { stopRx(); }
+    Q_INVOKABLE void startTx();
+    Q_INVOKABLE void stopTx();
+    Q_INVOKABLE void triggerManualTx() { startTx(); }  // PTT manuale FT2
+    Q_INVOKABLE void sendTx(int n);    // usato da TxPanel: seleziona messaggio n e trasmette
+    // CW via AUDIO: manipola un sidetone e lo trasmette come audio TX in USB/DATA-U,
+    // riusando l'intero percorso TX del bridge (PTT, audio sink, stop). Indipendente
+    // dal keyer CAT (rig_send_morse), che su molte radio (es. Yaesu FT-991/991A) non
+    // funziona in modalita' dati. dialFrequencyHz=0 lascia il VFO dov'e'.
+    Q_INVOKABLE void sendCwAudio(const QString& text, qint64 dialFrequencyHz, int wpm);
+    // Telemetria stazione+meteo (tipo FT8/FT4 0.5, opt-in): un solo TX extra
+    // subito dopo che un QSO e' stato loggato, se SendStationTelemetry e'
+    // attivo. Stesso schema one-shot di sendCwAudio, mai instradato nel
+    // sequencer/slot Tx1-6. Vedi src/radio/StationTelemetryCodec.hpp.
+    Q_INVOKABLE void sendStationTelemetry();
+    Q_INVOKABLE void fetchWeatherForGrid();
+    Q_INVOKABLE QVariantMap currentWeatherPreview() const;
+    Q_INVOKABLE QStringList stationRadioModelNames () const { return decodium::telemetry::stationRadioModelNames (); }
+    Q_INVOKABLE QStringList stationAntennaTypeNames () const { return decodium::telemetry::stationAntennaTypeNames (); }
+    Q_INVOKABLE bool transmitFt2LinkAudio(const QString& text,
+                                          const QVector<float>& wave,
+                                          const QVariantMap& plan);
+    Q_INVOKABLE QVariantMap ft2LinkSatelliteHalfDuplexStatus() const;
+    // Click su uno spot DX cluster nel waterfall: setta dxCall, txFrequency
+    // sull'audio offset dello spot, abilita TX e avvia la sequenza QSO.
+    Q_INVOKABLE void engageDxClusterSpot(const QString& call, int audioFreqHz);
+    Q_INVOKABLE QString txMessage(int n) const;
+    Q_INVOKABLE void setTxMessage(int n, const QString& message);
+    Q_INVOKABLE QString validateTxMessage(const QString& message) const;
+    Q_INVOKABLE void resetStandardTxMessages();
+    Q_INVOKABLE void clearTxMessages();
+    Q_INVOKABLE void startTune();      // tono continuo fino a stopTune()
+    Q_INVOKABLE void stopTune();
+    // 1.0.324 — ALC auto-calibration (Fase 2)
+    Q_INVOKABLE void startAlcCalibration();
+    Q_INVOKABLE void cancelAlcCalibration();
+    Q_INVOKABLE bool openAllTxtFolder() const;
+    Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
+    Q_INVOKABLE void haltWithReason(const QString& reason);
+    Q_INVOKABLE void logQso();
+
+    // Il collegamento RTTY entra nel log di Decodium dalla stessa porta di
+    // tutti gli altri. Non scrive un archivio suo: compila i campi del QSO e
+    // chiama logQso(), cosi' eredita quello che c'e' gia' — l'archivio attivo
+    // fra i vari libri, il formato ADIF, la richiesta di conferma se e'
+    // accesa, e tutti gli instradamenti verso QRZ, eQSL, HRDLog, Club Log e
+    // PSK Reporter. Un secondo archivio parallelo sarebbe la cosa peggiore:
+    // due liste di collegamenti che divergono e nessuna delle due completa.
+    // Il modo radio scelto per l'RTTY dai pulsanti sopra il waterfall. Fa due
+    // cose in una: commuta la radio adesso e ricorda la scelta, perche' al
+    // prossimo cambio di banda vada riapplicata — gli apparati che ricordano un
+    // modo per banda altrimenti la cancellerebbero al primo salto.
+    Q_INVOKABLE void impostaModoRadioRtty(const QString& modo);
+
+    Q_INVOKABLE bool registraQsoRtty(const QString& nominativo,
+                                     const QString& rstInviato,
+                                     const QString& rstRicevuto,
+                                     const QString& nome,
+                                     const QString& qth,
+                                     const QString& locatore);
+    Q_INVOKABLE QVariantMap uploadExternalAdif(const QString& dxCall,
+                                               const QString& adifRecord,
+                                               const QString& target);
+    Q_INVOKABLE QVariantMap uploadExternalAdifForOutbox(quint32 uploadId,
+                                                        const QString& dxCall,
+                                                        const QString& adifRecord,
+                                                        const QString& target);
+    Q_INVOKABLE void confirmLogQso();
+    Q_INVOKABLE void rejectPromptedLogQso();
+    // La QML segnala di aver davvero aperto la finestra di conferma. Se non
+    // arriva, il prompt e' stato scartato da una guardia (pannello TX non
+    // visibile) e si ricade sul dialogo nativo invece di perdere il QSO.
+    Q_INVOKABLE void notifyLogPromptShown();
+    Q_INVOKABLE void promptLogQso();
+    Q_INVOKABLE void requestManualLogQso();
+    Q_INVOKABLE void shutdown();
+    Q_INVOKABLE void copyToClipboard(const QString &text);
+    Q_INVOKABLE bool advanceQsoState(int txNum); // GitHub TxController clone
+
+private:
+    void saveSettingsInternal(bool asynchronous);
+    void fetchPskReporterSnapshot(int spanMinutes, bool mapRequest, bool force);
+    void syncPskMapSpotWindowToMap();
+
+    struct ExternalAdifUploadPending {
+        QString dxCall;
+        QString target;
+        QStringList pendingBackends;
+        QStringList sentBackends;
+        QStringList failedBackends;
+        QStringList skippedTargets;
+        QStringList immediateTargets;
+    };
+
+    QString decodeColorValue(const QString& prop) const;
+    QVariantMap uploadExternalAdifInternal(quint32 uploadId,
+                                           const QString& dxCall,
+                                           const QString& adifRecord,
+                                           const QString& target);
+    void noteExternalAdifUploadBackend(quint32 uploadId,
+                                       const QString& backend,
+                                       const QString& dxCall,
+                                       bool ok,
+                                       const QString& detail);
+    void finishExternalAdifUploadIfReady(quint32 uploadId);
+
+    // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory helpers (gate stretto + log immediato)
+    void rememberPartnerStateV2(QString const& tag);
+    bool tryResumeFromPartnerMemoryV2(QString const& newDxCall);
+    void prunePartnerMemoryIfDueV2();
+    // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send check
+    bool maybeForceTx2ResendOnStall();
+public:
+
+    // Audio
+    Q_INVOKABLE void refreshAudioDevices();
+    Q_INVOKABLE void setTxAudioFreqFromClick(int f) { setTxFrequency(f); }
+    Q_INVOKABLE void setRxAudioFreqFromClick(int f) { setRxFrequency(f); }
+    Q_INVOKABLE QVariantMap worldClockSnapshot(const QString& timeZoneId) const;
+    Q_INVOKABLE QVariantList worldClockCityOptions(const QString& query = QString(),
+                                                   int limit = 40) const;
+
+    // DX Cluster
+    Q_INVOKABLE void connectDxCluster();
+    Q_INVOKABLE void connectDxCluster(const QString& host, int port);
+    Q_INVOKABLE void disconnectDxCluster();
+    Q_INVOKABLE void setNextLogClusterSpotEnabled(bool enabled);
+    Q_INVOKABLE void setNextLogComment(const QString& comment);
+    Q_INVOKABLE void setNextLogGrid(const QString& grid);  // 1.0.302: locator editabile nel log QSO
+    Q_INVOKABLE void setNextLogTimes(const QString& timeOnUtc, const QString& timeOffUtc);
+    bool dxClusterConnected() const { return m_dxCluster && m_dxCluster->connected(); }
+    QVariantList dxClusterSpots() const { return m_dxCluster ? m_dxCluster->spots() : QVariantList{}; }
+    QString dxClusterHost() const { return m_dxCluster ? m_dxCluster->host() : QString{}; }
+    int dxClusterPort() const { return m_dxCluster ? m_dxCluster->port() : 8000; }
+    void setDxClusterHost(const QString& h) { if (m_dxCluster) { m_dxCluster->setHost(h); emit dxClusterHostChanged(); } }
+    void setDxClusterPort(int p) { if (m_dxCluster) { m_dxCluster->setPort(p); emit dxClusterPortChanged(); } }
+    bool autoSpotEnabled() const { return m_autoSpotEnabled; }
+    void setAutoSpotEnabled(bool enabled);
+
+    // Decode
+    Q_INVOKABLE void clearDecodeList();
+    Q_INVOKABLE void clearDecodes() { clearDecodeList(); }
+    Q_INVOKABLE void clearRxDecodes();
+    // QML may instantiate the Live Map lazily or in a detached window. Keep
+    // an explicit consumer-ready handshake so contact signals are replayed
+    // instead of being lost while the visual item is unavailable.
+    Q_INVOKABLE void setWorldMapConsumerReady(QObject* consumer, bool ready);
+    Q_INVOKABLE void processDecodeDoubleClick(const QString& message, const QString& timeStr,
+                                              const QString& db, int audioFreq);
+
+    // WAV
+    Q_INVOKABLE QString openFileDialog(const QString& title,
+                                       const QString& initialPath,
+                                       const QStringList& nameFilters = QStringList()) const;
+    Q_INVOKABLE QString saveFileDialog(const QString& title,
+                                       const QString& initialPath,
+                                       const QStringList& nameFilters = QStringList()) const;
+    Q_INVOKABLE QString openDirectoryDialog(const QString& title,
+                                            const QString& initialPath) const;
+    Q_INVOKABLE QVariantMap readTextFile(const QString& path,
+                                         int maxBytes = 4096) const;
+    Q_INVOKABLE QVariantMap writeTextFile(const QString& path,
+                                          const QString& text) const;
+    Q_INVOKABLE QVariantMap readFileBytes(const QString& path,
+                                          int maxBytes = 16384) const;
+    Q_INVOKABLE QVariantMap writeFileBytes(const QString& path,
+                                           const QString& base64) const;
+    Q_INVOKABLE QString defaultFt2LinkReceivedFilesDirectory() const;
+    Q_INVOKABLE quint64 saveFt2LinkReceivedFileAsync(
+        const QString& directory,
+        const QString& fileName,
+        const QString& text,
+        const QString& base64,
+        bool binary,
+        bool preserveExisting = true);
+    Q_INVOKABLE quint64 openFt2LinkReceivedFilesDirectoryAsync(
+        const QString& directory = QString());
+    Q_INVOKABLE bool openExternalUrl(const QString& url);
+    Q_INVOKABLE void openWavForDecode(const QString& path);
+    Q_INVOKABLE void openWavFolderDecode(const QString& folderPath);
+
+    // CAT
+    Q_INVOKABLE void openSetupSettings(int tabIndex = -1);
+    Q_INVOKABLE void openTimeSyncSettings();
+    Q_INVOKABLE void syncNtpNow();
+    Q_INVOKABLE void openCatSettings();
+    Q_INVOKABLE void retryRigConnection();
+    Q_INVOKABLE void openHamlibUpdatePage() const;
+
+    // PSK Reporter
+    Q_INVOKABLE void searchPskReporter(const QString& callsign);
+    Q_INVOKABLE void sendPskReporterNow();
+    // DX-Pedition Mode Fase 3 — fetch "heard-by" (chi riceve il MIO segnale).
+    // Async, riusa il pattern HTTP di searchPskReporter. Rate-limit 60s interno.
+    Q_INVOKABLE void fetchPskHeardBy();
+    // Live Map PSK snapshot: independently configurable 5–60 minute look-back.
+    Q_INVOKABLE void fetchPskMapSpots();
+    Q_INVOKABLE void refreshPskMapSpots();
+
+    // LED
+    Q_INVOKABLE void refreshLedStatus() {}
+    Q_INVOKABLE void resetLedStatus();
+
+    // Diagnostic log
+    Q_INVOKABLE QString diagnosticLogPath() const;
+    // IU8LMC: autodiagnosi -> filtra i NON-bug prima che diventino segnalazioni.
+    Q_INVOKABLE QVariantList runSelfCheck();
+    Q_INVOKABLE void openDiagnosticLog() const;
+    Q_INVOKABLE void requestSafeGraphicsNextLaunch(const QString& reason = QString());
+    Q_INVOKABLE bool configureQuickWindowGraphics(QObject* windowObject);
+    Q_INVOKABLE void notifyMainQmlLoadStarted();
+    Q_INVOKABLE void notifyMainQmlReady();
+
+    // Font scale
+    Q_INVOKABLE void increaseFontScale();
+    Q_INVOKABLE void decreaseFontScale();
+    Q_INVOKABLE void setFontScale(double s);
+
+    // B6 — cty.dat / CALL3.TXT update
+    Q_INVOKABLE void checkCtyDatUpdate(bool forceDownload = false);
+    Q_INVOKABLE void downloadCall3Txt();
+
+    // B8 — Alert sounds
+    Q_INVOKABLE void playAlert(const QString& alertType);
+
+    // B11 — Cabrillo export
+    Q_INVOKABLE bool exportCabrillo(const QString& filename);
+
+    // C15 — QSY
+    Q_INVOKABLE void qsyTo(double freqHz, const QString& newMode);
+
+    // C16 — Update checker
+    Q_INVOKABLE void checkForUpdates();
+
+    // C17 — OTP Fox verification
+    Q_INVOKABLE void verifyOtp(const QString& callsign, const QString& code, int audioHz);
+
+    // A4 — Fox/Hound queue management
+    Q_INVOKABLE void enqueueStation(const QString& call);
+    Q_INVOKABLE void dequeueStation(const QString& call);
+    Q_INVOKABLE void moveCallerQueueItem(int fromIndex, int toIndex);
+    Q_INVOKABLE void clearCallerQueue();
+
+    // C13 — Grid distance/bearing
+    Q_INVOKABLE double calcDistance(const QString& myGrid, const QString& dxGrid) const;
+    Q_INVOKABLE double calcBearing(const QString& myGrid, const QString& dxGrid) const;
+    Q_INVOKABLE void replayWorldMapFeed();
+    Q_INVOKABLE void processMapContactClick(const QString& call, const QString& grid);
+    // Explicit operational actions (roster, history and logbook) arm TX after
+    // selecting the station. A plain map click keeps its configurable
+    // single/double-click behavior.
+    Q_INVOKABLE void processMapRosterCall(const QString& call, const QString& grid);
+
+    // C14 — Grid to lat/lon (per AstroPanel)
+    Q_INVOKABLE double latFromGrid(const QString& grid) const;
+    Q_INVOKABLE double lonFromGrid(const QString& grid) const;
+
+    // Settings
+    Q_INVOKABLE void saveSettings();
+    // Debounced QML persistence. The QSettings flush runs on a serial worker
+    // so a timer callback never blocks rendering or input.
+    Q_INVOKABLE void saveSettingsAsync();
+    Q_INVOKABLE void loadSettings();
+    Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
+    Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE QString suggestedCatProfileName() const;
+    Q_INVOKABLE bool saveCatProfile(const QString& name);
+    Q_INVOKABLE bool loadCatProfile(const QString& name);
+    Q_INVOKABLE bool deleteCatProfile(const QString& name);
+    Q_INVOKABLE bool renameCatProfile(const QString& oldName, const QString& newName);
+    // Rilevamento automatico della radio, fase 1: SOLO lettura di cio' che il
+    // sistema gia' sa (identita' USB delle porte, nomi delle schede audio).
+    // Non apre porte e non invia comandi, quindi e' sicuro anche in TX.
+    Q_INVOKABLE QVariantList detectConnectedRigs() const;
+    Q_INVOKABLE QVariantMap ft2LinkEmailGatewayPasswordStatus(const QVariantMap& config) const;
+    Q_INVOKABLE QVariantMap setFt2LinkEmailGatewayPassword(const QVariantMap& config,
+                                                           const QString& password);
+    Q_INVOKABLE QVariantMap clearFt2LinkEmailGatewayPassword(const QVariantMap& config);
+    Q_INVOKABLE QVariantMap testFt2LinkEmailGateway(const QVariantMap& config);
+    Q_INVOKABLE QVariantMap sendFt2LinkGatewayEmail(quint32 mailboxId,
+                                                    const QVariantMap& config,
+                                                    const QString& eml);
+    Q_INVOKABLE QVariantList workingFrequencyRows() const;
+    Q_INVOKABLE QVariantList stationFrequencyRows() const;
+    Q_INVOKABLE QStringList frequencyRegionOptions() const;
+    Q_INVOKABLE QStringList frequencyModeOptions() const;
+    Q_INVOKABLE QStringList frequencyBandOptions() const;
+    Q_INVOKABLE bool addWorkingFrequencyRow(const QString& region,
+                                            const QString& mode,
+                                            const QVariant& frequency,
+                                            const QString& description,
+                                            const QString& startTime,
+                                            const QString& endTime,
+                                            bool preferred);
+    Q_INVOKABLE bool updateWorkingFrequencyRow(int index,
+                                               const QString& region,
+                                               const QString& mode,
+                                               const QVariant& frequency,
+                                               const QString& description,
+                                               const QString& startTime,
+                                               const QString& endTime,
+                                               bool preferred);
+    Q_INVOKABLE bool deleteWorkingFrequencyRow(int index);
+    Q_INVOKABLE bool setWorkingFrequencyPreferred(int index, bool preferred);
+    Q_INVOKABLE void resetWorkingFrequenciesToDefaults();
+    Q_INVOKABLE bool loadWorkingFrequenciesFile(const QString& path, bool merge);
+    Q_INVOKABLE bool saveWorkingFrequenciesFile(const QString& path);
+    Q_INVOKABLE bool addStationFrequencyRow(const QString& band,
+                                            const QVariant& offset,
+                                            const QString& antennaDescription);
+    Q_INVOKABLE bool updateStationFrequencyRow(int index,
+                                               const QString& band,
+                                               const QVariant& offset,
+                                               const QString& antennaDescription);
+    Q_INVOKABLE bool deleteStationFrequencyRow(int index);
+    Q_INVOKABLE double frequencyCalibrationSlopePpm() const;
+    Q_INVOKABLE double frequencyCalibrationInterceptHz() const;
+    Q_INVOKABLE void setFrequencyCalibrationSlopePpm(double value);
+    Q_INVOKABLE void setFrequencyCalibrationInterceptHz(double value);
+    // 1.0.192 — Completamento Frequency Calibration di Salvatore: applica
+    // slope+intercept alla frequenza prima di scriverla al rig. Fast path
+    // se entrambi 0 (return hz invariata).
+    double applyFrequencyCalibration(double hz) const;
+    // 1.0.194 — Station Frequency Offset apply: per-band offset (additivo)
+    // dalle Station Frequencies (antenna offsets, sub-band correction).
+    // Ritorna 0 se la freq e' OOB o se non c'e' record per quella banda.
+    double stationOffsetForFrequencyHz(double hz) const;
+    // Convert a physical CAT/IF dial report back to Decodium's logical
+    // on-air frequency.  This is the inverse of applyFrequencyCalibration()
+    // and keeps transverter offsets out of the user-facing dial/band state.
+    double logicalFrequencyFromCatDial(double rigHz,
+                                       QString* resolvedBand = nullptr,
+                                       qint64* resolvedOffsetHz = nullptr) const;
+    // 1.0.195 — QSY rapido a un preset Working Frequencies (index nella tabella
+    // restituita da workingFrequencyRows()). Usa il normale percorso QSY CAT
+    // e poi applica il modo. Log [QSY-Preset] su ogni invocazione.
+    Q_INVOKABLE void qsyToWorkingFrequency(int index);
+    Q_INVOKABLE QVariantMap pendingLogQsoPreview() const;
+    Q_INVOKABLE QStringList satelliteOptions() const;
+    Q_INVOKABLE QStringList satModeOptions() const;
+    Q_INVOKABLE QString fontSettingLabel(const QString& key,
+                                         const QString& fallbackFamily = QString(),
+                                         int fallbackPointSize = 0) const;
+    Q_INVOKABLE QString fontSettingFamily(const QString& key,
+                                          const QString& fallbackFamily = QString(),
+                                          int fallbackPointSize = 0) const;
+    Q_INVOKABLE int fontSettingPixelSize(const QString& key,
+                                         const QString& fallbackFamily = QString(),
+                                         int fallbackPointSize = 0) const;
+    Q_INVOKABLE int fontSettingPointSize(const QString& key,
+                                         const QString& fallbackFamily = QString(),
+                                         int fallbackPointSize = 0) const;
+    Q_INVOKABLE bool fontSettingBold(const QString& key,
+                                     const QString& fallbackFamily = QString(),
+                                     int fallbackPointSize = 0) const;
+    Q_INVOKABLE bool fontSettingItalic(const QString& key,
+                                       const QString& fallbackFamily = QString(),
+                                       int fallbackPointSize = 0) const;
+    Q_INVOKABLE QStringList availableFontFamilies(bool fixedPitchOnly = false) const;
+    Q_INVOKABLE void setFontSetting(const QString& key,
+                                    const QString& family,
+                                    int pointSize,
+                                    bool bold,
+                                    bool italic,
+                                    const QString& fallbackFamily = QString(),
+                                    int fallbackPointSize = 0);
+    Q_INVOKABLE void chooseFontSetting(const QString& key,
+                                       const QString& fallbackFamily = QString(),
+                                       int fallbackPointSize = 0);
+    Q_INVOKABLE void resetFontSetting(const QString& key,
+                                      const QString& fallbackFamily = QString(),
+                                      int fallbackPointSize = 0);
+    Q_INVOKABLE int remoteWebSocketPort() const;
+    Q_INVOKABLE QStringList networkInterfaceNames() const;
+    Q_INVOKABLE QString udpInterfaceName() const;
+    Q_INVOKABLE void setUdpInterfaceName(const QString& name);
+    Q_INVOKABLE QVariantMap loadWindowState(const QString& key) const;
+    Q_INVOKABLE void saveWindowState(const QString& key,
+                                     int x,
+                                     int y,
+                                     int width,
+                                     int height,
+                                     bool detached,
+                                     bool minimized);
+    Q_INVOKABLE void saveWindowStatesAsync(const QVariantMap& states,
+                                           const QVariantMap& layoutSettings = QVariantMap());
+    // 1.0.263 (fork-only) — cancella tutte le WindowState/* salvate e emette signal
+    // windowLayoutResetRequested(): il QML poi ripristina default position+size e re-docka
+    // tutte le finestre floating. Utile quando le finestre finiscono su monitor disconnessi
+    // o fuori area visibile.
+    Q_INVOKABLE void resetWindowLayout();
+
+    // 1.0.268 (Phase 5.3 fork-only) — Decode History Query API
+    // Apre una connessione SQLite separata named "decode_history_reader" sul
+    // main thread (worker scrive su "decode_history_worker"). Le query sono
+    // veloci grazie agli indici creati in Phase 5.1.
+    //
+    // Filtri supportati (tutti opzionali, omettere = no filtro):
+    //   callsign  -> LIKE su callsign_dx OR callsign_de OR message contains
+    //   band      -> exact match (es. "20M")
+    //   mode      -> exact match (es. "FT8")
+    //   fromUtc   -> ts_utc >= (millis)
+    //   toUtc     -> ts_utc <= (millis)
+    //   sessionId -> exact match
+    //   limit     -> default 500, max 5000
+    //   newestFirst -> bool, default true
+    Q_INVOKABLE QVariantList queryDecodeHistory(QVariantMap const& filters) const;
+    Q_INVOKABLE QVariantList queryDecodeSessions() const;
+    Q_INVOKABLE QStringList  queryDecodeBands() const;
+    Q_INVOKABLE QStringList  queryDecodeModes() const;
+    Q_INVOKABLE QVariantMap  queryDecodeStats() const;
+    Q_INVOKABLE bool         exportAdifFromHistory(QVariantMap const& filters, QString const& path);
+
+    Q_INVOKABLE QVariantMap primaryScreenAvailableGeometry() const;
+    Q_INVOKABLE QString version() const;
+
+    // ADIF import/export
+    Q_INVOKABLE QVariantList logbookProfiles() const;
+    Q_INVOKABLE bool createLogbook(const QString& name, bool backupCurrent = true);
+    Q_INVOKABLE bool addLogbook(const QString& filename, const QString& name = QString());
+    Q_INVOKABLE bool switchLogbook(const QString& path);
+    Q_INVOKABLE bool deleteLogbook(const QString& path, bool deleteFile = true);
+    Q_INVOKABLE bool backupActiveLogbook();
+    Q_INVOKABLE bool openActiveLogbookFolder() const;
+    QString activeLogbookName() const { return m_activeLogbookName; }
+    QString activeLogbookPath() const { return effectiveAdifLogPath(); }
+    Q_INVOKABLE bool exportAdif(const QString& filename);
+    Q_INVOKABLE bool importAdif(const QString& filename);
+    Q_INVOKABLE QVariantList searchQsos(const QString& search,
+                                        const QString& band,
+                                        const QString& mode,
+                                        const QString& fromDate,
+                                        const QString& toDate) const;
+    Q_INVOKABLE QVariantMap getQsoStats() const;
+    Q_INVOKABLE void warmLogCacheAsync();
+    bool adifImportInProgress() const { return m_adifImportInProgress; }
+    int adifImportProgress() const { return m_adifImportProgress; }
+    QString adifImportStatus() const { return m_adifImportStatus; }
+    Q_INVOKABLE bool importFromAdifAsync(const QString& filename);
+    Q_INVOKABLE int importFromAdif(const QString& filename);
+    Q_INVOKABLE bool exportToAdif(const QString& filename);
+    Q_INVOKABLE bool deleteQso(const QString& call, const QString& dateTime);
+    Q_INVOKABLE bool editQso(const QString& call, const QString& dateTime, const QVariantMap& newData);
+    Q_INVOKABLE QStringList workedCallsigns() const;
+    Q_INVOKABLE void setGpuPanadapterFftAvailable(bool available, const QString& reason = QString());
+    Q_INVOKABLE void setGpuPanadapterFftActive(bool active, const QString& backend = QString());
+    void registerPanadapterItem(PanadapterItem* item);
+    void unregisterPanadapterItem(PanadapterItem* item);
+    int workedCount() const;
+
+    // LotW lite
+    bool lotwEnabled()  const { return m_lotwEnabled; }
+    void setLotwEnabled(bool v);
+    bool lotwUpdating() const { return m_lotwUpdating; }
+    int lotwUserCount() const { return m_lotwUsers.size(); }
+    Q_INVOKABLE bool isLotwUser(const QString& call) const;
+    Q_INVOKABLE void updateLotwUsers();
+    Q_INVOKABLE void forceUpdateLotwUsers();
+    bool showUsState() const { return m_showUsState; }
+    void setShowUsState(bool v);
+    bool usStateDataReady() const;
+    bool usStateDataUpdating() const;
+    int usStateGridCount() const;
+    int usStateLocatorCount() const;
+    Q_INVOKABLE void updateUsStateData();
+
+    // Cloudlog
+    bool    cloudlogEnabled() const { return m_cloudlogEnabled; }
+    void    setCloudlogEnabled(bool v);
+    QString cloudlogUrl()      const { return m_cloudlogUrl; }
+    void    setCloudlogUrl(const QString& v);
+    QString cloudlogApiKey()   const { return m_cloudlogApiKey; }
+    void    setCloudlogApiKey(const QString& v);
+    Q_INVOKABLE void testCloudlogApi();
+
+    // QRZ Logbook
+    bool    qrzLogbookEnabled() const { return m_qrzLogbookEnabled; }
+    void    setQrzLogbookEnabled(bool v);
+    QString qrzLogbookApiKey() const { return m_qrzLogbookApiKey; }
+    void    setQrzLogbookApiKey(const QString& v);
+    bool    qrzLogbookReplaceDuplicates() const { return m_qrzLogbookReplaceDuplicates; }
+    void    setQrzLogbookReplaceDuplicates(bool v);
+    Q_INVOKABLE void testQrzLogbookApi();
+
+signals:
+    void satelliteTrackingWindowRequested();
+    void ft2LinkSatelliteHalfDuplexStatusChanged();
+    void spectrumDataReady(QVector<float> data);
+    // Alta risoluzione: dB raw + range + frequenze exact — per PanadapterItem
+    void panadapterDataReady(QVector<float> dbValues, float minDb, float maxDb,
+                             float freqMinHz, float freqMaxHz);
+    // Path GPU visuale: PCM grezzo verso PanadapterItem/RHI compute.
+    void panadapterPcmFrameReady(QVector<float> samples,
+                                 int usableSamples,
+                                 int nfa,
+                                 int nfb,
+                                 float freqMinHz,
+                                 float freqMaxHz,
+                                 quint64 serial);
+    void ft2LinkRxSamplesReady(QVector<short> samples, quint64 nowMs);
+    // P0b 1.0.459: fine REALE della TX FT2-Link (playback completato,
+    // abort/stop, o avvio fallito) - chiude il loop della coda TX adapter.
+    void ft2LinkTxFinished();
+    // TX — collegano bridge → Modulator (via QueuedConnection)
+    void transmitFrequency(double freq);
+    void sendMessage(QString mode, unsigned symbolsLength, double framesPerSymbol,
+                     double frequency, double toneSpacing, SoundOutput*,
+                     int channel, bool synchronize, bool fastMode,
+                     double dBSNR, double TRperiod);
+    void endTransmitMessage(bool quick = false);
+    void sendPrecomputedWave(QString mode, QVector<float> wave);
+    void callsignChanged();
+    void gridChanged();
+    void frequencyChanged();
+    void displayFrequencyChanged();
+    void modeChanged();
+    void ft2LinkAccessChanged();
+    void monitoringChanged();
+    void transmittingChanged();
+    void txRequestedChanged();
+    void pttPendingChanged();
+    void pttConfirmedChanged();
+    void tuningChanged();
+    void decodingChanged();
+    void sstvRxStateChanged();
+    void sstvRxSourceDeviceChanged();
+    void sstvRxSnapshotChanged();
+    void sstvRxAudioJobChanged();
+    void sstvStorageStateChanged();
+    void sstvRxAutoSaveChanged();
+    void sstvRxSaveStateChanged();
+    void sstvWavReplayChanged();
+    void sstvTxStateChanged();
+    void sstvTxTimingChanged();
+    void sstvVisDetected(QString mode, int rawVis, bool valid, double confidence);
+    void sstvQsoLogFinished(QString requestToken,
+                            QString imageRecordId,
+                            bool qsoCreated,
+                            bool associationStored,
+                            QString qsoId,
+                            QString error);
+    void rxFrequencyChanged();
+    void txFrequencyChanged();
+    void audioLevelChanged();
+    void sMeterChanged();
+    void waitPounceActiveChanged();
+    void rxInputLevelChanged();
+    void autoRxInputLevelChanged();
+    void txOutputLevelChanged();
+    void audioInputDevicesChanged();
+    void audioOutputDevicesChanged();
+    void audioInputDeviceChanged();
+    void audioOutputDeviceChanged();
+    void audioInputChannelChanged();
+    void audioOutputChannelChanged();
+    void rtlSdrDevicesChanged();
+    void rtlSdrRunningChanged();
+    void rtlSdrStatusChanged();
+    void rtlSdrRfViewChanged();
+    void rtlSdrRfSampleRateChanged();
+    void rtlSdrRfCenterFrequencyChanged();
+    void rtlSdrRfSelectedFrequencyChanged();
+    void decodeListChanged();
+    void rxDecodeListChanged();
+    // 1.0.233 — DevOverlay metrics (perf monitoring Sprint 2).
+    void perfMetricsChanged();
+    void devOverlayActiveChanged();
+    void worldMapResetRequested();
+    void worldMapContactAdded(const QString& call, const QString& sourceGrid, const QString& destinationGrid, int role);
+    void worldMapContactAddedByLonLat(const QString& call, double sourceLon, double sourceLat, const QString& destinationGrid, int role);
+    void worldMapContactDowngraded(const QString& call);
+    void periodProgressChanged();
+    void periodMillisecondsChanged();
+    void utcTimeChanged();
+    void tx1Changed(); void tx2Changed(); void tx3Changed();
+    void tx4Changed(); void tx5Changed(); void tx6Changed();
+    void txMessagesChanged();
+    void currentTxChanged();
+    void currentTxMessageChanged();
+    void dxCallChanged(); void dxGridChanged();
+    void qsoProgressChanged();
+    void reportSentChanged();
+    void reportReceivedChanged();
+    void sendRR73Changed();
+    void multiAnswerModeChanged();
+    void autoSeqChanged();
+    void holdTxFreqChanged();
+    void txEnabledChanged();
+    void txDisabledMaskChanged();
+    void autoCqRepeatChanged();
+    void maxCallerRetriesChanged();
+    void processPriorityChanged();   // 1.0.388
+    void autoCqMaxCyclesChanged();
+    void autoCqPauseSecChanged();
+    void autoCallEnabledChanged();
+    void autoCallMaxQsosChanged();
+    void autoCallQsoCountChanged();
+    void autoCallPriorityChanged();
+    void avgDecodeEnabledChanged();
+    void ft8ApEnabledChanged();
+    void txPeriodChanged();
+    void alt12EnabledChanged();
+    // === TARGET CALL signals (fork-only 1.0.262) ===
+    void targetCallActiveChanged();
+    void targetCallSignChanged();
+    void targetCallMaxRetriesChanged();
+    void targetCallTimeoutSChanged();
+    void targetCallPeriodChanged();
+    void targetCallPauseSChanged();
+    void targetCallRetryCountChanged();
+    void armedWatchEnabledChanged();
+    void armedReArmChanged();
+    void targetCallArmedWaitingChanged();
+    // 1.0.263 (fork-only) — signal QML per re-dock + reset position di tutte le floating windows
+    void windowLayoutResetRequested();
+    void asyncTxEnabledChanged();
+    void ft2ConservativeChanged();  // 1.0.174 — FT2 Weak-Signal Pack
+    void ft2SignoffRetryCapChanged();  // 1.0.311 — cap ripetizioni 73/RR73 FT2
+    void ftxImmediateClickTxChanged(); // 1.0.314 — TX immediato al click (stile 1.0.283)
+    void ft2LogRr73OnPartnerLeftChanged(); // 1.0.371 - log RR73 (TX4) anche se il partner sparisce (FT2 async)
+    void ft4SignoffRetryCapChanged();  // 1.0.315 — cap ripetizioni 73/RR73 FT4
+    void ft8SignoffRetryCapChanged();  // 1.0.315 — cap ripetizioni 73/RR73 FT8
+    void ft2ManualOneShotEnabledChanged(); // 1.0.321 — FT2 manual one-shot disarm opt-in
+    void ft8FastSequenceChanged();     // 1.0.317 — grace ridotta + late-decode accept FT8
+    void ft2ConservativeTimingChanged(); // 1.0.367 — finestra TX FT2 async stretta (no frame troncati)
+    void ft2FullDecodeInAutoCqChanged();  // 1.0.289
+    void ft8DeepDecodeInTxChanged();      // 1.0.299 — deep decode-list-only durante TX
+    void ft8SubpassHarvestChanged();      // F0 subpass harvest opt-in
+    void ft2QuickGiveUpStrongChanged();   // 1.0.289
+    void ftxWeakSignoffBoostChanged();    // 1.0.437 - extra signoff retries weak partner
+    void ftxWeakSnrThresholdChanged();    // 1.0.437
+    void ftxWeakSignoffBonusChanged();    // 1.0.437
+    void ft2PostLogReengageGuardChanged();  // 1.0.446 - guard ri-aggancio RRR post-log
+    void ft2PostLogReengageMaxChanged();    // 1.0.446
+    void txWatchdogLogOnCloseChanged();      // 1.0.446 - watchdog logga QSO in chiusura (P0-3)
+    void callerRetriesAlwaysHardChanged();   // 1.0.446 - P1-5 cap Caller-retries duro anche con watchdog ON
+    void ft2TransitionCensusChanged();        // 1.0.447 - censimento transizioni stato FT2 (fondamenta Fase 1)
+    void ft2AdaptiveTxGatesChanged();          // 1.0.447 - Leva#6-A gate smart-TX adattivi
+    void ft2AdaptiveDecodeChanged();      // 1.0.292
+    void ft2NarrowAsyncDecodeChanged();   // Sprint2-1
+    void ft2ApHashCacheChanged();         // 1.0.293
+    void ft2AsyncSkipRedundantSyncDecodeChanged();  // 1.0.355
+    void mamMultiStreamChanged();      // 1.0.364+ — MAM multi-stream FASE 3
+    void mamMaxStreamsChanged();       // 1.0.364+ — cap stream simultanei
+    void mamActiveSlotsChanged();      // 1.0.364+ — lista slot QSO attivi per UI
+    void mamCqSlotsChanged();          // 1.0.569+ — CQ paralleli sugli slot liberi
+    void decoPortUseRemoteChanged();   // 1.0.574+ — radio remota come sorgente
+    void decoPortMonitorChanged();     // 1.0.574+ — ascolto in altoparlante
+    void ft2PartnerMemoryEnabledChanged();  // 1.0.187 — Pack F v2
+    void ft2Tx2ResendOnStallChanged();      // 1.0.187 — Pack G
+    void smoothDecodeFlowChanged();  // 1.0.179 — Smooth Decode Flow
+    // 1.0.180
+    void uiQualityChanged();
+    void autoDetachFullSpectrumChanged();
+    void spectrumFpsCapChanged();
+    void cpuPressureEventCountChanged();
+    void cpuPressureSevereEventCountChanged();
+    void uiFramelessPopoutsChanged();
+    void uiStyleChanged();
+    void dualCarrierEnabledChanged();
+    void quickQsoEnabledChanged();
+    void resumeQsoOnReplyChanged();
+    void settingValueChanged(QString key, QVariant value);
+    void asyncSnrDbChanged();
+    void catConnectedChanged();
+    void catRigNameChanged();
+    void catModeChanged();
+    void rigTelemetryChanged();
+    // 1.0.324 — ALC calibration signals
+    void alcTargetChanged();
+    void alcCalibratingChanged();
+    void alcCalibrationStatusChanged();
+    void processCpuUsageChanged();
+    void processGpuUsageChanged();
+    void panadapterGpuFftActiveChanged();
+    void lastCatErrorChanged();
+    void dxClusterConnectedChanged();
+    void dxClusterSpotsChanged();
+    void dxClusterHostChanged();
+    void dxClusterPortChanged();
+    void autoSpotEnabledChanged();
+    void ledCoherentAveragingChanged();
+    void ledNeuralSyncChanged();
+    void ledTurboFeedbackChanged();
+    void coherentCountChanged();
+    void coherentAvgEnabledChanged();
+    void neuralSyncEnabledChanged();
+    void turboFeedbackEnabledChanged();
+    void fastLdpcEnabledChanged();
+    void advAutoModeEnabledChanged();
+    void advNeuralSyncActiveChanged();
+    void advTurboFeedbackActiveChanged();
+    void advCoherentAvgActiveChanged();
+    void pskSearchFoundChanged();
+    void pskSearchCallsignChanged();
+    void pskSearchingChanged();
+    void pskSearchBandsChanged();
+    void pskHeardByChanged();
+    void pskHeardByFetchingChanged();
+    void pskReporterTimeSpanMinutesChanged();
+    void pskMapSpotFetchingChanged();
+    void pskMapSpotWindowMinutesChanged();
+    void fontScaleChanged();
+    void nfaChanged(); void nfbChanged();
+    void ndepthChanged(); void ncontestChanged();
+    void singleDecodeChanged();
+    void specialOperationActivityChanged();
+    void spectrumColorPaletteChanged();
+    void spectrumRefLevelChanged();
+    void spectrumDynRangeChanged();
+    void spectrumVisibleChanged();
+    void rttyInAscoltoChanged();
+
+    // I campioni ricevuti, a 12 kHz, per il decodificatore RTTY. Stesso
+    // rubinetto di DecoPort e per la stessa ragione: RTTY legge quello che la
+    // radio ascolta, senza aprire una seconda sorgente audio sulla stessa
+    // scheda. Emesso solo con la finestra RTTY aperta.
+    void campioniRxRtty(QVector<short> const& campioni12k);
+    void statusMessage(const QString& msg);
+    void errorMessage(const QString& msg);
+    void warningRaised(const QString& title, const QString& summary, const QString& details);
+    void setupSettingsRequested(int tabIndex);
+    void timeSyncSettingsRequested();
+    void catSettingsRequested();
+    void logQsoPromptRequested();
+    // Un decode e' stato riconosciuto come telemetria stazione+meteo
+    // Decodium (firma valida): fields ha grid4, tempC, windSpeedKmh,
+    // windDirLabel, sky, powerWatts, radioModel, antennaType, likelyCall
+    // (puo' essere vuoto: il tipo di messaggio non porta il nominativo).
+    void stationTelemetryDecoded(QVariantMap fields);
+    void mainQmlReadyForNativeWindowing();
+    void quitRequested();
+    void rigErrorRaised(const QString& title, const QString& summary, const QString& details);
+    // B6 — cty.dat
+    void ctyDatUpdatingChanged();
+    void call3TxtUpdatingChanged();
+    void localDataStateChanged();
+    // B7 — Color highlighting
+    void colorCQChanged();
+    void colorMyCallChanged();
+    void colorDXEntityChanged();
+    void color73Changed();
+    void colorB4Changed();
+    void colorDecodeTextChanged();
+    void colorTxMessageChanged();
+    void colorNewDxccChanged();
+    void colorNewDxccBandChanged();
+    void colorNewContinentChanged();
+    void colorNewContinentBandChanged();
+    void colorNewCqZoneChanged();
+    void colorNewCqZoneBandChanged();
+    void colorNewItuZoneChanged();
+    void colorNewItuZoneBandChanged();
+    void colorNewGridChanged();
+    void colorNewGridBandChanged();
+    void colorNewCallChanged();
+    void colorNewCallBandChanged();
+    void colorLotwUserChanged();
+    void decodeColorEnabledChanged(QString prop, bool enabled);
+    void decodeColorBoldChanged(QString prop, bool bold);
+    void decodeColorBgChanged();   // 1.0.416 sfondo decode cambiato
+    void b4StrikethroughChanged();
+    // B8 — Alert sounds
+    void alertSoundsEnabledChanged();
+    // C16 — Update checker
+    void updateAvailableChanged();
+    void latestVersionChanged();
+    // A1 — Decoder watchdog
+    void decoderWatchdogTriggered();
+    // A2 — Soundcard drift
+    void soundcardDriftChanged();
+    // A3 — Time sync
+    void ntpEnabledChanged();
+    void ntpOffsetMsChanged();
+    void ntpSyncedChanged();
+    void avgDtChanged();
+    void decodeLatencyMsChanged();
+    void timeSyncSampleCountChanged();
+    // A4 — Fox/Hound
+    void foxModeChanged();
+    void houndModeChanged();
+    void callerQueueChanged();
+    // appEngine stub signals
+    void swlModeChanged();
+    void splitModeChanged();
+    void txWatchdogModeChanged();
+    void txWatchdogTimeChanged();
+    void txWatchdogCountChanged();
+    void filterCqOnlyChanged();
+    void activeReadyProfileChanged();   // 1.0.384
+    void cqFilterLevelChanged();
+    void filterMyCallOnlyChanged();
+    void filtersBypassedChanged();
+    void contestTypeChanged();
+    void zapEnabledChanged();
+    void deepSearchEnabledChanged();
+    // new stub signals
+    void asyncDecodeEnabledChanged();
+    void neuralScoreChanged();
+    void turboIterationsChanged();
+    void ftThreadsChanged();
+    void lowCpuModeEnabledChanged();
+    void lowEndModeChanged();
+    void alertOnCqChanged();
+    void alertOnMyCallChanged();
+    void recordRxEnabledChanged();
+    void recordTxEnabledChanged();
+    void stationNameChanged();
+    void stationQthChanged();
+    void stationRigInfoChanged();
+    void stationAntennaChanged();
+    void stationPowerWattsChanged();
+    void wsprPowerDbmChanged();
+    void autoStartMonitorOnStartupChanged();
+    void startFromTx2Changed();
+    void vhfUhfFeaturesChanged();
+    void directLogQsoChanged();
+    void confirm73Changed();
+    void contestExchangeChanged();
+    void contestNumberChanged();
+    void contestTypeNamesChanged();
+    void logAllTxtPathChanged();
+    void activeLogbookChanged();
+    void pskReporterEnabledChanged();
+    void pskReporterConnectedChanged();
+    // ADIF / LotW / Cloudlog
+    void qsoCountChanged();
+    void adifImportProgressChanged();
+    void adifImportFinished(bool success, int imported, int skipped, int total,
+                            const QString& backupPath, const QString& message);
+    void offlineModeChanged();
+    void qsoLogCacheChanged();
+    void workedCountChanged();
+    void lotwEnabledChanged();
+    void lotwUpdatingChanged();
+    void lotwUsersChanged();
+    void showUsStateChanged();
+    void usStateDataChanged();
+    void cloudlogEnabledChanged();
+    void cloudlogUrlChanged();
+    void cloudlogApiKeyChanged();
+    void qrzLogbookEnabledChanged();
+    void qrzLogbookApiKeyChanged();
+    void qrzLogbookReplaceDuplicatesChanged();
+    void externalAdifUploadStatus(quint32 uploadId,
+                                  const QString& state,
+                                  const QString& detail);
+    void ft2LinkEmailGatewayStatus(quint32 requestId,
+                                   quint32 mailboxId,
+                                   const QString& state,
+                                   const QString& detail);
+    void ft2LinkReceivedFileSaveFinished(quint64 requestId,
+                                         QVariantMap result);
+    void ft2LinkReceivedFilesDirectoryOpenFinished(quint64 requestId,
+                                                    QVariantMap result);
+    void wsprUploadEnabledChanged();
+    void catManagerChanged();
+    void catBackendChanged();
+    void activeCatProfileChanged();
+    void catProfilesChanged();
+    void uiSpectrumHeightChanged();
+    void uiPaletteIndexChanged();
+    void uiZoomFactorChanged();
+    void uiWaterfallHeightChanged();
+    void uiDecodeWinXChanged();
+    void uiDecodeWinYChanged();
+    void uiDecodeWinWidthChanged();
+    void uiDecodeWinHeightChanged();
+
+private slots:
+    void drainDecodeReleaseQueue();  // 1.0.179 — Smooth Decode Flow drain
+    void onFt8DecodeReady(quint64 serial, QStringList rows);
+    void onFt2DecodeReady(quint64 serial, QStringList rows);
+    void onFt2AsyncDecodeReady(QStringList rows);   // path async 100ms
+    void onFt4DecodeReady(quint64 serial, QStringList rows);
+    void onQ65DecodeReady(quint64 serial, QStringList rows);
+    void onMsk144DecodeReady(quint64 serial, QStringList rows);
+    void onWsprDecodeReady(quint64 serial, QStringList rows, QStringList diagnostics, int exitCode);
+    void onLegacyJtDecodeReady(quint64 serial, QStringList rows);
+    void onFst4DecodeReady(quint64 serial, QStringList rows);
+    void onPeriodTimer();
+    void onUtcTimer();
+    void onSpectrumTimer();
+    void updateProcessCpuUsage();
+    void updateProcessGpuUsage();
+    void updateUiStallDiagnostics();
+    void onLegacyWaterfallRow(QByteArray const& rowLevels,
+                              int startFrequencyHz,
+                              int spanHz,
+                              int rxFrequencyHz,
+                              int txFrequencyHz,
+                              QString const& mode);
+    void onLegacyAudioSamples(QByteArray const& pcmSamples);
+    void onAsyncDecodeTimer();   // FT2 turbo async ogni 100ms
+    void regenerateTxMessages();  // auto-genera TX6 (CQ) e TX1-5 da callsign/grid/dxCall
+    void onAlcCalibrationTick(); // 1.0.324 — ALC calibration timer slot
+    void processNextInQueue();   // mainwindow processNextInQueue: auto-handoff al prossimo caller
+    // 1.0.446 - P2-8: reset stato QSO estratto dalle 2 lambda finishAutoSequenceQso duplicate
+    // (checkAndStartPeriodicTx + autoSequenceStep). preserveAutoTx=false spegne il TX. Include
+    // il reset SNR partner (P2-9). Comportamento byte-identico alle ex-lambda.
+    void resetQsoStateForNextSequence(bool preserveAutoTx);
+    void onTargetCallTransmittingChanged();  // 1.0.262 CALL feature edge detector
+
+private:
+    bool autoCallModeSupported() const;
+    bool tryAutoCallFromRows(const QStringList& rows);
+    void noteAutoCallQsoCompleted();
+    void abortAutoCallAfterSwrStop(const QString& reason);
+    void tickTargetCallOnTx();   // CALL missed-target counter/timing enforcement on TX end
+    // DX-watch armato (estensione CALL): ARMED->CALLING quando il target compare
+    // come mittente in un decode; re-arm/stop a fine tentativo senza QSO.
+    bool targetCallRowsContainTarget(const QStringList& rows, QString* matchedMessage = nullptr) const;
+    void observeTargetCallDecodeRows(const QStringList& rows, const QString& context);
+    bool tryArmedWatchSeesTarget(const QStringList& rows);
+    void beginTargetCallCalling();   // ARMED->CALLING: abilita TX + arma il timeout
+    void endTargetCallNoQso(const QString& reason); // re-arm (capped->Halt) o stop
+
+    // 1.0.270 (Phase 5.3+) — cleanup retention DB: elimina decode + sessioni orfane
+    // piu' vecchie di N giorni + VACUUM. Eseguito UNA VOLTA al boot del worker.
+    void pruneDecodeHistoryOlderThan(int days);
+
+    // 1.0.268 (Phase 5.3) — apre connessione SQLite read-only named "decode_history_reader"
+    // sul main thread (worker scrive su connessione separata). Idempotente: se gia' aperta
+    // ritorna riferimento esistente. Restituisce QSqlDatabase non valida se DB non disponibile.
+    QSqlDatabase openHistoryReadDb() const;
+    bool shouldIgnoreDecodeCallbacks() const;
+    void beginDecodeCallbackShutdown();
+    bool isTimeSyncDecodeMode(const QString& mode) const;
+    void resetRxPeriodAccumulation(bool reserveAudioBuffer);
+    void armPeriodTimerForCurrentMode(quint64 sessionId, const QString& reason);
+    void maybeDispatchBridgeOwnedJtDecodeFallback();
+    int minimumDecodeSamplesForMode(const QString& mode) const;
+    void requestRigFrequencyFromBridge(double hz, const QString& reason);
+    void schedulePostQsyCatSettledSync(double hz, const QString& reason, int delayMs = 900,
+                                       int retryAttempt = 0);
+    bool hamlibCatFrequencySettleActive(const QString& reason) const;
+    bool ft2LinkSatelliteHalfDuplexRequested() const;
+    bool ft2LinkSatelliteHalfDuplexOperationActive() const;
+    bool beginFt2LinkSatelliteHalfDuplexTx();
+    void restoreFt2LinkSatelliteHalfDuplexRx(const QString& reason, bool error);
+    void finishFt2LinkSatelliteHalfDuplexTx(const QString& reason, bool error);
+    void cancelFt2LinkSatelliteHalfDuplexTx(const QString& reason);
+    void setFt2LinkSatelliteHalfDuplexState(int state, const QString& detail = {});
+    bool shouldIgnoreCatFrequencyDuringLocalQsy(double hz, const QString& backend);
+    bool shouldIgnoreLegacyAudioFrequencyDuringLocalQsy(int hz, bool tx);
+    bool catSplitOperationActiveForMode() const;
+    int catSplitXitHzForTxFrequency(int txFrequencyHz) const;
+    int effectiveTxAudioFrequencyHz() const;
+    double catSplitTxDialFrequencyHz() const;
+    void syncActiveCatTxSplitFrequency(const QString& reason);
+    void syncCatSplitModeToLegacy(const QString& mode, const QString& reason);
+    bool checkSwrAllowsTransmission(const QString& reason);
+    void enforceSwrTransmissionLimit(const QString& reason);
+    void enforceWsprPowerTransmissionLimit(const QString& reason);
+    void applyRemoteDialFrequency(double hz, const QString& reason);
+    void applyRemoteBandChange(const QString& band);
+    void publishRemoteActivityEntries(QVariantList const& entries);
+    void publishRemoteActivityEntry(QVariantMap const& entry);
+    void clearRemoteActivityCache(bool notifyRemote);
+    QString configuredCatRigMode() const;
+    bool configuredCatRigModeRequestsDataPacket() const;
+    void applyConfiguredCatRigMode(const QString& reason);
+
+    // Il modo in cui va messa la radio quando si lavora in RTTY. Non e' quello
+    // dei modi digitali: su una FT-991A i dati stanno in DATA-U, ma l'RTTY vero
+    // ha il suo modo — RTTY-U — con il filtro stretto giusto attorno ai toni.
+    // Si legge dall'impostazione RttyRigMode; vuota vuol dire "non toccare il
+    // modo", per chi preferisce restare dov'e'.
+    QString rttyRigMode() const;
+    // Mette la radio nel modo RTTY. Va richiamata anche dopo ogni cambio di
+    // banda: molti apparati, la FT-991A compresa, ricordano un modo diverso per
+    // ciascuna banda e ci tornano da soli appena ci si sposta.
+    void applyRttyRigMode(const QString& reason);
+    void updateRigTelemetry(double powerWatts, double swr, double alc = 0.0, bool alcValid = false);
+    void applyNtpSettings();
+    void configureNtpClientForMode(const QString& mode);
+    void resetStartupTransientQsoState();
+    void purgePersistentTransientQsoState();
+    void resetTimeSyncDecodeMetrics();
+    void finalizeTimeSyncDecodeCycle(quint64 serial, const QString& decodeMode,
+                                     const QVector<double>& dtSamples);
+    bool shouldTrackDtSample(int snr, double dtValue, const QString& message,
+                             const QString& decodeMode) const;
+    QString autoCqBandKeyForFrequency(double freqHz) const;
+    bool autoCqCanRestartTx6() const;
+    QString startupModeForFrequency(double dialFrequency) const;
+    double workingFrequencyForBandMode(const QString& bandLambda, const QString& mode) const;
+    void maybeApplyStartupModeFromRigFrequency(double dialFrequency, bool authoritativeRigFrequency = false);
+    void runPostQmlStartupServices();
+    void ensureDecodeWorkerForMode(const QString& mode);
+    void loadDxccLookupAsync();
+    void loadWorkedBeforeHistoryAsync();
+    qint64 correctedUtcEpochMs() const;
+    qint64 correctedUtcMsecsSinceStartOfDay() const;
+    QString effectiveAdifLogPath() const;
+    QString ensureAdifLogPath();
+    bool cpuPressureActive() const;
+    bool cpuPressureSevereActive() const;
+    void noteCpuPressure(const QString& reason, int durationMs = 10000, bool severe = false);
+    int effectiveFtThreadLimit() const;
+    bool ft4AdaptiveCpuLimitActive(qint64 nowMs = 0) const;
+    void activateFt4AdaptiveCpuLimit(qint64 nowMs, const QString& reason, qint64 durationMs = 60000);
+    bool ft4LatencyGuardActive(qint64 nowMs = 0) const;
+    void activateFt4LatencyGuard(qint64 nowMs, const QString& reason);
+    int effectiveFt4ThreadLimit() const;
+    int effectiveFt4DecodeDepth(int requestedDepth) const;
+    int effectiveSpectrumTimerIntervalMs() const;
+    void applyLowCpuRuntimeProfile(const QString& reason);
+    int effectiveDecodeDepth() const;
+    int legacyCompatibleDecodeDepthBits() const;
+    int legacyDecodeQsoProgress() const;
+    int legacyDecodeCqHint() const;
+    QString legacyAllTxtPath() const;
+    void appendLegacyAllTxtDecodeLine(const QVariantMap& entry) const;
+    QString resolveFt8HashPlaceholdersFromRecentAllTxt(const QString& timeToken,
+                                                       const QString& audioFreq,
+                                                       const QString& message,
+                                                       const QString& mode,
+                                                       QString* sourceOut = nullptr) const;
+    bool contestDecodeExchangesEnabled() const;
+    bool shouldAcceptDecodedMessage(const QString& message,
+                                    QString* reason = nullptr,
+                                    bool allowUnresolvedPlaceholder = false) const;
+    bool shouldSuppressConflictingDirectedReportDecode(const QStringList& fields,
+                                                       const QString& source,
+                                                       QString* reason = nullptr);
+    bool shouldSuppressRecentLocalTxEchoDecode(const QString& message,
+                                               const QString& source,
+                                               QString* reason = nullptr) const;
+    bool tryStartWaitPounceFromEntry(const QVariantMap& entry,
+                                     const QVariantList& previousEntries,
+                                     const QString& source);
+    bool isRecentAutoCqDuplicate(const QString& call,
+                                 double freqHz = -1.0,
+                                 const QString& mode = QString()) const;
+    bool isRecentAutoCqWorkedOrLoggedDuplicate(const QString& call,
+                                               double freqHz = -1.0,
+                                               const QString& mode = QString()) const;
+    void clearRecentAutoCqAbandoned(const QString& call,
+                                    double freqHz = -1.0,
+                                    const QString& mode = QString(),
+                                    const QString& reason = QString());
+    void rememberRecentAutoCqAbandoned(const QString& call, double freqHz, const QString& mode);
+    void rememberRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
+    void rememberCompletedAutoCqPartner(const QString& call, bool logged, const QString& reason);
+    bool finishAutoSequenceQsoFromCompletedSignoff(const QString& reason, bool logNow);
+    void removeCallerFromQueue(const QString& call);
+    QString activeMamCallerBase() const;
+    void removeActiveMamCallerFromQueue(const QString& reason);
+    void maybeEnqueueMamCallerFromMessage(const QString& message,
+                                          int freq = -1,
+                                          int snr = -99,
+                                          bool markCompletedSignoff = false);
+    void maybeEnqueueMamCallerFromDecode(const QStringList& fields,
+                                         bool markCompletedSignoff = false);
+    void clearNextLogClusterSpotOverride();
+    QString inferredPartnerForAutolog() const;
+    QDateTime effectiveQsoLogTimeOnUtc() const;
+    QString pskReporterProgramInfo() const;
+    QString pskReporterRigInfo() const;
+    QString pskReporterAntennaInfo() const;
+    void refreshPskReporterLocalStation();
+    void refreshMapMoonOverlay();
+    void maybeQueuePskReporterSpot(const QVariantMap& entry,
+                                   const QString& message,
+                                   bool isCQ,
+                                   const QString& audioFreqHz,
+                                   const QString& snrText,
+                                   const QString& mode);
+    void replayPskReporterRecentEntries(const QVariantList& entries, const QString& source);
+    bool promptToLogEnabled() const;
+    void logQsoNow();
+    QString defaultAdifLogPath() const;
+    QString logbookDirectoryPath() const;
+    QString sanitizedLogbookFileStem(const QString& name) const;
+    void loadLogbookSettings();
+    void saveLogbookSettings() const;
+    void ensureLogbookProfile(const QString& name, const QString& path);
+    void reloadActiveLogbookState(const QString& reason);
+    void resetCompletedQsoLatchesForCq(const QString& reason);
+    void clearCompletedQsoTxFields(const QString& completedCall, const QString& reason);
+    void clearTxArmedAfterCompletedQso(const QString& completedCall, const QString& reason);
+    void showLogQsoPromptDialog();
+    bool m_logPromptShownByQml {false};
+    void capturePromptLogSnapshot(const QVariantMap& preview);
+    void clearPromptLogSnapshot();
+    void capturePendingAutoLogSnapshot();
+    void clearPendingAutoLogSnapshot();
+    void clearPendingAutoSeqTx(const QString& reason);
+    void forgetPartnerMemoryForCall(const QString& call, const QString& reason);
+    bool selectCurrentTxIfAllowed(int txNum, const QString& reason);
+    bool ensureCurrentTxCanTransmit(const QString& reason);
+    void armLateAutoLogSnapshot();
+    void clearLateAutoLogSnapshot();
+    void engageManualTxHold(const QString& reason, bool clearQueue = false);
+    void clearManualTxHold(const QString& reason);
+    void clearResumeQsoOnReplyArm(const QString& reason);
+    // 1.0.304 (#9) — se armato (Halt con partner) e il partner ri-risponde, riprende il QSO.
+    // Ritorna true se ha ripreso. Inerte se toggle OFF / non armato / timeout.
+    bool tryResumeQsoOnReply(const QStringList& rows);
+    void resetManualTxRearmState(const QString& reason);
+    void armCqAutoReplyWindow(const QString& reason);
+    void clearCqAutoReplyWindow(const QString& reason);
+    bool decodeIsFreshForCqAutoReply(const QString& utcToken, QString* reason = nullptr) const;
+    bool usesDeferredManualSyncTx() const;
+    bool shouldDeferManualSyncTxStart() const;
+    bool tryStartDeferredManualSyncTx();
+    void clearDeferredManualSyncTx(const QString& reason);
+    void scheduleSyncTxAtNextValidSlot(const QString& reason,
+                                       int elapsedMs = -1,
+                                       int latestStartMs = -1);
+    void ensureSyncTxSchedulerActive(const QString& reason);
+    void clearAutoCqPartnerLock();
+    bool ft2AutoCqAwaitingPartnerDecode() const;
+    bool isDirectedToLocalHashFromActivePartner(const QString& message,
+                                                QString* partnerOut = nullptr) const;
+    bool isDirectedActivePartnerSignoffDecode(const QStringList& fields) const;
+    bool signoffDecodeWatchActive() const;
+    void armFt2AutoCqAwaitingPartnerDecode(int txNum, const QString& reason);
+    void clearFt2AutoCqAwaitingPartnerDecode(const QString& reason);
+    void armFt2AutoCqOneShotAfterCompletedTx(int txNum, const QString& reason);
+    bool applyPendingAutoSeqTxAfterCompletedTx(int finishedTx);
+    void updateAutoCqPartnerLock();
+    void restoreAutoCqPartnerLock();
+    bool enqueueCallerInternal(const QString& call,
+                               int freq = -1,
+                               int snr = -99,
+                               bool respectRecentDuplicateGuard = true);
+
+    // Legacy INI sync helpers for UDP settings
+    QString legacyIniPath() const;
+    QString legacyConfigGroupName() const;
+    bool isLegacySyncKey(const QString& key) const;
+    void syncSettingToLegacyIni(const QString& key, const QVariant& value);
+    QVariant readSettingFromLegacyIni(const QString& key) const;
+    void persistTxWatchdogSettings();
+    bool txWatchdogLimitConfigured() const;
+    QFont fontSettingFont(const QString& key,
+                          const QString& fallbackFamily,
+                          int fallbackPointSize) const;
+
+    // Standalone UDP MessageClient for WSJT-X protocol
+    void initUdpMessageClient();
+    void shutdownUdpMessageClient();
+    void scheduleUdpMessageClientRestart();
+    bool udpTrafficEnabled(const QString& destinationPrefix,
+                           const QString& category) const;
+    void udpSendStatus();
+    void udpSendDecode(bool isNew, const QString& rawLine, quint64 serial);
+    void udpSendWsprDecode(bool isNew, const QString& rawLine);
+    void udpSendLoggedQso(const QString& dxCall, const QString& dxGrid,
+                          double freqHz, const QString& mode,
+                          const QDateTime& timeOnUtc,
+                          const QDateTime& timeOffUtc,
+                          const QString& rstSent, const QString& rstRcvd,
+                          const QByteArray& adifRecord,
+                          const QString& comments = QString(),
+                          const QString& propMode = QString(),
+                          const QString& satellite = QString(),
+                          const QString& satMode = QString(),
+                          const QString& freqRx = QString());
+    bool udpSendRawAdifDatagram(const QString& label,
+                                const QString& serverName,
+                                quint16 port,
+                                const QString& dxCall,
+                                const QByteArray& adifRecord);
+    void udpSendN1mmLoggedQso(const QString& dxCall, const QByteArray& adifRecord);
+    void tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord);
+    void maybePlayDecodeAlert(bool isCQ, bool isMyCall);
+
+    QString m_callsign;
+    QString m_grid {"JN70"};
+    double m_frequency {14074000.0};
+    QString m_mode {"FT2"};
+    bool m_ft2LinkAccessUnlocked {false};
+    bool m_startupModeAutoPending {true};
+    qint64 m_startupModeAutoUntilMs {0};
+    bool m_startupModeAutoAuthoritativeApplied {false};
+    QString m_legacyStartupModeGuard;
+    qint64 m_legacyStartupModeGuardUntilMs {0};
+    bool m_preserveFrequencyOnModeChange {false};
+    bool m_shuttingDown {false};
+    bool m_mainQmlReady {false};
+    qint64 m_mainQmlAsyncLoadStartedMs {0};
+    qint64 m_ft8StartupEarlyDecodeGuardUntilMs {0};
+    bool m_ft8StartupPressureSlotDeferred {false};
+    std::shared_ptr<std::atomic_bool> m_mainQmlAsyncLoadDone;
+    bool m_startupServicesStarted {false};
+    bool m_dxccLookupLoading {false};
+    bool m_dxccLookupLoadAttempted {false};
+    quint64 m_dxccLookupLoadSerial {0};
+    bool m_workedHistoryLoading {false};
+    bool m_workedHistoryLoaded {false};
+    bool m_lastSuccessfulCatConnected {false};
+    QString m_lastSuccessfulCatBackend;
+    // Limita i retry di startup quando la porta CAT non e' ancora pronta
+    // (COM Windows enumerata in ritardo, radio appena accesa, porta occupata).
+    // Retry finiti e distanziati: nessun loop infinito.
+    int m_startupCatRetryCount {0};
+    bool m_monitoring {false};
+    bool m_sstvRxRequested {false};
+    bool m_sstvOwnsMonitoring {false};
+#if DECODIUM_HAS_SSTV
+    // While the native workspace is open, the selected FT/JT/WSPR mode stays
+    // unchanged for the dashboard and CAT. Its decoder generation is
+    // suspended, while an already-active panadapter keeps receiving PCM.
+    // This is deliberately separate from m_sstvRxRequested:
+    // opening the page must quiesce the previous decoder even before the user
+    // presses Start monitor.
+    bool m_sstvWorkspaceActive {false};
+    bool m_sstvWorkspaceRestoreMonitoring {false};
+    // A native SSTV RX session may temporarily own a dedicated Qt audio
+    // capture while the selected Decodium mode is still backed by the legacy
+    // decoder.  The flag lets stopSstvRx() restore the legacy single-capture
+    // path without disturbing a capture that was already active beforehand.
+    bool m_sstvOwnsDedicatedAudioCapture {false};
+    bool m_sstvRestoresLegacyMonitoring {false};
+    // The object address is stable for the bridge lifetime. Its worker and DSP
+    // pipeline remain lazy and run only between startSstvRx()/stopSstvRx().
+    // Stable ownership also makes the direct bounded audio relay safe across
+    // normal capture restarts; destruction happens after RX source teardown.
+    std::unique_ptr<decodium::sstv::SstvRxRuntime> m_sstvRxRuntime;
+    decodium::sstv::SstvWavReplayController* m_sstvWavReplayController {nullptr};
+    decodium::sstv::SstvRxAudioJobController* m_sstvRxAudioJobController {nullptr};
+    quint64 m_sstvWavReplaySession {0U};
+    bool m_sstvWavReplayRestoreLive {false};
+    std::uint8_t m_sstvWavReplayRestoreKind {0U};
+    quint32 m_sstvWavReplayRestoreStreamId {0U};
+    QVariantMap m_sstvRedecodeRestoreControls;
+    bool m_sstvRedecodeActive {false};
+    QString m_sstvRxRawAudioPath;
+    quint64 m_sstvRxRawAudioAcquisitionId {0U};
+    quint64 m_sstvRxStartAcquisitionId {0U};
+    QDateTime m_sstvRxStartUtc;
+    decodium::sstv::SstvStudioController* m_sstvStudioController {nullptr};
+    decodium::sstv::SstvGalleryModel* m_sstvGalleryModel {nullptr};
+    decodium::sstv::SstvShareController* m_sstvShareController {nullptr};
+    decodium::sstv::SstvDiagnosticsController*
+        m_sstvDiagnosticsController {nullptr};
+#if DECODIUM_HAS_HAMDRM
+    decodium::sstv::hamdrm::HamDrmController* m_hamDrmController {nullptr};
+    std::shared_ptr<decodium::sstv::hamdrm::waveform::HamDrmNativeRxBackend>
+        m_hamDrmRxBackend;
+    std::shared_ptr<decodium::sstv::hamdrm::waveform::HamDrmNativeTxBackend>
+        m_hamDrmTxBackend;
+    bool m_hamDrmRxRequested {false};
+    bool m_hamDrmOwnsMonitoring {false};
+    std::uint8_t m_hamDrmRxSourceKind {0U};
+    quint32 m_hamDrmRxStreamId {0U};
+#endif
+    QThread* m_sstvStorageThread {nullptr};
+    QPointer<decodium::sstv::SstvStorageWorker> m_sstvStorageWorker;
+    QPointer<decodium::sstv::SstvThumbnailProvider> m_sstvThumbnailProvider;
+    quint64 m_sstvStorageRequestId {1};
+    bool m_sstvStorageReady {false};
+    bool m_sstvRxAutoSaveEnabled {false};
+    QString m_sstvRxSaveState {QStringLiteral("idle")};
+    QString m_sstvRxSaveError;
+    QHash<quint64, QString> m_sstvRxSaveRequests;
+    // QSO workflow request IDs use a dedicated high-bit namespace so the
+    // worker's shared completion signal cannot collide with GalleryModel's
+    // independent request counter. Values contain only validated scalar log
+    // input and workflow state, never image/audio paths.
+    quint64 m_sstvQsoStorageSerial {1};
+    QHash<quint64, QVariantMap> m_sstvQsoLogRequests;
+    QSet<QString> m_sstvIssuedExistingQsoIds;
+    quint64 m_sstvIssuedExistingQsoGeneration {0};
+    // A validated remote handoff remains owned by sharing until Gallery has
+    // committed it.  Keep only the small versioned map here so transient
+    // storage failures can be retried without rereading untrusted metadata or
+    // acknowledging the provider.  Image bytes remain in the private staging
+    // file and never enter the GUI thread.
+    QHash<QString, QVariantMap> m_sstvIncomingImportHandoffs;
+    QHash<QString, int> m_sstvIncomingImportRetryCounts;
+    QSet<QString> m_sstvRxPendingSaveKeys;
+    QSet<QString> m_sstvRxSavedKeys;
+    QQueue<QString> m_sstvRxSavedKeyOrder;
+    // A preparation revision is immutable once handed to the storage worker.
+    // Keep the dedupe key in the bridge so a worker that becomes ready after
+    // Studio preparation still archives exactly one Draft for that revision.
+    quint64 m_sstvStudioPreparedGeneration {0U};
+    quint64 m_sstvStudioDraftQueuedGeneration {0U};
+    QHash<quint64, QString> m_sstvTxGallerySaveRequests;
+    std::unique_ptr<decodium::sstv::SstvTxCoordinator> m_sstvTxCoordinator;
+    QPointer<decodium::sstv::SstvTxAudioDevice> m_sstvTxAudioDevice;
+    // A resolved local output is pinned before the coordinator can acquire
+    // PTT and remains immutable for the complete session. Configuration
+    // changes or resolver fallbacks cannot silently reroute on-air audio.
+    QAudioDevice m_sstvTxOutputDevice;
+    unsigned m_sstvTxOutputChannels {0U};
+    bool m_sstvTxOutputPinned {false};
+    QTimer* m_sstvTxTimer {nullptr};
+    QElapsedTimer m_sstvTxClock;
+    quint64 m_sstvTxSessionId {0};
+    QString m_sstvTxState {QStringLiteral("Disabled")};
+    QString m_sstvTxError;
+    double m_sstvTxProgress {0.0};
+    quint64 m_sstvTxUnderruns {0U};
+    bool m_sstvOwnsBridgeTx {false};
+    bool m_sstvTxShuttingDown {false};
+    // Every producer tap captures one immutable route token.  Connections are
+    // rebound at each generation boundary, and the shared relay drains any
+    // DirectConnection callback already in flight before runtime shutdown.
+    std::shared_ptr<DecodiumSstvAudioRelay> m_sstvAudioRelay;
+    QMetaObject::Connection m_sstvLocalAudioTap;
+    QMetaObject::Connection m_sstvLegacyAudioTap;
+    QMetaObject::Connection m_sstvTciAudioTap;
+    QMetaObject::Connection m_sstvDecoPortAudioTap;
+    QMetaObject::Connection m_sstvRtlPcmTap;
+    QMetaObject::Connection m_sstvRtlAudioTap;
+#endif
+    QDateTime m_monitoringSince;  // IU8LMC: inizio ascolto (autodiagnosi banda morta)
+    bool m_monitorRequested {false};
+    bool m_transmitting {false};
+    bool m_txRequested {false};
+    bool m_pttPending {false};
+    bool m_pttConfirmed {false};
+    bool m_pttOnDispatched {false};
+    bool m_pttOffSentForTransition {false};
+    quint64 m_pttTransitionSerial {0};
+    QString m_pttTransitionReason;
+    std::function<bool()> m_pttConfirmedAction;
+    bool m_tuning {false};
+    bool m_bridgeAudioTuneActive {false};
+    bool m_bridgeAudioLegacyTxActive {false};
+    quint64 m_legacyBridgeAudioTxStartSerial {0};
+    bool m_legacyBridgeAudioTxStartPending {false};
+    bool m_decoding {false};
+    int m_rxFrequency {1500};
+    int m_txFrequency {1500};
+    double m_audioLevel {0.0};
+    double m_sMeter {0.0};
+    double m_rxInputLevel {50.0};
+    bool m_autoRxInputLevel {true};
+    qint64 m_autoRxLevelLastAdjustMs {0};
+    qint64 m_autoRxLevelLowStartMs {0};
+    qint64 m_autoRxLevelManualHoldUntilMs {0};
+    double m_txOutputLevel {0.0};
+    QStringList m_audioInputDevices;
+    QStringList m_audioOutputDevices;
+    QString m_audioInputDevice;
+    QString m_audioOutputDevice;
+    QString m_audioInputDeviceId;
+    QString m_audioOutputDeviceId;
+    int m_audioInputChannel {0};
+    int m_audioOutputChannel {0};
+    QVariantList m_decodeList;
+    QVariantList m_rxDecodeList;
+    // 1.0.257 — Auto-clear separato per le due finestre decode. Full Spectrum
+    // conta tutte le righe, Signal RX conta solo i decode RX reali: le righe
+    // TX locali sono timeline e non devono cancellare ricezioni precedenti.
+    // Keep the live QML histories compact. Complete RX history is persisted in
+    // SQLite, so these limits affect only resident models and delegates.
+    static constexpr int kDecodeListCap = 192;
+    static constexpr int kDecodeListRetainRows = 128;
+    static constexpr int kRxDecodeListCap = 192;
+    static constexpr int kRxDecodeListRetainRxRows = 128;
+    static constexpr int kRxDecodeListRetainTxRows = 32;
+    void trimDecodeListsIfNeeded();
+    void moveLegacyAllTxtCursorToEnd();
+    // 1.0.142: throttle per decodeListChanged signal nei path high-frequency
+    // (FT2 async 5-20Hz, FT8 ready bursts, legacy mirror replace). Riduce
+    // rebuild ListView QML da ~20/sec a ~4/sec → fluidità percepita.
+    // I reset/clear low-frequency emettono diretto; i burst e DXCC usano throttle.
+    QTimer* m_decodeListEmitTimer {nullptr};
+    bool m_decodeListEmitPending {false};
+    // Signal RX has its own high-frequency path: FT8/FT2 can append many rows
+    // inside one decode callback. Coalesce model rebuilds and side effects.
+    QTimer* m_rxDecodeListEmitTimer {nullptr};
+    bool m_rxDecodeListEmitPending {false};
+    bool m_rxDecodeListNormalizePending {false};
+    // 1.0.233 — DevOverlay metrics (Sprint 2). Ring buffer 32 sample frame
+    // time (ms), atomic counters per decode rate "received" (enrich) e
+    // "committed" (appendDecodeMapToList). Update gated dal flag
+    // m_devOverlayActive: quando false, recordFrameTimestamp /
+    // noteDecodeReceived / noteDecodeCommitted ritornano early.
+    static constexpr int kPerfFrameRingSize = 32;
+    double  m_frameTimeRing[kPerfFrameRingSize] {};
+    int     m_frameTimeRingPos {0};
+    int     m_frameTimeRingFilled {0};
+    QElapsedTimer m_perfFrameElapsed;
+    bool    m_perfFrameElapsedStarted {false};
+    double  m_lastFrameTimeMs {0.0};
+    double  m_meanFrameTimeMs {0.0};
+    double  m_p99FrameTimeMs  {0.0};
+    mutable std::atomic<int> m_decodeRateReceivedCounter {0};
+    mutable std::atomic<int> m_decodeRateCommittedCounter {0};
+    double  m_decodeRateReceivedHz {0.0};
+    double  m_decodeRateCommittedHz {0.0};
+    // 1.0.245 debug: cumulativi NON resettati, per diagnosi gate
+    // m_devOverlayActive: se totFrames=0 nello snapshot, recordFrameTimestamp
+    // non e' mai stato chiamato con gate==true.
+    mutable std::atomic<qint64> m_totalFrameSamples {0};
+    mutable std::atomic<qint64> m_totalDecodesReceived {0};
+    mutable std::atomic<qint64> m_totalDecodesCommitted {0};
+    QTimer* m_perfMetricsTimer {nullptr};
+    std::atomic<bool>  m_devOverlayActive {false};
+    QString m_activeRhiBackend {QStringLiteral("unknown")};
+    // 1.0.143 fase 2: model nativi per le 2 ListView (Band Activity + Signal RX).
+    // Sostituiscono i JS-filter array di DecodeWindow.qml. Vengono syncati
+    // dal slot di decodeListChanged via setEntries() che applica diff
+    // incrementale (no rebuild totale dei delegate QML).
+    DecodeListModel* m_bandActivityModel {nullptr};
+    DecodeListModel* m_fullSpectrumModel {nullptr};
+    DecodeListModel* m_rxDecodeModel {nullptr};
+    QTimer* m_decodeUiRefreshTimer {nullptr};
+    QTimer* m_fullSpectrumRefreshTimer {nullptr};
+    QThreadPool* m_decodeUiThreadPool {nullptr};
+    int m_decodeUiPendingFlags {0};
+    bool m_decodeUiSnapshotInFlight {false};
+    quint64 m_decodeUiSnapshotGeneration {0};
+    qint64 m_decodeUiBurstUntilMs {0};
+    QVector<QVariantMap> m_pendingFullSpectrumModelEntries;
+    QVector<QString> m_pendingFullSpectrumModelKeys;
+    bool m_fullSpectrumSnapshotPending {false};
+    QHash<QString, bool> m_decodeUiGhostCache;
+    QHash<QString, bool> m_decodeUiRxMembershipCache;
+    bool m_decodeShowPeriodSeparator {true};
+    bool m_decodeNewestFirst {false};
+    bool m_hideTelemetryOnlyDecodes {true};
+    // 1.0.145: filter "stazioni fantasma" (decoder false positives a SNR
+    // marginali). Default ON — disabilitabile da setting per chi vuole
+    // vedere TUTTO comprese le decode dubbie.
+    bool m_hideGhostDecodes {true};
+    // 1.0.225 — reentry guard per checkAndStartPeriodicTx coalescing.
+    // Pre-1.0.225 al fine TX FT2 venivano scheduate 3 QTimer::singleShot
+    // verso checkAndStartPeriodicTx (da noteTxPlaybackFinished +
+    // completeTxPlayback con 0ms e 220ms) -> 3 chiamate consecutive,
+    // ognuna con 12+ bridgeLog flush. Ora il primo singleShot setta
+    // m_periodicTxCheckScheduled=true, gli altri short-circuit; il
+    // callback resetta a false prima di entrare nel body.
+    bool m_periodicTxCheckScheduled {false};
+    bool m_syncTxRetryScheduled {false};
+    quint64 m_syncTxRetrySerial {0};
+    // A roster CALL prepares the QSO immediately but synchronized waveforms
+    // must not be dispatched in the middle of an already-running slot.
+    bool m_suppressImmediateTxEnableDispatch {false};
+    bool m_mapRosterCallPending {false};
+    quint64 m_mapRosterCallSerial {0};
+    // 1.0.256 — guard reentry UNIVERSALE in checkAndStartPeriodicTx. Set
+    // a true a entry function, false via qScopeGuard al return. Copre i 11
+    // call site, non solo i 2 con m_periodicTxCheckScheduled. Causa singhiozzo
+    // FT2 doppia TX in 1.0.255 era due chiamate concorrenti entrare prima
+    // che m_transmitting fosse true.
+    bool m_periodicTxInFlight {false};
+    // 1.0.311 — cap ripetizioni 73/RR73 in FT2 (default 4; era hardcoded 8). Regolabile 1-8.
+    int  m_ft2SignoffRetryCap {4};
+    // 1.0.314 — opt-in TX immediato al click (stile 1.0.283). Default OFF = comportamento upstream.
+    // ON: rilassa il period-gate FT2 (TX1 da double-click bypassa) e il cap finestra FT8/FT4 (650→2000ms shift accettato).
+    bool m_ftxImmediateClickTx {false};
+    bool m_ft2LogRr73OnPartnerLeft {false};
+    // 1.0.315 — cap ripetizioni 73/RR73 FT4 (default 4) e FT8 (default 3), regolabili 1-8.
+    // Stesso pattern di m_ft2SignoffRetryCap: valore ASSOLUTO (niente extra conservative/weak).
+    int  m_ft4SignoffRetryCap {4};
+    int  m_ft8SignoffRetryCap {3};
+    // 1.0.321 — FT2 manual one-shot disarm (Salvatore commit ed7ffeb / 1.0.300).
+    // OFF (default fork): TX1 ripete fino a maxCallerRetries — risolve "TX1 stacca su partner deboli"
+    //                     (feedback Pasquale). Comportamento pre-1.0.300.
+    // ON: disarm dopo ogni TX1-TX3, re-arm SOLO se decode partner riceve a iniziativa autoSeqStep.
+    //     Era il fix Salvatore al latch doppio-click, OK per partner forti.
+    bool m_ft2ManualOneShotEnabled {false};
+    // 1.0.317 — opt-in: FT8 sequenze veloci (per "dopo che chiamo, ci mette troppo").
+    // ON: grace al boundary 1200→400ms + onFt8DecodeReady accetta decode tardivo fino a
+    // d3CapMs (~11s) invece di scartare lo slot. Sotto pressione CPU la safety
+    // (effectiveAutoTxDecodeGraceMs qMax(900,...)) sovrascrive comunque.
+    bool m_ft8FastSequence {false};
+    bool m_ft2ConservativeTiming {true}; // 1.0.367 — default ON: finestra TX FT2 async ~18% (payload intero, niente troncamento)
+    // 1.0.174 — FT2 weak-signal pack master flag (opt-in, default OFF).
+    bool m_ft2Conservative {false};
+    // 1.0.289 — FT2 enhancement toggles (opt-in, default OFF = comportamento 1.0.288)
+    bool m_ft2FullDecodeInAutoCq {false};  // #1: piena profondità decode durante attesa AutoCQ
+    bool m_ft2QuickGiveUpStrong {false};   // #3: cap RR73 ridotto sui partner forti che spariscono
+    // 1.0.437 - opt-in: bonus signoff retries per partner debole (FTX). Default OFF = byte-identico.
+    bool m_ftxWeakSignoffBoost {false};
+    int  m_ftxWeakSnrThreshold {-15};
+    int  m_ftxWeakSignoffBonus {3};
+    // 1.0.446 - opt-in (default OFF): dopo aver loggato un partner ("partner left"), limita i
+    // ri-aggganci RRR allo stesso partner che insiste con R+report (caso 9H1SR). Bound: al piu'
+    // m_ft2PostLogReengageMax RRR di cortesia entro la finestra cooldown (30s), poi sopprime.
+    bool m_ft2PostLogReengageGuard {false};
+    int  m_ft2PostLogReengageMax {1};
+    QHash<QString,int> m_postLogReengageCount;  // base call -> ri-aggganci consumati (entro cooldown)
+    // 1.0.446 - P0-3 opt-in (default OFF): se il TX watchdog scatta con un QSO gia' a
+    // scambio report bidirezionale completato (m_qsoProgress>=4), logga il QSO invece di
+    // abbandonarlo (1.0.445 armava solo il late-snapshot, perso in QSO manuale).
+    bool m_txWatchdogLogOnClose {false};
+    // 1.0.446 - P1-5: quando ON il cap "Caller retries" su TX1/TX2 ferma la chiamata anche
+    // se il TX watchdog e' ON (1.0.438: watchdog prioritario, ignora il cap fino al timeout).
+    // 1.0.493 - default ON su fork: col watchdog attivo di default (6 min) il cap utente non
+    // fermava MAI la chiamata ("Caller Retries non funziona"). Principio 1.0.429: niente
+    // automazione silenziosa che scavalca i settaggi. OFF = comportamento watchdog-priority.
+    bool m_callerRetriesAlwaysHard {true};
+    // 1.0.447 - Fondamenta Fase 1 (opt-in, default OFF): logga ogni transizione (from,to,progress,
+    // quick) in advanceQsoState per costruire EMPIRICAMENTE la matrice reale dei salti PRIMA di
+    // qualunque enforcement canAdvance. Solo-logging, gated FT2+async, byte-identico col toggle OFF.
+    bool m_ft2TransitionCensus {false};
+    // 1.0.447 - Leva#6-A (opt-in, default OFF): gate smart-TX (RMS/decode-quiet/jitter) adattivi
+    // all'occupazione del canale. OFF -> requisiti = literal storici (3/400/50/200), byte-identico.
+    bool m_ft2AdaptiveTxGates {false};
+    bool m_ft2AdaptiveDecode {false};      // 1.0.292: re-decode async rado in solo-ascolto, pieno in QSO/CQ
+    // Sprint2-1: fast pass narrow-band quando attendi una reply (opt-in).
+    bool m_ft2NarrowAsyncDecode {false};
+    int  m_ft2NarrowPassCounter {0};
+    qint64 m_ft2NarrowLogMs {0};
+    // Sprint2-2: gate RX-health sul rearm AutoCQ (default ON).
+    bool m_autoCqRxHealthGate {true};
+    qint64 m_autoCqRxHealthLogMs {0};
+    // Sprint3-C: deadline cooperativa sul decode async (0 = off).
+    int m_ft2AsyncDeadlineMs {2500};
+    quint64 m_ft2AsyncDispatchSeq {0};
+    bool m_ft2ApHashCache {false};         // 1.0.293/294: AP hash cache; cache-rescued decodes are display/audit only for AutoSeq/TX
+    bool m_ft2AsyncSkipRedundantSyncDecode {false};  // 1.0.355: salta decode sync fine-slot se async ha gia' coperto lo slot
+    qint64 m_ft2AsyncDecodeProducedSlotMs {0};       // 1.0.355: indice slot corrected-UTC dell'ultimo decode async accettato
+    bool m_ft8DeepDecodeInTx {false};      // 1.0.299: deep depth-4 follow-up (decode-list-only) anche durante TX/QSO. Opt-in.
+    bool m_ft8SubpassHarvest {false};       // F0: abilita engine subpass ft8b (lft8subpass). Opt-in, default OFF.
+    // 1.0.293 — cache band-wide degli hash28 dei call visti in banda (single-thread, GUI-confined).
+    HashedCallsignCache m_hashedCallsignCache;
+    qint64 m_lastApHashLogMs {0};          // throttle del log hit-rate
+    // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory state
+    bool m_ft2PartnerMemoryEnabled {false};   // opt-in, default OFF
+    struct PartnerMemoryEntry {
+        QString callUpper;
+        int     lastTxNum {0};
+        int     qsoProgress {0};
+        int     lastSnrDb {127};
+        qint64  lastSeenMs {0};
+        QString lastTxPayload;
+    };
+    QHash<QString, PartnerMemoryEntry> m_partnerMemory;
+    qint64 m_partnerMemoryLastPruneMs {0};
+    static constexpr qint64 kPartnerMemoryWindowMs = 30000;   // 30s
+    static constexpr qint64 kPartnerMemoryPruneMs  = 60000;   // 60s
+    // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
+    bool m_ft2Tx2ResendOnStall {true};        // gated comunque su Conservative+FT2
+    int  m_ft2Tx2ResendsThisQso {0};          // cap: max 1 re-send per QSO (evita loop)
+    int  m_ft2LastForcedTxBefore {0};         // ricorda da quale TX abbiamo "forzato"
+    // 1.0.179 — Smooth Decode Flow scheduler state
+    bool                  m_smoothDecodeFlow {true};
+    QVector<QVariantMap>  m_pendingDecodeReleaseQueue;
+    QTimer*               m_decodeReleaseTimer {nullptr};
+    int                   m_decodeReleaseChunkSize {1};
+    qint64                m_lastReleaseSerial {-1};
+    // 1.0.180
+    QString m_uiQuality {QStringLiteral("Medium")};       // Low | Medium | High
+    bool    m_uiFramelessPopouts {false};
+    QString m_uiStyle {QStringLiteral("Default")};        // Default | FluentWinUI3 | Material | Universal
+    // 1.0.186 — Full Spectrum auto-detach + spectrum FPS cap
+    bool m_autoDetachFullSpectrum {false};                // default OFF: resta integrato al primo avvio
+    int  m_spectrumFpsCap {20};                           // 15 | 20 | 30 (FPS panadapter)
+    // 1.0.189 — Telemetria pressione CPU (contatori sessione corrente)
+    int m_cpuPressureEventCount {0};
+    int m_cpuPressureSevereEventCount {0};
+    // 1.0.186 — Ring buffer timestamps dei "short stall" (gapMs >= 300 ma < 600),
+    // per scattare cpuPressure anche su raffiche di stall corti consecutivi
+    // che non superano la soglia 600ms ma cumulativamente strozzano il decode.
+    QVector<qint64> m_recentShortStalls;
+    // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
+    // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
+    int  m_currentPartnerSnrDb {127};
+    QSet<QString> m_remoteActivityKeys;
+    QStringList m_remoteActivityKeyOrder;
+    QHash<QString, QString> m_worldMapGridByCall;
+    QSet<QString> m_worldMapClosedQsoCallKeys;
+    QSet<QString> m_worldMapClearedDecodeKeys;
+    QVector<QVariantMap> m_deferredWorldMapFeedQueue;
+    QSet<QString> m_deferredWorldMapFeedKeys;
+    QSet<QObject*> m_worldMapReadyConsumers;
+    bool m_worldMapFeedFlushScheduled {false};
+    bool m_worldMapFullReplayDeferred {false};
+    bool m_worldMapDeferredLogActive {false};
+    bool m_worldMapCall3Loaded {false};
+    bool m_worldMapCall3Loading {false};
+    bool m_worldMapDisplayed {true};
+    QVariantList m_worldMapReplayEntries;
+    int m_worldMapReplayIndex {0};
+    quint64 m_worldMapReplayGeneration {0};
+    bool m_worldMapReplayActive {false};
+    std::atomic_bool m_asyncSettingsSavePending {false};
+    std::atomic_bool m_asyncSettingsSaveAgain {false};
+    bool m_settingsShutdownInProgress {false};
+    QString m_mapLastClickCall;
+    qint64 m_mapLastClickMs {0};
+    int m_periodProgress {0};
+    int m_lastPublishedPeriodMilliseconds {0};
+    QString m_utcTime;
+    // 1.0.498 step B2 strangler: m_seqState dichiarata QUI (prima del 1° stato
+    // QSO) così gli alias di TUTTI i blocchi (progressione + TxController clone)
+    // possono legarsi. La progressione QSO sotto è reference-alias alla struct.
+    decodium::seq::QsoSequencerState m_seqState;
+    QString m_tx1, m_tx2, m_tx3, m_tx4, m_tx5, m_tx6;
+    // Operator-selected CQ tokens between "CQ" and our callsign (for
+    // example "CQ WWA").  Auto CQ must not discard them when TX6 is rebuilt.
+    QString m_customCqPrefix;
+    bool m_skipCustomCqPrefixRecovery {false};
+    int&    m_currentTx = m_seqState.currentTx;
+    QString& m_dxCall = m_seqState.dxCall;
+    QString& m_dxGrid = m_seqState.dxGrid;
+    int&    m_qsoProgress = m_seqState.qsoProgress;
+    QString& m_reportSent = m_seqState.reportSent;
+    QString& m_reportReceived = m_seqState.reportReceived;  // default -10 dB (nella struct)
+    bool&   m_sendRR73 = m_seqState.sendRR73;               // true=RR73, false=RRR
+    int     m_autoCQPeriodsMissed {0}; // periodi CQ senza risposta (watchdog count-based)
+    bool m_multiAnswerMode {false};
+    bool m_autoSeq          {true};
+    bool m_waitPounceActive {false};
+    QString m_lastWaitPounceKey;
+    qint64 m_lastWaitPounceMs {0};
+    bool m_holdTxFreq       {false};
+    bool m_txEnabled        {false};
+    bool m_manualTxHold     {false};
+    bool m_deferredManualSyncTx {false};
+    bool m_autoCqRepeat     {false};
+    bool m_avgDecodeEnabled {false};
+    int  m_txPeriod         {0};   // 1=first/even (:00/:30), 0=second/odd (:15/:45)
+    bool m_alt12Enabled     {false};
+    bool    m_asyncTxEnabled   {true};   // FT2 async TX SEMPRE ON (permanente, non disattivabile): il path FT2 sync e' rimosso di fatto. Solo modo FT2 lo usa (gated ovunque da m_mode=="FT2").
+    qint64  m_asyncLastTxEndMs {0};      // timestamp fine ultima TX FT2 async (per guard timer)
+    bool m_dualCarrierEnabled{false}; // FT2 dual carrier mode
+    bool m_quickQsoEnabled   {false}; // FT2 Quick QSO: salta TX1, flusso Ultra2 (2 messaggi)
+    // 1.0.304 — resume-on-reply (#9): se attivo, alla Halt con QSO attivo memorizza il
+    // partner; se quello ri-risponde (decode con suo call + mio call) entro 2 min, riprende
+    // il QSO via processDecodeDoubleClick. Opt-in, default OFF (l'hard-stop v4 resta default).
+    bool m_resumeQsoOnReply  {false};
+    QString m_resumeTargetCall;        // base-call del partner sospeso (vuoto = disarmato)
+    qint64  m_resumeArmedMs   {0};     // epoch ms dell'arm (timeout 120s)
+    QString m_resumeArmedMode;
+    int     m_resumeArmedTx {0};
+    int     m_resumeArmedProgress {0};
+    int  m_asyncSnrDb          {-99};   // SNR ultimo decode FT2 (per AsyncModeWidget S-meter)
+    // FT2 QSO cooldown: evita re-triggering sullo stesso 73 decodificato ogni ~4s (Shannon m_qsoCooldown)
+    QMap<QString, qint64> m_qsoCooldown;  // callsign → timestamp msec UTC
+    bool m_catConnected {false};
+    QString m_catRigName;
+    QString m_lastCatError;
+    quint64 m_omniRigReconnectSerial {0};
+    bool    m_omniRigReconnectInProgress {false};
+    bool    m_catTelemetryReconnectPending {false};
+    QString m_catMode;
+    double m_rigPowerWatts {0.0};
+    double m_rigSwr {0.0};
+    double m_rigAlc {0.0};  // 1.0.323 — ALC meter 0..100
+    bool m_rigAlcValid {false};
+    qint64 m_lastWsprPowerGuardMs {0};
+    // 1.0.324 — ALC auto-calibration state
+    int     m_alcTarget        {20};
+    bool    m_alcCalibrating   {false};
+    QString m_alcCalStatus;
+    QTimer* m_alcCalTimer      {nullptr};
+    double  m_alcEma           {0.0};
+    int     m_alcConvergeCount {0};
+    int     m_alcStuckCount    {0};   // 1.0.325 — saturazione: tick consecutivi con level clampato
+    double  m_alcCalStartLevel {0.0};
+    qint64  m_alcCalStartMs    {0};
+    void    finishAlcCalibration(bool success, const QString& reason);
+    double m_processCpuUsage {0.0};
+    double m_processGpuUsage {-1.0};
+    QString m_processGpuUsageSource {QStringLiteral("unavailable")};
+    qint64 m_cpuPressureUntilMs {0};
+    qint64 m_cpuPressureSevereUntilMs {0};
+    qint64 m_lastCpuPressureLogMs {0};
+    quint64 m_lastProcessCpuUsec {0};
+    quint64 m_lastProcessGpuTimeNs {0};
+    quint64 m_lastProcessGpuBusyCycles {0};
+    quint64 m_lastProcessGpuTotalCycles {0};
+    int m_processGpuZeroSampleCount {0};
+    int m_processCpuLogicalCores {1};
+    bool m_processCpuSampleInitialized {false};
+    bool m_processGpuSampleInitialized {false};
+    bool m_processGpuCycleSampleInitialized {false};
+    QElapsedTimer m_processCpuSampleClock;
+    QElapsedTimer m_processGpuSampleClock;
+    QElapsedTimer m_uiStallClock;
+    qint64 m_lastUiStallTickMs {0};
+    qint64 m_lastUiStallLogMs {0};
+    double m_localCatFrequencyTargetHz {0.0};
+    double m_localCatFrequencyPreviousHz {0.0};
+    QString m_currentCatLogicalBand;
+    qint64 m_currentCatStationOffsetHz {0};
+    qint64 m_localCatFrequencyGuardUntilMs {0};
+    quint64 m_catQsySettleSerial {0};
+    qint64 m_catFrequencySettleUntilMs {0};
+    // 1.0.362 — tetto massimo del guard anti-poll-stale: finché il rig riporta una
+    // frequenza diversa dal target (es. FT8 dopo aver chiesto FT2 su un FT-991 lento),
+    // shouldIgnoreCatFrequencyDuringLocalQsy ri-arma il guard fino a questo tetto, così
+    // i report vecchi non scavalcano la finestra di 8s e la freq non torna a FT8.
+    qint64 m_localCatFrequencyGuardMaxMs {0};
+    qint64 m_lastIgnoredCatFrequencyLogMs {0};
+    int    m_localRxFrequencyTargetHz {0};
+    qint64 m_localRxFrequencyGuardUntilMs {0};
+    int    m_localTxFrequencyTargetHz {0};
+    qint64 m_localTxFrequencyGuardUntilMs {0};
+    bool   m_ledCoherentAveraging {false};
+    bool   m_ledNeuralSync {false};
+    bool   m_ledTurboFeedback {false};
+    int    m_coherentCount {0};
+    double m_neuralScore {0.0};
+    int    m_turboIterations {0};
+    bool   m_coherentAvgEnabled {false};
+    bool   m_neuralSyncEnabled {false};
+    bool   m_turboFeedbackEnabled {false};
+    bool   m_fastLdpcEnabled {true};   // decoder LDPC veloce per FT2, acceso di serie
+    bool   m_advAutoModeEnabled {true};
+    bool   m_advNeuralSyncActive {false};
+    bool   m_advTurboFeedbackActive {false};
+    bool   m_advCoherentAvgActive {false};
+    // Rolling window degli ultimi N decode count FT8 (slot 15s)
+    QVector<int> m_ft8DecodeHistory;
+    static constexpr int kFt8HistoryDepth = 4;
+    bool        m_pskSearchFound {false};
+    QString     m_pskSearchCallsign;
+    bool        m_pskSearching {false};
+    QStringList m_pskSearchBands {"160m","80m","40m","20m","15m","10m"};
+    // DX-Pedition Mode Fase 3 — "heard-by" state.
+    QVariantList m_pskHeardByList;
+    int          m_pskHeardByCount {0};
+    int          m_pskHeardByDxccCount {0};
+    double       m_pskHeardByMaxKm {0.0};
+    bool         m_pskHeardByFetching {false};
+    qint64       m_pskHeardByLastFetchMs {0};   // rate-limit guard (QDateTime msecs)
+    int          m_pskReporterTimeSpanMinutes {60};
+    bool         m_pskMapSpotFetching {false};
+    qint64       m_pskMapSpotLastFetchMs {0};
+    int          m_pskMapSpotWindowMinutes {15};
+    bool        m_pskReporterEnabled {false};
+    int         m_ftThreads {3};
+    bool        m_ftThreadsAuto {true};
+    bool        m_lowCpuModeEnabled {false};
+    bool        m_lowEndMode {false};   // 1.0.497 — Modalità PC lento (master)
+    double m_fontScale {1.08};
+    int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
+    bool m_singleDecode {false};
+    int m_specialOperationActivity {0};
+    bool m_forceLegacyTxForSpecialOp {false};
+
+    // Spectrum/Waterfall settings
+    int    m_spectrumColorPalette {0};
+    double m_spectrumRefLevel {-10.0};
+    double m_spectrumDynRange {70.0};
+    bool   m_spectrumVisible {true};
+    bool   m_rttyInAscolto {false};
+
+    DecodiumThemeManager* m_themeManager  {nullptr};
+    DecodiumPropagationManager* m_propagationManager {nullptr};
+    SatelliteTrackingService*   m_satelliteTracking {nullptr};
+    MapIntelligenceService*      m_mapIntelligenceService {nullptr};
+    bool                         m_satelliteDopplerApplying {false};
+    CallsignIntelligenceService* m_callsignIntelligence {nullptr};
+    DecodiumDiagnostics*        m_diagnostics {nullptr};
+    WavManager*           m_wavManager    {nullptr};
+    MacroManager*         m_macroManager  {nullptr};
+    BandManager*          m_bandManager   {nullptr};
+    DecodiumCatManager*           m_nativeCat     {nullptr};
+    DecodiumCat4OmManager*        m_cat4OmCat     {nullptr};
+    DecodiumOmniRigManager*       m_omniRigCat    {nullptr};
+    DecodiumTransceiverManager*   m_hamlibCat     {nullptr};
+    DecodiumCatShare*             m_catShare      {nullptr};
+    QByteArray decoPortAuthKey() const;
+    void onDecoPortRxAudio(const QVector<short>& samples, quint64 captureTsNs);
+    void onDecoPortRemoteState();
+    void decoPortKeyLocalRig(bool on);
+    void decoPortEnsureRigDriver();
+    QString catBackendForPersistence() const;
+    DecoPortRigDriver* m_decoPortRig {nullptr};
+    bool decoPortSendTxWave(const QVector<float>& wave, double* durationSeconds);
+    void decoPortStopTx(const QString& reason);
+    void decoPortPumpTxFrames();
+    QVector<QVector<short>> m_decoPortTxFrames;
+    quint64    m_decoPortTxStartNs {0};
+    int        m_decoPortTxNextFrame {0};
+    QTimer*    m_decoPortTxPacer {nullptr};
+    void decoPortPlayTxAudio(const QVector<short>& samples);
+    bool       m_decoPortRemoteKeyed {false};
+    QTimer*    m_decoPortTxGuard {nullptr};
+    QThread*           m_decoPortTxOutThread {nullptr};
+    RtlSdrAudioOutput* m_decoPortTxOut {nullptr};
+    int                m_decoPortTxOutRate {0};
+    bool       m_decoPortApplyingRemote {false};
+    QString    m_catBackendBeforeDecoPort;
+    bool       m_catConnectedBeforeDecoPort {false};
+    QString    m_catRigNameBeforeDecoPort;
+    QString    m_catModeBeforeDecoPort;
+    bool       m_decoPortMonitor {false};
+    QThread*            m_decoPortMonitorThread {nullptr};
+    RtlSdrAudioOutput*  m_decoPortMonitorOut {nullptr};
+    int                 m_decoPortMonitorRate {0};
+    bool       m_decoPortUseRemote {false};
+    qint64     m_decoPortRemoteSamples {0};
+    qint64     m_lastDecoPortAudioLogMs {0};
+    mutable DecodiumDecoPortGateway* m_decoPortGateway {nullptr};
+    mutable DecoPortDiscovery*       m_decoPortDiscovery {nullptr};
+    mutable DecoPortLink*            m_decoPortLink {nullptr};
+    DecodiumSpotShare*            m_spotShare     {nullptr};
+    DecodiumAmplifier*            m_amplifier     {nullptr};
+    QString                       m_catBackend    {"hamlib"};
+    bool                          m_suppressCatErrors {false};
+    RemoteCommandServer*          m_remoteServer {nullptr};
+    DecodiumDxCluster*    m_dxCluster     {nullptr};
+    QTimer*               m_dxClusterSpotsNotifyTimer {nullptr};
+    bool                  m_dxClusterSpotsChangedPending {false};
+    bool                  m_dxClusterSpotsDeferredDuringTx {false};
+    // FT2 async smart TX scheduler (anti-collision)
+    qint64                m_ft2AsyncLastDecodeMs   {0};
+    qint64                m_ft2AsyncFirstDecodeMs  {0};   // start of current decode burst
+    // FIX A: signal-time slot boundary (epoch ms) of the partner's frame for
+    // the current decode burst, derived from the corrected UTC clock + decode DT.
+    // 0 = not available -> scheduleSmartFt2AsyncTx falls back to wall-clock estimate.
+    qint64                m_ft2AsyncPartnerSlotMs  {0};
+    // FIX A v2 (1.0.356): slot-start (epoch ms, corrected-UTC) della finestra audio
+    // calcolato al DISPATCH del decode async (stabile), non al callback ready (che e'
+    // gonfiato dalla latenza di decode variabile). onFt2AsyncDecodeReady lo usa come
+    // ancora dello slot del partner. Single-flight => corrisponde al ready in arrivo.
+    qint64                m_ft2AsyncDispatchSlotStartMs {0};
+    // Sprint1 (1.0.393): ancora rinfrescata + breaker nel path diretto + skip stale.
+    qint64                m_ft2AsyncPartnerSlotSetMs {0}; // wall-ms ultimo refresh dell'ancora (freshness gate breaker)
+    qint64                m_ft2ParityDeferUntilMs {0};    // corrected-ms: rinvio TX anti same-phase (0 = nessun rinvio)
+    quint64               m_ft2AsyncLastDispatchAudioPos {0}; // pos audio all'ultimo dispatch (skip se invariato)
+    int                   m_ft2EmptyAsyncAttempts {0};    // contatore attempt vuoti per log aggregato
+    qint64                m_ft2EmptyAsyncAttemptLogMs {0};
+    qint64                m_ft2RetryDeferLogMs {0};       // throttle 1/slot del log retry guard
+    int                   m_ft2AsyncAudioQuietRuns {0};   // consecutive RMS<threshold samples
+    bool                  m_ft2AsyncSmartTxPending {false};
+    quint64               m_ft2AsyncSmartTxSerial {0};
+    qint64                m_ft2AsyncSmartTxDeadlineMs {0};
+    int                   m_ft2AsyncSmartTxRetries {0};
+    bool                  m_ft2ManualClickTx1BypassPeriodOnce {false};
+    void scheduleSmartFt2AsyncTx(const QString& reason);
+    void ft2AsyncGateRequirements(qint64 nowMs, int& rmsRunsReq, int& decodeQuietReq,
+                                 int& jitterBase, int& jitterSpan) const; // 1.0.447 Leva#6-A
+    bool canAdvance(int fromTx, int toTx) const;  // 1.0.447 Fase 2 - matrice transizioni legittime (would-reject)
+    void onAudioLevelForFt2Gate();
+    bool                  m_autoSpotEnabled {false};
+    bool                  m_nextLogClusterSpotOverrideValid {false};
+    bool                  m_nextLogClusterSpotEnabled {false};
+    DecodiumPskReporterLite* m_pskReporter {nullptr};
+    DecodiumCloudlogLite*    m_cloudlog    {nullptr};
+    DecodiumQrzLogbookLite*  m_qrzLogbook  {nullptr};
+    QHash<quint32, ExternalAdifUploadPending> m_externalAdifUploads;
+    std::atomic<quint64> m_ft2LinkReceivedFileIoSerial {0};
+    DecodiumWsprUploader*    m_wsprUploader{nullptr};
+    bool                  m_wsprUploadEnabled {false};
+
+    // UI persistence state
+    int    m_uiSpectrumHeight  {150};
+    int    m_uiPaletteIndex    {3};
+    double m_uiZoomFactor      {1.0};
+    int    m_uiWaterfallHeight {420};
+    int    m_uiDecodeWinX      {0};
+    int    m_uiDecodeWinY      {0};
+    int    m_uiDecodeWinWidth  {1100};
+    int    m_uiDecodeWinHeight {600};
+
+    QVector<short> m_audioBuffer;
+    // Protegge m_audioBuffer rispetto al callback DecodiumAudioSink::writeData,
+    // che in alcune piattaforme Qt6 (PulseAudio/ALSA) viene invocato dal thread
+    // interno del backend audio anche quando il sink ha parent nel main thread.
+    // QMutex perché QVector NON è thread-safe per scritture concorrenti.
+    mutable QMutex m_audioBufferMutex;
+    quint64 m_decodeSerial {0};
+    quint64 m_decodeSessionId {0};
+    quint64 m_periodTimerSessionId {0};
+    qint64 m_bridgeOwnedJtFallbackLastSlot {-1};
+    qint64 m_bridgeOwnedJtFallbackLastDispatchMs {0};
+    QString m_bridgeOwnedJtFallbackLastMode;
+    // Period timer ticks at 250ms; mode determines how many ticks = 1 period
+    int m_periodTicks {0};
+    int m_periodTicksMax {60};   // FT8=60 (15s), FT4=30 (7.5s), FT2=15 (3.75s)
+    // Slot index UTC (= epoch_ms / periodMs). Usato in onPeriodTimer per
+    // rilevare l'attraversamento del boundary UTC senza accumulare drift dal
+    // counter di tick Qt (che può perdere/ritardare scatti sotto event loop
+    // carico — UI, UDP, Hamlib, WebSocket). -1 = non ancora inizializzato.
+    qint64 m_lastPeriodSlot {-1};
+    qint64 m_ft8EarlyDecodeSlot {-1};
+    bool m_ft8EarlyDecode41Sent {false};
+    bool m_ft8EarlyDecode47Sent {false};
+    QSet<quint64> m_ft8EarlyDecodeSerials;
+    // Serial dei deep follow-up list-only: aggiornano SOLO la decode-list (UI),
+    // MAI l'auto-seq (niente doppio advanceQsoState/checkAndStartPeriodicTx).
+    QSet<quint64> m_ft8DeepInTxSerials;
+    struct Ft8PendingDeepFollowup {
+        QVector<short> audio;
+        int nutc {0};
+        qint64 slotIndex {-1};
+        int decodeDepth {1};
+        int decodeQsoProgress {0};
+        int cqHint {0};
+        bool ft8ApEnabled {false};
+        bool inTx {false};
+        quint64 sessionId {0};
+        QString utcToken;
+        qint64 latestCompleteMs {0};
+    };
+    QHash<quint64, Ft8PendingDeepFollowup> m_ft8PendingDeepFollowups;
+    QHash<quint64, Ft8PendingDeepFollowup> m_ft8PendingSubpassHarvest;  // F1: harvest subpass pending (key=deepSerial), al piu' 1 entry
+    // P0 (1.0.403): cooldown del deep follow-up FT8. Quando il deep torna troppo
+    // tardi (worker in saturazione su runtime_mutex single-flight) lo saltiamo per
+    // N slot cosi' la pipeline early+fast drena e i fast pass tornano consegnati.
+    // Tocca SOLO il pass opzionale: early/fast (produzione) non sono mai influenzati.
+    int m_ft8DeepFollowupCooldownSlots {0};
+    QHash<quint64, quint64> m_decodeSessionBySerial;
+    qint64 m_ft4EarlyDecodeSlot {-1};
+    bool m_ft4EarlyDecodeSent {false};
+    qint64 m_lastEarlyDecodeSkipLogMs {0};
+    qint64 m_lastFt8BacklogDrainLogMs {0};
+    int m_ft4LateCallbackStreak {0};
+    qint64 m_ft4AdaptiveLimitUntilMs {0};
+    qint64 m_lastFt4AdaptiveLogMs {0};
+    qint64 m_lastFt4BacklogDrainLogMs {0};
+    qint64 m_ft4LatencyGuardUntilMs {0};
+    qint64 m_lastFt4LatencyGuardLogMs {0};
+    QVector<short> m_pendingTimeSyncDecodeAudio;
+    qint64 m_pendingTimeSyncDecodeSlot {-1};
+    QString m_pendingTimeSyncDecodeMode;
+    bool m_pendingTimeSyncDecodeActive {false};
+    QVector<short> m_forcedDecodeAudioSnapshot;
+    bool m_forcedDecodeAudioSnapshotActive {false};
+    static constexpr int TIMER_MS = 250;
+    static constexpr int SAMPLE_RATE = 12000;
+
+    QThread* m_workerThread {nullptr};
+    decodium::ft8::FT8DecodeWorker*    m_ft8Worker    {nullptr};
+    QThread* m_workerThreadFt2 {nullptr};
+    decodium::ft2::FT2DecodeWorker*    m_ft2Worker    {nullptr};
+    QThread* m_workerThreadFt4 {nullptr};
+    decodium::ft4::FT4DecodeWorker*    m_ft4Worker    {nullptr};
+    QThread* m_workerThreadQ65 {nullptr};
+    decodium::q65::Q65DecodeWorker*    m_q65Worker    {nullptr};
+    QThread* m_workerThreadMsk {nullptr};
+    decodium::msk144::MSK144DecodeWorker* m_mskWorker {nullptr};
+    QThread* m_workerThreadWspr{nullptr};
+    decodium::wspr::WSPRDecodeWorker*  m_wsprWorker   {nullptr};
+    QHash<quint64, QString> m_wsprDecodeTempFiles;
+    QThread* m_workerThreadLegacyJt{nullptr};
+    decodium::legacyjt::LegacyJtDecodeWorker* m_legacyJtWorker {nullptr};
+    QThread* m_workerThreadFst4{nullptr};
+    decodium::fst4::FST4DecodeWorker*  m_fst4Worker   {nullptr};
+
+    QTimer* m_periodTimer      {nullptr};
+    QTimer* m_utcTimer         {nullptr};
+    QTimer* m_spectrumTimer    {nullptr};
+    QTimer* m_processCpuTimer  {nullptr};
+    QTimer* m_uiStallTimer     {nullptr};
+    QTimer* m_asyncDecodeTimer {nullptr};   // FT2 turbo async 100ms
+    QTimer* m_legacyStateTimer {nullptr};
+    QTimer* m_audioDeviceRefreshTimer {nullptr};
+    QTimer* m_audioBufferReleaseTimer {nullptr};
+    QMediaDevices* m_mediaDevices {nullptr};
+    bool m_audioDeviceCacheValid {false};
+    bool m_audioDeviceCacheDirty {true};
+    bool m_pendingAudioDeviceRefreshVerbose {false};
+    qint64 m_audioDeviceCacheRefreshMs {0};
+    qint64 m_lastAudioDeviceCacheLogMs {0};
+    QString m_audioDeviceCacheSignature;
+    QList<QAudioDevice> m_cachedAudioInputs;
+    QList<QAudioDevice> m_cachedAudioOutputs;
+    QAudioDevice m_cachedDefaultAudioInput;
+    QAudioDevice m_cachedDefaultAudioOutput;
+    QThread* m_soundInputThread {nullptr};
+    SoundInput*        m_soundInput  {nullptr};
+    SoundOutput*       m_soundOutput {nullptr};
+    Modulator*         m_modulator   {nullptr};
+    DecodiumAudioSink* m_audioSink   {nullptr};
+    RtlSdrInput*       m_rtlSdrInput {nullptr};
+    QTimer*            m_rtlSdrRetuneTimer {nullptr};
+    QThread*           m_rtlSdrAudioThread {nullptr};
+    RtlSdrAudioOutput* m_rtlSdrAudioOutput {nullptr};
+    bool               m_rtlSdrAudioPlaybackRequested {false};
+    QByteArray         m_rtlSdrAudioPlaybackDeviceId;
+    int                m_rtlSdrAudioPlaybackSampleRate {0};
+    qint64             m_rtlSdrAudioRetryAfterMs {0};
+    QStringList        m_rtlSdrDevices;
+    QString            m_rtlSdrStatus;
+    int                m_rtlSdrRfSampleRate {0};
+    quint32            m_rtlSdrRfCenterFrequencyHz {0};
+    quint32            m_rtlSdrRfSelectedFrequencyHz {0};
+    bool               m_rtlSdrRfSpectrumInverted {false};
+    bool               m_rtlSdrDiscoveryPending {false};
+    QString            m_lastAudioCaptureStartKey;
+    qint64             m_lastAudioCaptureStartMs {0};
+    QAudioSink*        m_txAudioSink  {nullptr};
+    bool               m_rxAudioSuspendedForTx {false};
+    bool               m_rxAudioKeptOpenForTx {false};
+    bool               m_rxAudioIoRecoveryQueued {false};
+    QString            m_activeRxInputDeviceName;
+    QString            m_activeRxInputDeviceId;
+    qint64             m_rxAudioStartupStartMs {0};
+    bool               m_pendingRxAudioStartupHealthLog {false};
+    bool               m_spectrumTimerPausedForTx {false};
+    qint64             m_txPlaybackHoldUntilMs {0};
+    qint64             m_txPlaybackHardDeadlineMs {0};
+    bool               m_txPlaybackReleasePending {false};
+    quint64            m_txPlaybackSerial {0};
+    bool               m_txAudioRestartPending {false};
+    quint64            m_txAudioTelemetrySerial {0};
+    qint64             m_txAudioTelemetryStartWallMs {0};
+    qint64             m_txAudioTelemetryLastWallMs {0};
+    qint64             m_txAudioTelemetryLastProcessedUs {0};
+    qint64             m_txAudioTelemetryExpectedUs {0};
+    qint64             m_txAudioTelemetryMaxLagMs {0};
+    qint64             m_txAudioTelemetryMaxStallMs {0};
+    qint64             m_txAudioTelemetryLastWarningMs {0};
+    int                m_txAudioTelemetrySlotElapsedMs {-1};
+    int                m_txAudioTelemetryLeadInMs {0};
+    int                m_txAudioTelemetryPayloadDelayMs {0};
+    qint64             m_txAudioTelemetryPcmBytes {0};
+    qsizetype          m_txAudioTelemetrySinkBufferSize {-1};
+    double             m_txAudioTelemetryWavePeak {0.0};
+    double             m_txAudioTelemetryGain {0.0};
+    int                m_txAudioTelemetryStallCount {0};
+    int                m_txAudioTelemetryErrorCount {0};
+    int                m_txAudioTelemetryIdleCount {0};
+    int                m_txAudioTelemetryUnderrunCount {0};
+    bool               m_txAudioPriorityBoosted {false};
+    quint32            m_txAudioPreviousPriorityClass {0};
+    qint64             m_audioUnhealthyStartMs {0};
+    qint64             m_lastAudioWatchdogRestartMs {0};
+    qint64             m_lastAudioWatchdogLogMs {0};
+    quint64            m_audioWatchdogRecoverySerial {0};
+    qint64             m_audioWatchdogIgnoreUntilMs {0};
+    qint64             m_audioOverdriveStartMs {0};
+    qint64             m_lastAudioOverdriveWarningMs {0};
+    qint64             m_lastZeroDecodeAudioWarningMs {0};
+    quint64            m_postTxRxResumeSerial {0};
+    qint64             m_lastAudioHealthMs {0};
+    double             m_lastAudioHealthRms {0.0};
+    double             m_lastAudioHealthPeak {0.0};
+    int                m_lastAudioHealthClippedSamples {0};
+    int                m_lastAudioHealthSamples {0};
+    int                m_zeroRawDecodeStreak {0};
+    QBuffer*           m_txPcmBuffer  {nullptr};
+    QByteArray         m_txPcmData;
+    struct TxAudioCache {
+        QString mode;
+        QString message;
+        int txAudioFrequency {0};
+        int periodMs {0};
+        bool tciAudio {false};
+        QString outputDeviceName;
+        QString outputDeviceDescription;
+        int outputChannel {0};
+        QAudioFormat outputFormat;
+        QVector<float> wave;
+        QByteArray pcm;
+    };
+    TxAudioCache       m_txAudioCache;
+    // 1.0.364+ — MAM multi-stream nativo (FASE 1). Default OFF: con
+    // m_mamMultiStream==false multiStreamActive() ritorna sempre false e il
+    // path TX e' identico al mono single-stream.
+    bool               m_mamMultiStream {false};
+    QStringList        m_mamMessages;
+    QVector<int>       m_mamF0sHz;
+    // 1.0.364+ — MAM multi-stream nativo (FASE 2). Sequencer multi-QSO
+    // paralleli, modello MSHV "rispondi sulla freq del chiamante". Default OFF
+    // (m_mamMultiStream==false): nessuno slot viene mai creato, mamDispatchPeriod
+    // non viene mai invocato (gated da mamMultiStreamSequencerActive()) e il path
+    // single-QSO resta byte-identico. Ogni slot replica lo stato single-QSO
+    // (dxCall/grid/progress/currentTx/report/retry) in modo isolato, senza
+    // toccare i membri m_dxCall/m_qsoProgress/m_currentTx/... usati dal mono.
+    struct MamQsoSlot {
+        QString call;            // base callsign del partner (UPPER)
+        QString callFull;        // callsign completo come decodificato
+        QString grid;            // grid 4-char del partner (se nota)
+        int     audioFreqHz {0}; // freq audio del chiamante (MSHV: TX su questa)
+        int     progress {0};    // 0=IDLE 1=CQ 2=REPLY 3=REPORT 4=ROGER 5=SIGNOFF
+        int     currentTx {0};   // 1..6 step FT8 corrente dello slot
+        int     lastNtx {-1};    // ultimo currentTx trasmesso (per retry count)
+        int     retryCount {0};  // invii consecutivi dello stesso step
+        int     nTx73 {0};       // quante volte ho inviato il signoff
+        QString reportSent;      // report che invio (da SNR ricevuto)
+        QString reportReceived;  // report ricevuto dal partner
+        int     partnerSnrDb {127}; // 127 = sentinel "no data"
+        qint64  startedOnMs {0};    // epoch ms di apertura slot (per log On)
+        qint64  lastTxSlotMs {0};   // epoch ms ultimo slot in cui ho TX questo slot
+        qint64  lastHeardMs {0};    // epoch ms ultimo decode diretto a me
+        bool    logged {false};     // QSO loggato
+        QString lastTransmittedMessage;
+        enum class State { Active, Signoff, Done } state {State::Active};
+    };
+    QVector<MamQsoSlot> m_mamSlots;
+    int                 m_mamMaxStreams {3};
+    // 1.0.569+ — riempi gli slot liberi con CQ paralleli (modello DX-pedition:
+    // chiamo CQ su piu' frequenze insieme e ogni risposta si prende il suo slot).
+    // Ha effetto solo dentro il multi-stream, che e' gia' opt-in (default OFF).
+    bool                m_mamCqSlots {true};
+    bool               m_txAudioPrecomputeScheduled {false};
+    bool               m_cachedTxOutputDeviceValid {false};
+    QString            m_cachedTxOutputDeviceName;
+    QString            m_cachedTxOutputDeviceId;
+    bool               m_cachedTxOutputDeviceFound {false};
+    QAudioDevice       m_cachedTxOutputDevice;
+    bool               m_tciAudioCaptureActive {false};
+    qint64             m_lastTciAudioLogMs {0};
+    qint64             m_lastFt2LinkModernRxTapLogMs {0};
+    qint64             m_lastFt2LinkModernRxEmitMs {0};
+    qint64             m_lastFt2LinkModernRxEmitLogMs {0};
+    bool               m_ft2LinkModernRxDrainScheduled {false};
+    QVector<short>     m_ft2LinkModernRxPending;
+    qint64             m_lastFt2LinkLegacyRxTapLogMs {0};
+    qint64             m_lastFt2LinkLegacyRxEmitMs {0};
+    qint64             m_lastFt2LinkLegacyRxEmitLogMs {0};
+    qint64             m_lastLegacyWaterfallDiagLogMs {0};
+    qint64             m_lastLegacyAudioDiagLogMs {0};
+    bool               m_ft2LinkLegacyRxDrainScheduled {false};
+    QVector<short>     m_ft2LinkLegacyRxPending;
+    QTimer*            m_tuneTimer    {nullptr};
+    DecodiumLegacyBackend* m_legacyBackend {nullptr};
+    bool m_useLegacyTxBackend {false};
+    MessageClient* m_udpMessageClient {nullptr};
+    MessageClient* m_udpSecondaryMessageClient {nullptr};
+    MessageClient* m_udpTertiaryMessageClient {nullptr};
+    bool m_udpMessageClientRestartPending {false};
+    bool m_udpNoTargetWarningSent {false};
+    int  m_legacyBandActivityRevision {-1};
+    int  m_legacyRxFrequencyRevision {-1};
+    QString m_legacyAllTxtRevisionKey;
+    mutable QString m_legacyAllTxtConsumedPath;
+    mutable qint64 m_legacyAllTxtConsumedSize {-1};
+    mutable QSet<QString> m_loggedDirectedGhostMsgs;  // 1.0.378: dedup log ghost grid-mismatch (filtro gira a render-time)
+    // Ghost-gate conferma 2 decode: peerBase -> (timeToken del 1o avvistamento, wall-ms).
+    mutable QHash<QString, QPair<QString, qint64>> m_directedWeakPeerSeen;
+    bool m_syncingLegacyBackendState {false};
+    bool m_syncingLegacyBackendDecodeList {false};
+    bool m_legacyStateRefreshBurstQueued {false};
+    QSet<QString> m_legacyModeChangeClearedDecodeKeys;
+    QSet<QString> m_legacyPrunedBandMirrorKeys;
+    QSet<QString> m_legacyClearedRxMirrorKeys;
+    QSet<QString> m_clearedRxDecodeKeys;
+    // Native decoder duplicate lookup. The old path rebuilt this set by
+    // scanning the last 300 decode rows for every FT8/FT4 callback.
+    QSet<QString> m_nativeDecodeDedupKeys;
+    QQueue<QString> m_nativeDecodeDedupOrder;
+    quint64 m_nativeDecodeDedupSessionId {0};
+    // FT2 async emits overlapping decode batches. Keep its quantized keys in
+    // a bounded index instead of rebuilding a set from the full history.
+    QSet<QString> m_ft2AsyncDecodeDedupKeys;
+    QQueue<QString> m_ft2AsyncDecodeDedupOrder;
+    quint64 m_ft2AsyncDecodeDedupSessionId {0};
+    // Signal RX is append-oriented; retain an index instead of scanning every
+    // displayed row to suppress a mirrored duplicate.
+    QSet<QString> m_rxDecodeMirrorKeys;
+    struct LegacyDecodeSecondaryWork {
+        QVariantMap entry;
+        QString source;
+        QString key;
+    };
+    QQueue<LegacyDecodeSecondaryWork> m_legacyDecodeSecondaryQueue;
+    QSet<QString> m_legacyDecodeSecondaryPendingKeys;
+    bool m_legacyDecodeSecondaryDrainScheduled {false};
+    struct NativeDecodeSecondaryWork {
+        QVariantMap entry;
+        QString rawRow;
+        quint64 serial {0};
+        QString key;
+        bool publishPsk {false};
+        bool updateActiveStation {false};
+        bool updateWorldMap {false};
+        bool sendUdp {false};
+        bool playAlert {false};
+        bool reportDecodeTiming {false};
+    };
+    QQueue<NativeDecodeSecondaryWork> m_nativeDecodeSecondaryQueue;
+    QSet<QString> m_nativeDecodeSecondaryPendingKeys;
+    bool m_nativeDecodeSecondaryDrainScheduled {false};
+    bool m_skipNextLegacyBandModelSnapshot {false};
+    bool m_skipNextLegacyRxModelSnapshot {false};
+    QVariantList m_pendingLegacyFullSpectrumDelta;
+    QTimer* m_legacyFullSpectrumDeltaTimer {nullptr};
+
+    // === GitHub TxController clone ===
+    // 1.0.498 step B strangler: i 12 campi sotto vivono ora in QsoSequencerState
+    // (Sequencer/QsoSequencerState.hpp), condiviso col core mobile. I membri m_*
+    // sono riferimenti-alias con gli STESSI nomi/default → tutti i call-site nel
+    // .cpp restano invariati. m_seqState va dichiarato PRIMA degli alias (ordine
+    // di costruzione = ordine di dichiarazione).
+    int&  m_nTx73            = m_seqState.nTx73;         // completed 73/RR73 transmissions in current QSO
+    int&  m_txRetryCount     = m_seqState.txRetryCount;  // quante volte abbiamo inviato m_lastNtx senza risposta
+    int&  m_lastNtx          = m_seqState.lastNtx;       // ultimo TX number inviato
+    int&  m_lastCqPidx       = m_seqState.lastCqPidx;    // period index dell'ultimo CQ inviato (evita CQ consecutivi)
+    QString& m_lastAutoSeqKey = m_seqState.lastAutoSeqKey;   // deduplicazione autoSequenceStep
+    qint64&  m_lastAutoSeqMs  = m_seqState.lastAutoSeqMs;    // timestamp ultima deduplicazione
+    QHash<QString, qint64>&  m_recentDirectedReportDecodeMs = m_seqState.recentDirectedReportDecodeMs;
+    QHash<QString, QString>& m_recentDirectedReportDecodeMessage = m_seqState.recentDirectedReportDecodeMessage;
+    QString& m_lastTransmittedMessage = m_seqState.lastTransmittedMessage;
+    QString& m_autoSeqRogerReportBase = m_seqState.autoSeqRogerReportBase;
+    int&     m_activeTxNumber = m_seqState.activeTxNumber;
+    QString& m_activeTxMessage = m_seqState.activeTxMessage;
+    // Stato CW-audio (vedi sendCwAudio). m_cwTxActive devia i punti FT-specifici
+    // di startTx/ensureTxAudioPrepared/completeTxPlayback verso il percorso CW.
+    bool    m_cwTxActive {false};
+    QString m_pendingCwText;
+    int     m_cwWpm {20};
+    int     m_cwSidetoneHz {700};
+    // Stato telemetria stazione+meteo (vedi sendStationTelemetry): stesso
+    // schema di m_cwTxActive, un solo messaggio FT one-shot dopo il QSO,
+    // mai instradato nel sequencer/slot Tx1-6.
+    bool    m_telemetryTxActive {false};
+    QString m_pendingTelemetryHex;
+    QString m_lastLoggedQsoCall;
+    qint64  m_lastLoggedQsoTimestampMs {0};
+    int     m_weatherTempC {decodium::telemetry::kTempUnknown};
+    int     m_weatherWindKmh {0};
+    int     m_weatherWindDirDeg {0};
+    decodium::telemetry::SkyCondition m_weatherSky {decodium::telemetry::SkyCondition::Unknown};
+    qint64  m_weatherFetchedAtMs {0};
+    QTimer* m_weatherRefreshTimer {nullptr};
+    bool    m_ft2LinkTxActive {false};
+    // 0 idle, 1 preparing TX VFO, 2 transmitting, 3 returning to RX VFO.
+    // The values are deliberately stable because they are exposed in a QML
+    // status map rather than as a writable control.
+    int     m_ft2LinkSatelliteHalfDuplexState {0};
+    quint64 m_ft2LinkSatelliteHalfDuplexSerial {0};
+    qint64  m_ft2LinkSatelliteHalfDuplexRxDialHz {0};
+    qint64  m_ft2LinkSatelliteHalfDuplexTxDialHz {0};
+    int     m_ft2LinkSatelliteHalfDuplexSettleMs {900};
+    QString m_ft2LinkSatelliteHalfDuplexDetail;
+    qint64  m_ft2LinkPostTxAckGuardUntilMs {0};
+    QString m_pendingFt2LinkText;
+    QVector<float> m_pendingFt2LinkWave;
+    QVariantMap m_pendingFt2LinkPlan;
+    QDateTime m_lastTxActivityUtc;
+    // 1.0.498 step B3 strangler: deferred/pending sequencing -> QsoSequencerState (reference-alias)
+    QDateTime& m_qsoStartedOn = m_seqState.qsoStartedOn;
+    QDateTime& m_qsoFirstReplyOn = m_seqState.qsoFirstReplyOn;
+    bool&   m_logAfterOwn73 = m_seqState.logAfterOwn73;
+    bool&   m_ft2DeferredLogPending = m_seqState.ft2DeferredLogPending;
+    int&    m_cqAutoReplyArmSecond = m_seqState.cqAutoReplyArmSecond;
+    qint64& m_cqAutoReplyArmWallMs = m_seqState.cqAutoReplyArmWallMs;
+    int&    m_pendingAutoSeqTxAfterActiveTx = m_seqState.pendingAutoSeqTxAfterActiveTx;
+    QString& m_pendingAutoSeqPartnerBase = m_seqState.pendingAutoSeqPartnerBase;
+    QString& m_pendingAutoSeqMessage = m_seqState.pendingAutoSeqMessage;
+    QString& m_pendingAutoSeqMode = m_seqState.pendingAutoSeqMode;
+    bool&   m_quickPeerSignaled = m_seqState.quickPeerSignaled;
+    bool&   m_qsoLogged = m_seqState.qsoLogged;   // flag anti-doppio log per QSO corrente
+    int  m_maxCallerRetries {10};  // invii totali per step prima di fermarsi
+    int  m_processPriority {1};    // 1.0.388 — 0=Normale,1=Sopra il normale,2=Alta,3=Tempo reale
+    int  m_txDisabledMask {0};     // bitmask: bit N-1 set = TX(N) saltato in auto-seq (1.0.130)
+    int  m_autoCqMaxCycles  {0};   // 0 = infinito, >0 = max cicli CQ
+    int  m_autoCqPauseSec   {0};   // pausa (s) tra cicli CQ (0 = nessuna pausa)
+    int  m_autoCqCycleCount {0};   // contatore cicli CQ corrente
+
+    // WSJT-Z-style Auto Call session state. The feature is deliberately
+    // decode/control-only: it never touches the waterfall or panadapter path.
+    bool    m_autoCallEnabled   {false};
+    int     m_autoCallMaxQsos   {5};   // 0 = unlimited
+    int     m_autoCallQsoCount  {0};
+    int     m_autoCallPriority  {0};   // 0=last decoded, 1=strongest, 2=furthest
+    bool    m_autoCallStartingCandidate {false};
+    QString m_autoCallCurrentCandidate;
+
+    // === TARGET CALL feature (fork-only 1.0.262) ===
+    bool    m_targetCallActive       {false};
+    QString m_targetCallSign;
+    int     m_targetCallMaxRetries   {10};   // 0 = infinito; semantica: TX senza rivedere il target
+    int     m_targetCallTimeoutS     {90};
+    int     m_targetCallPeriod       {2};    // CALL UI convention: 0=1st, 1=2nd, 2=alterna
+    int     m_targetCallPauseS       {0};
+    int     m_targetCallRetryCount   {0};
+    QDateTime m_targetCallStartedUtc;        // CALL wall-clock timeout anchor
+    QDateTime m_targetCallLastTxUtc;         // ultima TX inviata al target
+    QDateTime m_targetCallLastSeenUtc;       // ultimo decode del target mentre CALL e' attivo
+    quint64 m_targetCallSessionId {0};       // invalidates timeout/pause timers across stop/start
+    QString m_targetCallSavedDxCall;         // dxCall pre-attivazione (per ripristino on stop)
+    int     m_targetCallSavedTxPeriod {0};
+    bool    m_targetCallSavedAlt12   {false};
+    bool    m_targetCallWasTransmitting {false}; // edge detector per transmittingChanged
+    bool    m_targetCallSeenSinceLastTx {false}; // resetta il contatore TX a vuoto
+    // DX-watch armato (opt-in, default OFF): ARMED prima di chiamare il target.
+    bool    m_armedWatchEnabled      {false};  // toggle: arma il watch invece di chiamare subito
+    bool    m_armedReArm             {false};  // a fine tentativo senza QSO torna in ascolto (capped)
+    bool    m_targetCallArmedWaiting {false};  // runtime: true=ARMED (attende target), false=CALLING/off
+    int     m_armedReArmCount        {0};      // re-arm consumati nella sessione (cap anti-loop DXCC)
+
+    int  m_txWatchdogTicks  {0};   // tick watchdog a 250ms: period/count logic
+    qint64 m_txWatchdogActiveSinceMs {0}; // wall-clock anchor for logs only
+    qint64 m_txWatchdogLastProgressLogMs {0};
+    QElapsedTimer m_txWatchdogElapsed; // monotonic source for minute watchdog
+    bool m_txWatchdogElapsedActive {false};
+    static constexpr int TX_WATCHDOG_MAX = 240; // 60s @ 250ms
+
+    // appEngine stub members
+    bool    m_swlMode {false};
+    bool    m_splitMode {false};
+    int     m_txWatchdogMode {1};
+    int     m_txWatchdogTime {6};
+    int     m_txWatchdogCount {3};
+    bool    m_filterCqOnly {false};
+    int     m_cqFilterLevel {0};   // 1.0.383 — 0=CQ, 1=+73, 2=+RR73, 3=+RRR (vedi passesCqFilter)
+    QString m_activeReadyProfile;  // 1.0.384 — id profilo pronto attivo ("" = personalizzato)
+    bool    m_applyingReadyProfile {false};  // 1.0.384 — guard: evita auto-clear durante applyReadyProfile
+    bool    m_filterMyCallOnly {false};
+    bool    m_filtersBypassed {false};
+    int     m_contestType {0};
+    bool    m_zapEnabled {false};
+    bool    m_deepSearchEnabled {false};
+    bool    m_ft8ApEnabled {true};
+    bool    m_asyncDecodeEnabled {false};
+    bool    m_alertOnCq {false};
+    bool    m_alertOnMyCall {false};
+    bool    m_recordRxEnabled {false};
+    bool    m_recordTxEnabled {false};
+    QString m_stationName;
+    QString m_stationQth;
+    QString m_stationRigInfo;
+    QString m_stationAntenna;
+    int     m_stationPowerWatts {100};
+    int     m_wsprPowerDbm {37};
+    bool    m_autoStartMonitorOnStartup {true};
+    bool    m_startFromTx2 {false};
+    bool    m_vhfUhfFeatures {false};
+    bool    m_directLogQso {false};
+    bool    m_confirm73 {true};
+    QString m_contestExchange;
+    int     m_contestNumber {1};
+    bool    m_pendingAutoLogValid {false};
+    bool    m_logPromptOpen {false};
+    QPointer<QDialog> m_logQsoPromptDialog;
+    bool    m_promptLogSnapshotValid {false};
+    QString m_promptLogCall;
+    QString m_promptLogGrid;
+    QString m_promptLogRptSent;
+    QString m_promptLogRptRcvd;
+    QString m_promptLogMode;
+    QString m_promptLogComment;
+    bool    m_promptLogCommentOverrideValid {false};
+    QDateTime m_promptLogOn;
+    QDateTime m_promptLogOff;
+    double    m_promptLogDialFreq {0.0};
+    QString m_pendingAutoLogCall;
+    QString m_pendingAutoLogGrid;
+    QString m_pendingAutoLogRptSent;
+    QString m_pendingAutoLogRptRcvd;
+    QDateTime m_pendingAutoLogOn;
+    QDateTime m_pendingAutoLogOff;
+    double    m_pendingAutoLogDialFreq {0.0};
+    bool    m_lateAutoLogValid {false};
+    QString m_lateAutoLogCall;
+    QString m_lateAutoLogGrid;
+    QString m_lateAutoLogRptSent;
+    QString m_lateAutoLogRptRcvd;
+    QDateTime m_lateAutoLogOn;
+    QDateTime m_lateAutoLogOff;
+    double    m_lateAutoLogDialFreq {0.0};
+    QDateTime m_lateAutoLogExpires;
+    QString m_autoCqLockedCall;
+    QString m_autoCqLockedGrid;
+    int     m_autoCqLockedNtx {6};
+    int     m_autoCqLockedProgress {0};
+    int     m_ft2AutoCqAwaitingPartnerTx {0};
+    QString m_ft2AutoCqAwaitingPartnerBase;
+    QString m_ft2AutoCqAwaitingPartnerDecodeIdentity;
+    qint64  m_ft2AutoCqAwaitingPartnerSinceMs {0};
+    QString m_lastAutoSeqDecodeIdentity;
+    QHash<QString, QDateTime> m_recentAutoCqAbandonedUtcByKey;
+    QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
+    QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
+
+    // B6 — cty.dat
+    bool   m_ctyDatUpdating {false};
+    bool   m_call3TxtUpdating {false};
+    QString m_ctyDatLastError;
+    QString m_call3TxtLastError;
+    int m_worldMapCall3RecordCount {0};
+
+    // B7 — Color highlighting (default WSJT-X colors)
+    QString m_colorCQ       {"#33FF33"};
+    QString m_colorMyCall   {"#FF5555"};
+    QString m_colorDXEntity {"#FFAA33"};
+    QString m_color73       {"#5599FF"};
+    QString m_colorB4       {"#888888"};
+    QString m_colorDecodeText {"#AFC4D8"};
+    bool    m_b4Strikethrough {true};
+
+    // === WSJT-X background highlight palette (full 14-color set) ===
+    QString m_colorTxMessage         {"#FFFF00"}; // yellow
+    QString m_colorNewDxcc           {"#FF00FF"}; // magenta
+    QString m_colorNewDxccBand       {"#F8AAD0"}; // pink
+    QString m_colorNewContinent      {"#E91E63"}; // hot pink
+    QString m_colorNewContinentBand  {"#F5B7C7"}; // light pink
+    QString m_colorNewCqZone         {"#F0A030"}; // orange
+    QString m_colorNewCqZoneBand     {"#F5DDA0"}; // cream
+    QString m_colorNewItuZone        {"#9ACD32"}; // lime
+    QString m_colorNewItuZoneBand    {"#D4E89F"}; // pale green
+    QString m_colorNewGrid           {"#FF8C00"}; // orange
+    QString m_colorNewGridBand       {"#FFCAA0"}; // peach
+    QString m_colorNewCall           {"#00E0E0"}; // cyan
+    QString m_colorNewCallBand       {"#B5E8E8"}; // light cyan
+    QString m_colorLotwUser          {"#FFFFFF"}; // white bg, dark red text
+    QHash<QString, bool> m_decodeColorEnabled;
+    QHash<QString, bool> m_decodeColorBold;
+    QHash<QString, QString> m_decodeColorBg;          // 1.0.416 sfondo riga per categoria
+    QHash<QString, bool>    m_decodeColorBgEnabled;   // 1.0.416 abilitazione sfondo per categoria
+
+    // Worked-before tracking (per-band/DXCC/zone/grid). Populated from ADIF
+    // import + each logged TX. Keys for *byBand sets are "BAND|VALUE", e.g.
+    // "20m|Italy" or "20m|JN61".
+    struct WorkedSets {
+        QSet<QString> dxccEver;          // DXCC entity name
+        QSet<QString> dxccByBand;
+        QSet<QString> continentEver;     // 2-letter continent code
+        QSet<QString> continentByBand;
+        QSet<int>     cqZoneEver;
+        QSet<QString> cqZoneByBand;
+        QSet<int>     ituZoneEver;
+        QSet<QString> ituZoneByBand;
+        QSet<QString> gridEver;          // 4-char Maidenhead grid
+        QSet<QString> gridByBand;
+        QSet<QString> callByBand;        // call already in m_workedCalls (ever)
+        QSet<QString> callByBandMode;    // B4 for the exact call + band + mode
+        // 1.0.584: the four sets below are keyed by BASE call (IK8OLM for
+        // IK8OLM/P), so a portable suffix no longer defeats the filters.
+        QSet<QString> callToday;         // base call worked today, by ADIF UTC QSO_DATE
+        QSet<QString> callTodayByBand;   // base call worked today on band
+        QSet<QString> callYesterday;     // base call worked yesterday (UTC)
+        QSet<QString> callYesterdayByBand;
+        QSet<QString> callEver;          // base call worked on any date/band
+        void clear() {
+            dxccEver.clear(); dxccByBand.clear();
+            continentEver.clear(); continentByBand.clear();
+            cqZoneEver.clear(); cqZoneByBand.clear();
+            ituZoneEver.clear(); ituZoneByBand.clear();
+            gridEver.clear(); gridByBand.clear();
+            callByBand.clear();
+            callByBandMode.clear();
+            callToday.clear();
+            callTodayByBand.clear();
+            callYesterday.clear();
+            callYesterdayByBand.clear();
+            callEver.clear();
+        }
+    };
+    WorkedSets m_worked;
+
+    // Populate m_worked from the parsed ADIF log, using m_dxccLookup to derive
+    // DXCC entity / continent / CQ + ITU zone for each callsign. Cheap enough
+    // to call after each import (a few hundred lookups for typical logbooks).
+    void rebuildWorkedSetsFromAdifRecords(QList<ParsedAdifRecord> const& records);
+    // Append a single QSO to m_worked. Called from logQsoNow().
+    void appendWorkedQso(const QString& call, const QString& grid, quint64 freqHz,
+                         const QString& mode, const QString& qsoDateUtc = QString());
+    void refreshWorkedBeforeDecodeEntriesForCall(const QString& call);
+
+    // B8 — Alert sounds
+    bool                 m_alertSoundsEnabled {false};
+    qint64               m_lastCqAlertMs {0};
+    qint64               m_lastMyCallAlertMs {0};
+    DecodiumAlertManager* m_alertManager {nullptr};
+    DxccLookup*           m_dxccLookup  {nullptr};
+
+    // C16 — Update checker
+    bool    m_updateAvailable {false};
+    QString m_latestVersion;
+
+    // A2 — Soundcard drift detection
+    double        m_soundcardDriftPpm {0.0};
+    qint64        m_driftFrameCount   {0};
+    // std::atomic: writer è il callback audio del sink (thread audio Qt),
+    // reader è il period timer sul main thread. Accessi relaxed: drift è una
+    // misura statistica, non serve synchronization stretta.
+    std::atomic<qint64> m_driftExpectedFrames {0};
+    QElapsedTimer m_driftClock;
+
+    // A3 — Time sync state
+    // 1.0.159 — DecoSyncTime fase 1: wrapper centrale che possiede il NtpClient
+    // interno. m_ntpClient rimane puntatore al NtpClient interno per backward
+    // compat con tutto il codice esistente. Default ON.
+    DecoSyncTime* m_decoSyncTime {nullptr};
+    DecodiumWebServer* m_webServer {nullptr};
+    // 1.0.238 (Phase 5.2 perf roadmap): write-behind worker per persistere la
+    // decode history su SQLite in modo asincrono. Il worker vive su un
+    // QThread dedicato (m_persistenceThread); il bridge gli invia entry via
+    // QMetaObject::invokeMethod(... QueuedConnection ...) da
+    // appendDecodeMapToList(). m_currentSessionId e' la PK in `sessions`
+    // creata al boot del bridge.
+    QThread* m_persistenceThread {nullptr};
+    DecodeHistoryWorker* m_persistenceWorker {nullptr};
+    qint64   m_currentSessionId {-1};
+    QSet<QString> m_decodeHistoryPersistedKeys;
+    NtpClient* m_ntpClient      {nullptr};
+    bool   m_ntpEnabled         {false};
+    QString m_ntpCustomServer;
+    double m_ntpOffsetMs    {0.0};
+    bool   m_ntpSynced      {false};
+    qint64 m_lastTxEndMs    {0};      // 1.0.166 hold-off NTP rearm post-TX
+    qint64 m_lastNtpRearmMs {0};      // 1.0.166 debounce NTP rearm
+    double m_avgDt          {0.0};
+    double m_decodeLatencyMs{0.0};
+    QHash<quint64, qint64> m_decodeStartMsBySerial;
+    QHash<quint64, QString> m_decodeModeBySerial;
+    QHash<quint64, QString> m_decodeUtcTokenBySerial;
+    int    m_dtMinSamples   {3};
+    int    m_dtLastSampleCount {0};
+    int    m_totalDecodesForDt {0};
+    double m_dtSmoothFactor {0.5};
+
+    // A4 — Fox/Hound
+    bool        m_foxMode   {false};
+    bool        m_houndMode {false};
+    QStringList m_callerQueue;
+    static constexpr int FOX_QUEUE_MAX = 20;
+
+    // B9 — Active Stations model
+    QPointer<ActiveStationsModel> m_activeStations;
+
+    // ADIF — log lavorato + import
+    QSet<QString>    m_workedCalls;   // callsign già lavorati (B4 check)
+    QString          m_adifLogPath;   // path file .adi
+    QString          m_activeLogbookName;
+    QStringList      m_logbookProfileNames;
+    QStringList      m_logbookProfilePaths;
+    mutable int      m_qsoCountCache {-1};
+    mutable QMutex   m_qsoSearchCacheMutex;
+    mutable QString  m_qsoSearchCachePath;
+    mutable QDateTime m_qsoSearchCacheModified;
+    mutable qint64   m_qsoSearchCacheSize {-1};
+    mutable QVariantList m_qsoSearchCacheRows;
+    mutable QVariantMap  m_qsoSearchCacheStats;
+    mutable bool     m_qsoSearchCacheReady {false};
+    bool             m_qsoSearchWarmupInProgress {false};
+    std::atomic<quint64> m_qsoSearchCacheGeneration {0};
+    QFutureWatcher<QVariantMap>* m_confirmedAdifImportWatcher {nullptr};
+    QFutureWatcher<QVariantMap>* m_adifImportWatcher {nullptr};
+    bool m_adifImportInProgress {false};
+    int m_adifImportProgress {0};
+    QString m_adifImportStatus;
+    void invalidateQsoSearchCache();
+    void setAdifImportProgress(int progress, const QString& status);
+    bool appendAdifRecord(const QString& dxCall, const QString& dxGrid,
+                          double freqHz, const QString& mode,
+                          const QDateTime& timeOnUtc,
+                          const QDateTime& timeOffUtc,
+                          const QString& rstSent, const QString& rstRcvd,
+                          const QString& comments = QString(),
+                          const QString& propMode = QString(),
+                          const QString& satellite = QString(),
+                          const QString& satMode = QString(),
+                          const QString& freqRx = QString(),
+                          int cqZone = 0,
+                          int ituZone = 0);
+    void importConfirmedAdifIntoLogbookAsync(const QString& provider, const QString& path);
+
+    // LotW lite
+    bool          m_lotwEnabled  {false};
+    bool          m_lotwUpdating {false};
+    QSet<QString> m_lotwUsers;
+    bool          m_showUsState {true};
+    UsStateDataManager* m_usStateData {nullptr};
+
+    // Cloudlog
+    bool    m_cloudlogEnabled {false};
+    QString m_cloudlogUrl;
+    QString m_cloudlogApiKey;
+
+    // QRZ Logbook
+    bool    m_qrzLogbookEnabled {false};
+    QString m_qrzLogbookApiKey;
+    bool    m_qrzLogbookReplaceDuplicates {false};
+    QString m_nextLogName;
+    QString m_nextLogQth;
+
+    // FT2 async ring buffer: ultimi 7.5s di audio (90000 campioni a 12kHz)
+    static constexpr int ASYNC_BUF_SIZE = 90000;
+    short m_asyncAudio[ASYNC_BUF_SIZE] {};
+    // Modificato dal callback audio (DecodiumAudioSink::setSampleCallback) e
+    // letto dal timer FT2 (onAsyncDecodeTimer). Atomico per garantire una read
+    // coerente dello snapshot della write position; il callback usa fetch_add
+    // implicito via operator++ per l'incremento.
+    // Tipo unsigned 64-bit: a 12 kHz un int signed va in overflow UB dopo
+    // ~50 h di funzionamento continuo. uint64_t copre >48 milioni di anni e
+    // ha wrap-around well-defined per il C++ memory model.
+    std::atomic<uint64_t> m_asyncAudioPos {0};   // posizione assoluta (mai resettata, mod ASYNC_BUF_SIZE)
+    bool  m_asyncDecodePending {false};  // previene overlap
+
+    // Spectrum ring buffer — buffer circolare separato per waterfall (non consumato dal decoder)
+    static constexpr int WF_RING_SIZE = 16384;  // ~1.37s a 12kHz, enough for the visual FFT
+    short m_wfRing[WF_RING_SIZE] {};
+    int   m_wfRingPos {0};
+    int   m_lastWaterfallAudioBufferSize {0};
+    qint64 m_lastFt2AsyncDecodeDispatchMs {0};
+    QVector<short> m_spectrumBuf;
+    static constexpr int SPECTRUM_FFT_SIZE    = 512;   // legacy WaterfallItem
+    static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // visual panadapter (~2.93 Hz/bin @ 12kHz)
+    QVector<float> m_lastPanadapterData;   // ultimo spettro valido (evita fasce nere)
+    qint64 m_lastPanadapterFrameMs {0};     // throttle visual FFT so decode keeps priority
+    qint64 m_lastPanadapterPressureLogMs {0};
+    qint64 m_deepDecodeVisualThrottleUntilMs {0};
+    quint64 m_deepDecodeVisualSerial {0};
+    qint64 m_lastSpectrumRecoveryMs {0};
+    qint64 m_lastLegacyPcmSampleMs {0};
+    float m_lastPanMinDb {0.f};
+    float m_lastPanMaxDb {0.f};
+    float m_lastPanFreqMin {0.f};
+    float m_lastPanFreqMax {0.f};
+    bool m_legacyPcmSpectrumFeed {false};
+    bool m_directVisualAudioCaptureUnsafe {false};
+    std::atomic_bool m_panadapterComputeBusy {false};
+    std::atomic<uint64_t> m_panadapterComputeSerial {0};
+    std::atomic_bool m_gpuPanadapterFftAvailable {true};
+    std::atomic_bool m_forceGpuPanadapterFft {true};
+    std::atomic_bool m_gpuPanadapterFftStallGuard {false};
+    std::atomic_bool m_openGlGpuPanadapterFftEnabled {false};
+    bool m_panadapterGpuFftActive {false};
+    QString m_panadapterGpuFftBackend {QStringLiteral("CPU FFTW")};
+    qint64 m_lastGpuPanadapterProbeMs {0};
+    qint64 m_gpuPanadapterRetryNotBeforeMs {0};
+    qint64 m_gpuPanadapterStableSinceMs {0};
+    int m_gpuPanadapterStallRetryCount {0};
+    QList<QPointer<PanadapterItem>> m_panadapterItems;
+
+    // The IQ ring stores interleaved signed samples.  It is written in the
+    // bridge thread by a throttled reader signal and copied before the FFT
+    // worker starts, so no USB/GUI lock is required.
+    static constexpr int RTL_IQ_RING_SHORTS = 32768;
+    QVector<short> m_rtlSdrIqRing;
+    int m_rtlSdrIqWritePos {0};
+    int m_rtlSdrIqCount {0};
+    std::atomic_bool m_rtlSdrSpectrumBusy {false};
+    std::atomic<uint64_t> m_rtlSdrSpectrumSerial {0};
+    qint64 m_lastRtlSdrRfLogMs {0};
+
+    mutable QMutex m_ft8MicroStallGuardMutex;
+    decodium::decode::Ft8MicroStallGuard m_ft8MicroStallGuard;
+
+    struct PanadapterFrameResult
+    {
+        QVector<float> values;
+        float minDb {0.0f};
+        float maxDb {0.0f};
+    };
+
+    QStringList ctyDatSearchPaths() const;
+    bool applyCatProfileSnapshotToSettings(const QString& name, bool setActiveProfile);
+    void noteActiveCatProfileAtStartup();
+    void reloadDxccLookupAsync(const std::function<void(bool, const QString&)>& completion);
+    QString extractDecodedCallsign(const QString& msg, bool isCQ) const;
+    QString extractDecodedGrid(const QString& msg) const;
+    QString lookupUsStateForDecode(const QString& call, const QString& gridHint) const;
+    void reloadLotwUsers(bool forceDownload);
+    void startLotwUsersDownload(const QString& cachePath, bool reportErrors);
+    void enrichDecodeEntry(QVariantMap& entry, bool countAsReceived = true) const;
+    // 1.0.142: throttle helper per decodeListChanged. Vedi commento timer.
+    void emitDecodeListChangedThrottled();
+    void emitRxDecodeListChangedThrottled(bool normalizeBeforeEmit = true);
+
+    // 1.0.143 fase 2: rebuild dei 2 model nativi dalla m_decodeList.
+    void rebuildBandActivityModel();
+    void rebuildRxDecodeModel();
+    void scheduleDecodeUiRefresh(int flags, int delayMs = 60);
+    void startDecodeUiSnapshotRefresh();
+    void scheduleFullSpectrumModelRefresh();
+    void applyPendingFullSpectrumSnapshot();
+    void invalidateDecodeUiPredicateCaches();
+    bool decodeUiBurstActive() const;
+    int decodeUiRowsPerCycle() const;
+    QVariantList filterEntriesForBandActivity(QVariantList const& source) const;
+    QVariantList filterEntriesForRxDecode(QVariantList const& source) const;
+    bool shouldDisplayEntryForBandActivity(QVariantMap const& entry) const;
+    bool shouldDisplayEntryForBandActivity(
+        QVariantMap const& entry,
+        decodium::decode_ui::WorkedFilterOptions const& workedFilters) const;
+    // Reads the Settings > Filters switches once, honouring "Bypass Filters".
+    decodium::decode_ui::WorkedFilterOptions workedFilterOptions() const;
+    bool entryBelongsToCurrentQso(QVariantMap const& entry,
+                                  bool ghostAlreadyAccepted = false) const;
+    void injectPeriodSeparators(QVariantList& filtered) const;
+    // 1.0.145: detection ghost decode (SNR marginale + AP-aided high-FP-rate).
+    bool looksLikeGhostDecode(QVariantMap const& entry) const;
+    bool directedDecodePeerHasInvalidDxcc(const QString& peerToken,
+                                          const QString& message,
+                                          const QString& context,
+                                          bool logReject = true) const;
+    bool shouldSuppressDirectedGhostDecode(const QStringList& fields,
+                                           const QString& context) const;
+    bool shouldSuppressDirectedGhostDecode(const QVariantMap& entry,
+                                           const QString& context) const;
+
+public:
+    Q_INVOKABLE bool hideGhostDecodes() const { return m_hideGhostDecodes; }
+    Q_INVOKABLE void setHideGhostDecodes(bool v);
+    // 1.0.226 — Esposizione del ghost filter a QML per chiusura fallback.
+    // Le funzioni shouldDisplayDecodeEntry in DecodeWindow.qml e Main.qml
+    // usavano solo hideTelemetryOnlyDecodes ignorando hideGhostDecodes,
+    // mostrando ghost quando bridge.rxDecodeModel era momentaneamente null
+    // (race boot/Loader). Single source of truth ora: il C++.
+    Q_INVOKABLE bool entryLooksLikeGhost(const QVariantMap& entry) const;
+    // 1.0.149: esponi flag period-separator per UI sync (era sempre true
+    // lato C++ ma desincronizzato dalla QSettings letta dal QML).
+    Q_INVOKABLE bool decodeShowPeriodSeparator() const { return m_decodeShowPeriodSeparator; }
+    Q_INVOKABLE void setDecodeShowPeriodSeparator(bool v);
+
+    // 1.0.174 — FT2 weak-signal pack: master flag "Conservative" che attiva
+    // ghost filter rilassato (-24 dB), retry cap esteso, same-step wait
+    // adattivo. Opt-in via Settings; default OFF.
+    Q_INVOKABLE bool ft2Conservative() const { return m_ft2Conservative; }
+    // 1.0.187 — FT2 Weak-Signal Pack F v2
+    Q_INVOKABLE bool ft2PartnerMemoryEnabled() const { return m_ft2PartnerMemoryEnabled; }
+    Q_INVOKABLE void setFt2PartnerMemoryEnabled(bool v);
+    // 1.0.187 — FT2 Weak-Signal Pack G
+    Q_INVOKABLE bool ft2Tx2ResendOnStall() const { return m_ft2Tx2ResendOnStall; }
+    Q_INVOKABLE void setFt2Tx2ResendOnStall(bool v);
+    Q_INVOKABLE void setFt2Conservative(bool v);
+    // 1.0.311 — cap ripetizioni 73/RR73 in FT2 (1-8, default 4), regolabile da Settings
+    Q_INVOKABLE int  ft2SignoffRetryCap() const { return m_ft2SignoffRetryCap; }
+    Q_INVOKABLE void setFt2SignoffRetryCap(int v);
+    // 1.0.314 — TX immediato al click (FT2 bypass period-gate TX1, FT8/FT4 cap 2000ms invece di 650ms)
+    Q_INVOKABLE bool ftxImmediateClickTx() const { return m_ftxImmediateClickTx; }
+    Q_INVOKABLE void setFtxImmediateClickTx(bool v);
+    Q_INVOKABLE bool ft2LogRr73OnPartnerLeft() const { return m_ft2LogRr73OnPartnerLeft; }
+    Q_INVOKABLE void setFt2LogRr73OnPartnerLeft(bool v);
+    // 1.0.315 — ripetizioni signoff regolabili per FT4 e FT8 (oltre a FT2), 1-8 assoluto
+    Q_INVOKABLE int  ft4SignoffRetryCap() const { return m_ft4SignoffRetryCap; }
+    Q_INVOKABLE void setFt4SignoffRetryCap(int v);
+    Q_INVOKABLE int  ft8SignoffRetryCap() const { return m_ft8SignoffRetryCap; }
+    Q_INVOKABLE void setFt8SignoffRetryCap(int v);
+    // 1.0.321 — FT2 manual one-shot disarm opt-in (Salvatore latch fix)
+    Q_INVOKABLE bool ft2ManualOneShotEnabled() const { return m_ft2ManualOneShotEnabled; }
+    Q_INVOKABLE void setFt2ManualOneShotEnabled(bool v);
+    // 1.0.317 — FT8 fast sequence (grace 400ms + accept late decodes)
+    Q_INVOKABLE bool ft8FastSequence() const { return m_ft8FastSequence; }
+    Q_INVOKABLE void setFt8FastSequence(bool v);
+    Q_INVOKABLE bool ft2ConservativeTiming() const { return m_ft2ConservativeTiming; }
+    Q_INVOKABLE void setFt2ConservativeTiming(bool v);
+    // 1.0.326 B4 — helper: relax latestD3 cap se ftxImmediateClickTx OR ft8FastSequence+FT8
+    bool effectiveRelaxLatestCap() const { return m_ftxImmediateClickTx || (m_ft8FastSequence && m_mode == QStringLiteral("FT8")); }
+    // 1.0.289 — FT2 enhancement toggles
+    Q_INVOKABLE bool ft2FullDecodeInAutoCq() const { return m_ft2FullDecodeInAutoCq; }
+    Q_INVOKABLE void setFt2FullDecodeInAutoCq(bool v);
+    Q_INVOKABLE bool ft2QuickGiveUpStrong() const { return m_ft2QuickGiveUpStrong; }
+    Q_INVOKABLE void setFt2QuickGiveUpStrong(bool v);
+    Q_INVOKABLE bool ftxWeakSignoffBoost() const { return m_ftxWeakSignoffBoost; }
+    Q_INVOKABLE void setFtxWeakSignoffBoost(bool v);
+    Q_INVOKABLE int  ftxWeakSnrThreshold() const { return m_ftxWeakSnrThreshold; }
+    Q_INVOKABLE void setFtxWeakSnrThreshold(int v);
+    Q_INVOKABLE int  ftxWeakSignoffBonus() const { return m_ftxWeakSignoffBonus; }
+    Q_INVOKABLE void setFtxWeakSignoffBonus(int v);
+    Q_INVOKABLE bool ft2PostLogReengageGuard() const { return m_ft2PostLogReengageGuard; }
+    Q_INVOKABLE void setFt2PostLogReengageGuard(bool v);
+    Q_INVOKABLE int  ft2PostLogReengageMax() const { return m_ft2PostLogReengageMax; }
+    Q_INVOKABLE void setFt2PostLogReengageMax(int v);
+    Q_INVOKABLE bool txWatchdogLogOnClose() const { return m_txWatchdogLogOnClose; }
+    Q_INVOKABLE void setTxWatchdogLogOnClose(bool v);
+    Q_INVOKABLE bool callerRetriesAlwaysHard() const { return m_callerRetriesAlwaysHard; }
+    Q_INVOKABLE void setCallerRetriesAlwaysHard(bool v);
+    Q_INVOKABLE bool ft2TransitionCensus() const { return m_ft2TransitionCensus; }
+    Q_INVOKABLE void setFt2TransitionCensus(bool v);
+    Q_INVOKABLE bool ft2AdaptiveTxGates() const { return m_ft2AdaptiveTxGates; }
+    Q_INVOKABLE void setFt2AdaptiveTxGates(bool v);
+    Q_INVOKABLE bool ft2AdaptiveDecode() const { return m_ft2AdaptiveDecode; }
+    Q_INVOKABLE void setFt2AdaptiveDecode(bool v);
+    Q_INVOKABLE bool ft2NarrowAsyncDecode() const { return m_ft2NarrowAsyncDecode; }
+    Q_INVOKABLE void setFt2NarrowAsyncDecode(bool v);
+    Q_INVOKABLE bool ft2ApHashCache() const { return m_ft2ApHashCache; }
+    Q_INVOKABLE void setFt2ApHashCache(bool v);
+    // 1.0.355 — opt-in: salta decode sync ridondante di fine-slot (riduce latenza aggancio)
+    Q_INVOKABLE bool ft2AsyncSkipRedundantSyncDecode() const { return m_ft2AsyncSkipRedundantSyncDecode; }
+    Q_INVOKABLE void setFt2AsyncSkipRedundantSyncDecode(bool v);
+    Q_INVOKABLE bool ft8DeepDecodeInTx() const { return m_ft8DeepDecodeInTx; }
+    Q_INVOKABLE bool ft8SubpassHarvest() const { return m_ft8SubpassHarvest; }
+    Q_INVOKABLE void setFt8DeepDecodeInTx(bool v);
+    Q_INVOKABLE void setFt8SubpassHarvest(bool v);
+
+    // 1.0.179 — Smooth Decode Flow scheduler: spalma il rilascio dei decode
+    // FT8/FT4 dal batch (15-30 row insieme) in stream progressivo con
+    // interval adattivo. Default ON, auto-fallback su UI stall.
+    Q_INVOKABLE bool smoothDecodeFlow() const { return m_smoothDecodeFlow; }
+    Q_INVOKABLE void setSmoothDecodeFlow(bool v);
+
+    // 1.0.180 — UI Revolution
+    Q_INVOKABLE QString uiQuality() const { return m_uiQuality; }
+    Q_INVOKABLE void    setUiQuality(QString const& v);
+    Q_INVOKABLE bool    uiFramelessPopouts() const { return m_uiFramelessPopouts; }
+    Q_INVOKABLE void    setUiFramelessPopouts(bool v);
+    Q_INVOKABLE QString uiStyle() const { return m_uiStyle; }
+    Q_INVOKABLE void    setUiStyle(QString const& v);
+
+    // 1.0.186 — Full Spectrum auto-detach (default OFF)
+    Q_INVOKABLE bool autoDetachFullSpectrum() const { return m_autoDetachFullSpectrum; }
+    Q_INVOKABLE void setAutoDetachFullSpectrum(bool v);
+    // 1.0.186 — Cap FPS panadapter (15 | 20 | 30)
+    Q_INVOKABLE int  spectrumFpsCap() const { return m_spectrumFpsCap; }
+    Q_INVOKABLE void setSpectrumFpsCap(int v);
+    // 1.0.189 — Telemetria sessione
+    Q_INVOKABLE int cpuPressureEventCount() const { return m_cpuPressureEventCount; }
+    Q_INVOKABLE int cpuPressureSevereEventCount() const { return m_cpuPressureSevereEventCount; }
+    Q_INVOKABLE bool cpuPressureNow() const { return cpuPressureActive(); }
+
+    // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
+    Q_INVOKABLE bool    startWebServer(int port = 8080);
+    Q_INVOKABLE void    stopWebServer();
+    Q_INVOKABLE bool    webServerRunning() const;
+    Q_INVOKABLE QString webServerUrl() const;
+    Q_INVOKABLE QString webServerQrUrl() const;
+    // 1.0.152: log dal QML al decodium_diagnostic.log (console.warn QML
+    // non viene catturato dal handler bridgeLog).
+    Q_INVOKABLE void qmlDebugLog(QString const& msg) const;
+
+    // 1.0.233 — DevOverlay metrics (Sprint 2 Phase 7).
+    // Gate critico: tutte le sample/contatori vengono skippati se
+    // m_devOverlayActive == false. La connect a frameSwapped resta
+    // attiva ma recordFrameTimestamp ritorna early.
+    double  lastFrameTimeMs()      const { return m_lastFrameTimeMs; }
+    double  meanFrameTimeMs()      const { return m_meanFrameTimeMs; }
+    double  p99FrameTimeMs()       const { return m_p99FrameTimeMs; }
+    double  decodeRateReceivedHz() const { return m_decodeRateReceivedHz; }
+    double  decodeRateCommittedHz()const { return m_decodeRateCommittedHz; }
+    QString activeRhiBackend()     const { return m_activeRhiBackend; }
+    bool    devOverlayActive()     const { return m_devOverlayActive; }
+    qint64  totalFrameSamples()    const { return m_totalFrameSamples; }
+    qint64  totalDecodesReceived() const { return m_totalDecodesReceived; }
+    qint64  totalDecodesCommitted()const { return m_totalDecodesCommitted; }
+    QVariantList frameTimeSamples() const;
+    void    setActiveRhiBackend(QString const& backend);
+    void    setDevOverlayActive(bool v);
+    Q_INVOKABLE void recordFrameTimestamp();
+    void noteDecodeReceived() const;   // contatore "received" (enrich)
+    void noteDecodeCommitted();        // contatore "committed" (append)
+
+    // 1.0.364+ — MAM multi-stream nativo (FASE 1, solo C++, default OFF).
+    // multiStreamActive() e' true solo quando il toggle e' attivo, il modo e'
+    // FT2/FT4/FT8 e c'e' >=1 messaggio con altrettante frequenze. Quando false (sempre
+    // se m_mamMultiStream==false, oppure se m_mamMessages e' vuoto) il path TX
+    // resta byte-identico al mono single-stream esistente.
+    // FASE 2: la soglia e' >=1 (era >=2 in FASE 1) cosi' il caso 1-slot del
+    // sequencer usa generateMultiStreamFtxWave (1 stream all'offset dello slot)
+    // invece del mono path che leggerebbe lo stato single-QSO non popolato in
+    // MAM. m_mamMessages e' scritto SOLO da mamDispatchPeriod (mai altrove),
+    // quindi cambiare la soglia non ha effetti runtime fuori dal MAM.
+    bool multiStreamActive() const;
+    // 1.0.365+ — modi ammessi al MAM multi-stream (FT8/FT4/FT2). Usato dai
+    // gate multiStreamActive()/mamMultiStreamSequencerActive() al posto del
+    // vecchio confronto FT8-only. Default OFF invariato (gate combinato con
+    // m_mamMultiStream).
+    bool isMamMultiStreamMode() const;
+    // Test/verifica offline: genera il multi-stream wave dai messaggi/f0
+    // passati direttamente (indipendente dallo stato del bridge) e lo scrive
+    // come WAV mono 16-bit via writeMono16WavFile. Serve per l'analisi
+    // spettrale delle fasi 2-3 senza UI.
+    Q_INVOKABLE bool mamDumpTestWav(const QString& path, const QStringList& messages,
+                                    const QVector<int>& f0sHz, int sampleRate = 48000);
+
+    // 1.0.364+ — MAM multi-stream nativo (FASE 2): sequencer multi-QSO.
+    // Tutto gated da mamMultiStreamSequencerActive(); se OFF non vengono mai
+    // invocate e il path single-QSO e' intatto.
+    Q_INVOKABLE void setMamMultiStream(bool on);
+    bool    mamMultiStream() const { return m_mamMultiStream; }
+    void    setMamMaxStreams(int v);
+    int     mamMaxStreams() const { return m_mamMaxStreams; }
+    QVariantList mamActiveSlots() const;
+    int     mamActiveSlotCount() const { return m_mamSlots.size(); }
+    bool    mamMultiStreamSequencerActive() const;
+    void    mamDispatchPeriod();
+    void    mamIngestDecode(const QStringList& f);
+    QString mamBuildSlotMessage(MamQsoSlot& s);
+    void    mamPruneSlots();
+    void    mamPromoteFromQueue();
+    void    mamLogSlot(MamQsoSlot& s);
+    int     mamSlotIndexForCall(const QString& base) const;
+    // 1.0.365+ — path CLICK->SLOT: doppio-click / spot DX cluster su una stazione
+    // con MAM multi-stream attivo la aggiunge a uno slot (IO chiamo da TX1) o, se
+    // pieno, alla coda. Q_INVOKABLE per un eventuale pulsante QML. Gated da
+    // mamMultiStreamSequencerActive(): con MAM OFF non fa nulla.
+    Q_INVOKABLE void mamEnqueueClickedStation(const QString& callFull, int audioFreqHz);
+
+    // 1.0.569+ - DX-Pedition multi-slot. Controlli manuali sugli slot esposti al
+    // pannello DX-Pedition (DxPedTxPanel.qml). Tutti no-op quando non ci sono
+    // slot: non toccano il path single-QSO.
+    bool    mamCqSlots() const { return m_mamCqSlots; }
+    void    setMamCqSlots(bool on);
+    // Pianifica le frequenze audio dei CQ paralleli: parte dalla frequenza TX e
+    // sale a passi di 60 Hz, poi scende, saltando quelle gia' occupate.
+    QVector<int> mamPlanCqFrequencies(int count, const QVector<int>& used) const;
+    bool    mamModeSupported() const { return isMamMultiStreamMode(); }
+    // FT2: il multi-stream non e' mai stato validato on-air (primo pileup reale
+    // fallito, 1.0.449) -> la UI mostra un avviso ma lascia la scelta.
+    bool    mamModeExperimental() const;
+    Q_INVOKABLE void mamDropSlot(const QString& call);
+    Q_INVOKABLE void mamLogSlotNow(const QString& call);
+    Q_INVOKABLE void mamClearSlots();
+    Q_INVOKABLE void mamClearQueue();
+
+private:
+
+public:
+    DecodeListModel* bandActivityModel() const { return m_bandActivityModel; }
+    DecodeListModel* fullSpectrumModel() const { return m_fullSpectrumModel; }
+    DecodeListModel* rxDecodeModel() const { return m_rxDecodeModel; }
+
+private:
+    // 1.0.179 — Smooth Decode Flow helpers
+    bool isUiStallActive(int thresholdMs, int windowMs) const;
+    void appendDecodeMapToList(QVariantMap const& entry);
+
+public slots:
+    // Una riga RTTY completa entra nella lista dei decodificati. RTTY e' un
+    // flusso continuo e il suo testo scorre nella finestra dedicata: qui
+    // arrivano solo le righe chiuse, perche' finiscano nella cronologia e
+    // nell'archivio come le altre decodifiche.
+    void aggiungiRigaRtty (QString const& testo, double qualita, double frequenzaHz);
+
+
+    // Alimenta il waterfall con l'audio che arriva dalla radio RTTY. Si passa
+    // l'AUDIO e non uno spettro gia' fatto: cosi' il waterfall resta quello di
+    // Decodium, con la sua risoluzione e la sua resa, invece di dover
+    // convertire due formati diversi (512 bin contro 1024 a passo 3,9 Hz).
+    // I campioni arrivano a 24 kHz e vengono decimati a 12, che e' il passo
+    // del ring. Ha effetto solo quando il modo attivo e' RTTY: negli altri
+    // modi il ring resta alimentato dall'audio locale come sempre.
+private:
+
+    // 1.0.238 (Phase 5.2): write-behind persistence helpers.
+    // startPersistenceWorker(): chiamato durante l'init del bridge, crea una
+    //   riga in `sessions`, lancia il QThread worker e connette i signal.
+    // enqueuePersistDecode(): chiamato da appendDecodeMapToList(); fa solo
+    //   QMetaObject::invokeMethod sul worker (~µs sul thread GUI).
+    // stopPersistenceWorker(): cleanup nel distruttore.
+    void startPersistenceWorker();
+    bool persistDecodeHistoryEntry(QVariantMap const& entry);
+    void enqueuePersistDecode(QVariantMap const& entry);
+    void stopPersistenceWorker();
+    void seedFt8KnownCqCacheFromAllTxt();
+
+    void refreshDecodeListDxcc();
+    QStringList parseFt8Row(const QString& row) const;
+    QStringList parseWsprRow(const QString& row) const;
+    QStringList parseJt65Row(const QString& row) const;
+    void ensureAudioSink();
+    void initialiseSstvRuntime();
+    void initialiseSstvStorage();
+    void initialiseSstvTx();
+    void shutdownSstvRuntime();
+    void refreshSstvDiagnosticsSnapshot();
+    void shutdownSstvStorage();
+    void shutdownSstvTx();
+    void tickSstvTx();
+    void releaseSstvTxBridgeOwnership();
+    bool sstvTxGlobalPreflightReady() const;
+    // Alzato fra il pin della rotta audio e il ritorno di start()/startPrepared():
+    // impedisce che la notifica di stato della sessione PRECEDENTE smonti la
+    // rotta appena fissata per quella nuova.
+    bool m_sstvTxStartInProgress {false};
+    // Le condizioni del preflight che in questo momento bloccano il TX SSTV,
+    // ognuna col suo nome; vuota significa pronto. Il messaggio mostrato
+    // all'operatore si costruisce da qui.
+    QStringList sstvTxPreflightBlockers() const;
+    QString sstvTxPreflightRejection() const;
+    std::uint64_t sstvTxNowMs() const noexcept;
+    bool sstvTxUsesVoxPtt() const;
+    bool sstvTxCanControlPtt() const;
+    bool sstvTxPttActive() const;
+    bool sstvTxAudioOnlyAllowed() const;
+    void setSstvTxPtt(bool on);
+    bool applySstvTxTimingSettings();
+#if DECODIUM_HAS_SSTV && DECODIUM_HAS_HAMDRM
+    decodium::sstv::hamdrm::HamDrmStatus activateHamDrmRxTap();
+    void deactivateHamDrmRxTap();
+    void queueHamDrmTransmittedImage(QImage image,
+                                     QString profileId,
+                                     int occupiedBandwidthHz);
+    decodium::sstv::SstvTxCoordinatorResult startHamDrmPreparedAudio(
+        std::unique_ptr<decodium::sstv::SstvPcm16Source> source,
+        std::string mode);
+    bool cancelHamDrmPreparedAudio(std::uint64_t coordinatorSessionId);
+#endif
+#if DECODIUM_HAS_SSTV
+    // Queues an already atomically stored path-only record onto the SQLite
+    // owner thread. A successful insert emits recordChanged and therefore
+    // updates the Gallery model incrementally without polling.
+    quint64 enqueueSstvStoredRecord(
+        decodium::sstv::SstvImageRecord record);
+    bool queueSstvIncomingImport(const QString& transferId);
+    bool queueSstvRxImageSave(bool automatic);
+    void handleSstvStudioPreparedChanged();
+    void queueSstvStudioDraftImage();
+    void queueSstvStudioTransmittedImage(
+        std::shared_ptr<const QImage> prepared,
+        QString fskId,
+        quint64 sessionId);
+    void maybeAutoSaveSstvRxImage();
+    void setSstvRxSaveStatus(QString state, QString error = {});
+    bool queueSstvQsoAssociation(quint64 requestId,
+                                 const QString& imageRecordId,
+                                 const QString& qsoId);
+    bool isSstvExistingQsoChoiceCurrent(const QString& qsoId) const;
+    void finishSstvQsoLog(quint64 requestId,
+                          bool associationStored,
+                          const QString& error = {});
+    bool commitSstvNewQso(
+        const decodium::sstv::SstvQsoLogRequest& request,
+        QString* associationId,
+        QString* error);
+#endif
+    void stopSstvRxForMonitorStop();
+    void refreshSstvProducerTaps();
+    void disconnectSstvProducerTaps();
+    void disableSstvProducerTaps();
+    void finishSstvWavReplay(bool completed,
+                             bool cancelled,
+                             quint64 sessionId);
+    bool restoreSstvLiveAfterReplay();
+    decodium::sstv::SstvAudioSourceKind currentSstvAudioSourceKind() const;
+    bool nativeSstvRxForcesDedicatedAudioCapture() const;
+    quint32 currentSstvAudioStreamId(decodium::sstv::SstvAudioSourceKind kind) const;
+    void selectSstvRxSource(decodium::sstv::SstvAudioSourceKind kind,
+                            quint32 streamId,
+                            bool resetExistingStream = false);
+    void startAudioCapture(bool watchdogRecovery = false);
+    void stopAudioCapture();
+    void scheduleAudioDeviceRefresh(int delayMs = 250, bool verboseLog = false);
+    void refreshAudioDeviceCache(const QString& reason, bool verboseLog, bool emitSignals = true);
+    QList<QAudioDevice> cachedAudioInputs(const QString& reason, bool refreshIfStale);
+    QList<QAudioDevice> cachedAudioOutputs(const QString& reason, bool refreshIfStale);
+    QAudioDevice cachedDefaultAudioInput(const QString& reason, bool refreshIfStale);
+    QAudioDevice cachedDefaultAudioOutput(const QString& reason, bool refreshIfStale);
+    void refreshAudioDevicesInternal(const QString& reason,
+                                     bool forceEnumeration,
+                                     bool emitStatus);
+    QAudioDevice resolveRxInputDevice(const QString& requestedName,
+                                      const QString& requestedId,
+                                      bool* requestedDeviceFound,
+                                      QString* matchReason);
+    void rememberAudioInputDeviceIdentity(QAudioDevice const& device,
+                                          const QString& reason,
+                                          bool updateDisplayName);
+    void rememberAudioOutputDeviceIdentity(QAudioDevice const& device,
+                                           const QString& reason,
+                                           bool updateDisplayName);
+    bool usingTciAudioInput() const;
+    bool rtlSdrEnabled() const;
+    bool rtlSdrGeneralReceiverConfigured() const;
+    bool rtlSdrGeneralReceiverActive() const;
+    void startRtlSdrCapture();
+    void stopRtlSdrCapture();
+    void scheduleRtlSdrRetune();
+    void applyRtlSdrSettings(const QString& reason);
+    void onRtlSdrIqSamplesReady(const QVector<short>& samples, int sampleRate,
+                                quint32 centerFrequencyHz);
+    void onRtlSdrPcmSamplesReady(const QVector<short>& samples);
+    void onRtlSdrAudioSamplesReady(const QVector<short>& samples, int sampleRate);
+    void processRtlSdrSpectrum();
+    void startRtlSdrAudioPlayback(int sampleRate);
+    void stopRtlSdrAudioPlayback(const QString& reason);
+    bool startTciTxAudioStream(QVector<float> const& wave, QString const& mode,
+                               unsigned symbolsLength, double framesPerSymbol,
+                               double frequency, double toneSpacing,
+                               bool synchronize, double periodSeconds);
+    bool startTciTuneAudioStream(double frequency);
+    void stopTciTxAudioStream(bool quick = true);
+    void startTciAudioCapture();
+    void stopTciAudioCapture();
+    void onTciPcmSamplesReady(const QVector<short>& samples);
+    void handleAudioHealth(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
+    void updateAutoRxInputLevel(double rms, double peak, int clippedSamples, int samples, qint64 now);
+    void applyRxInputLevel(double level, bool automatic);
+    void restartAudioCaptureForModeChange(const QString& previousMode);
+    void scheduleMonitorRecovery(const QString& reason,
+                                 quint64 sessionId,
+                                 bool monitorShouldStayActive);
+    void scheduleModeChangeMonitorRecovery(const QString& previousMode,
+                                           const QString& requestedMode,
+                                           quint64 sessionId,
+                                           bool monitorWasActive);
+    void restartAudioCaptureFromWatchdog(const QString& reason);
+    void feedAudioToDecoder(qint64 completedUtcSlot = -1);
+    void dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot, const QString& modeSnapshot,
+                                         quint64 sessionId, qint64 deadlineMs);
+    void maybeDispatchFt8EarlyDecode(qint64 utcSlot, int msInSlot, int periodMs);
+    void maybeDispatchFt4EarlyDecode(qint64 utcSlot, int msInSlot, int periodMs);
+    bool ft8LiveDecodeBacklogActive(qint64 nowMs, int minAgeMs, quint64 ignoreSerial,
+                                    QString* detail = nullptr) const;
+    void drainFt8LiveDecodeBacklog(quint64 keepSerial, const QString& reason);
+    bool ft4LiveDecodeBacklogActive(qint64 nowMs, int minAgeMs, quint64 ignoreSerial,
+                                    QString* detail = nullptr) const;
+    void drainFt4LiveDecodeBacklog(quint64 keepSerial, const QString& reason);
+    void resetFtxDecodeWorkersForModeChange(const QString& previousMode,
+                                            const QString& nextMode);
+    void queueFt8DecodeRequest(const QVector<short>& audioSnapshot, quint64 serial,
+                               int nutc, qint64 slotIndexForUtc, int decodeDepth,
+                               int decodeQsoProgress, int cqHint, int nzhsym,
+                               bool ft8ApEnabled, bool suppressUiRows,
+                               bool listOnlyRows = false, int maxDecodeMsOverride = 0,
+                               bool subpassRequested = false, int threadCountOverride = 0);
+    void queueFt4DecodeRequest(const QVector<short>& audioSnapshot, quint64 serial,
+                               int nutc, qint64 slotIndexForUtc, int decodeDepth,
+                               int decodeQsoProgress, int cqHint);
+    void resetEarlyDecodeSchedule();
+    int targetDecodeSamplesForMode(const QString& mode) const;
+    void enumerateAudioDevices();
+    void applyAudioInputRuntimeChange(const QString& reason);
+    void applyAudioOutputRuntimeChange(const QString& reason);
+    void syncAudioDeviceSettingsToLegacyIni();
+    void updatePeriodTicksMax();
+    QVector<float> computeSpectrum() const;
+    void publishRemoteWaterfallFrame(const QVector<float>& dbValues,
+                                     float minDb,
+                                     float maxDb,
+                                     float freqMinHz,
+                                     float freqMaxHz);
+    static PanadapterFrameResult computePanadapterFrame(const QVector<short>& samples,
+                                                        int nfa,
+                                                        int nfb);
+    void finishPanadapterFrame(QVector<float> values,
+                               float minDb,
+                               float maxDb,
+                               int usableSamples,
+                               float freqMinHz,
+                               float freqMaxHz,
+                               uint64_t serial);
+    void initTxDevices();
+    void invalidateTxAudioCache();
+    void scheduleIdleAudioBufferRelease(int delayMs = 120000);
+    void releaseIdleAudioBuffers();
+    void scheduleTxAudioPrecompute(int delayMs = 75);
+    void precomputeTxAudioForCurrentMessage(const QString& reason);
+    bool ensureTxAudioPrepared(const QString& msg, int txAudioFrequency, bool needPcm,
+                               QVector<float>* waveOut, QByteArray* pcmOut,
+                               QAudioFormat* formatOut, QAudioDevice* deviceOut,
+                               QString* errorOut);
+    QAudioDevice resolveTxOutputDevice(bool* requestedDeviceFound);
+    void saveTxRecordingAsync(const QString& path, QVector<float> wave, int sampleRate,
+                              const QString& logLabel);
+    void suspendNonAudioTxWork(const QString& reason);
+    void resumeNonAudioTxWork(const QString& reason);
+    void applyTxAudioSchedulingBoost(const QString& reason);
+    void restoreTxAudioSchedulingBoost(const QString& reason);
+    void pauseRxAudioForTx(const QString& context);
+    void resumeRxAudioAfterTx(const QString& reason);
+    bool noteTxPlaybackFinished(const QString& reason, bool error);
+    void completeTxPlayback(const QString& reason, bool error = false);
+    bool delayTxFinishUntilPcmConsumed(const QString& context,
+                                       const QString& reason,
+                                       bool useCompletePlayback);
+    void finishModulatorIdlePlayback(const QString& reason);
+    bool shouldAlignTxAudioToCurrentSyncSlot() const;
+    bool isSyncTxStartTooLate(int* elapsedMsOut = nullptr, int* latestStartMsOut = nullptr) const;
+    bool isFt2AsyncTxStartTooLate(int* elapsedMsOut = nullptr,
+                                  int* latestStartMsOut = nullptr,
+                                  int* delayToNextSlotMsOut = nullptr) const;
+    qint64 safeFt2AsyncTxDelay(qint64 requestedDelayMs, QString* adjustmentOut = nullptr) const;
+    void scheduleFt2AsyncTxAtNextSafeSlot(const QString& reason,
+                                          int elapsedMs = -1,
+                                          int latestStartMs = -1,
+                                          int delayMs = -1);
+    void clearFt2AsyncAbortQsoState(const QString& reason);
+    qint64 syncTxPcmStartOffsetBytes(const QAudioFormat& format, qint64 pcmSizeBytes,
+                                     int* elapsedMsOut = nullptr) const;
+    void scheduleSyncTxBoundaryStop(const QString& reason, quint64 txSerial);
+    void resetTxAudioTelemetry(quint64 txSerial, qint64 audioStartWallMs, qint64 expectedUs,
+                               int slotElapsedMs, int leadInMs, int payloadDelayMs,
+                               qint64 pcmBytes, qsizetype sinkBufferSize,
+                               double wavePeak, double effectiveGain);
+    void scheduleTxAudioTelemetryProbe(quint64 txSerial);
+    void logTxAudioTelemetrySummary(const QString& reason);
+    QString buildCurrentTxMessage() const;
+    QString currentBridgeTxRepresentativeMessage() const;
+    bool forceRecentRogerReportSignoffIfNeeded(QString& message, const QString& reason);
+    bool repairOrRejectStalePartnerTxMessage(QString& message, const QString& reason);
+    bool prepareHoundTxSelectionForStart(const QString& reason);
+    QString defaultLogCommentForQso(const QString& mode,
+                                    const QString& rstSent,
+                                    const QString& rstRcvd,
+                                    const QString& dxGrid = QString()) const;
+    bool legacyBackendAvailable() const;
+    bool ensureLegacyBackendAvailable();
+    void noteFt8AdaptivePeriod(qint64 periodId);
+    bool legacyTxBackendRequested() const;
+    bool legacyBackendRequestedForRx() const;
+    bool specialOperationRequiresLegacyTx() const;
+    bool usingLegacyBackendForTx() const;
+    bool usingLegacyBackendForRx() const;
+    bool shouldUseBridgeAudioForLegacyDigitalTx() const;
+    bool legacyBridgeAudioTxInFlight() const;
+    void mirrorLegacyLoggedAdif(QByteArray const& adif);
+    bool preflightLegacyBridgeTxBeforePtt(const QString& reason);
+    QString activePttMethod() const;
+    bool activeCatReportsPttActive() const;
+    void setTxRequestedState(bool requested);
+    void setPttPendingState(bool pending);
+    void setPttConfirmedState(bool confirmed);
+    void beginLegacyPttTransition(const QString& reason,
+                                  decodium::tx::PttConfirmationMode confirmationMode,
+                                  std::function<bool()> confirmedAction);
+    void confirmLegacyPttTransition(const QString& source);
+    void failLegacyPttTransition(const QString& reason, bool reschedule);
+    void clearLegacyPttTransition(const QString& reason);
+    void requestLegacyPttOffOnce(const QString& reason);
+    void handleActivePttFeedback(bool active, const QString& backend);
+    void abortLegacyBridgeTxRequest(const QString& reason);
+    quint64 armPendingLegacyBridgeAudioStart(const QString& reason);
+    bool consumePendingLegacyBridgeAudioStart(quint64 serial, const QString& reason);
+    void cancelPendingLegacyBridgeAudioStart(const QString& reason);
+    bool startBridgeAudioForLegacyDigitalTx(const QString& reason);
+    void stopBridgeAudioForLegacyDigitalTx(const QString& reason);
+    bool useModernSpectrumFeedWithLegacy() const;
+    bool useDedicatedModernAudioCaptureWithLegacy() const;
+    void syncSpecialOperationToLegacyBackend();
+    void updateSpecialOperationFromLegacy(int activity);
+    void syncLegacyBackendDialogState();
+    void syncLegacyBackendTxState();
+    void syncLegacyBackendState();
+    void scheduleLegacyStateRefreshBurst();
+    void migrateActiveMonitoringToLegacyBackend();
+    void applyDirectVisualAudioCaptureMode(const QString& reason);
+    void rearmLegacyPcmSpectrumFeed(const QString& reason);
+    void scheduleLegacyPcmSpectrumRearm(const QString& reason);
+    void teardownAudioCapture();
+    void primeLegacyAllTxtCursor();
+    void clearDecodeWindowsForBandChange(double previousFrequency, double nextFrequency, const QString& reason);
+    void clearDecodeWindowsForModeChange(const QString& previousMode, const QString& nextMode);
+    void reloadBridgeSettingsFromPersistentStore();
+    void syncLegacyBackendDecodeList();
+    void queueLegacyDecodeSecondaryWork(QVariantList const& entries,
+                                        QString const& source);
+    void scheduleLegacyDecodeSecondaryDrain(int delayMs = 12);
+    void drainLegacyDecodeSecondaryWork();
+    void queueNativeDecodeSecondaryWork(NativeDecodeSecondaryWork work);
+    void scheduleNativeDecodeSecondaryDrain(int delayMs = 12);
+    void drainNativeDecodeSecondaryWork();
+    void resetNativeDecodeDedupIndex();
+    void ensureNativeDecodeDedupIndex();
+    void rememberNativeDecodeDedupKey(const QString& key);
+    void resetFt2AsyncDecodeDedupIndex();
+    void rememberFt2AsyncDecodeDedupKey(const QString& key);
+    void rememberDecodeDedupEntry(const QVariantMap& entry);
+    void rebuildRxDecodeMirrorIndex();
+    bool applyLegacyBandModelDelta(QVariantList const& entries);
+    bool applyLegacyRxModelDelta(QVariantList const& entries);
+    void queueLegacyFullSpectrumModelDelta(QVariantList const& entries);
+    void applyLegacyFullSpectrumModelDelta();
+    void invalidateLegacyDecodeModelDeltaFastPath();
+    DecodeUserFilterConfig readDecodeUserFilterConfig() const;
+    QVariantList mirrorLegacyDecodeLines(QStringList const& lines,
+                                         bool rxPane,
+                                         QVariantList const& previousEntries) const;
+    QVariantList mirrorLegacyDecodeLines(QStringList const& lines,
+                                         bool rxPane,
+                                         QVariantList const& previousEntries,
+                                         DecodeUserFilterConfig const& userFilterConfig) const;
+    QVariantList augmentLegacyMirrorWithAllTxt(QVariantList const& mirroredEntries,
+                                               bool rxPane) const;
+    QStringList localDecodeCallCandidates() const;
+    bool messageMentionsLocalCall(const QString& message, QString* matchedCall = nullptr) const;
+    bool shouldMirrorToRxPane(const QVariantMap& entry,
+                              bool ghostAlreadyAccepted = false) const;
+    void appendTxDecodeEntry(const QString& message);
+    void appendRxDecodeEntry(const QVariantMap& entry);
+    void rebuildRxDecodeList();
+    bool worldMapFeedEnabled() const;
+    bool worldMapConsumerReady() const;
+    QString worldMapFeedEntryKey(const QVariantMap& entry) const;
+    bool worldMapEntryFreshEnough(const QVariantMap& entry,
+                                  int maxAgeSeconds = 120,
+                                  QString* reason = nullptr) const;
+    bool visualFeedsDeferredForTx() const;
+    void queueWorldMapEntryForReplay(const QVariantMap& entry,
+                                     bool skipClearedFeedEntry,
+                                     int delayMs = 250,
+                                     bool logTxDeferral = false);
+    void deferWorldMapEntryForTx(const QVariantMap& entry, bool skipClearedFeedEntry);
+    void scheduleDeferredWorldMapFeedFlush(int delayMs = 600);
+    void flushDeferredWorldMapFeed();
+    void resetWorldMapDisplayFromCurrentDecodes();
+    void replayWorldMapEntry(const QVariantMap& entry,
+                             bool skipClearedFeedEntry = false,
+                             int maxAgeSeconds = 120);
+    void flushWorldMapReplayChunk(quint64 generation);
+    void emitCurrentWorldMapQsoPath();
+    void markWorldMapQsoClosed(const QString& call, const QString& reason = QString());
+    void clearWorldMapClosedQso(const QString& call);
+    bool worldMapQsoPathSuppressed(const QString& call) const;
+    void rememberWorldMapGrid(const QString& call, const QString& grid);
+    QString lookupWorldMapGrid(const QString& call);
+    QString approximateWorldMapGridForCall(const QString& call);
+    void loadWorldMapCall3Cache();
+    void scheduleDxClusterSpotsChanged(int delayMs = 200);
+    void flushDxClusterSpotsChanged();
+    bool shouldPreserveDeferredAutoSeqTxForRearm(QString* staleReason = nullptr) const;
+    bool applyDeferredAutoSeqTxForRearm(const QString& reason);
+    void genStdMsgs(const QString& hisCall, const QString& hisGrid);
+    void checkAndStartPeriodicTx();
+    bool shouldDeferAutoTxUntilTimeSyncDecode(const QString& modeSnapshot) const;
+    bool hasPendingTimeSyncDecodeForMode(const QString& modeSnapshot) const;
+    // Grace di attesa decode al boundary, CLAMPATO per CPU pressure. Usato sia dal
+    // fallback timer (scheduleDeferredAutoTxAfterTimeSyncDecode) sia dal gate
+    // "defer al prossimo slot" (onFt8DecodeReady), per evitare l'asimmetria P1-A.
+    int  effectiveAutoTxDecodeGraceMs(const QString& modeSnapshot) const;
+    void scheduleDeferredAutoTxAfterTimeSyncDecode(const QString& modeSnapshot,
+                                                  quint64 sessionId);
+    void autoSequenceStep(const QStringList& parsedFields);
+    int effectivePeriodMsForMode(const QString& mode) const;
+    static int periodMsForMode(const QString& mode) {
+        QString const normalizedMode = mode.trimmed().toUpper();
+        if (normalizedMode=="FT2-LINK" || normalizedMode=="FT2LINK") return 15000;
+        if (normalizedMode=="FT2") return 3750;
+        if (normalizedMode=="FT4")      return 7500;
+        if (normalizedMode=="Q65")      return 60000;
+        if (normalizedMode.startsWith("Q65-")) {
+            int end = 4;
+            while (end < normalizedMode.size() && normalizedMode.at(end).isDigit()) {
+                ++end;
+            }
+            bool ok = false;
+            int const trPeriod = normalizedMode.mid(4, end - 4).toInt(&ok);
+            if (ok && (trPeriod == 15 || trPeriod == 30 || trPeriod == 60
+                       || trPeriod == 120 || trPeriod == 300)) {
+                return trPeriod * 1000;
+            }
+            return 60000;
+        }
+        if (normalizedMode=="MSK144")   return 15000;
+        if (normalizedMode=="WSPR")     return 120000;
+        if (normalizedMode=="JT65")     return 60000;
+        if (normalizedMode=="JT9")      return 60000;
+        if (normalizedMode=="JT4")      return 60000;
+        if (normalizedMode=="FST4")     return 60000;
+        if (normalizedMode=="FST4W")    return 120000;
+        // C12 — FST4/FST4W multi-period
+        if (normalizedMode=="FST4-15")  return 15000;
+        if (normalizedMode=="FST4-30")  return 30000;
+        if (normalizedMode=="FST4-60")  return 60000;
+        if (normalizedMode=="FST4-120") return 120000;
+        if (normalizedMode=="FST4-300") return 300000;
+        if (normalizedMode=="FST4-900") return 900000;
+        if (normalizedMode=="FST4-1800") return 1800000;
+        if (normalizedMode=="FST4W-120") return 120000;
+        if (normalizedMode=="FST4W-300") return 300000;
+        if (normalizedMode=="FST4W-900") return 900000;
+        if (normalizedMode=="FST4W-1800") return 1800000;
+        return 15000;  // FT8 default
+    }
+    void updateSoundOutputDevice();
+    bool launchTuneAudio();
+};

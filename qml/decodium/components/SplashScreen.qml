@@ -1,4 +1,4 @@
-/* Decodium 4.0 Core Shannon — Splash Screen
+/* Decodium 4.0 Core Gallager — Splash Screen
  * Schermata di avvio con logo, versione e animazione di caricamento.
  * Si chiude automaticamente dopo splashDuration ms oppure al click.
  */
@@ -10,7 +10,7 @@ import QtQuick.Layouts
 Rectangle {
     id: splashRoot
 
-    property int splashDuration: 2800   // ms prima della chiusura automatica
+    property int splashDuration: 10000   // 1.0.310: resta 10s (o "Avvia" per proseguire)
     property color bgDeep:        "#0a0e1a"
     property color primaryBlue:   "#1a73e8"
     property color secondaryCyan: "#00bcd4"
@@ -23,18 +23,14 @@ Rectangle {
     color: bgDeep
     z:     9999
 
-    // Chiudi al click
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: splashRoot.close()
-    }
+    // 1.0.310: niente più click-anywhere — si prosegue col pulsante "Avvia"
+    // (così la splash resta i 10s pieni senza chiusure accidentali)
 
     // Timer auto-close
     Timer {
         id: autoClose
         interval: splashDuration
-        running: true
+        running: splashRoot.visible
         repeat: false
         onTriggered: splashRoot.close()
     }
@@ -76,7 +72,7 @@ Rectangle {
                 border.width: 3
 
                 SequentialAnimation on opacity {
-                    running: true; loops: Animation.Infinite
+                    running: splashRoot.visible; loops: Animation.Infinite
                     NumberAnimation { to: 0.3; duration: 900 }
                     NumberAnimation { to: 1.0; duration: 900 }
                 }
@@ -132,7 +128,7 @@ Rectangle {
             }
 
             Text {
-                text: "Core Shannon"
+                text: qsTr("Core Gallager")
                 font.pixelSize: 16; font.italic: true
                 color: secondaryCyan
             }
@@ -143,7 +139,7 @@ Rectangle {
         // Tagline
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "Advanced Digital Mode Decoder for Amateur Radio"
+            text: qsTr("Advanced Digital Mode Decoder for Amateur Radio")
             font.pixelSize: 13
             color: textSecondary
         }
@@ -166,7 +162,7 @@ Rectangle {
                     from: 0; to: 320
                     duration: splashRoot.splashDuration - 200
                     easing.type: Easing.InOutQuad
-                    running: true
+                    running: splashRoot.visible
                 }
 
                 // Riflesso scorrevole
@@ -183,7 +179,7 @@ Rectangle {
                         from: -60; to: 320
                         duration: splashRoot.splashDuration - 200
                         easing.type: Easing.InOutQuad
-                        running: true
+                        running: splashRoot.visible
                     }
                 }
             }
@@ -193,9 +189,59 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "Caricamento in corso…"
+            text: qsTr("Loading…")
             font.pixelSize: 11
             color: Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.6)
+        }
+
+        Item { height: 26 }
+
+        // 1.0.310: pulsanti — Offrimi un caffè + Avvia (prosegui subito)
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 14
+
+            // ☕ Buy me a coffee → buymeacoffee.com/iu8lmc
+            Rectangle {
+                width: 200; height: 38; radius: 8
+                color: bmacMA.containsMouse ? Qt.rgba(1, 0.86, 0.25, 0.32) : Qt.rgba(1, 0.86, 0.25, 0.16)
+                border.color: "#FFD740"; border.width: 1
+                Behavior on color { ColorAnimation { duration: 150 } }
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("☕  Buy me a coffee")
+                    font.pixelSize: 13; font.bold: true
+                    color: "#FFE082"
+                }
+                MouseArea {
+                    id: bmacMA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Qt.openUrlExternally("https://buymeacoffee.com/iu8lmc")
+                }
+            }
+
+            // ▶ Avvia → chiude la splash e prosegue
+            Rectangle {
+                width: 140; height: 38; radius: 8
+                color: startMA.containsMouse ? Qt.rgba(0, 0.74, 0.83, 0.45) : Qt.rgba(0, 0.74, 0.83, 0.26)
+                border.color: secondaryCyan; border.width: 1
+                Behavior on color { ColorAnimation { duration: 150 } }
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("Start  ▶")
+                    font.pixelSize: 13; font.bold: true
+                    color: textPrimary
+                }
+                MouseArea {
+                    id: startMA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: splashRoot.close()
+                }
+            }
         }
     }
 
@@ -206,14 +252,14 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "Named after Claude E. Shannon · Father of Information Theory"
+            text: qsTr("Named after Robert G. Gallager · Father of LDPC Codes")
             font.pixelSize: 10; font.italic: true
             color: Qt.rgba(0.53, 0.6, 0.67, 0.7)
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "© 2024-2026 IU8LMC  ·  GPL Open Source  ·  Based on WSJT-X by K1JT et al. & WSJT-X by K1JT"
+            text: qsTr("© 2024-2026 IU8LMC  ·  GPL Open Source  ·  Based on WSJT-X by K1JT et al. & WSJT-X by K1JT")
             font.pixelSize: 10
             color: Qt.rgba(0.53, 0.6, 0.67, 0.5)
         }
@@ -225,6 +271,6 @@ Rectangle {
         from: 0; to: 1
         duration: 350
         easing.type: Easing.OutQuad
-        running: true
+        running: splashRoot.visible
     }
 }

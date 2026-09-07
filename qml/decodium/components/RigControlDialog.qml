@@ -7,11 +7,10 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
-import QtQuick.Effects  // 1.0.182 — MultiEffect Qt 6.5+
 
 Dialog {
     id: rigDialog
-    title: "CAT — Impostazioni Transceiver"
+    title: qsTr("CAT — Transceiver Settings")
     modal: true
     width: 760
     height: 720
@@ -35,6 +34,14 @@ Dialog {
         return bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
     }
 
+    function usesCat4OmControls() {
+        return bridge.catBackend === "cat4om" || bridge.catManager.portType === "cat4om"
+    }
+
+    function usesProtocolCatOnly() {
+        return usesTciControls() || usesCat4OmControls()
+    }
+
     onAboutToShow: ensureInitialPosition()
 
     property color bgDeep:        bridge.themeManager.bgDeep
@@ -53,18 +60,9 @@ Dialog {
         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
         border.color: secondaryCyan; border.width: 2; radius: 12
 
-        // 1.0.182 — UI Visual Boost: MultiEffect shadow gated su uiQuality High.
-        // Su Low/Medium nessuna ombra (PC modesti). Pattern identico a
-        // SettingsDialog.qml ~1001-1014.
-        layer.enabled: bridge && bridge.uiQuality === "High"
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowBlur: 0.5
-            shadowColor: Qt.rgba(0, 0, 0, 0.45)
-            shadowVerticalOffset: 4
-            shadowHorizontalOffset: 0
-            blurMax: 16
-        }
+        // Keep this dialog compatible with the Linux Qt 6.4 AppImage runtime.
+        // QtQuick.Effects/MultiEffect is only available from Qt 6.5.
+        layer.enabled: false
     }
 
     header: Rectangle {
@@ -93,7 +91,7 @@ Dialog {
                 spacing: 2
 
                 Text {
-                    text: "CAT — Controllo Transceiver"
+                    text: qsTr("CAT — Transceiver Control")
                     font.pixelSize: 16
                     font.bold: true
                     color: secondaryCyan
@@ -121,7 +119,7 @@ Dialog {
                 }
             }
             Text {
-                text: bridge.catConnected ? bridge.catRigName : "Non connesso"
+                text: bridge.catConnected ? bridge.catRigName : qsTr("Not connected")
                 font.pixelSize: 13
                 color: bridge.catConnected ? accentGreen : "#f44336"
             }
@@ -160,7 +158,7 @@ Dialog {
                 anchors.fill: parent; anchors.margins: 12; spacing: 12
                 Rectangle { width: 12; height: 12; radius: 6; color: bridge.catConnected ? accentGreen : "#f44336" }
                 Text {
-                    text: bridge.catConnected ? "CAT attivo" : "CAT non connesso"
+                    text: bridge.catConnected ? qsTr("CAT active") : qsTr("CAT not connected")
                     font.pixelSize: 12; font.bold: true
                     color: bridge.catConnected ? accentGreen : "#f44336"
                 }
@@ -189,7 +187,7 @@ Dialog {
                 }
 
                 Repeater {
-                    model: [["native","Nativo (QSerialPort)"],["omnirig","OmniRig"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"]]
+                    model: [["native","Nativo (QSerialPort)"],["omnirig","OmniRig"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"],["cat4om","Cat4OM"]]
                     delegate: Rectangle {
                         property string bk: modelData[0]
                         property bool active: bridge.catBackend === bk
@@ -224,7 +222,7 @@ Dialog {
             }
 
             Text {
-                text: "Il backend si cambia solo a radio scollegata."
+                text: qsTr("The backend can only be changed when the radio is disconnected.")
                 color: textSecondary
                 font.pixelSize: 10
                 opacity: 0.6
@@ -246,7 +244,7 @@ Dialog {
                     wrapMode: Text.WordWrap
                     color: textPrimary
                     font.pixelSize: 11
-                    text: bridge.lastCatError + "\nSuggerimento: chiudi OmniRig dalla tray icon di Windows, poi premi di nuovo Connetti."
+                    text: bridge.lastCatError + qsTr("\nTip: close OmniRig from the Windows tray icon, then press Connect again.")
                 }
             }
         }
@@ -267,7 +265,7 @@ Dialog {
                 contentItem: Text { text: parent.text; color: tabBar.currentIndex === 0 ? secondaryCyan : textSecondary; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
             }
             TabButton {
-                text: "Avanzate"
+                text: qsTr("Advanced")
                 implicitHeight: 42
                 background: Rectangle {
                     color: tabBar.currentIndex === 1 ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.2) : "transparent"
@@ -302,13 +300,13 @@ Dialog {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 4
 
-                        TextField {
+                        DecoTextField {
                             id: rigNameField
                             Layout.fillWidth: true; implicitHeight: controlHeight
                             leftPadding: 8
                             text: bridge.catManager.rigName
                             color: textPrimary; font.pixelSize: controlFontSize
-                            placeholderText: "Nome rig…"
+                            placeholderText: qsTr("Rig name…")
                             background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onEditingFinished: bridge.catManager.setRigName(text.trim())
                         }
@@ -316,7 +314,7 @@ Dialog {
                         Button {
                             implicitWidth: 88; implicitHeight: controlHeight
                             padding: 0
-                            text: "Scegli…"
+                            text: qsTr("Choose…")
                             onClicked: rigPickerDialog.open()
                             background: Rectangle { color: parent.hovered ? bgMedium : "transparent"; border.color: secondaryCyan; radius: 4 }
                             contentItem: Text { text: parent.text; color: secondaryCyan; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -326,7 +324,7 @@ Dialog {
                     // ── Dialog separato per la selezione del rig ─────────────
                     Dialog {
                         id: rigPickerDialog
-                        title: "Seleziona Transceiver"
+                        title: qsTr("Select Transceiver")
                         modal: true
                         width: 460; height: 500
                         anchors.centerIn: parent
@@ -335,16 +333,16 @@ Dialog {
                         background: Rectangle { color: Qt.rgba(bgDeep.r,bgDeep.g,bgDeep.b,0.98); border.color: secondaryCyan; border.width: 2; radius: 10 }
                         header: Rectangle {
                             height: 44; color: "transparent"
-                            Text { anchors.centerIn: parent; text: "⚙  Scegli Transceiver (" + rigPickerList.count + " disponibili)"; color: secondaryCyan; font.pixelSize: 13; font.bold: true }
+                            Text { anchors.centerIn: parent; text: qsTr("⚙  Choose Transceiver (%1 available)").arg(rigPickerList.count); color: secondaryCyan; font.pixelSize: 13; font.bold: true }
                         }
 
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 8; spacing: 6
 
-                            TextField {
+                            DecoTextField {
                                 id: rigFilterField
                                 Layout.fillWidth: true; implicitHeight: 32
-                                placeholderText: "Filtra per nome (es. Icom, Yaesu, FT-991…)"
+                                placeholderText: qsTr("Filter by name (e.g. Icom, Yaesu, FT-991…)")
                                 leftPadding: 8; color: textPrimary; font.pixelSize: 11
                                 background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             }
@@ -379,7 +377,7 @@ Dialog {
 
                             Button {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Annulla"; implicitHeight: 32; implicitWidth: 100
+                                text: qsTr("Cancel"); implicitHeight: 32; implicitWidth: 100
                                 onClicked: rigPickerDialog.close()
                                 background: Rectangle { color: "transparent"; border.color: glassBorder; radius: 4 }
                                 contentItem: Text { text: parent.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -387,15 +385,55 @@ Dialog {
                         }
                     }
 
+                    Text {
+                        text: qsTr("Management:"); color: textSecondary; font.pixelSize: 12
+                        visible: rigDialog.usesCat4OmControls()
+                    }
+                    DecoTextField {
+                        Layout.fillWidth: true; implicitHeight: controlHeight
+                        visible: rigDialog.usesCat4OmControls()
+                        text: rigDialog.usesCat4OmControls() ? bridge.catManager.managementEndpoint : ""
+                        placeholderText: "127.0.0.1:5000"
+                        color: textPrimary; font.pixelSize: controlFontSize
+                        onEditingFinished: bridge.catManager.managementEndpoint = text.trim()
+                        background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                    }
+
+                    Text {
+                        text: qsTr("Control:"); color: textSecondary; font.pixelSize: 12
+                        visible: rigDialog.usesCat4OmControls()
+                    }
+                    DecoTextField {
+                        Layout.fillWidth: true; implicitHeight: controlHeight
+                        visible: rigDialog.usesCat4OmControls()
+                        text: rigDialog.usesCat4OmControls() ? bridge.catManager.controlEndpoint : ""
+                        placeholderText: "127.0.0.1:5001"
+                        color: textPrimary; font.pixelSize: controlFontSize
+                        onEditingFinished: bridge.catManager.controlEndpoint = text.trim()
+                        background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                    }
+
+                    Text {
+                        text: qsTr("Ownership:"); color: textSecondary; font.pixelSize: 12
+                        visible: rigDialog.usesCat4OmControls()
+                    }
+                    CheckBox {
+                        visible: rigDialog.usesCat4OmControls()
+                        text: qsTr("Request control automatically")
+                        checked: rigDialog.usesCat4OmControls() ? bridge.catManager.autoRequestOwnership : true
+                        onToggled: bridge.catManager.autoRequestOwnership = checked
+                        contentItem: Text { text: parent.text; leftPadding: 4; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
+                    }
+
                     // Porta seriale (visibile se portType=serial/usb)
                     Text {
                         text: "Porta:"; color: textSecondary; font.pixelSize: 12
-                        visible: bridge.catBackend !== "tci" && bridge.catManager.portType !== "network" && bridge.catManager.portType !== "tci"
+                        visible: bridge.catManager.portType === "serial" || bridge.catManager.portType === "usb"
                     }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 4
-                        visible: bridge.catBackend !== "tci" && bridge.catManager.portType !== "network" && bridge.catManager.portType !== "tci"
-                        ComboBox {
+                        visible: bridge.catManager.portType === "serial" || bridge.catManager.portType === "usb"
+                        DecoComboBox {
                             id: portCombo
                             Layout.fillWidth: true; implicitHeight: controlHeight
                             editable: true
@@ -405,7 +443,7 @@ Dialog {
                                 if (idx >= 0) currentIndex = idx
                                 else editText = bridge.catManager.serialPort
                             }
-                            contentItem: TextField {
+                            contentItem: DecoTextField {
                                 leftPadding: 8; text: portCombo.editText; color: textPrimary; font.pixelSize: controlFontSize
                                 background: Rectangle { color: "transparent" }
                                 onTextEdited: portCombo.editText = text
@@ -420,7 +458,7 @@ Dialog {
                         Button {
                             implicitWidth: 36; implicitHeight: 36
                             padding: 0
-                            ToolTip.text: "Aggiorna porte"; ToolTip.visible: hovered
+                            ToolTip.text: "Refresh ports"; ToolTip.visible: hovered; ToolTip.delay: 500
                             onClicked: bridge.catManager.refreshPorts()
                             background: Rectangle { color: parent.hovered ? bgMedium : "transparent"; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: "↻"; color: secondaryCyan; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -432,7 +470,7 @@ Dialog {
                         text: "Baud:"; color: textSecondary; font.pixelSize: 12
                         visible: bridge.catManager.portType === "serial" || bridge.catManager.portType === "usb"
                     }
-                    ComboBox {
+                    DecoComboBox {
                         id: baudCombo
                         Layout.fillWidth: true; implicitHeight: controlHeight
                         visible: bridge.catManager.portType === "serial" || bridge.catManager.portType === "usb"
@@ -463,7 +501,7 @@ Dialog {
                         text: "Host:Port:"; color: textSecondary; font.pixelSize: 12
                         visible: bridge.catManager.portType === "network"
                     }
-                    TextField {
+                    DecoTextField {
                         id: networkField
                         Layout.fillWidth: true; implicitHeight: controlHeight
                         visible: bridge.catManager.portType === "network"
@@ -479,14 +517,17 @@ Dialog {
                         text: "TCI:"; color: textSecondary; font.pixelSize: 12
                         visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
                     }
-                    TextField {
+                    DecoTextField {
                         id: tciField
                         Layout.fillWidth: true; implicitHeight: controlHeight
                         visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
                         text: bridge.catManager.tciPort
                         placeholderText: "localhost:50001"
                         color: textPrimary; font.pixelSize: controlFontSize
-                        onTextChanged: bridge.catManager.tciPort = text
+                        // 1.0.352 fix: onEditingFinished (come networkField sopra) invece di
+                        // onTextChanged, che scattava sugli update programmatici del setter C++
+                        // rompendo il binding dichiarativo text:.
+                        onEditingFinished: bridge.catManager.tciPort = text.trim()
                         background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                     }
 
@@ -504,12 +545,12 @@ Dialog {
 
                     // PTT method
                     Text { text: "PTT:"; color: textSecondary; font.pixelSize: 12 }
-                    ComboBox {
+                    DecoComboBox {
                         id: pttCombo
                         Layout.fillWidth: true; implicitHeight: controlHeight
-                        enabled: !rigDialog.usesTciControls()
-                        model: rigDialog.usesTciControls() ? ["CAT"] : bridge.catManager.pttMethodList
-                        Component.onCompleted: { var i = find(rigDialog.usesTciControls() ? "CAT" : bridge.catManager.pttMethod); currentIndex = i>=0?i:0 }
+                        enabled: !rigDialog.usesProtocolCatOnly()
+                        model: rigDialog.usesProtocolCatOnly() ? ["CAT"] : bridge.catManager.pttMethodList
+                        Component.onCompleted: { var i = find(rigDialog.usesProtocolCatOnly() ? "CAT" : bridge.catManager.pttMethod); currentIndex = i>=0?i:0 }
                         contentItem: Text { leftPadding: 8; text: pttCombo.displayText; color: pttCombo.enabled ? textPrimary : textSecondary; font.pixelSize: controlFontSize; verticalAlignment: Text.AlignVCenter; height: pttCombo.height }
                         background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         delegate: ItemDelegate {
@@ -521,7 +562,7 @@ Dialog {
 
                     // Split
                     Text { text: "Split:"; color: textSecondary; font.pixelSize: 12 }
-                    ComboBox {
+                    DecoComboBox {
                         id: splitCombo
                         Layout.fillWidth: true; implicitHeight: controlHeight
                         model: bridge.catManager.splitModeList
@@ -540,13 +581,13 @@ Dialog {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 16
                         CheckBox {
-                            text: "Connetti all'avvio"
+                            text: qsTr("Connect on startup")
                             checked: bridge.catManager.catAutoConnect
                             onCheckedChanged: bridge.catManager.catAutoConnect = checked
                             contentItem: Text { text: parent.text; leftPadding: 4; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
                         }
                         CheckBox {
-                            text: "Avvia monitor"
+                            text: qsTr("Start monitor")
                             checked: bridge.catManager.audioAutoStart
                             onCheckedChanged: bridge.catManager.audioAutoStart = checked
                             contentItem: Text { text: parent.text; leftPadding: 4; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
@@ -569,7 +610,7 @@ Dialog {
                     Text { text: "PTT port:"; color: textSecondary; font.pixelSize: 12 }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 4
-                        ComboBox {
+                        DecoComboBox {
                             id: pttPortCombo; Layout.fillWidth: true; implicitHeight: controlHeight; editable: true
                             model: ["CAT"].concat(bridge.catManager.portList)
                             Component.onCompleted: {
@@ -577,7 +618,7 @@ Dialog {
                                 currentIndex = idx >= 0 ? idx : 0
                                 editText = bridge.catManager.pttPort
                             }
-                            contentItem: TextField {
+                            contentItem: DecoTextField {
                                 leftPadding: 8; text: pttPortCombo.editText
                                 color: textPrimary; font.pixelSize: controlFontSize
                                 background: Rectangle { color: "transparent" }
@@ -600,9 +641,18 @@ Dialog {
                         background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     }
 
+                    Text { text: "Keep-alive:"; color: textSecondary; font.pixelSize: 12 }
+                    CheckBox {
+                        id: catKeepAliveCheck
+                        text: "CAT leggero"
+                        checked: bridge.catManager.catKeepAlive
+                        onCheckedChanged: bridge.catManager.catKeepAlive = checked
+                        contentItem: Text { text: parent.text; leftPadding: 4; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
+                    }
+
                     // Data bits
                     Text { text: "Data bits:"; color: textSecondary; font.pixelSize: 12 }
-                    ComboBox {
+                    DecoComboBox {
                         id: dataCombo; Layout.fillWidth: true; implicitHeight: controlHeight
                         model: ["8","7"]
                         Component.onCompleted: { var i = find(bridge.catManager.dataBits); currentIndex = i>=0?i:0 }
@@ -617,7 +667,7 @@ Dialog {
 
                     // Stop bits
                     Text { text: "Stop bits:"; color: textSecondary; font.pixelSize: 12 }
-                    ComboBox {
+                    DecoComboBox {
                         id: stopCombo; Layout.fillWidth: true; implicitHeight: controlHeight
                         model: ["1","2"]
                         Component.onCompleted: { var i = find(bridge.catManager.stopBits); currentIndex = i>=0?i:0 }
@@ -632,7 +682,7 @@ Dialog {
 
                     // Handshake
                     Text { text: "Handshake:"; color: textSecondary; font.pixelSize: 12 }
-                    ComboBox {
+                    DecoComboBox {
                         id: hsCombo; Layout.fillWidth: true; implicitHeight: controlHeight
                         model: ["none","xonxoff","hardware"]
                         Component.onCompleted: { var i = find(bridge.catManager.handshake); currentIndex = i>=0?i:0 }
@@ -684,7 +734,7 @@ Dialog {
             function onErrorMessage(msg) {
                 // mostra solo la prima riga significativa + dettaglio ridotto
                 var lines = msg.split("\n").filter(function(l){ return l.trim().length > 0 })
-                catErrorText.text = lines.length > 0 ? lines[0] + (lines.length > 1 ? "\n…(" + (lines.length-1) + " righe)" : "") : msg
+                catErrorText.text = lines.length > 0 ? lines[0] + (lines.length > 1 ? "\n" + qsTr("…(%1 more lines)").arg(lines.length-1) : "") : msg
             }
         }
 
@@ -702,7 +752,7 @@ Dialog {
             Button {
                 implicitWidth: 150; implicitHeight: 42
                 padding: 0
-                text: "▶  Connetti"
+                text: qsTr("▶  Connect")
                 enabled: !bridge.catConnected
                 onClicked: {
                     bridge.catManager.rigName     = rigNameField.text.trim()
@@ -713,6 +763,7 @@ Dialog {
                     bridge.catManager.networkPort = networkField.text.trim()
                     bridge.catManager.pttPort     = pttPortCombo.editText.trim()
                     bridge.catManager.pollInterval = pollSpin.value
+                    bridge.catManager.catKeepAlive = catKeepAliveCheck.checked
                     bridge.catManager.dataBits    = dataCombo.currentText
                     bridge.catManager.stopBits    = stopCombo.currentText
                     bridge.catManager.handshake   = hsCombo.currentText
@@ -734,7 +785,7 @@ Dialog {
             Button {
                 implicitWidth: 150; implicitHeight: 42
                 padding: 0
-                text: "■  Disconnetti"
+                text: qsTr("■  Disconnect")
                 enabled: bridge.catConnected
                 onClicked: bridge.catManager.disconnectRig()
                 background: Rectangle {
@@ -752,7 +803,7 @@ Dialog {
             Button {
                 implicitWidth: 100; implicitHeight: 42
                 padding: 0
-                text: "Chiudi"
+                text: qsTr("Close")
                 onClicked: rigDialog.close()
                 background: Rectangle { radius: 8; color: Qt.rgba(1,1,1,0.07); border.color: glassBorder }
                 contentItem: Text {

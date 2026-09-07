@@ -19,6 +19,8 @@ permissions:
 env:
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
+  RTLSDR_VERSION: "2.0.2"
+  DECODIUM_REQUIRE_RTLSDR: "ON"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -45,22 +47,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Select version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
-          elif [[ -f fork_release_version.txt ]]; then
-            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
-          else
-            VERSION="0.0.0-ci-${GITHUB_SHA::7}"
-          fi
-          VERSION="${VERSION#v}"
-          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          set -euo pipefail
+          VERSION="$(scripts/ci/resolve-release-version.sh "${INPUT_VERSION}")"
+          scripts/ci/validate-repository-layout.sh
+          printf 'VERSION=%s\n' "${VERSION}" >> "$GITHUB_ENV"
           echo "Using version: ${VERSION}"
 
       - name: Install dependencies
         run: |
           brew update
-          brew install qt gcc fftw libusb boost pkg-config create-dmg dylibbundler
+          brew install qt gcc fftw libusb boost openjpeg pkg-config create-dmg dylibbundler
 
           GCC_PREFIX="$(brew --prefix gcc)"
           GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
@@ -72,9 +71,11 @@ jobs:
           "${GFORTRAN}" --version
 
           QT_PREFIX="$(brew --prefix qt)"
+          OPENJPEG_PREFIX="$(brew --prefix openjpeg)"
           echo "${QT_PREFIX}/bin" >> "$GITHUB_PATH"
           echo "QT_PREFIX=${QT_PREFIX}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "$GITHUB_ENV"
+          echo "OPENJPEG_PREFIX=${OPENJPEG_PREFIX}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${OPENJPEG_PREFIX}" >> "$GITHUB_ENV"
           qmake6 -v
 
       - name: Build and install Hamlib
@@ -98,8 +99,9 @@ jobs:
           fi
 
           echo "${HAMLIB_PREFIX}/bin" >> "$GITHUB_PATH"
+          echo "HAMLIB_PREFIX=${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${OPENJPEG_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
           echo "Hamlib_INCLUDE_DIR=${HAMLIB_PREFIX}/include" >> "$GITHUB_ENV"
           echo "Hamlib_LIBRARY=${HAMLIB_LIBRARY}" >> "$GITHUB_ENV"
           echo "RIGCTL_EXE=${HAMLIB_PREFIX}/bin/rigctl" >> "$GITHUB_ENV"
@@ -107,6 +109,23 @@ jobs:
           echo "RIGCTLCOM_EXE=${HAMLIB_PREFIX}/bin/rigctlcom" >> "$GITHUB_ENV"
 
           "${HAMLIB_PREFIX}/bin/rigctl" --version
+
+      - name: Build pinned RTL-SDR Blog driver
+        run: |
+          set -euo pipefail
+          RTLSDR_PREFIX="${RUNNER_TEMP}/librtlsdr-${RTLSDR_VERSION}"
+          RTLSDR_VERSION="${RTLSDR_VERSION}" RTLSDR_PREFIX="${RTLSDR_PREFIX}" \
+            scripts/ci/build-librtlsdr.sh
+
+          RTLSDR_LIBRARY="$(find "${RTLSDR_PREFIX}/lib" -maxdepth 1 -type f -name 'librtlsdr*.dylib' | sort | head -n1)"
+          test -f "${RTLSDR_PREFIX}/include/rtl-sdr.h"
+          test -n "${RTLSDR_LIBRARY}"
+
+          echo "RTLSDR_PREFIX=${RTLSDR_PREFIX}" >> "$GITHUB_ENV"
+          echo "RtlSdr_INCLUDE_DIR=${RTLSDR_PREFIX}/include" >> "$GITHUB_ENV"
+          echo "RtlSdr_LIBRARY=${RTLSDR_LIBRARY}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${OPENJPEG_PREFIX};${HAMLIB_PREFIX};${RTLSDR_PREFIX}" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${RTLSDR_PREFIX}/lib:${HAMLIB_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
       - name: Build release assets
         run: |
@@ -122,7 +141,6 @@ jobs:
           if-no-files-found: error
           path: |
             build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.dmg
-            build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.zip
             build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}-sha256.txt
 
   publish:
@@ -137,13 +155,14 @@ jobs:
 
       - name: Select version
         id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [[ -z "${VERSION}" && -f fork_release_version.txt ]]; then
-            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
-          fi
-          VERSION="${VERSION#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          VERSION="$(scripts/ci/resolve-release-version.sh "${INPUT_VERSION}")"
+          RELEASE_REF="v${VERSION}"
+          printf 'version=%s\n' "${VERSION}" >> "$GITHUB_OUTPUT"
+          printf 'release_ref=%s\n' "${RELEASE_REF}" >> "$GITHUB_OUTPUT"
           echo "Using version: ${VERSION}"
 
       - name: Download build artifacts
@@ -158,10 +177,8 @@ jobs:
           ls -lh release-assets
           VERSION="${{ steps.version.outputs.version }}"
           test -f "release-assets/decodium4-ft2-${VERSION}-macos-tahoe-arm64.dmg"
-          test -f "release-assets/decodium4-ft2-${VERSION}-macos-tahoe-arm64.zip"
           test -f "release-assets/decodium4-ft2-${VERSION}-macos-tahoe-arm64-sha256.txt"
           test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-arm64.dmg"
-          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-arm64.zip"
           test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-arm64-sha256.txt"
 
       - name: Publish release
@@ -169,6 +186,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_REF="${{ steps.version.outputs.release_ref }}"
           REPO="${GITHUB_REPOSITORY}"
 
           NOTES_FILE="$(mktemp)"
@@ -183,18 +201,16 @@ jobs:
 
           ASSETS=(
             "release-assets/decodium4-ft2-${VERSION}-macos-tahoe-arm64.dmg"
-            "release-assets/decodium4-ft2-${VERSION}-macos-tahoe-arm64.zip"
             "release-assets/decodium4-ft2-${VERSION}-macos-tahoe-arm64-sha256.txt"
             "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-arm64.dmg"
-            "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-arm64.zip"
             "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-arm64-sha256.txt"
           )
 
-          if gh release view "${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
-            gh release upload "${VERSION}" "${ASSETS[@]}" --repo "${REPO}" --clobber
-            gh release edit "${VERSION}" --repo "${REPO}" --notes-file "${NOTES_FILE}"
+          if gh release view "${RELEASE_REF}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_REF}" "${ASSETS[@]}" --repo "${REPO}" --clobber
+            gh release edit "${RELEASE_REF}" --repo "${REPO}" --notes-file "${NOTES_FILE}"
           else
-            gh release create "${VERSION}" "${ASSETS[@]}" \
+            gh release create "${RELEASE_REF}" "${ASSETS[@]}" \
               --repo "${REPO}" \
               --title "Decodium 4 FT2 ${VERSION} (macOS Apple Silicon)" \
               --notes-file "${NOTES_FILE}"

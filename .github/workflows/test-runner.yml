@@ -2,18 +2,249 @@ name: Test Runner
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'lib/ft2link/**'
+      - 'controllers/FT2Link*'
+      - 'tests/test_ft2link*'
+      - 'Detector/JT4Decoder.*'
+      - 'Detector/LegacyJtDecodeWorker.*'
+      - 'Modulator/FtxMessageEncoder.*'
+      - 'Modulator/FtxWaveformGenerator.*'
+      - 'tests/test_jt4_roundtrip.cpp'
+      - 'src/rtl/**'
+      - 'tests/test_rtlsdr*'
+      - 'CMake/Modules/FindRtlSdr.cmake'
+      - 'CMakeLists.txt'
+      - 'CMake/templates/**'
+      - 'packaging/**'
+      - 'resources/runtime/**'
+      - 'scripts/ci/**'
+      - 'fork_release_version.txt'
+      - 'doc/GITHUB_RELEASE_BODY_*.md'
+      - '.github/workflows/test-runner.yml'
+  push:
+    paths:
+      - 'lib/ft2link/**'
+      - 'controllers/FT2Link*'
+      - 'tests/test_ft2link*'
+      - 'Detector/JT4Decoder.*'
+      - 'Detector/LegacyJtDecodeWorker.*'
+      - 'Modulator/FtxMessageEncoder.*'
+      - 'Modulator/FtxWaveformGenerator.*'
+      - 'tests/test_jt4_roundtrip.cpp'
+      - 'src/rtl/**'
+      - 'tests/test_rtlsdr*'
+      - 'CMake/Modules/FindRtlSdr.cmake'
+      - 'CMakeLists.txt'
+      - 'CMake/templates/**'
+      - 'packaging/**'
+      - 'resources/runtime/**'
+      - 'scripts/ci/**'
+      - 'fork_release_version.txt'
+      - 'doc/GITHUB_RELEASE_BODY_*.md'
+      - '.github/workflows/test-runner.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test-macos:
-    runs-on: macos-15-intel
+  repository-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - run: echo "macOS runner works"
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  test-linux:
-    runs-on: ubuntu-22.04
+      - name: Validate repository layout and release version
+        run: scripts/ci/validate-repository-layout.sh
+
+  ft2link-macos:
+    needs: repository-contract
+    runs-on: macos-15-intel
+    timeout-minutes: 45
     steps:
-      - run: echo "Linux runner works"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          brew update
+          brew install qt gcc fftw libusb boost hamlib openjpeg pkg-config libomp
+
+          echo "$(brew --prefix qt)/bin" >> "${GITHUB_PATH}"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt);$(brew --prefix hamlib);$(brew --prefix openjpeg);$(brew --prefix libomp)" >> "${GITHUB_ENV}"
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ft2link \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" \
+            -DBUILD_TESTING=ON \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build cross-platform modem tests
+        run: |
+          set -euo pipefail
+          cmake --build build-ft2link \
+            --target ft2link_core test_ft2link test_ft2link_qml_adapter test_jt4_roundtrip test_rtlsdr_dsp \
+            --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Run cross-platform modem tests
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-ft2link \
+            -R '^(test_ft2link|test_ft2link_qml_adapter|test_jt4_roundtrip|test_rtlsdr_dsp)$' \
+            --output-on-failure
+
+  ft2link-linux:
+    needs: repository-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            gfortran \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libboost-filesystem-dev \
+            libboost-log-dev \
+            libboost-thread-dev \
+            libfftw3-dev \
+            libhamlib-dev \
+            libomp-dev \
+            libopenjp2-7-dev \
+            libreadline-dev \
+            libusb-1.0-0-dev \
+            portaudio19-dev \
+            qt6-5compat-dev \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            qt6-base-private-dev \
+            libxkbcommon-dev \
+            qt6-declarative-dev \
+            qt6-declarative-dev-tools \
+            qt6-image-formats-plugins \
+            qt6-multimedia-dev \
+            qt6-serialport-dev \
+            qt6-shadertools-dev \
+            qt6-tools-dev \
+            qt6-tools-dev-tools \
+            libqt6svg6-dev \
+            libqt6websockets6-dev
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ft2link -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build cross-platform modem tests
+        run: |
+          set -euo pipefail
+          cmake --build build-ft2link \
+            --target ft2link_core test_ft2link test_ft2link_qml_adapter test_jt4_roundtrip test_rtlsdr_dsp \
+            --parallel "$(nproc)"
+
+      - name: Run cross-platform modem tests
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-ft2link \
+            -R '^(test_ft2link|test_ft2link_qml_adapter|test_jt4_roundtrip|test_rtlsdr_dsp)$' \
+            --output-on-failure
+
+  ft2link-windows:
+    needs: repository-contract
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          cache: true
+          install: >-
+            git
+            make
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-openjpeg2
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-qt6-5compat
+            mingw-w64-x86_64-qt6-activeqt
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-imageformats
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-serialport
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-translations
+            mingw-w64-x86_64-qt6-websockets
+
+      - name: Build and install Hamlib
+        run: |
+          set -euo pipefail
+          curl -fsSL -o hamlib-4.7.0.tar.gz https://github.com/Hamlib/Hamlib/releases/download/4.7.0/hamlib-4.7.0.tar.gz
+          tar -xzf hamlib-4.7.0.tar.gz
+          cd hamlib-4.7.0
+          ./configure --prefix=/mingw64 --disable-static --enable-shared --without-readline
+          make -j"$(nproc)"
+          make install
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ft2link -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DBUILD_TESTING=ON \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build cross-platform modem tests
+        run: |
+          set -euo pipefail
+          cmake --build build-ft2link \
+            --target ft2link_core test_ft2link test_ft2link_qml_adapter test_jt4_roundtrip test_rtlsdr_dsp \
+            --parallel "$(nproc)"
+
+      - name: Run cross-platform modem tests
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-ft2link \
+            -R '^(test_ft2link|test_ft2link_qml_adapter|test_jt4_roundtrip|test_rtlsdr_dsp)$' \
+            --output-on-failure

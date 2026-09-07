@@ -1,0 +1,306 @@
+name: Release Linux AppImage Qt 6.11 aarch64
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (leave empty to use fork_release_version.txt)"
+        required: false
+        default: ""
+      publish_release:
+        description: "Upload Raspberry Pi aarch64 AppImage to GitHub release"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: "6.11.0"
+  QT_CACHE_ROOT: ".ci/cache/qt-linux-aarch64-6.11.0"
+  QT_SOURCE_URL: "https://download.qt.io/official_releases/qt/6.11/6.11.0/single/qt-everywhere-src-6.11.0.tar.xz"
+  HAMLIB_TAG: "4.7.1"
+  HAMLIB_VERSION: "4.7.1"
+  HAMLIB_CACHE_DIR: ".ci/cache/hamlib-linux-aarch64-4.7.1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name || inputs.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build-appimage-qt611-aarch64:
+    name: Build Qt 6.11 Linux AppImage aarch64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          REQUESTED_VERSION=""
+          if [[ -n "${RELEASE_TAG}" ]]; then
+            REQUESTED_VERSION="${RELEASE_TAG}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            REQUESTED_VERSION="${INPUT_VERSION}"
+          fi
+
+          VERSION="$(scripts/ci/resolve-release-version.sh "${REQUESTED_VERSION}")"
+          RELEASE_REF="v${VERSION}"
+          scripts/ci/validate-repository-layout.sh
+          printf 'VERSION=%s\n' "${VERSION}" >> "${GITHUB_ENV}"
+          printf 'RELEASE_REF=%s\n' "${RELEASE_REF}" >> "${GITHUB_ENV}"
+          printf 'version=%s\n' "${VERSION}" >> "${GITHUB_OUTPUT}"
+          printf 'release_ref=%s\n' "${RELEASE_REF}" >> "${GITHUB_OUTPUT}"
+          echo "Using version: ${VERSION}"
+          echo "Release ref: ${RELEASE_REF}"
+
+      - name: Install Linux build dependencies
+        run: |
+          set -euo pipefail
+
+          # GitHub's native ARM runners occasionally cannot reach the Ubuntu
+          # ports mirror over plain HTTP. Prefer HTTPS and make transient mirror
+          # failures retryable before starting the long Qt build.
+          sudo find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
+            -exec sed -i 's|http://ports.ubuntu.com/ubuntu-ports|https://ports.ubuntu.com/ubuntu-ports|g' {} +
+          sudo tee /etc/apt/apt.conf.d/80decodium-network-retries >/dev/null <<'EOF'
+          Acquire::Retries "5";
+          Acquire::ForceIPv4 "true";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
+
+          apt_updated=false
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq --error-on=any; then
+              apt_updated=true
+              break
+            fi
+            echo "APT index refresh failed (attempt ${attempt}/3); retrying..."
+            sleep "$((attempt * 15))"
+          done
+          if [[ "${apt_updated}" != true ]]; then
+            echo "APT index refresh failed after 3 attempts" >&2
+            exit 1
+          fi
+
+          sudo apt-get install -y -qq \
+            autoconf \
+            automake \
+            bison \
+            build-essential \
+            ca-certificates \
+            cmake \
+            curl \
+            desktop-file-utils \
+            file \
+            flex \
+            gfortran \
+            gperf \
+            libfftw3-dev \
+            libasound2-dev \
+            libavcodec-dev \
+            libavdevice-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libboost-filesystem-dev \
+            libboost-log-dev \
+            libboost-thread-dev \
+            libdrm-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libgl1-mesa-dev \
+            libglib2.0-dev \
+            libopengl-dev \
+            libopenjp2-7-dev \
+            libpulse-dev \
+            libreadline-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libtool \
+            libudev-dev \
+            libusb-1.0-0-dev \
+            libvulkan-dev \
+            libwayland-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb-cursor-dev \
+            libxcb-glx0-dev \
+            libxcb-icccm4-dev \
+            libxcb-image0-dev \
+            libxcb-keysyms1-dev \
+            libxcb-randr0-dev \
+            libxcb-render0-dev \
+            libxcb-render-util0-dev \
+            libxcb-shape0-dev \
+            libxcb-shm0-dev \
+            libxcb-sync-dev \
+            libxcb-util-dev \
+            libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev \
+            libxcb1-dev \
+            libxdamage-dev \
+            libxext-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            make \
+            mesa-common-dev \
+            ninja-build \
+            patchelf \
+            pkg-config \
+            portaudio19-dev \
+            python3 \
+            python3-pip \
+            python3-venv \
+            squashfs-tools \
+            tar \
+            texinfo \
+            wayland-protocols \
+            wget \
+            xz-utils
+          sudo apt-get install -y -qq libfuse2t64 || sudo apt-get install -y -qq libfuse2
+
+      - name: Restore Qt 6.11 aarch64 cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: linux-aarch64-qt-${{ env.QT_VERSION }}-source-xcb-v2
+
+      - name: Build Qt 6.11 from source
+        run: |
+          set -euo pipefail
+          QT_INSTALL_ROOT="${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}"
+          QT_PREFIX="${QT_INSTALL_ROOT}/${QT_VERSION}/gcc_arm64"
+
+          if [[ ! -x "${QT_PREFIX}/bin/qmake6" ]]; then
+            rm -rf "${QT_INSTALL_ROOT}"
+            mkdir -p "${QT_INSTALL_ROOT}" "${RUNNER_TEMP}/qt-source"
+
+            cd "${RUNNER_TEMP}/qt-source"
+            curl -fsSL --retry 5 -o "qt-everywhere-src-${QT_VERSION}.tar.xz" "${QT_SOURCE_URL}"
+            tar -xf "qt-everywhere-src-${QT_VERSION}.tar.xz"
+
+            mkdir -p "qt-build-${QT_VERSION}"
+            cd "qt-build-${QT_VERSION}"
+            "../qt-everywhere-src-${QT_VERSION}/configure" \
+              -prefix "${QT_PREFIX}" \
+              -opensource \
+              -confirm-license \
+              -release \
+              -nomake examples \
+              -nomake tests \
+              -feature-xcb \
+              -submodules qtbase,qtshadertools,qtdeclarative,qtsvg,qtimageformats,qtmultimedia,qtserialport,qtwebsockets,qt5compat,qttools
+
+            cmake --build . --parallel "$(nproc)"
+            cmake --install .
+          fi
+
+          test -x "${QT_PREFIX}/bin/qmake6"
+          echo "${QT_PREFIX}/bin" >> "${GITHUB_PATH}"
+          echo "QT_PREFIX=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          echo "QMAKE=${QT_PREFIX}/bin/qmake6" >> "${GITHUB_ENV}"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          "${QT_PREFIX}/bin/qmake6" -v
+          test "$("${QT_PREFIX}/bin/qmake6" -query QT_VERSION)" = "${QT_VERSION}"
+          if [[ ! -f "${QT_PREFIX}/plugins/platforms/libqxcb.so" ]]; then
+            echo "::error::Qt ${QT_VERSION} aarch64 build did not produce plugins/platforms/libqxcb.so"
+            find "${QT_PREFIX}/plugins" -maxdepth 3 -type f | sort || true
+            exit 1
+          fi
+          ls -l "${QT_PREFIX}/plugins/platforms/libqxcb.so"
+
+      - name: Restore Hamlib cache
+        id: hamlib-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HAMLIB_CACHE_DIR }}
+          key: linux-aarch64-hamlib-${{ env.HAMLIB_VERSION }}-ubuntu24.04-qt611-v1
+          restore-keys: |
+            linux-aarch64-hamlib-${{ env.HAMLIB_VERSION }}-
+            linux-aarch64-hamlib-
+
+      - name: Build Raspberry Pi aarch64 AppImage
+        run: |
+          set -euo pipefail
+          mkdir -p "${HAMLIB_CACHE_DIR}" dist-linux-appimage-qt611-aarch64
+
+          export PATH="${QT_PREFIX}/bin:${PATH}"
+          export QMAKE="${QT_PREFIX}/bin/qmake6"
+          export CMAKE_PREFIX_PATH="${QT_PREFIX}"
+
+          HAMLIB_PREFIX="${GITHUB_WORKSPACE}/${HAMLIB_CACHE_DIR}" \
+          OUTPUT_DIR="${GITHUB_WORKSPACE}/dist-linux-appimage-qt611-aarch64" \
+          BUILD_DIR="${GITHUB_WORKSPACE}/build-linux-appimage-qt611-aarch64" \
+          APPDIR="${GITHUB_WORKSPACE}/AppDir-linux-qt611-aarch64" \
+          VERSION="${VERSION}" \
+          APPIMAGE_ARCH="aarch64" \
+          APPIMAGE_OUTPUT_ARCH="aarch64" \
+          LINUXDEPLOY_ARCH="aarch64" \
+          LINUXDEPLOY_URL="https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-aarch64.AppImage" \
+          LINUXDEPLOY_QT_PLUGIN_URL="https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-qt-aarch64.AppImage" \
+          JOBS="2" \
+          bash scripts/ci-build-linux-appimage-x64.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium4-ft2-${{ steps.version.outputs.version }}-linux-aarch64-qt611
+          if-no-files-found: error
+          path: |
+            dist-linux-appimage-qt611-aarch64/decodium4-ft2-${{ steps.version.outputs.version }}-linux-aarch64.AppImage
+            dist-linux-appimage-qt611-aarch64/decodium4-ft2-${{ steps.version.outputs.version }}-linux-aarch64.AppImage.sha256.txt
+
+      - name: Publish Raspberry Pi AppImage to GitHub release
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_REF="${{ steps.version.outputs.release_ref }}"
+          REPO="${GITHUB_REPOSITORY}"
+          ASSETS=(
+            "dist-linux-appimage-qt611-aarch64/decodium4-ft2-${VERSION}-linux-aarch64.AppImage"
+            "dist-linux-appimage-qt611-aarch64/decodium4-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
+          )
+
+          for asset in "${ASSETS[@]}"; do
+            test -f "${asset}"
+          done
+
+          if gh release view "${RELEASE_REF}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_REF}" "${ASSETS[@]}" --repo "${REPO}" --clobber
+          else
+            NOTES_FILE="$(mktemp)"
+            NOTES_TEMPLATE="doc/GITHUB_RELEASE_BODY_${VERSION}.md"
+            if [[ -f "${NOTES_TEMPLATE}" ]]; then
+              cp "${NOTES_TEMPLATE}" "${NOTES_FILE}"
+            elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
+              cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
+            else
+              printf "# Decodium 4 FT2 %s\n\nLinux aarch64 AppImage for Raspberry Pi built with Qt %s.\n" "${VERSION}" "${QT_VERSION}" > "${NOTES_FILE}"
+            fi
+            gh release create "${RELEASE_REF}" "${ASSETS[@]}" \
+              --repo "${REPO}" \
+              --title "Decodium 4 FT2 ${VERSION}" \
+              --notes-file "${NOTES_FILE}"
+            rm -f "${NOTES_FILE}"
+          fi

@@ -312,6 +312,8 @@ namespace
       {28124600, Modes::FST4W, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {28180000, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
 
+      {40680000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+
       {50200000, Modes::Echo, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {50211000, Modes::Q65, IARURegions::ALL, "EME","", QDateTime(), QDateTime(), false},
       {50275000, Modes::Q65, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
@@ -359,6 +361,7 @@ namespace
 	  
       {432065000, Modes::Echo, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {432065000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
+      {432170000, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {432174000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {432177000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {432300000, Modes::WSPR, IARURegions::ALL,"","", QDateTime(), QDateTime(), false},
@@ -372,6 +375,7 @@ namespace
       {1296065000, Modes::JT65, IARURegions::ALL,"","", QDateTime(), QDateTime(), false},
       {1296500000, Modes::WSPR, IARURegions::ALL,"","", QDateTime(), QDateTime(), false},
       {1296065000, Modes::Q65, IARURegions::ALL,"","", QDateTime(), QDateTime(), false},
+      {1296170000, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {1296174000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {1296177000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       

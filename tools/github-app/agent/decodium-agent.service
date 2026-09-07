@@ -1,0 +1,41 @@
+[Unit]
+Description=decodium-agent - ricevitore webhook della GitHub App
+Documentation=https://github.com/iu8lmc/Decodium-4.0-Core-Shannon/tree/main/tools/github-app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=decoagent
+Group=decoagent
+WorkingDirectory=/opt/decodium-agent
+ExecStart=/usr/bin/python3 /opt/decodium-agent/decodium_agent.py
+EnvironmentFile=/etc/decodium-agent.env
+Restart=on-failure
+RestartSec=5
+
+# Il servizio ascolta solo su loopback e legge un unico segreto: non gli serve
+# altro. Se un giorno venisse compromesso, questo limita cosa puo' toccare.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+ReadOnlyPaths=/opt/decodium-agent
+# clone del repository: unica area scrivibile (/var/lib/decodium-agent)
+StateDirectory=decodium-agent
+StateDirectoryMode=0750
+# Claude Code scrive configurazione e cache sotto HOME
+CacheDirectory=decodium-agent
+Environment=HOME=/var/lib/decodium-agent
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

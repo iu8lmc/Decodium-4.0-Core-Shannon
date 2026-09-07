@@ -117,19 +117,32 @@ void DecodiumQrzLogbookLite::testApi()
     });
 }
 
-void DecodiumQrzLogbookLite::uploadAdif(const QString& dxCall, const QByteArray& adifRecord)
+void DecodiumQrzLogbookLite::uploadAdif(const QString& dxCall,
+                                        const QByteArray& adifRecord,
+                                        quint32 requestId)
 {
     if (!m_enabled) {
+        if (requestId != 0) {
+            emit adifUploadFinished(requestId, dxCall, false, tr("QRZ Logbook disabled"));
+        }
         return;
     }
     if (m_apiKey.trimmed().isEmpty()) {
-        emit errorOccurred(tr("API key mancante."));
+        const QString detail = tr("API key mancante.");
+        emit errorOccurred(detail);
+        if (requestId != 0) {
+            emit adifUploadFinished(requestId, dxCall, false, detail);
+        }
         return;
     }
 
     QString adif = QString::fromUtf8(adifRecord).trimmed();
     if (adif.isEmpty()) {
-        emit errorOccurred(tr("record ADIF vuoto."));
+        const QString detail = tr("record ADIF vuoto.");
+        emit errorOccurred(detail);
+        if (requestId != 0) {
+            emit adifUploadFinished(requestId, dxCall, false, detail);
+        }
         return;
     }
     adif = ensureAdifRecordTerminator(adif);
@@ -150,23 +163,39 @@ void DecodiumQrzLogbookLite::uploadAdif(const QString& dxCall, const QByteArray&
     request.setTransferTimeout(15000);
 
     QNetworkReply* reply = m_nam->post(request, formBody(fields));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, dxCall]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, dxCall, requestId]() {
         const QByteArray raw = reply->readAll();
         const QString bodyText = QString::fromUtf8(raw);
         reply->deleteLater();
 
         if (reply->error() != QNetworkReply::NoError && raw.isEmpty()) {
-            emit errorOccurred(tr("upload fallito: %1").arg(reply->errorString()));
+            const QString detail = tr("upload fallito: %1").arg(reply->errorString());
+            emit errorOccurred(detail);
+            if (requestId != 0) {
+                emit adifUploadFinished(requestId, dxCall, false, detail);
+            }
             return;
         }
 
         const QString result = valueFromQrzResponse(bodyText, QStringLiteral("RESULT")).toUpper();
         if (result == QStringLiteral("OK") || result == QStringLiteral("REPLACE")) {
             emit qsoLogged(dxCall);
+            if (requestId != 0) {
+                emit adifUploadFinished(requestId,
+                                        dxCall,
+                                        true,
+                                        result == QStringLiteral("REPLACE")
+                                        ? tr("QRZ Logbook accepted duplicate replacement")
+                                        : tr("QRZ Logbook accepted"));
+            }
             return;
         }
 
-        emit errorOccurred(tr("upload rifiutato per %1: %2")
-                               .arg(dxCall, qrzFailureReason(bodyText)));
+        const QString detail = tr("upload rifiutato per %1: %2")
+                                   .arg(dxCall, qrzFailureReason(bodyText));
+        emit errorOccurred(detail);
+        if (requestId != 0) {
+            emit adifUploadFinished(requestId, dxCall, false, detail);
+        }
     });
 }

@@ -4,17 +4,24 @@ on:
   push:
     tags:
       - 'v*'
-      - '[0-9]*.[0-9]*.[0-9]*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional existing release tag to build and publish (for example v1.0.495)
+        required: false
+        type: string
 
 permissions:
   contents: write
-  id-token: write
 
 env:
+  QT_VERSION: "6.11.0"
+  QT_CACHE_ROOT: ".ci/qt-windows-6.11.0"
+  QT_SOURCE_URL: "https://download.qt.io/official_releases/qt/6.11/6.11.0/single/qt-everywhere-src-6.11.0.tar.xz"
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
+  RTLSDR_VERSION: "2.0.2"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +30,7 @@ concurrency:
 jobs:
   build-windows-x64:
     runs-on: windows-2022
-    timeout-minutes: 120
+    timeout-minutes: 240
 
     defaults:
       run:
@@ -44,6 +51,9 @@ jobs:
           install: >-
             git
             make
+            perl
+            python
+            gperf
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
@@ -52,16 +62,95 @@ jobs:
             mingw-w64-x86_64-fftw
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-portaudio
-            mingw-w64-x86_64-qt6-5compat
-            mingw-w64-x86_64-qt6-activeqt
-            mingw-w64-x86_64-qt6-base
-            mingw-w64-x86_64-qt6-declarative
-            mingw-w64-x86_64-qt6-multimedia
-            mingw-w64-x86_64-qt6-serialport
-            mingw-w64-x86_64-qt6-svg
-            mingw-w64-x86_64-qt6-tools
-            mingw-w64-x86_64-qt6-translations
-            mingw-w64-x86_64-qt6-websockets
+            mingw-w64-x86_64-openjpeg2
+
+      - name: Validate repository contract
+        run: scripts/ci/validate-repository-layout.sh
+
+      - name: Resolve build version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          REQUESTED_VERSION=""
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            REQUESTED_VERSION="${GITHUB_REF}"
+          elif [[ -n "${RELEASE_TAG}" ]]; then
+            REQUESTED_VERSION="${RELEASE_TAG}"
+          fi
+          APP_VERSION="$(scripts/ci/resolve-release-version.sh "${REQUESTED_VERSION}")"
+          echo "APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
+          echo "INSTALLER_BASENAME=Decodium_${APP_VERSION}_Setup_x64" >> "${GITHUB_ENV}"
+
+      - name: Restore Qt 6.11 cache
+        id: qt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: windows-mingw64-qt-${{ env.QT_VERSION }}-v1
+
+      - name: Build Qt 6.11.0 MinGW from source
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          QT_PREFIX_WIN="$(cygpath -w "${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}/${QT_VERSION}/mingw_64")"
+          QT_PREFIX="$(cygpath -u "${QT_PREFIX_WIN}")"
+          # RUNNER_TEMP is a Windows path (for example D:\\a\\_temp) and
+          # must not be passed directly to MSYS2 tar as an archive path.
+          QT_SOURCE_ARCHIVE="/tmp/qt-everywhere-src-${QT_VERSION}.tar.xz"
+          QT_SOURCE_DIR="/tmp/qt-everywhere-src-${QT_VERSION}"
+
+          rm -rf "${QT_SOURCE_DIR}" "${QT_PREFIX}"
+          curl -fsSL --retry 3 "${QT_SOURCE_URL}" -o "${QT_SOURCE_ARCHIVE}"
+          mkdir -p /tmp
+          tar -xf "${QT_SOURCE_ARCHIVE}" -C /tmp
+          cd "${QT_SOURCE_DIR}"
+          ./configure \
+            -prefix "${QT_PREFIX_WIN}" \
+            -release \
+            -opensource \
+            -confirm-license \
+            -nomake tests \
+            -nomake examples \
+            -submodules qtbase,qt5compat,qtdeclarative,qtimageformats,qtmultimedia,qtserialport,qtsvg,qtshadertools,qttools,qttranslations,qtwebsockets
+          cmake --build . --parallel "$(nproc)"
+          cmake --install .
+
+      - name: Save Qt 6.11 cache
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: windows-mingw64-qt-${{ env.QT_VERSION }}-v1
+
+      - name: Verify and export Qt 6.11.0
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          QT_PREFIX_WIN="$(cygpath -w "${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}/${QT_VERSION}/mingw_64")"
+          QT_PREFIX="$(cygpath -u "${QT_PREFIX_WIN}")"
+          QT6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
+          QMAKE="${QT_PREFIX}/bin/qmake6.exe"
+          WINDEPLOYQT="${QT_PREFIX}/bin/windeployqt6.exe"
+
+          test -x "${QMAKE}"
+          test -x "${WINDEPLOYQT}"
+          test -f "${QT6_DIR}/Qt6Config.cmake"
+          qt_reported_version="$("${QMAKE}" -query QT_VERSION)"
+          if [[ "${qt_reported_version}" != "${QT_VERSION}" ]]; then
+            echo "Expected Qt ${QT_VERSION}, got ${qt_reported_version}" >&2
+            exit 1
+          fi
+
+          echo "QT_PREFIX_WIN=${QT_PREFIX_WIN}" >> "${GITHUB_ENV}"
+          echo "QT_PREFIX=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          echo "QT6_DIR=${QT6_DIR}" >> "${GITHUB_ENV}"
+          echo "QMAKE=${QMAKE}" >> "${GITHUB_ENV}"
+          echo "WINDEPLOYQT=${WINDEPLOYQT}" >> "${GITHUB_ENV}"
+          echo "${QT_PREFIX_WIN}/bin" >> "${GITHUB_PATH}"
+          echo "Qt ${qt_reported_version} verified at ${QT_PREFIX_WIN}"
+          echo "Qt package configuration verified at ${QT6_DIR}/Qt6Config.cmake"
 
       - name: Restore Hamlib cache
         id: hamlib-cache
@@ -117,17 +206,22 @@ jobs:
           echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig" >> "${GITHUB_ENV}"
           "${HAMLIB_PREFIX}/bin/rigctl" --version
 
-      - name: Resolve build version
+      - name: Build pinned RTL-SDR Blog driver
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            APP_VERSION="${GITHUB_REF#refs/tags/}"
-            APP_VERSION="${APP_VERSION#v}"
-          else
-            APP_VERSION="0.0.0-ci.${GITHUB_RUN_NUMBER}"
-          fi
-          echo "APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
-          echo "INSTALLER_BASENAME=Decodium_${APP_VERSION}_Setup_x64" >> "${GITHUB_ENV}"
+          RTLSDR_PREFIX="$(cygpath -u "$GITHUB_WORKSPACE")/.ci/librtlsdr-mingw64-${RTLSDR_VERSION}"
+          RTLSDR_VERSION="${RTLSDR_VERSION}" RTLSDR_PREFIX="${RTLSDR_PREFIX}" \
+            scripts/ci/build-librtlsdr.sh
+
+          RTLSDR_LIBRARY="$(find "${RTLSDR_PREFIX}/lib" -maxdepth 1 -name 'librtlsdr*.dll.a' | sort | head -n1)"
+          test -f "${RTLSDR_PREFIX}/include/rtl-sdr.h"
+          test -n "${RTLSDR_LIBRARY}"
+          test -f "${RTLSDR_PREFIX}/bin/librtlsdr.dll"
+
+          echo "RTLSDR_PREFIX=${RTLSDR_PREFIX}" >> "${GITHUB_ENV}"
+          echo "RtlSdr_INCLUDE_DIR=${RTLSDR_PREFIX}/include" >> "${GITHUB_ENV}"
+          echo "RtlSdr_LIBRARY=${RTLSDR_LIBRARY}" >> "${GITHUB_ENV}"
+          echo "$(cygpath -w "${RTLSDR_PREFIX}/bin")" >> "${GITHUB_PATH}"
 
       - name: Show toolchain versions
         run: |
@@ -135,17 +229,24 @@ jobs:
           cmake --version
           ninja --version
           g++ --version
-          qmake6 -v || true
-          /mingw64/bin/windeployqt6.exe --version || /mingw64/bin/windeployqt.exe --version || true
+          "${QMAKE}" -v
+          "${QMAKE}" -query QT_VERSION
+          "${WINDEPLOYQT}" --version
 
       - name: Configure CMake
         run: |
           set -euo pipefail
           cmake -S . -B build-windows -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${HAMLIB_PREFIX};/mingw64" \
+            -DQt6_DIR="${QT6_DIR}" \
+            -DCMAKE_PREFIX_PATH="${QT_PREFIX};${HAMLIB_PREFIX};${RTLSDR_PREFIX}" \
             -DHamlib_INCLUDE_DIR="${HAMLIB_INCLUDE_DIR}" \
             -DHamlib_LIBRARY="${HAMLIB_LIBRARY}" \
+            -DRtlSdr_INCLUDE_DIR="${RtlSdr_INCLUDE_DIR}" \
+            -DRtlSdr_LIBRARY="${RtlSdr_LIBRARY}" \
+            -DDECODIUM_REQUIRE_RTLSDR=ON \
+            -DDECODIUM_ENABLE_SSTV=ON \
+            -DDECODIUM_ENABLE_HAMDRM=ON \
             -DRIGCTL_EXE="${RIGCTL_EXE}" \
             -DRIGCTLD_EXE="${RIGCTLD_EXE}" \
             -DRIGCTLCOM_EXE="${RIGCTLCOM_EXE}" \
@@ -153,6 +254,13 @@ jobs:
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
+
+          for release_feature in DECODIUM_ENABLE_SSTV DECODIUM_ENABLE_HAMDRM; do
+            if ! grep -Fxq "${release_feature}:BOOL=ON" build-windows/CMakeCache.txt; then
+              echo "error: advertised Windows release must enable ${release_feature}" >&2
+              exit 1
+            fi
+          done
 
       - name: Build Decodium
         run: |
@@ -171,20 +279,30 @@ jobs:
           cp icons/windows-icons/decodium.ico "${DIST}/decodium.ico"
           cp -R build-windows/qml "${DIST}/"
           cp build-windows/*.qm "${DIST}/" 2>/dev/null || true
-          cp cty.dat sat.dat ALLCALL7.TXT "${DIST}/" 2>/dev/null || true
+          # These files are required runtime data. Never publish a bundle when
+          # one is absent: the previous best-effort copy hid packaging errors.
+          cp resources/runtime/cty.dat \
+             resources/runtime/sat.dat \
+             resources/runtime/ALLCALL7.TXT \
+             "${DIST}/"
+          test -s "${DIST}/cty.dat"
+          test -s "${DIST}/sat.dat"
+          test -s "${DIST}/ALLCALL7.TXT"
+          test "$(sha256sum resources/runtime/cty.dat | awk '{print $1}')" = \
+               "$(sha256sum "${DIST}/cty.dat" | awk '{print $1}')"
           cp -R sounds "${DIST}/sounds"
           cp -R Palettes "${DIST}/Palettes"
+          cp COPYING \
+             doc/THIRD_PARTY_LICENSES_RTLSDR.md \
+             doc/THIRD_PARTY_LICENSES_OPENJPEG.md \
+             "${DIST}/"
 
-          WINDEPLOYQT="/mingw64/bin/windeployqt6.exe"
-          if [[ ! -x "${WINDEPLOYQT}" ]]; then
-            WINDEPLOYQT="/mingw64/bin/windeployqt.exe"
-          fi
-
-          QT_SHARE_BIN="/mingw64/share/qt6/bin"
+          WINDEPLOYQT="${WINDEPLOYQT}"
+          QT_SHARE_BIN="${QT_PREFIX}/bin"
           QMLIMPORTSCANNER="${QT_SHARE_BIN}/qmlimportscanner.exe"
           if [[ ! -x "${QMLIMPORTSCANNER}" ]]; then
             echo "qmlimportscanner.exe not found under ${QT_SHARE_BIN}" >&2
-            find /mingw64 -maxdepth 4 -iname 'qmlimportscanner*' -print >&2 || true
+            find "${QT_PREFIX}" -maxdepth 4 -iname 'qmlimportscanner*' -print >&2 || true
             exit 1
           fi
           export PATH="${QT_SHARE_BIN}:$PATH"
@@ -196,15 +314,28 @@ jobs:
             --dir "${PWD}/${DIST}"
             "${PWD}/${DIST}/decodium.exe"
           )
-          if [[ ! -f /mingw64/share/qt6/translations/catalogs.json ]]; then
+          if [[ ! -f "${QT_PREFIX}/translations/catalogs.json" ]]; then
             WINDEPLOY_ARGS=(--no-translations "${WINDEPLOY_ARGS[@]}")
           fi
 
           "${WINDEPLOYQT}" "${WINDEPLOY_ARGS[@]}"
 
+          # Qt deploy tools do not necessarily infer a runtime-selected SQL
+          # driver from the executable. Copy the required SQLite driver
+          # explicitly; the dependency pass below validates its DLL closure.
+          QSQLITE_PLUGIN="${QT_PREFIX}/plugins/sqldrivers/qsqlite.dll"
+          if [[ ! -f "${QSQLITE_PLUGIN}" ]]; then
+            echo "Required Qt SQLite driver is unavailable: ${QSQLITE_PLUGIN}" >&2
+            exit 1
+          fi
+          mkdir -p "${DIST}/sqldrivers"
+          cp -f "${QSQLITE_PLUGIN}" "${DIST}/sqldrivers/qsqlite.dll"
+
           SEARCH_DIRS=(
+            "${QT_PREFIX}/bin"
             "/mingw64/bin"
             "${HAMLIB_PREFIX}/bin"
+            "${RTLSDR_PREFIX}/bin"
           )
 
           is_system_dll() {
@@ -212,7 +343,7 @@ jobs:
             local upper_name=""
             upper_name="$(printf '%s' "${dll_name}" | tr '[:lower:]' '[:upper:]')"
             case "${upper_name}" in
-              API-MS-WIN-*.DLL|EXT-MS-*.DLL|KERNEL32.DLL|KERNELBASE.DLL|USER32.DLL|GDI32.DLL|ADVAPI32.DLL|COMDLG32.DLL|COMCTL32.DLL|SHELL32.DLL|OLE32.DLL|OLEAUT32.DLL|WS2_32.DLL|WSOCK32.DLL|WINMM.DLL|IMM32.DLL|VERSION.DLL|SETUPAPI.DLL|SHLWAPI.DLL|SHCORE.DLL|RPCRT4.DLL|CRYPT32.DLL|CRYPTSP.DLL|IPHLPAPI.DLL|DNSAPI.DLL|NETAPI32.DLL|WTSAPI32.DLL|UXTHEME.DLL|DWMAPI.DLL|MPR.DLL|BCRYPT.DLL|BCRYPTPRIMITIVES.DLL|MSVCRT.DLL|SECHOST.DLL|NTDLL.DLL|WINSPOOL.DRV|AUTHZ.DLL|AVRT.DLL|D3D9.DLL|D3D11.DLL|D3D12.DLL|DWRITE.DLL|DXGI.DLL|DXVA2.DLL|GDIPLUS.DLL|MF.DLL|MFPLAT.DLL|MFREADWRITE.DLL|MSIMG32.DLL|NCRYPT.DLL|ODBC32.DLL|PDH.DLL|PROPSYS.DLL|SECUR32.DLL|USERENV.DLL|USP10.DLL|WINHTTP.DLL)
+              API-MS-WIN-*.DLL|EXT-MS-*.DLL|KERNEL32.DLL|KERNELBASE.DLL|USER32.DLL|GDI32.DLL|ADVAPI32.DLL|COMDLG32.DLL|COMCTL32.DLL|SHELL32.DLL|OLE32.DLL|OLEAUT32.DLL|WS2_32.DLL|WSOCK32.DLL|WINMM.DLL|IMM32.DLL|VERSION.DLL|SETUPAPI.DLL|SHLWAPI.DLL|SHCORE.DLL|RPCRT4.DLL|CRYPT32.DLL|CRYPTSP.DLL|IPHLPAPI.DLL|DNSAPI.DLL|NETAPI32.DLL|WTSAPI32.DLL|UXTHEME.DLL|DWMAPI.DLL|MPR.DLL|BCRYPT.DLL|BCRYPTPRIMITIVES.DLL|MSVCRT.DLL|SECHOST.DLL|NTDLL.DLL|WINSPOOL.DRV|AUTHZ.DLL|AVRT.DLL|EVR.DLL|D3D9.DLL|D3D11.DLL|D3D12.DLL|DWRITE.DLL|DXGI.DLL|DXVA2.DLL|GDIPLUS.DLL|MF.DLL|MFPLAT.DLL|MFREADWRITE.DLL|MSIMG32.DLL|NCRYPT.DLL|ODBC32.DLL|PDH.DLL|PROPSYS.DLL|SECUR32.DLL|USERENV.DLL|USP10.DLL|WINHTTP.DLL)
                 return 0
                 ;;
             esac
@@ -307,6 +438,60 @@ jobs:
             exit 1
           fi
 
+          test -f "${DIST}/Qt6Core.dll"
+          core_private_abis="$(
+            objdump -p "${DIST}/Qt6Core.dll" 2>/dev/null |
+              grep -oE 'QtPrivate_[0-9]+_[0-9]+_[0-9]+' |
+              sort -u || true
+          )"
+          if [[ -z "${core_private_abis}" ]]; then
+            echo "Unable to determine the private Qt ABI exported by Qt6Core.dll" >&2
+            exit 1
+          fi
+
+          qt_abi_mismatch=0
+          qt_source_mismatch=0
+          while IFS= read -r -d '' qt_dll; do
+            qt_name="$(basename "${qt_dll}")"
+            required_abis="$(
+              objdump -p "${qt_dll}" 2>/dev/null |
+                grep -oE 'QtPrivate_[0-9]+_[0-9]+_[0-9]+' |
+                sort -u || true
+            )"
+            while IFS= read -r required_abi; do
+              [[ -n "${required_abi}" ]] || continue
+              if ! grep -Fxq "${required_abi}" <<< "${core_private_abis}"; then
+                echo "Qt ABI mismatch: ${qt_name} requires ${required_abi}, but Qt6Core.dll exports:" >&2
+                printf '  %s\n' "${core_private_abis}" >&2
+                qt_abi_mismatch=1
+              fi
+            done <<< "${required_abis}"
+
+            qt_source="${QT_PREFIX}/bin/${qt_name}"
+            if [[ -f "${qt_source}" ]]; then
+              qt_hash="$(sha256sum "${qt_dll}" | awk '{print $1}')"
+              qt_source_hash="$(sha256sum "${qt_source}" | awk '{print $1}')"
+              if [[ "${qt_hash}" != "${qt_source_hash}" ]]; then
+                echo "Qt runtime mismatch: ${qt_dll} differs from ${qt_source}" >&2
+                qt_source_mismatch=1
+              fi
+            fi
+          done < <(find "${DIST}" -type f -iname 'Qt6*.dll' -print0)
+
+          if [[ "${qt_abi_mismatch}" -ne 0 || "${qt_source_mismatch}" -ne 0 ]]; then
+            echo "Refusing to package a mixed Qt runtime." >&2
+            exit 1
+          fi
+
+          echo "Qt runtime ABI verified: $(tr '\n' ' ' <<< "${core_private_abis}")"
+          test -f "${DIST}/librtlsdr.dll"
+          test -f "${DIST}/libopenjp2-7.dll"
+          test -f "${DIST}/sqldrivers/qsqlite.dll"
+          test -f "${DIST}/imageformats/qgif.dll"
+          test -f "${DIST}/imageformats/qjpeg.dll"
+          test -f "${DIST}/imageformats/qtiff.dll"
+          test -f "${DIST}/imageformats/qwebp.dll"
+
           printf '%s\n' "Runtime DLLs bundled:" > "${DIST}/runtime-dll-report.txt"
           find "${DIST}" -maxdepth 1 -type f -iname '*.dll' -printf '%f\n' | sort -fu >> "${DIST}/runtime-dll-report.txt"
 
@@ -336,7 +521,7 @@ jobs:
             "/DSourceRoot=$env:GITHUB_WORKSPACE" `
             "/DOutputDir=$outputDir" `
             "/DOutputBaseFilename=$env:INSTALLER_BASENAME" `
-            "$env:GITHUB_WORKSPACE\installer\decodium_setup.iss"
+            "$env:GITHUB_WORKSPACE\packaging\windows\decodium_setup.iss"
 
           Get-ChildItem $outputDir
 
@@ -355,13 +540,14 @@ jobs:
           path: installer-output/*.exe
 
       - name: Publish release assets (unsigned)
-        if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = "${{ github.ref_name }}"
+          $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { "${{ github.ref_name }}" }
           $repo = "${{ github.repository }}"
           $assets = Get-ChildItem -Path "installer-output" -Filter "*.exe"
           if (-not $assets) {
@@ -382,93 +568,3 @@ jobs:
           foreach ($asset in $assets) {
             gh release upload $tag $asset.FullName --repo $repo --clobber
           }
-
-  # ── SignPath Code Signing ──────────────────────────────────────────
-  sign:
-    needs: build-windows-x64
-    runs-on: ubuntu-latest
-    # Numeric release tags publish the unsigned Windows installer from the
-    # build job. SignPath packaging is only attempted for explicit v* tags.
-    if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Download portable bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: decodium-windows-x64-portable
-          path: unsigned
-
-      - name: Repackage for SignPath
-        run: |
-          cd unsigned
-          zip -r ../decodium-x64.zip .
-
-      - name: Upload for SignPath
-        id: upload-for-signing
-        uses: actions/upload-artifact@v4
-        with:
-          name: decodium-to-sign-x64
-          path: decodium-x64.zip
-
-      - name: Submit signing request
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '${{ vars.SIGNPATH_ORGANIZATION_ID }}'
-          project-slug: 'decodium'
-          signing-policy-slug: >-
-            ${{ startsWith(github.ref, 'refs/tags/v')
-                && 'release-signing'
-                || 'test-signing' }}
-          github-artifact-id: '${{ steps.upload-for-signing.outputs.artifact-id }}'
-          wait-for-completion: true
-          output-artifact-directory: 'signed'
-
-      - name: Upload signed bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: decodium-signed-x64
-          path: signed
-          if-no-files-found: error
-
-  # ── Build signed installer ────────────────────────────────────────
-  package-signed:
-    needs: sign
-    runs-on: windows-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract version
-        id: version
-        run: |
-          $VER = "$env:GITHUB_REF" -replace 'refs/tags/v',''
-          echo "version=$VER" >> $env:GITHUB_OUTPUT
-        shell: pwsh
-
-      - name: Download signed bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: decodium-signed-x64
-          path: dist-windows-x64
-
-      - name: Build signed installer
-        shell: pwsh
-        run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            /DAppVersion="${{ steps.version.outputs.version }}" `
-            /DBuildDir="dist-windows-x64" `
-            /DSourceRoot="." `
-            /DOutputDir="installer-output" `
-            /DOutputBaseFilename="Decodium_${{ steps.version.outputs.version }}_Setup_x64" `
-            "installer\decodium_setup.iss"
-
-      - name: Create signed release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          generate_release_notes: true
-          files: |
-            installer-output/*.exe

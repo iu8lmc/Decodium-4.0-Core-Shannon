@@ -8,15 +8,20 @@ import QtQuick.Layouts
 
 Dialog {
     id: mamWindow
-    title: "Multi-Answer Mode"
-    width: 700
-    height: 450
+    title: qsTr("Multi-Answer Mode")
+    width: nativeHostWindow && parent ? Math.max(500, parent.width) : 700
+    height: nativeHostWindow && parent ? Math.max(360, parent.height) : 450
     modal: false
-    standardButtons: Dialog.Close
+    // 1.0.364+ — niente CloseOnPressOutside: la finestra MAM non si chiude piu' per
+    // un click accidentale fuori. Resta chiudibile con Esc o con la X (in tema)
+    // nell'header. Rimosso standardButtons (footer di stile default fuori-tema).
+    closePolicy: Popup.CloseOnEscape
     property var engine: null
+    property var nativeHostWindow: null
     property bool positionInitialized: false
 
     function clampToParent() {
+        if (nativeHostWindow) return
         if (!parent) return
         x = Math.max(0, Math.min(x, parent.width - width))
         y = Math.max(0, Math.min(y, parent.height - height))
@@ -24,9 +29,39 @@ Dialog {
 
     function ensureInitialPosition() {
         if (positionInitialized || !parent) return
+        if (nativeHostWindow) {
+            x = 0
+            y = 0
+            positionInitialized = true
+            return
+        }
         x = Math.max(0, Math.round((parent.width - width) / 2))
         y = Math.max(0, Math.round((parent.height - height) / 2))
         positionInitialized = true
+    }
+
+    function startNativeHostMove() {
+        if (!nativeHostWindow || typeof nativeHostWindow.startSystemMove !== "function")
+            return false
+        try {
+            return nativeHostWindow.startSystemMove()
+        } catch (error) {
+            console.log("MAM startSystemMove failed: " + error)
+        }
+        return false
+    }
+
+    function finishNativeHostMove() {
+        if (nativeHostWindow && typeof nativeHostWindow.finishDesktopMove === "function")
+            nativeHostWindow.finishDesktopMove()
+    }
+
+    function requestWindowClose() {
+        if (nativeHostWindow && typeof nativeHostWindow.hideHostedWindow === "function") {
+            nativeHostWindow.hideHostedWindow()
+            return
+        }
+        mamWindow.close()
     }
 
     onAboutToShow: ensureInitialPosition()
@@ -41,8 +76,9 @@ Dialog {
     property color textPrimary: engine ? engine.themeManager.textPrimary : "#e5eefc"
     property color textSecondary: engine ? engine.themeManager.textSecondary : "#9db1c9"
     property color glassBorder: engine ? engine.themeManager.glassBorder : "#2a3950"
-    readonly property var mamQueueEntries: engine ? engine.callerQueue : []
-    readonly property int mamQueueCount: engine ? engine.callerQueueSize : 0
+    readonly property bool mamQueueActive: engine && (engine.multiAnswerMode || engine.autoCqRepeat)
+    readonly property var mamQueueEntries: mamWindow.mamQueueActive ? engine.callerQueue : []
+    readonly property int mamQueueCount: mamWindow.mamQueueActive ? engine.callerQueueSize : 0
     readonly property string mamActiveCall: inferMamActiveCall()
     readonly property bool mamHasActiveCaller: engine
                                                && mamWindow.mamActiveCall.length > 0
@@ -61,6 +97,19 @@ Dialog {
         case 5: return "SIGNOFF"
         case 6: return "IDLE_QSO"
         default: return "IDLE"
+        }
+    }
+
+    // 1.0.364+ - etichetta leggibile dello stato di uno stream MAM dal suo
+    // progress/currentTx (per la lista multi-stream).
+    function mamStreamStage(progress, tx) {
+        switch (tx) {
+        case 2: return "TX2 rpt"
+        case 3: return "TX3 R+rpt"
+        case 4: return "TX4 RR73"
+        case 5: return "TX5 73"
+        case 6: return "CQ"
+        default: return qsoProgressName(progress)
         }
     }
 
@@ -132,6 +181,47 @@ Dialog {
         return ""
     }
 
+    component QueueMoveButton: Rectangle {
+        id: queueMoveButton
+        property string symbol: ""
+        property string tip: ""
+        property bool active: true
+        signal triggered()
+
+        implicitWidth: 20
+        implicitHeight: 22
+        radius: 4
+        opacity: active ? 1.0 : 0.28
+        color: active && moveMouse.containsMouse
+               ? Qt.rgba(mamWindow.secondaryCyan.r, mamWindow.secondaryCyan.g, mamWindow.secondaryCyan.b, 0.24)
+               : Qt.rgba(mamWindow.secondaryCyan.r, mamWindow.secondaryCyan.g, mamWindow.secondaryCyan.b, 0.08)
+        border.width: 1
+        border.color: active
+                      ? Qt.rgba(mamWindow.secondaryCyan.r, mamWindow.secondaryCyan.g, mamWindow.secondaryCyan.b, 0.55)
+                      : Qt.rgba(mamWindow.textSecondary.r, mamWindow.textSecondary.g, mamWindow.textSecondary.b, 0.25)
+
+        Text {
+            anchors.centerIn: parent
+            text: queueMoveButton.symbol
+            font.pixelSize: 11
+            font.bold: true
+            color: queueMoveButton.active ? mamWindow.textPrimary : mamWindow.textSecondary
+        }
+
+        MouseArea {
+            id: moveMouse
+            anchors.fill: parent
+            enabled: queueMoveButton.active
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: queueMoveButton.triggered()
+        }
+
+        ToolTip.visible: moveMouse.containsMouse && queueMoveButton.active
+        ToolTip.text: queueMoveButton.tip
+        ToolTip.delay: 500
+    }
+
     background: Rectangle {
         color: bgPanel
         border.color: glassBorder
@@ -147,25 +237,80 @@ Dialog {
         MouseArea {
             anchors.fill: parent
             property point clickPos: Qt.point(0, 0)
+            property point pressGlobalPos: Qt.point(0, 0)
+            property point pressWindowPos: Qt.point(0, 0)
+            property bool nativeMoveActive: false
             cursorShape: Qt.SizeAllCursor
             onPressed: function(mouse) {
                 clickPos = Qt.point(mouse.x, mouse.y)
                 mamWindow.positionInitialized = true
+                if (mamWindow.nativeHostWindow) {
+                    pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                    pressWindowPos = Qt.point(mamWindow.nativeHostWindow.x,
+                                              mamWindow.nativeHostWindow.y)
+                    nativeMoveActive = mamWindow.startNativeHostMove()
+                }
             }
             onPositionChanged: function(mouse) {
                 if (!pressed) return
+                if (mamWindow.nativeHostWindow) {
+                    if (nativeMoveActive)
+                        return
+                    var currentGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                    mamWindow.nativeHostWindow.x = Math.round(
+                                pressWindowPos.x + currentGlobalPos.x - pressGlobalPos.x)
+                    mamWindow.nativeHostWindow.y = Math.round(
+                                pressWindowPos.y + currentGlobalPos.y - pressGlobalPos.y)
+                    return
+                }
                 mamWindow.x += mouse.x - clickPos.x
                 mamWindow.y += mouse.y - clickPos.y
                 mamWindow.clampToParent()
+            }
+            onReleased: {
+                nativeMoveActive = false
+                mamWindow.finishNativeHostMove()
+            }
+            onCanceled: {
+                nativeMoveActive = false
+                mamWindow.finishNativeHostMove()
             }
         }
 
         Text {
             anchors.centerIn: parent
-            text: "Multi-Answer Mode - Queue: " + mamWindow.mamQueueCount + " | Now: " + mamWindow.mamNowCount
+            text: "Multi-Answer Mode - " + (mamWindow.mamQueueActive ? ("Queue: " + mamWindow.mamQueueCount) : "Manual TX") + " | Now: " + mamWindow.mamNowCount
             font.pixelSize: 16
             font.bold: true
             color: warningOrange
+        }
+
+        // 1.0.364+ — X di chiusura in tema (sostituisce il footer standardButtons).
+        // Sta sopra il MouseArea di drag (ultimo figlio dichiarato) e ha il suo
+        // MouseArea che intercetta il click.
+        Rectangle {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 10
+            width: 28
+            height: 28
+            radius: 6
+            color: closeMamMA.containsMouse ? Qt.rgba(0.95, 0.26, 0.21, 0.30)
+                                            : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
+            border.color: closeMamMA.containsMouse ? errorRed : glassBorder
+            Text {
+                anchors.centerIn: parent
+                text: "✕"
+                color: closeMamMA.containsMouse ? errorRed : textPrimary
+                font.pixelSize: 14
+            }
+            MouseArea {
+                id: closeMamMA
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mamWindow.requestWindowClose()
+            }
         }
     }
 
@@ -198,7 +343,7 @@ Dialog {
                     }
 
                     Text {
-                        text: "Count: " + mamWindow.mamQueueCount
+                        text: mamWindow.mamQueueActive ? ("Count: " + mamWindow.mamQueueCount) : "Manual TX"
                         font.pixelSize: 12
                         color: textSecondary
                     }
@@ -215,14 +360,14 @@ Dialog {
 
                         delegate: Rectangle {
                             width: queueList.width - (queueScroll.visible ? queueScroll.width + 6 : 0)
-                            height: 38
+                            height: 42
                             radius: 4
                             color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.08)
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.margins: 8
-                                spacing: 8
+                                anchors.margins: 7
+                                spacing: 6
 
                                 Text {
                                     text: (index + 1) + "."
@@ -245,6 +390,8 @@ Dialog {
                                     text: mamWindow.queueFreq(modelData) + " Hz"
                                     font.pixelSize: 11
                                     color: textSecondary
+                                    Layout.preferredWidth: 58
+                                    horizontalAlignment: Text.AlignRight
                                 }
 
                                 Text {
@@ -252,6 +399,29 @@ Dialog {
                                     text: mamWindow.queueSnr(modelData) + " dB"
                                     font.pixelSize: 11
                                     color: textSecondary
+                                    Layout.preferredWidth: 42
+                                    horizontalAlignment: Text.AlignRight
+                                }
+
+                                QueueMoveButton {
+                                    symbol: "⇧"
+                                    tip: "Move to top"
+                                    active: index > 0
+                                    onTriggered: if (mamWindow.engine) mamWindow.engine.moveCallerQueueItem(index, 0)
+                                }
+
+                                QueueMoveButton {
+                                    symbol: "↑"
+                                    tip: "Move up"
+                                    active: index > 0
+                                    onTriggered: if (mamWindow.engine) mamWindow.engine.moveCallerQueueItem(index, index - 1)
+                                }
+
+                                QueueMoveButton {
+                                    symbol: "↓"
+                                    tip: "Move down"
+                                    active: index < queueList.count - 1
+                                    onTriggered: if (mamWindow.engine) mamWindow.engine.moveCallerQueueItem(index, index + 1)
                                 }
                             }
                         }
@@ -264,7 +434,7 @@ Dialog {
                         Text {
                             anchors.centerIn: parent
                             visible: mamWindow.mamQueueCount === 0
-                            text: "No queued callers"
+                            text: mamWindow.mamQueueActive ? "No queued callers" : "Queue inactive"
                             font.pixelSize: 12
                             color: textSecondary
                         }
@@ -337,10 +507,91 @@ Dialog {
                     }
 
                     Text {
-                        visible: !mamWindow.mamHasActiveCaller
-                        text: "No active caller"
+                        visible: !mamWindow.mamHasActiveCaller && !(mamWindow.engine && mamWindow.engine.mamMultiStream)
+                        text: qsTr("No active caller")
                         font.pixelSize: 12
                         color: textSecondary
+                    }
+
+                    // 1.0.364+ - MAM multi-stream (MSHV): QSO paralleli attivi.
+                    // Visibile solo col toggle multi-stream ON; la vista coda/NOW
+                    // seriale resta intatta per il MAM seriale.
+                    Column {
+                        width: parent.width
+                        spacing: 6
+                        visible: mamWindow.engine ? mamWindow.engine.mamMultiStream : false
+
+                        Rectangle {
+                            width: parent.width
+                            height: 1
+                            color: mamWindow.glassBorder
+                            visible: mamWindow.mamHasActiveCaller
+                        }
+
+                        Text {
+                            text: qsTr("QSO attivi (multi-stream): ") + (mamWindow.engine ? mamWindow.engine.mamActiveSlotCount : 0)
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: secondaryCyan
+                        }
+
+                        Repeater {
+                            model: mamWindow.engine ? mamWindow.engine.mamActiveSlots : []
+
+                            Rectangle {
+                                width: parent ? parent.width : 0
+                                height: msRow.implicitHeight + 8
+                                radius: 4
+                                color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.08)
+
+                                RowLayout {
+                                    id: msRow
+                                    anchors.fill: parent
+                                    anchors.margins: 6
+                                    spacing: 6
+
+                                    Text {
+                                        text: modelData.call
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        color: accentGreen
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: modelData.freq + " Hz"
+                                        font.pixelSize: 11
+                                        color: textSecondary
+                                        Layout.preferredWidth: 58
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+
+                                    Text {
+                                        text: mamWindow.mamStreamStage(modelData.progress, modelData.tx)
+                                        font.pixelSize: 11
+                                        color: warningOrange
+                                        Layout.preferredWidth: 82
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+
+                                    Text {
+                                        text: (modelData.snr === 127 ? "--" : modelData.snr) + " dB"
+                                        font.pixelSize: 11
+                                        color: textSecondary
+                                        Layout.preferredWidth: 46
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: mamWindow.engine ? mamWindow.engine.mamActiveSlotCount === 0 : true
+                            text: qsTr("No active stream")
+                            font.pixelSize: 11
+                            color: textSecondary
+                        }
                     }
                 }
             }

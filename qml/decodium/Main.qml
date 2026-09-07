@@ -8,12 +8,13 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Window
-import QtQuick.Dialogs
 // import Qt.labs.settings 1.1  // non disponibile in questa build Qt
 import "components"
 
 ApplicationWindow {
     id: mainWindow
+    font.family: bridge ? bridge.fontSettingFamily("Font", Qt.platform.os === "windows" ? "Segoe UI" : (Qt.platform.os === "osx" ? "Helvetica Neue" : ""), 10)
+                        : (Qt.platform.os === "windows" ? "Segoe UI" : (Qt.platform.os === "osx" ? "Helvetica Neue" : ""))
     readonly property int preferredMinimumWidth: 1200
     readonly property int preferredMinimumHeight: 480
     readonly property int currentScreenAvailableWidth: (Screen.desktopAvailableWidth > 0
@@ -28,13 +29,46 @@ ApplicationWindow {
     visible: true
     flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
          | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
-    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
+    property bool superFoxOptionEnabled: bridge ? settingBool("SuperFox", true) : true
+    readonly property string dxpeditionModeLabel: !bridge || bridge.mode !== "FT8" ? ""
+        : bridge.houndMode ? (superFoxOptionEnabled ? "SuperHound" : "Hound")
+        : bridge.foxMode ? (superFoxOptionEnabled ? "SuperFox" : "Fox") : ""
+    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "")
+        + (dxpeditionModeLabel ? " [" + dxpeditionModeLabel + "]" : "")
+        + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
+    // Persist the native maximised state separately from the last usable
+    // windowed geometry.  On Windows QWindow reports the maximised dimensions
+    // through width/height; saving those as normal geometry reopens an
+    // oversized window while losing the maximised state.
+    property bool mainWindowMaximized: false
+    property int normalWindowX: 0
+    property int normalWindowY: 0
+    property int normalWindowWidth: preferredMinimumWidth
+    property int normalWindowHeight: 800
+    property int floatingGeometryInteractionDepth: 0
+    property bool deferredWindowStateSave: false
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
+    readonly property bool txPttPending: !!(bridge && bridge.pttPending && !bridge.pttConfirmed)
+    // Build the expensive visual surfaces after the first interactive frame on
+    // every platform.  The Waterfall loader also owns PanadapterItem, so this
+    // defers palette/scene-graph setup together with the visual itself.
+    readonly property bool startupVisualStagingEnabled: true
+    property bool startupWaterfallVisualReady: !startupVisualStagingEnabled
+    property bool startupLiveMapVisualReady: !startupVisualStagingEnabled
+    property bool startupSettingsSavePending: false
+    // Settings is a QML Dialog in this main window, whereas detached panels
+    // are native top-level Windows.  On Windows an always-on-top panel stays
+    // above the QML overlay and can make Settings visible but impossible to
+    // click.  Keep the exact visible set so it can be restored unchanged when
+    // the modal dialog closes.
+    property var settingsSuspendedTopmostPopouts: []
+    property bool settingsTopmostPopoutsSuspended: false
     property bool decodePanelLayoutSaved: false
     property int savedPeriod1PanelWidth: 400
     property int savedRxFreqPanelWidth: 400
     property int savedLiveMapPanelWidth: 360
+    property int savedDxClusterColumnWidth: Math.max(320, Number(bridge.getSetting("uiDxClusterColumnWidth", 380)))  // 1.0.385 — larghezza 4ª colonna DX Cluster
     property double startupCompletedStartedMs: 0
 
     function startupElapsedMs() {
@@ -43,6 +77,63 @@ ApplicationWindow {
 
     function startupLog(phase) {
         console.log("Main.qml startup +" + startupElapsedMs() + " ms: " + phase)
+    }
+
+    function startupVisualStageCanRun(stage) {
+        if (!startupVisualStagingEnabled || !bridge)
+            return true
+        if (bridge.transmitting || bridge.tuning)
+            return false
+        // Do not let a long first decode keep the normal dashboard hidden.
+        // Prefer a quiet FT slot, but guarantee that both visuals appear.
+        var deadlineMs = stage === "waterfall" ? 5000 : 7500
+        if (startupElapsedMs() >= deadlineMs)
+            return true
+        var mode = String(bridge.mode || "").toUpperCase()
+        if (mode === "FT8") {
+            var progress = Number(bridge.periodProgress || 0)
+            return progress >= 8 && progress <= 22
+        }
+        return true
+    }
+
+    function maybeFinishStartupWaterfallVisualStage(reason) {
+        if (startupWaterfallVisualReady)
+            return
+        if (!startupVisualStageCanRun("waterfall")) {
+            startupWaterfallStageRetryTimer.restart()
+            return
+        }
+        finishStartupWaterfallVisualStage(reason)
+    }
+
+    function maybeFinishStartupLiveMapVisualStage(reason) {
+        if (startupLiveMapVisualReady)
+            return
+        if (!startupWaterfallVisualReady || !startupVisualStageCanRun("livemap")) {
+            startupLiveMapStageRetryTimer.restart()
+            return
+        }
+        finishStartupLiveMapVisualStage(reason)
+    }
+
+    function finishStartupWaterfallVisualStage(reason) {
+        if (startupWaterfallVisualReady)
+            return
+        startupWaterfallVisualReady = true
+        startupLog("waterfall visual stage ready" + (reason ? " (" + reason + ")" : ""))
+        syncSpectrumVisibility()
+    }
+
+    function finishStartupLiveMapVisualStage(reason) {
+        if (startupLiveMapVisualReady)
+            return
+        startupLiveMapVisualReady = true
+        startupLog("live map visual stage ready" + (reason ? " (" + reason + ")" : ""))
+        if (startupSettingsSavePending) {
+            startupSettingsSavePending = false
+            saveTimer.restart()
+        }
     }
 
     function availableScreenGeometries() {
@@ -84,7 +175,8 @@ ApplicationWindow {
                 x: Math.round(safeNumber(g.x, 0)),
                 y: Math.round(safeNumber(g.y, 0)),
                 width: Math.round(safeNumber(g.width, preferredMinimumWidth)),
-                height: Math.round(safeNumber(g.height, preferredMinimumHeight))
+                height: Math.round(safeNumber(g.height, preferredMinimumHeight)),
+                screen: screen
             }
         }
 
@@ -95,7 +187,8 @@ ApplicationWindow {
                 x: Math.round(safeNumber(screen.virtualX, 0)),
                 y: Math.round(safeNumber(screen.virtualY, 0)),
                 width: Math.round(widthValue),
-                height: Math.round(heightValue)
+                height: Math.round(heightValue),
+                screen: screen
             }
         }
         return null
@@ -112,6 +205,34 @@ ApplicationWindow {
             console.log("getSetting error for " + key + ": " + e)
         }
         return fallback
+    }
+
+    function coerceBool(value, fallback) {
+        if (value === undefined || value === null)
+            return !!fallback
+        if (typeof value === "boolean")
+            return value
+        if (typeof value === "number")
+            return value !== 0
+
+        var text = String(value).trim().toLowerCase()
+        if (text === "true" || text === "1" || text === "yes" || text === "on")
+            return true
+        if (text === "false" || text === "0" || text === "no" || text === "off")
+            return false
+        return !!fallback
+    }
+
+    function settingBool(key, fallback) {
+        return coerceBool(safeBridgeSetting(key, fallback), fallback)
+    }
+
+    function persistUiSetting(key, value) {
+        if (!bridge)
+            return
+        bridge.setSetting(key, value)
+        if (!windowStateRestoreInProgress)
+            scheduleSave()
     }
 
     function safeWindowState(key) {
@@ -135,7 +256,8 @@ ApplicationWindow {
                 centerY >= g.y && centerY < g.y + g.height) {
                 return {
                     x: Math.max(g.x, Math.min(savedX, g.x + Math.max(0, g.width - winW))),
-                    y: Math.max(g.y, Math.min(savedY, g.y + Math.max(0, g.height - winH)))
+                    y: Math.max(g.y, Math.min(savedY, g.y + Math.max(0, g.height - winH))),
+                    screen: g.screen
                 }
             }
         }
@@ -143,8 +265,188 @@ ApplicationWindow {
         var fallback = screens[0]
         return {
             x: Math.round(fallback.x + Math.max(0, (fallback.width - winW) / 2)),
-            y: Math.round(fallback.y + Math.max(0, (fallback.height - winH) / 2))
+            y: Math.round(fallback.y + Math.max(0, (fallback.height - winH) / 2)),
+            screen: fallback.screen
         }
+    }
+
+    function geometryForWindowScreen(windowRef) {
+        var screens = availableScreenGeometries()
+        if (screens.length === 0)
+            return null
+
+        // Use a point near the draggable header rather than the window centre:
+        // an oversized window may still have its centre on the monitor it is
+        // leaving, and some platforms update QWindow::screen only after move.
+        if (windowRef) {
+            var anchorX = safeNumber(windowRef.x, 0)
+                          + Math.min(64, Math.max(1, safeNumber(windowRef.width, 1) / 2))
+            var anchorY = safeNumber(windowRef.y, 0)
+                          + Math.min(32, Math.max(1, safeNumber(windowRef.height, 1) / 2))
+            for (var i = 0; i < screens.length; ++i) {
+                var candidate = screens[i]
+                if (anchorX >= candidate.x && anchorX < candidate.x + candidate.width
+                        && anchorY >= candidate.y && anchorY < candidate.y + candidate.height)
+                    return candidate
+            }
+        }
+
+        if (windowRef && windowRef.screen) {
+            for (var j = 0; j < screens.length; ++j) {
+                if (screens[j].screen === windowRef.screen)
+                    return screens[j]
+            }
+        }
+        return screens[0]
+    }
+
+    function fitWindowSizeToGeometry(windowRef, target, preserveAspectRatio) {
+        if (!windowRef || !target)
+            return
+
+        var currentWidth = safeNumber(windowRef.width, 0)
+        var currentHeight = safeNumber(windowRef.height, 0)
+        var minimumWidthValue = Math.max(1, safeNumber(windowRef.minimumWidth, 1))
+        var minimumHeightValue = Math.max(1, safeNumber(windowRef.minimumHeight, 1))
+        var declaredMaximumWidth = Math.max(minimumWidthValue,
+                                            safeNumber(windowRef.maximumWidth, 10000))
+        var declaredMaximumHeight = Math.max(minimumHeightValue,
+                                             safeNumber(windowRef.maximumHeight, 6000))
+        var maximumWidth = Math.max(minimumWidthValue,
+                                    Math.min(declaredMaximumWidth, target.width - 16))
+        var maximumHeight = Math.max(minimumHeightValue,
+                                     Math.min(declaredMaximumHeight, target.height - 16))
+        var aspectRatio = safeNumber(preserveAspectRatio, 0)
+
+        if (aspectRatio > 0) {
+            maximumWidth = Math.max(minimumWidthValue,
+                                    Math.min(maximumWidth, maximumHeight * aspectRatio))
+            var proportionalWidth = Math.max(minimumWidthValue,
+                                             Math.min(currentWidth, maximumWidth))
+            var proportionalHeight = Math.round(proportionalWidth / aspectRatio)
+            if (proportionalHeight < minimumHeightValue) {
+                proportionalHeight = minimumHeightValue
+                proportionalWidth = Math.round(proportionalHeight * aspectRatio)
+            }
+            windowRef.width = Math.round(proportionalWidth)
+            windowRef.height = proportionalHeight
+            return
+        }
+
+        windowRef.width = Math.max(minimumWidthValue, Math.min(currentWidth, maximumWidth))
+        windowRef.height = Math.max(minimumHeightValue, Math.min(currentHeight, maximumHeight))
+    }
+
+    // A saved window geometry may come from a larger monitor or from a
+    // previous multi-monitor setup.  Clamping only x/y leaves the window
+    // wider/taller than the current screen, which makes the right-hand part
+    // of panels such as Signal RX unreachable until the user resizes it.
+    function fitWindowSizeToAvailableScreen(windowRef, savedX, savedY) {
+        if (!windowRef)
+            return
+
+        var screens = availableScreenGeometries()
+        if (screens.length === 0)
+            return
+
+        var savedWidth = safeNumber(windowRef.width, 0)
+        var savedHeight = safeNumber(windowRef.height, 0)
+        var centerX = safeNumber(savedX, NaN) + savedWidth / 2
+        var centerY = safeNumber(savedY, NaN) + savedHeight / 2
+        var target = null
+
+        if (isFinite(centerX) && isFinite(centerY)) {
+            for (var i = 0; i < screens.length; ++i) {
+                var candidate = screens[i]
+                if (centerX >= candidate.x && centerX < candidate.x + candidate.width &&
+                    centerY >= candidate.y && centerY < candidate.y + candidate.height) {
+                    target = candidate
+                    break
+                }
+            }
+        }
+        if (!target)
+            target = screens[0]
+
+        fitWindowSizeToGeometry(windowRef, target)
+    }
+
+    function dragFloatingWindowToGlobal(windowRef, pressWindowPos, pressGlobalPos, currentGlobalPos) {
+        if (!windowRef || !pressWindowPos || !pressGlobalPos || !currentGlobalPos)
+            return
+        var nextX = Math.round(pressWindowPos.x + currentGlobalPos.x - pressGlobalPos.x)
+        var nextY = Math.round(pressWindowPos.y + currentGlobalPos.y - pressGlobalPos.y)
+        if (isFinite(nextX))
+            windowRef.x = nextX
+        if (isFinite(nextY))
+            windowRef.y = nextY
+    }
+
+    function startNativeFloatingWindowMove(windowRef) {
+        if (!windowRef || typeof windowRef.startSystemMove !== "function")
+            return false
+        try {
+            return windowRef.startSystemMove()
+        } catch(e) {
+            console.log("startSystemMove failed: " + e)
+        }
+        return false
+    }
+
+    function finishFloatingWindowDrag(windowRef, preserveAspectRatio) {
+        if (!windowRef)
+            return
+        var target = geometryForWindowScreen(windowRef)
+        fitWindowSizeToGeometry(windowRef, target, preserveAspectRatio)
+        if (target) {
+            if (target.screen && windowRef.screen !== target.screen)
+                windowRef.screen = target.screen
+            windowRef.x = Math.max(target.x,
+                                   Math.min(windowRef.x,
+                                            target.x + Math.max(0, target.width - windowRef.width)))
+            windowRef.y = Math.max(target.y,
+                                   Math.min(windowRef.y,
+                                            target.y + Math.max(0, target.height - windowRef.height)))
+        }
+        scheduleWindowStateSave()
+    }
+
+    function beginFloatingGeometryInteraction() {
+        floatingGeometryInteractionDepth += 1
+        deferredWindowStateSave = true
+        if (typeof windowStateSaveTimer !== "undefined" && windowStateSaveTimer)
+            windowStateSaveTimer.stop()
+    }
+
+    function endFloatingGeometryInteraction() {
+        floatingGeometryInteractionDepth = Math.max(0, floatingGeometryInteractionDepth - 1)
+        if (floatingGeometryInteractionDepth === 0 && deferredWindowStateSave)
+            scheduleWindowStateSave(true)
+    }
+
+    function resetFloatingWindowGeometry(windowRef, preferredWidth, preferredHeight) {
+        if (!windowRef)
+            return
+
+        var screens = availableScreenGeometries()
+        if (screens.length === 0)
+            return
+        var target = screens[0]
+        var minimumWidthValue = Math.max(1, safeNumber(windowRef.minimumWidth, 1))
+        var minimumHeightValue = Math.max(1, safeNumber(windowRef.minimumHeight, 1))
+        var availableWidth = Math.max(minimumWidthValue, safeNumber(target.width, preferredWidth) - 16)
+        var availableHeight = Math.max(minimumHeightValue, safeNumber(target.height, preferredHeight) - 16)
+        var resetWidth = Math.max(minimumWidthValue,
+                                  Math.min(Math.round(preferredWidth), availableWidth))
+        var resetHeight = Math.max(minimumHeightValue,
+                                   Math.min(Math.round(preferredHeight), availableHeight))
+
+        if (target.screen && windowRef.screen !== target.screen)
+            windowRef.screen = target.screen
+        windowRef.width = resetWidth
+        windowRef.height = resetHeight
+        windowRef.x = Math.round(target.x + Math.max(0, (target.width - resetWidth) / 2))
+        windowRef.y = Math.round(target.y + Math.max(0, (target.height - resetHeight) / 2))
     }
 
     function safeStoredPanelWidth(value, fallback, minimum) {
@@ -154,11 +456,16 @@ ApplicationWindow {
         return Math.max(minimum, Math.round(numeric))
     }
 
+    // Stadio 1: la larghezza-valore vive ora sugli SLOT-HOST (colSlot0/1/2) per POSIZIONE.
+    // Le chiavi restano mappate per posizione (slot0=uiFullSpectrumPanelWidth,
+    // slot1=uiSignalRxPanelWidth, slot2=uiLiveMapPanelWidth) indipendentemente da quale
+    // pannello le occupa. I minimi sono per-slot (classicMinWidthForSlot) ma il default
+    // (mappa = ordine attuale) coincide esattamente col comportamento precedente.
     function restoreDecodePanelWidths() {
         if (typeof decodePanelsSplit === "undefined" || !decodePanelsSplit ||
-            typeof period1Panel === "undefined" || !period1Panel ||
-            typeof rxFreqPanel === "undefined" || !rxFreqPanel ||
-            typeof liveMapPanelHost === "undefined" || !liveMapPanelHost) {
+            typeof colSlot0 === "undefined" || !colSlot0 ||
+            typeof colSlot1 === "undefined" || !colSlot1 ||
+            typeof colSlot2 === "undefined" || !colSlot2) {
             Qt.callLater(restoreDecodePanelWidths)
             return
         }
@@ -169,82 +476,119 @@ ApplicationWindow {
             return
         }
 
-        liveMapPanelHost.targetPanelWidth = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, 280)
+        colSlot2.targetPanelWidth = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, 280)
 
         if (!decodePanelLayoutSaved) {
-            period1Panel.userDraggedSplit = false
-            period1Panel.applyCenterSplit()
+            colSlot0.userDraggedSplit = false
+            colSlot0.applyCenterSplit()
             return
         }
 
-        var period1Min = 360
-        var rxMin = 260
-        var mapMin = 280
-        var savedPeriod1 = safeStoredPanelWidth(savedPeriod1PanelWidth, 400, period1Min)
-        var savedRx = safeStoredPanelWidth(savedRxFreqPanelWidth, 400, rxMin)
-        var savedMap = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, mapMin)
-        var mapWidth = 0
+        // Minimi per posizione (seguono il pannello che occupa lo slot).
+        var slot0Min = classicMinWidthForSlot(0)
+        var slot1Min = classicMinWidthForSlot(1)
+        var savedSlot0 = safeStoredPanelWidth(savedPeriod1PanelWidth, 400, slot0Min)
+        var savedSlot1 = safeStoredPanelWidth(savedRxFreqPanelWidth, 400, slot1Min)
+        var savedSlot2 = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, 280)
+        var slot2Width = 0
 
-        if (mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached) {
-            var maxMapWidth = Math.max(mapMin, totalWidth - period1Min - rxMin)
-            mapWidth = Math.min(savedMap, maxMapWidth)
+        // Lo slot2 mostra una larghezza solo se NON è collassato (Live Map visibile lì).
+        if (!classicSlotCollapsed(2)) {
+            var slot2Min = classicMinWidthForSlot(2)
+            var maxSlot2Width = Math.max(slot2Min, totalWidth - slot0Min - slot1Min)
+            slot2Width = Math.min(savedSlot2, maxSlot2Width)
         }
 
-        var remainingWidth = Math.max(period1Min + rxMin, totalWidth - mapWidth)
-        var savedCombined = Math.max(1, savedPeriod1 + savedRx)
-        var period1Width = Math.round(remainingWidth * (savedPeriod1 / savedCombined))
-        period1Width = Math.max(period1Min, Math.min(period1Width, remainingWidth - rxMin))
-        var rxWidth = Math.max(rxMin, remainingWidth - period1Width)
+        // 1.0.385 — la 4ª colonna (DX Cluster) occupa larghezza solo se non collassata.
+        var slot3Width = 0
+        if (!classicSlotCollapsed(3)) {
+            var slot3Min = classicMinWidthForSlot(3)
+            var savedSlot3 = safeStoredPanelWidth(savedDxClusterColumnWidth, 380, slot3Min)
+            var maxSlot3Width = Math.max(slot3Min, totalWidth - slot0Min - slot1Min - slot2Width)
+            slot3Width = Math.min(savedSlot3, maxSlot3Width)
+        }
 
-        period1Panel.userDraggedSplit = true
-        period1Panel.targetPanelWidth = period1Width
-        rxFreqPanel.targetPanelWidth = rxWidth
-        if (mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached)
-            liveMapPanelHost.targetPanelWidth = mapWidth
+        var remainingWidth = Math.max(slot0Min + slot1Min, totalWidth - slot2Width - slot3Width)
+        var savedCombined = Math.max(1, savedSlot0 + savedSlot1)
+        var slot0Width = Math.round(remainingWidth * (savedSlot0 / savedCombined))
+        slot0Width = Math.max(slot0Min, Math.min(slot0Width, remainingWidth - slot1Min))
+        var slot1Width = Math.max(slot1Min, remainingWidth - slot0Width)
+
+        colSlot0.userDraggedSplit = true
+        colSlot0.targetPanelWidth = slot0Width
+        colSlot1.targetPanelWidth = slot1Width
+        if (!classicSlotCollapsed(2))
+            colSlot2.targetPanelWidth = slot2Width
+        if (!classicSlotCollapsed(3) && typeof colSlot3 !== "undefined" && colSlot3)
+            colSlot3.targetPanelWidth = slot3Width
     }
 
-    function persistDecodePanelWidths() {
+    function captureDecodePanelWidths() {
+        var layoutSettings = ({})
         if (!bridge)
-            return
+            return layoutSettings
 
-        if (typeof period1Panel !== "undefined" && period1Panel &&
-            !period1Detached && period1Panel.width >= 360) {
-            savedPeriod1PanelWidth = Math.round(period1Panel.width)
-            bridge.setSetting("uiFullSpectrumPanelWidth", savedPeriod1PanelWidth)
+        if (typeof colSlot0 !== "undefined" && colSlot0 &&
+            !colSlot0.slotCollapsed && colSlot0.width >= classicMinWidthForSlot(0)) {
+            savedPeriod1PanelWidth = Math.round(colSlot0.width)
+            layoutSettings.uiFullSpectrumPanelWidth = savedPeriod1PanelWidth
         }
 
-        if (typeof rxFreqPanel !== "undefined" && rxFreqPanel &&
-            !rxFreqDetached && rxFreqPanel.width >= 260) {
-            savedRxFreqPanelWidth = Math.round(rxFreqPanel.width)
-            bridge.setSetting("uiSignalRxPanelWidth", savedRxFreqPanelWidth)
+        if (typeof colSlot1 !== "undefined" && colSlot1 &&
+            !colSlot1.slotCollapsed && colSlot1.width >= classicMinWidthForSlot(1)) {
+            savedRxFreqPanelWidth = Math.round(colSlot1.width)
+            layoutSettings.uiSignalRxPanelWidth = savedRxFreqPanelWidth
         }
 
-        if (typeof liveMapPanelHost !== "undefined" && liveMapPanelHost) {
-            var liveMapWidth = liveMapPanelHost.visible ? liveMapPanelHost.width : liveMapPanelHost.targetPanelWidth
-            if (liveMapWidth >= 280) {
-                savedLiveMapPanelWidth = Math.round(liveMapWidth)
-                liveMapPanelHost.targetPanelWidth = savedLiveMapPanelWidth
-                bridge.setSetting("uiLiveMapPanelWidth", savedLiveMapPanelWidth)
+        if (typeof colSlot2 !== "undefined" && colSlot2) {
+            var slot2Width = !colSlot2.slotCollapsed ? colSlot2.width : colSlot2.targetPanelWidth
+            if (slot2Width >= 280) {
+                savedLiveMapPanelWidth = Math.round(slot2Width)
+                colSlot2.targetPanelWidth = savedLiveMapPanelWidth
+                layoutSettings.uiLiveMapPanelWidth = savedLiveMapPanelWidth
+            }
+        }
+
+        // 1.0.385 — persisti la larghezza della 4ª colonna (DX Cluster)
+        if (typeof colSlot3 !== "undefined" && colSlot3) {
+            var slot3Width = !colSlot3.slotCollapsed ? colSlot3.width : colSlot3.targetPanelWidth
+            if (slot3Width >= 320) {
+                savedDxClusterColumnWidth = Math.round(slot3Width)
+                colSlot3.targetPanelWidth = savedDxClusterColumnWidth
+                layoutSettings.uiDxClusterColumnWidth = savedDxClusterColumnWidth
             }
         }
 
         decodePanelLayoutSaved = true
-        bridge.setSetting("uiDecodePanelsLayoutSaved", true)
+        layoutSettings.uiDecodePanelsLayoutSaved = true
+        return layoutSettings
     }
 
     Component.onCompleted: {
         startupCompletedStartedMs = Date.now()
         startupLog("Component.onCompleted begin")
-        callerQueuePanelVisible = !!safeBridgeSetting("uiCallerQueuePanelVisible", !!(bridge && bridge.foxMode))
+        syncSpectrumVisibility()
+        callerQueuePanelVisible = settingBool("uiCallerQueuePanelVisible", !!(bridge && bridge.foxMode))
         startupLog("fox/caller queue state restored")
-        decodePanelLayoutSaved = !!safeBridgeSetting("uiDecodePanelsLayoutSaved", false)
+        decodePanelLayoutSaved = settingBool("uiDecodePanelsLayoutSaved", false)
+        // 1.0.338: l'app parte SEMPRE in classico (footer+waterfall+TX). La
+        // DX-Pedition si attiva solo a mano da Impostazioni e NON si auto-ripristina
+        // all'avvio (scelta utente). Azzero anche il setting per coerenza col checkbox.
+        if (settingBool("uiDxPeditionMode", false))
+            bridge.setSetting("uiDxPeditionMode", false)
+        dxPeditionMode = false
+        startupLog("dx-pedition mode: always start classic (restore disabled by user)")
         savedPeriod1PanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiFullSpectrumPanelWidth", 400), 400, 360)
-        savedRxFreqPanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiSignalRxPanelWidth", 400), 400, 260)
+        savedRxFreqPanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiSignalRxPanelWidth", 400), 400, 360)
         savedLiveMapPanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiLiveMapPanelWidth", 360), 360, 280)
+        fsLoadColumns()
         startupLog("decode panel settings restored")
 
         var state = safeWindowState("mainWindow")
         startupLog("main window state read")
+        mainWindowMaximized = state.maximized !== undefined
+                ? coerceBool(state.maximized, false)
+                : false
         var restoredWidth = safeNumber(state.width, width)
         var restoredHeight = safeNumber(state.height, height)
         if (restoredWidth > 0) width = restoredWidth
@@ -252,6 +596,7 @@ ApplicationWindow {
         var pos
         var restoredX = safeNumber(state.x, NaN)
         var restoredY = safeNumber(state.y, NaN)
+        fitWindowSizeToAvailableScreen(mainWindow, restoredX, restoredY)
         if (isFinite(restoredX) && isFinite(restoredY)) {
             pos = clampWindowPosition(restoredX, restoredY, width, height)
         } else {
@@ -263,18 +608,41 @@ ApplicationWindow {
         }
         x = pos.x
         y = pos.y
+        normalWindowX = Math.round(x)
+        normalWindowY = Math.round(y)
+        normalWindowWidth = Math.round(width)
+        normalWindowHeight = Math.round(height)
         startupLog("main window geometry applied x=" + x + " y=" + y + " w=" + width + " h=" + height)
-        windowStateRestoreInProgress = false
 
-        // Force window visible on Windows — some WM/GPU combos need explicit calls
-        visible = true
-        show()
+        // Force the native state explicitly on Windows. BootLoader repeats this
+        // presentation call after configuring the graphics backend, so it must
+        // preserve rather than reset a restored maximised state.
+        showRestoredWindowState()
+        windowStateRestoreInProgress = false
         raise()
         requestActivate()
         startupLog("main window show/raise/requestActivate done")
+        startupLiveMapPopoutRestoreTimer.restart()
+        // The clock is re-parented into contentItem during header creation.  At
+        // that point the final window geometry may not exist yet, so apply the
+        // persisted position once more after the first layout pass.
+        Qt.callLater(function() {
+            mainWindow.applyWorldClockSlot()
+            Qt.callLater(mainWindow.applyWorldClockSlot)
+        })
         Qt.callLater(restoreDecodePanelWidths)
+        // Stadio 1+2: applica l'ordine pannelli persistito re-parentando i 4 pannelli
+        // (3 colonne + TX area) negli slot-host indicati dalla mappa (default = ordine
+        // attuale -> no-op; una mappa salvata a 3 elementi migra con "txpanel" in slot 3).
+        Qt.callLater(applyClassicColumnOrder)
         bridge.notifyMainQmlReady()
         startupLog("bridge notified ready")
+        if (startupVisualStagingEnabled) {
+            startupLog("visual startup staging armed")
+            startupWaterfallStageTimer.restart()
+            startupLiveMapStageTimer.restart()
+        }
+        firstUseWarmupTimer.restart()
         console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
@@ -285,53 +653,216 @@ ApplicationWindow {
     // Timer che salva le impostazioni 2s dopo ogni modifica (debounce)
     Timer {
         id: saveTimer
+        objectName: "settingsSaveTimer"
         interval: 2000
         repeat: false
-        onTriggered: bridge.saveSettings()
+        onTriggered: bridge.saveSettingsAsync()
     }
     Timer {
         id: windowStateSaveTimer
+        objectName: "windowStateSaveTimer"
         interval: 500
         repeat: false
         onTriggered: persistWindowLayouts()
     }
     Timer {
-        id: firstUseWarmupTimer
-        interval: 2500
+        id: normalWindowGeometryTimer
+        objectName: "normalWindowGeometryTimer"
+        interval: 180
         repeat: false
-        running: true
+        onTriggered: captureNormalWindowGeometry()
+    }
+    Timer {
+        id: firstUseWarmupTimer
+        interval: 30000
+        repeat: false
+        running: false
         onTriggered: {
+            if (bridge && (bridge.monitoring || bridge.transmitting || bridge.tuning || bridge.decoding)) {
+                interval = 10000
+                restart()
+                return
+            }
             if (bridge && bridge.warmLogCacheAsync)
                 bridge.warmLogCacheAsync()
-            if (settingsDialog && settingsDialog.warmUpPopup)
-                settingsDialog.warmUpPopup()
+            // SettingsDialog contains all tabs in one StackLayout.  Loading it
+            // on the first click can pause the GUI while RX is active. Warm it
+            // once during a pressure-free window; low-end machines retry later
+            // instead of moving that cost into decoder delivery.
+            if (bridge && bridge.cpuPressureNow && bridge.cpuPressureNow()) {
+                interval = 10000
+                restart()
+                return
+            }
+            if (!settingsDialogLoader.item) {
+                settingsDialogLoader.pendingAction = function(item) {
+                    if (item && item.warmUpPopup)
+                        item.warmUpPopup()
+                }
+                settingsDialogLoader.active = true
+            } else {
+                var settings = settingsDialogLoader.item
+                if (settings && settings.warmUpPopup)
+                    settings.warmUpPopup()
+            }
         }
     }
+    Timer {
+        id: startupWaterfallStageTimer
+        interval: 1200
+        repeat: false
+        running: false
+        onTriggered: maybeFinishStartupWaterfallVisualStage("timer")
+    }
+    Timer {
+        id: startupWaterfallStageRetryTimer
+        interval: 1000
+        repeat: false
+        running: false
+        onTriggered: maybeFinishStartupWaterfallVisualStage("safe-slot")
+    }
+    Timer {
+        id: startupLiveMapStageTimer
+        interval: 3500
+        repeat: false
+        running: false
+        onTriggered: maybeFinishStartupLiveMapVisualStage("timer")
+    }
+    Timer {
+        id: startupLiveMapStageRetryTimer
+        interval: 1000
+        repeat: false
+        running: false
+        onTriggered: maybeFinishStartupLiveMapVisualStage("safe-slot")
+    }
+    Timer {
+        id: startupLiveMapPopoutRestoreTimer
+        interval: 350
+        repeat: false
+        running: false
+        onTriggered: mainWindow.restoreLiveMapPopoutAfterStartup()
+    }
     // Funzione helper chiamabile da qualsiasi parte del QML
-    function scheduleSave() { saveTimer.restart() }
-    function scheduleWindowStateSave() {
-        if (!windowStateRestoreInProgress) {
+    function scheduleSave() {
+        if (startupVisualStagingEnabled && !startupLiveMapVisualReady) {
+            startupSettingsSavePending = true
+            return
+        }
+        if (typeof saveTimer !== "undefined" && saveTimer)
+            saveTimer.restart()
+    }
+    function scheduleWindowStateSave(forceSave) {
+        if (!forceSave && floatingGeometryInteractionDepth > 0) {
+            deferredWindowStateSave = true
+            return
+        }
+        if (!windowStateRestoreInProgress && typeof windowStateSaveTimer !== "undefined" && windowStateSaveTimer) {
+            deferredWindowStateSave = false
             windowStateSaveTimer.restart()
         }
     }
 
+    function captureNormalWindowGeometry() {
+        if (windowStateRestoreInProgress || visibility !== Window.Windowed)
+            return
+
+        var capturedWidth = Math.round(safeNumber(width, normalWindowWidth))
+        var capturedHeight = Math.round(safeNumber(height, normalWindowHeight))
+        var capturedX = Math.round(safeNumber(x, normalWindowX))
+        var capturedY = Math.round(safeNumber(y, normalWindowY))
+        if (capturedWidth < minimumWidth || capturedHeight < minimumHeight
+                || capturedWidth > 10000 || capturedHeight > 6000
+                || !isFinite(capturedX) || !isFinite(capturedY))
+            return
+
+        normalWindowX = capturedX
+        normalWindowY = capturedY
+        normalWindowWidth = capturedWidth
+        normalWindowHeight = capturedHeight
+    }
+
+    function scheduleNormalWindowGeometryCapture() {
+        if (!windowStateRestoreInProgress && visibility === Window.Windowed
+                && typeof normalWindowGeometryTimer !== "undefined"
+                && normalWindowGeometryTimer)
+            normalWindowGeometryTimer.restart()
+    }
+
+    function showRestoredWindowState() {
+        visible = true
+        if (mainWindowMaximized && typeof showMaximized === "function")
+            showMaximized()
+        else
+            show()
+    }
+
+    function frequencyDisplayCells(freqHz) {
+        var numericHz = Math.round(Number(freqHz) || 0)
+        var text = (numericHz / 1000000).toFixed(6)
+        var dot = text.indexOf(".")
+        var cells = []
+        for (var i = 0; i < text.length; ++i) {
+            var ch = text.charAt(i)
+            var isDigit = ch >= "0" && ch <= "9"
+            var stepHz = 0
+            if (isDigit && dot >= 0) {
+                if (i < dot) {
+                    stepHz = Math.pow(10, dot - i - 1) * 1000000
+                } else if (i > dot) {
+                    stepHz = Math.pow(10, 6 - (i - dot))
+                }
+                stepHz = Math.max(1, Math.round(stepHz))
+            }
+            cells.push({ text: ch, digit: isDigit, stepHz: stepHz })
+        }
+        return cells
+    }
+
+    function tuneDialByStep(stepHz, direction) {
+        if (!bridge || !(stepHz > 0))
+            return
+        var currentHz = Math.round(Number(bridge.frequency) || 0)
+        var nextHz = Math.max(0, currentHz + Math.round(stepHz) * direction)
+        if (nextHz === currentHz)
+            return
+        bridge.qsyTo(nextHz, bridge.mode || "")
+    }
+
     function persistSettingsDialogIfOpen() {
-        if (settingsDialog && settingsDialog.visible && settingsDialog.persistSettingsNow)
-            settingsDialog.persistSettingsNow()
+        var settings = settingsDialogLoader.item
+        if (settings && settings.visible && settings.persistSettingsNow)
+            settings.persistSettingsNow()
     }
 
     function restoreFloatingWindowState(windowRef, key, detachedPropName, minimizedPropName) {
         if (!windowRef)
-            return
+            return {}
         var state = safeWindowState(key)
-        var restoredWidth = safeNumber(state.width, windowRef.width)
-        var restoredHeight = safeNumber(state.height, windowRef.height)
-        if (restoredWidth > 0) windowRef.width = restoredWidth
-        if (restoredHeight > 0) windowRef.height = restoredHeight
+        var minimumWidthValue = Math.max(1, safeNumber(windowRef.minimumWidth, 1))
+        var minimumHeightValue = Math.max(1, safeNumber(windowRef.minimumHeight, 1))
+        var defaultWidth = Math.max(minimumWidthValue, safeNumber(windowRef.width, minimumWidthValue))
+        var defaultHeight = Math.max(minimumHeightValue, safeNumber(windowRef.height, minimumHeightValue))
+        var restoredWidth = Number(state.width)
+        var restoredHeight = Number(state.height)
+
+        // Reject corrupted or obsolete geometries instead of allowing a
+        // floating window to shrink progressively at every restore.
+        if (!isFinite(restoredWidth) || restoredWidth < minimumWidthValue || restoredWidth > 10000)
+            restoredWidth = defaultWidth
+        if (!isFinite(restoredHeight) || restoredHeight < minimumHeightValue || restoredHeight > 6000)
+            restoredHeight = defaultHeight
+        windowRef.width = Math.round(restoredWidth)
+        windowRef.height = Math.round(restoredHeight)
         var restoredX = safeNumber(state.x, NaN)
         var restoredY = safeNumber(state.y, NaN)
+        fitWindowSizeToAvailableScreen(windowRef, restoredX, restoredY)
         if (isFinite(restoredX) && isFinite(restoredY)) {
             var pos = clampWindowPosition(restoredX, restoredY, windowRef.width, windowRef.height)
+            // Hidden QQuickWindows start on the primary display. Associate
+            // the saved target screen before applying virtual coordinates so
+            // Qt does not silently pull external-monitor windows back.
+            if (pos.screen && windowRef.screen !== pos.screen)
+                windowRef.screen = pos.screen
             windowRef.x = pos.x
             windowRef.y = pos.y
         }
@@ -347,6 +878,7 @@ ApplicationWindow {
                 windowRef.visible = true
             }
         }
+        return state
     }
 
     function minimizeFloatingWindow(windowRef, minimizedPropName) {
@@ -371,33 +903,145 @@ ApplicationWindow {
     }
 
     function persistWindowLayouts() {
-        persistDecodePanelWidths()
-        bridge.saveWindowState("mainWindow", Math.round(x), Math.round(y), Math.round(width), Math.round(height), false, visibility === Window.Minimized)
-        bridge.saveWindowState("waterfallWindow", Math.round(waterfallWindow.x), Math.round(waterfallWindow.y), Math.round(waterfallWindow.width), Math.round(waterfallWindow.height), waterfallDetached, waterfallMinimized)
-        bridge.saveWindowState("logFloatingWindow", Math.round(logFloatingWindow.x), Math.round(logFloatingWindow.y), Math.round(logFloatingWindow.width), Math.round(logFloatingWindow.height), logWindowDetached, logWindowMinimized)
-        bridge.saveWindowState("astroFloatingWindow", Math.round(astroFloatingWindow.x), Math.round(astroFloatingWindow.y), Math.round(astroFloatingWindow.width), Math.round(astroFloatingWindow.height), astroWindowDetached, astroWindowMinimized)
-        bridge.saveWindowState("macroFloatingWindow", Math.round(macroFloatingWindow.x), Math.round(macroFloatingWindow.y), Math.round(macroFloatingWindow.width), Math.round(macroFloatingWindow.height), macroDialogDetached, macroDialogMinimized)
-        bridge.saveWindowState("rigFloatingWindow", Math.round(rigFloatingWindow.x), Math.round(rigFloatingWindow.y), Math.round(rigFloatingWindow.width), Math.round(rigFloatingWindow.height), rigControlDetached, rigControlMinimized)
-        bridge.saveWindowState("period1FloatingWindow", Math.round(period1FloatingWindow.x), Math.round(period1FloatingWindow.y), Math.round(period1FloatingWindow.width), Math.round(period1FloatingWindow.height), period1Detached, period1Minimized)
-        bridge.saveWindowState("period2FloatingWindow", Math.round(period2FloatingWindow.x), Math.round(period2FloatingWindow.y), Math.round(period2FloatingWindow.width), Math.round(period2FloatingWindow.height), period2Detached, period2Minimized)
-        bridge.saveWindowState("rxFreqFloatingWindow", Math.round(rxFreqFloatingWindow.x), Math.round(rxFreqFloatingWindow.y), Math.round(rxFreqFloatingWindow.width), Math.round(rxFreqFloatingWindow.height), rxFreqDetached, rxFreqMinimized)
-        bridge.saveWindowState("txPanelFloatingWindow", Math.round(txPanelFloatingWindow.x), Math.round(txPanelFloatingWindow.y), Math.round(txPanelFloatingWindow.width), Math.round(txPanelFloatingWindow.height), txPanelDetached, txPanelMinimized)
-        bridge.saveWindowState("liveMapFloatingWindow", Math.round(liveMapFloatingWindow.x), Math.round(liveMapFloatingWindow.y), Math.round(liveMapFloatingWindow.width), Math.round(liveMapFloatingWindow.height), liveMapDetached, false)
-        bridge.saveWindowState("decoSyncMonitorWindow", Math.round(decoSyncMonitorWindow.x), Math.round(decoSyncMonitorWindow.y), Math.round(decoSyncMonitorWindow.width), Math.round(decoSyncMonitorWindow.height), false, decoSyncMonitorWindow.visibility === Window.Minimized)
+        function snapshot(windowRef, detached, minimized, geometryOverride, maximized) {
+            var geometry = geometryOverride || windowRef
+            var minimumWidthValue = Math.max(1, safeNumber(windowRef.minimumWidth, 1))
+            var minimumHeightValue = Math.max(1, safeNumber(windowRef.minimumHeight, 1))
+            var state = {
+                x: Math.round(safeNumber(geometry.x, windowRef.x)),
+                y: Math.round(safeNumber(geometry.y, windowRef.y)),
+                width: Math.max(minimumWidthValue,
+                                Math.round(safeNumber(geometry.width, minimumWidthValue))),
+                height: Math.max(minimumHeightValue,
+                                 Math.round(safeNumber(geometry.height, minimumHeightValue))),
+                detached: !!detached,
+                minimized: !!minimized
+            }
+            if (maximized !== undefined)
+                state.maximized = !!maximized
+            return state
+        }
+
+        var states = ({})
+        var mainNormalGeometry = {
+            x: normalWindowX,
+            y: normalWindowY,
+            width: normalWindowWidth,
+            height: normalWindowHeight
+        }
+        states.mainWindow = snapshot(mainWindow, false,
+                                     visibility === Window.Minimized,
+                                     mainNormalGeometry,
+                                     mainWindowMaximized)
+        states.waterfallWindow = snapshot(waterfallWindow, waterfallDetached, waterfallMinimized)
+        states.logFloatingWindow = snapshot(logFloatingWindow, logWindowDetached, logWindowMinimized)
+        states.astroFloatingWindow = snapshot(astroFloatingWindow, astroWindowDetached, astroWindowMinimized)
+        states.satelliteFloatingWindow = snapshot(satelliteFloatingWindow, satelliteWindowDetached, false)
+        states.macroFloatingWindow = snapshot(macroFloatingWindow, macroDialogDetached, macroDialogMinimized)
+        states.settingsFloatingWindow = snapshot(settingsFloatingWindow, false, false)
+        states.mamFloatingWindow = snapshot(mamFloatingWindow, false, false)
+        states.decometerFloatingWindow = snapshot(decometerFloatingWindow, false, false)
+        states.activeStationsFloatingWindow = snapshot(activeStationsFloatingWindow, false, false)
+        states.rigFloatingWindow = snapshot(rigFloatingWindow, rigControlDetached, rigControlMinimized)
+        states.period1FloatingWindow = snapshot(period1FloatingWindow, period1Detached, period1Minimized)
+        states.period2FloatingWindow = snapshot(period2FloatingWindow, period2Detached, period2Minimized)
+        states.rxFreqFloatingWindow = snapshot(rxFreqFloatingWindow, rxFreqDetached, rxFreqMinimized)
+        states.txPanelFloatingWindow = snapshot(txPanelFloatingWindow, txPanelDetached, txPanelMinimized)
+        states.liveMapFloatingWindow = snapshot(liveMapFloatingWindow, liveMapDetached, false)
+        states.decoSyncMonitorWindow = snapshot(decoSyncMonitorWindow, false, decoSyncMonitorWindow.visibility === Window.Minimized)
+        // 1.0.275 — DX Cluster floating window
+        if (dxClusterFloatingWindow)
+            states.dxClusterFloatingWindow = snapshot(dxClusterFloatingWindow, dxClusterDetached, dxClusterMinimized)
+
+        bridge.saveWindowStatesAsync(states, captureDecodePanelWidths())
+    }
+
+    // 1.0.263 (fork-only) — Reset Layout: ricevi signal dal backend e ripristina
+    // tutte le floating windows a docked + centra mainWindow sul primary screen.
+    Connections {
+        target: bridge
+        function onWindowLayoutResetRequested() {
+            console.log("[ResetLayout] applying default layout")
+            // 1) Re-dock di tutte le finestre floating (toglie detached + minimized)
+            waterfallDetached = false;   waterfallMinimized = false
+            logWindowDetached = false;   logWindowMinimized = false
+            astroWindowDetached = false; astroWindowMinimized = false
+            satelliteWindowDetached = false
+            if (astroFloatingWindow) astroFloatingWindow.hide()
+            if (satelliteFloatingWindow) satelliteFloatingWindow.hide()
+            macroDialogDetached = false; macroDialogMinimized = false
+            if (settingsFloatingWindow) {
+                settingsFloatingWindow.hideHostedWindow()
+                resetFloatingWindowGeometry(settingsFloatingWindow,
+                                            settingsFloatingWindow.preferredWidth,
+                                            settingsFloatingWindow.preferredHeight)
+            }
+            if (mamFloatingWindow) mamFloatingWindow.hideHostedWindow()
+            if (decometerFloatingWindow) decometerFloatingWindow.hideHostedWindow()
+            activeStationsPanelVisible = false
+            if (activeStationsFloatingWindow) activeStationsFloatingWindow.hide()
+            rigControlDetached = false;  rigControlMinimized = false
+            period1Detached = false;     period1Minimized = false
+            period2Detached = false;     period2Minimized = false
+            rxFreqDetached = false;      rxFreqMinimized = false
+            txPanelDetached = false;     txPanelMinimized = false
+            liveMapDetached = false;     liveMapMinimized = false
+            // 1.0.275 — DX Cluster: riporta alla posizione default vicino bordo destro mainWindow
+            dxClusterMinimized = false
+            if (dxClusterFloatingWindow) {
+                dxClusterFloatingWindow.width = 560
+                dxClusterFloatingWindow.height = 360
+                dxClusterFloatingWindow.x = mainWindow.x + Math.max(0, mainWindow.width - 560 - 60)
+                dxClusterFloatingWindow.y = mainWindow.y + 80
+                dxClusterFloatingWindow.visibility = Window.Windowed
+                if (dxClusterFloatingWindow.visible) dxClusterFloatingWindow.raise()
+            }
+
+            // 2) Centra mainWindow su primary screen con dimensioni default
+            var geo = bridge.primaryScreenAvailableGeometry()
+            if (geo && geo.width && geo.height) {
+                var dw = Math.min(1600, Math.max(1024, geo.width  - 100))
+                var dh = Math.min(1000, Math.max(720,  geo.height - 100))
+                visibility = Window.Windowed
+                width  = dw
+                height = dh
+                x = geo.x + Math.round((geo.width  - dw) / 2)
+                y = geo.y + Math.round((geo.height - dh) / 2)
+            } else {
+                visibility = Window.Windowed
+                width = 1280; height = 800; x = 100; y = 100
+            }
+            mainWindowMaximized = false
+            captureNormalWindowGeometry()
+            raise(); requestActivate()
+
+            // 3) Forza salvataggio nuovo state pulito (sovrascrive QSettings)
+            Qt.callLater(persistWindowLayouts)
+        }
     }
 
     // Salva impostazioni bridge al close
     onClosing: function(close) {
         saveTimer.stop()
         windowStateSaveTimer.stop()
+        normalWindowGeometryTimer.stop()
         applicationClosing = true
+        // Keep the last position even when the user closes immediately after
+        // dragging, before the normal settings debounce can run.
+        persistWorldClockPos()
         persistSettingsDialogIfOpen()
+        captureNormalWindowGeometry()
         persistWindowLayouts()
-        bridge.saveSettings()
         console.log("Main window closing - shutting down application")
         // Close all floating windows
         if (waterfallWindow) waterfallWindow.close()
-        if (logWindow) logWindow.close()
+        if (logFloatingWindow) logFloatingWindow.close()
+        if (macroFloatingWindow) macroFloatingWindow.close()
+        if (settingsFloatingWindow) settingsFloatingWindow.close()
+        if (mamFloatingWindow) mamFloatingWindow.close()
+        if (decometerFloatingWindow) decometerFloatingWindow.close()
+        if (activeStationsFloatingWindow) activeStationsFloatingWindow.close()
+        if (logWindowLoader.item) logWindowLoader.item.close()
         closeLoaded(astroWindowLoader)
         closeLoaded(macroDialogLoader)
         if (txPanelFloatingWindow) txPanelFloatingWindow.close()
@@ -408,14 +1052,40 @@ ApplicationWindow {
         // Stop monitoring and cleanup
         bridge.stopMonitor()
         bridge.shutdown()
+        shutdownAsyncLoaders()
         // Quit application
         Qt.quit()
     }
 
-    onXChanged: scheduleWindowStateSave()
-    onYChanged: scheduleWindowStateSave()
-    onWidthChanged: scheduleWindowStateSave()
-    onHeightChanged: scheduleWindowStateSave()
+    onXChanged: {
+        scheduleNormalWindowGeometryCapture()
+        scheduleWindowStateSave()
+    }
+    onYChanged: {
+        scheduleNormalWindowGeometryCapture()
+        scheduleWindowStateSave()
+    }
+    onWidthChanged: {
+        scheduleNormalWindowGeometryCapture()
+        scheduleWindowStateSave()
+    }
+    onHeightChanged: {
+        scheduleNormalWindowGeometryCapture()
+        scheduleWindowStateSave()
+    }
+    onVisibilityChanged: {
+        if (windowStateRestoreInProgress)
+            return
+        if (visibility === Window.Maximized) {
+            normalWindowGeometryTimer.stop()
+            mainWindowMaximized = true
+        } else if (visibility === Window.Windowed) {
+            mainWindowMaximized = false
+            scheduleNormalWindowGeometryCapture()
+        }
+        if (visibility === Window.Maximized || visibility === Window.Windowed)
+            scheduleWindowStateSave()
+    }
 
     component FloatingResizeHandles: Item {
         id: resizeRoot
@@ -424,6 +1094,14 @@ ApplicationWindow {
         property int cornerSize: 16
         property int maxWidth: 10000
         property int maxHeight: 6000
+        property bool resizeActive: false
+        property bool resizeFromLeft: false
+        property bool resizeFromTop: false
+        property bool resizeFromRight: false
+        property bool resizeFromBottom: false
+        property point pressGlobalPos: Qt.point(0, 0)
+        property point pressWindowPos: Qt.point(0, 0)
+        property size pressWindowSize: Qt.size(0, 0)
 
         anchors.fill: parent
         enabled: !!targetWindow
@@ -443,148 +1121,384 @@ ApplicationWindow {
                             Math.min(value, maxHeight))
         }
 
-        function resizeRight(delta) {
-            targetWindow.width = boundedWidth(targetWindow.width + delta)
+        function beginResize(handle, mouse, fromLeft, fromTop, fromRight, fromBottom) {
+            if (!targetWindow || resizeActive)
+                return
+            resizeActive = true
+            resizeFromLeft = fromLeft
+            resizeFromTop = fromTop
+            resizeFromRight = fromRight
+            resizeFromBottom = fromBottom
+            pressGlobalPos = handle.mapToGlobal(mouse.x, mouse.y)
+            pressWindowPos = Qt.point(targetWindow.x, targetWindow.y)
+            pressWindowSize = Qt.size(targetWindow.width, targetWindow.height)
+            mainWindow.beginFloatingGeometryInteraction()
         }
 
-        function resizeBottom(delta) {
-            targetWindow.height = boundedHeight(targetWindow.height + delta)
+        function applyResize(handle, mouse) {
+            if (!targetWindow || !resizeActive)
+                return
+
+            var currentGlobal = handle.mapToGlobal(mouse.x, mouse.y)
+            var deltaX = currentGlobal.x - pressGlobalPos.x
+            var deltaY = currentGlobal.y - pressGlobalPos.y
+            var newWidth = pressWindowSize.width
+            var newHeight = pressWindowSize.height
+            var newX = pressWindowPos.x
+            var newY = pressWindowPos.y
+
+            if (resizeFromLeft) {
+                newWidth = boundedWidth(pressWindowSize.width - deltaX)
+                newX = pressWindowPos.x + pressWindowSize.width - newWidth
+            } else if (resizeFromRight) {
+                newWidth = boundedWidth(pressWindowSize.width + deltaX)
+            }
+
+            if (resizeFromTop) {
+                newHeight = boundedHeight(pressWindowSize.height - deltaY)
+                newY = pressWindowPos.y + pressWindowSize.height - newHeight
+            } else if (resizeFromBottom) {
+                newHeight = boundedHeight(pressWindowSize.height + deltaY)
+            }
+
+            if (resizeFromLeft)
+                targetWindow.x = Math.round(newX)
+            if (resizeFromTop)
+                targetWindow.y = Math.round(newY)
+            targetWindow.width = Math.round(newWidth)
+            targetWindow.height = Math.round(newHeight)
         }
 
-        function resizeLeft(delta) {
-            var oldWidth = targetWindow.width
-            var newWidth = boundedWidth(oldWidth - delta)
-            var applied = oldWidth - newWidth
-            targetWindow.x += applied
+        function finishResize() {
+            if (!resizeActive)
+                return
+            resizeActive = false
+            mainWindow.finishFloatingWindowDrag(targetWindow)
+            mainWindow.endFloatingGeometryInteraction()
+        }
+
+        MouseArea {
+            id: resizeRightHandle
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.topMargin: resizeRoot.cornerSize
+            anchors.bottomMargin: resizeRoot.cornerSize
+            width: resizeRoot.edgeSize
+            cursorShape: Qt.SizeHorCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeRightHandle, mouse, false, false, true, false)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeRightHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeLeftHandle
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.topMargin: resizeRoot.cornerSize
+            anchors.bottomMargin: resizeRoot.cornerSize
+            width: resizeRoot.edgeSize
+            cursorShape: Qt.SizeHorCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeLeftHandle, mouse, true, false, false, false)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeLeftHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeBottomHandle
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: resizeRoot.cornerSize
+            anchors.rightMargin: resizeRoot.cornerSize
+            height: resizeRoot.edgeSize
+            cursorShape: Qt.SizeVerCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeBottomHandle, mouse, false, false, false, true)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeBottomHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeTopHandle
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: resizeRoot.cornerSize
+            anchors.rightMargin: resizeRoot.cornerSize
+            height: resizeRoot.edgeSize
+            cursorShape: Qt.SizeVerCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeTopHandle, mouse, false, true, false, false)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeTopHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeBottomRightHandle
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeFDiagCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeBottomRightHandle, mouse, false, false, true, true)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeBottomRightHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeBottomLeftHandle
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeBDiagCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeBottomLeftHandle, mouse, true, false, false, true)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeBottomLeftHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeTopRightHandle
+            anchors.right: parent.right
+            anchors.top: parent.top
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeBDiagCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeTopRightHandle, mouse, false, true, true, false)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeTopRightHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+
+        MouseArea {
+            id: resizeTopLeftHandle
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeFDiagCursor
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: function(mouse) {
+                resizeRoot.beginResize(resizeTopLeftHandle, mouse, true, true, false, false)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.applyResize(resizeTopLeftHandle, mouse)
+            }
+            onReleased: resizeRoot.finishResize()
+            onCanceled: resizeRoot.finishResize()
+        }
+    }
+
+    // Corner-only resize for fixed-aspect instruments.  The handles live
+    // inside the face, so they do not create a second frame or an external
+    // input gutter.  Width drives height and the opposite corner stays fixed.
+    component ProportionalResizeHandles: Item {
+        id: proportionalResizeRoot
+        property var targetWindow
+        property real aspectRatio: 15 / 7
+        property int minWidth: 450
+        property int maxWidth: 1800
+        // A frameless Windows window has no native resize border.  Keep a
+        // generous hit target for the two proportional corner grips so the
+        // resize remains usable with display scaling enabled.
+        property int cornerSize: 32
+        property bool resizeActive: false
+        property bool nativeResizeActive: false
+        property bool nativeResizeAdjusting: false
+
+        anchors.fill: parent
+        enabled: !!targetWindow && aspectRatio > 0
+        z: 1000
+
+        function boundedWidth(value) {
+            return Math.max(minWidth, Math.min(maxWidth, Math.round(value)))
+        }
+
+        function beginResize() {
+            if (resizeActive)
+                return
+            resizeActive = true
+            mainWindow.beginFloatingGeometryInteraction()
+        }
+
+        // Il percorso nativo di Windows E' STATO PROVATO E NON FUNZIONA su
+        // questa finestra, ed e' peggio di non averlo: startSystemResize()
+        // risponde true — cioe' "il ridimensionamento me lo prendo io" — ma
+        // poi non muove un pixel, perche' la finestra e' frameless e Windows
+        // non ha un bordo di sistema da trascinare. Quella risposta accendeva
+        // nativeResizeActive, che a sua volta spegne il percorso manuale qui
+        // sotto: il risultato era una finestra semplicemente NON
+        // ridimensionabile, con gli angoli che rispondevano al mouse senza
+        // che succedesse niente.
+        //
+        // Verificato con una sonda sul posto: beginResize scatta, pressed e'
+        // true, startSystemResize torna true, la geometria resta identica.
+        //
+        // Si tiene quindi il percorso manuale, che aggiorna width e height a
+        // ogni movimento: meno fluido di quello di sistema, ma e' sotto il
+        // nostro controllo, rispetta il rapporto 15:7 esatto e soprattutto
+        // funziona. Se un domani si volesse riprovare la strada nativa, va
+        // verificato che la finestra cambi davvero dimensione prima di
+        // fidarsi del valore di ritorno.
+        function startNativeResize(edges) {
+            return false
+        }
+
+        function constrainNativeAspect() {
+            if (!nativeResizeActive || nativeResizeAdjusting || !targetWindow)
+                return
+            var bounded = boundedWidth(targetWindow.width)
+            var proportionalHeight = Math.max(targetWindow.minimumHeight,
+                                              Math.min(targetWindow.maximumHeight,
+                                                       Math.round(bounded / aspectRatio)))
+            nativeResizeAdjusting = true
+            targetWindow.width = bounded
+            targetWindow.height = proportionalHeight
+            nativeResizeAdjusting = false
+        }
+
+        function applyBottomResize(handle, mouse, fromLeft) {
+            if (!targetWindow || !handle.pressed || nativeResizeActive)
+                return
+            var currentGlobal = handle.mapToGlobal(mouse.x, mouse.y)
+            var deltaX = currentGlobal.x - handle.pressGlobalPos.x
+            var deltaY = currentGlobal.y - handle.pressGlobalPos.y
+            var horizontalGrowth = fromLeft ? -deltaX : deltaX
+            var verticalGrowthAsWidth = deltaY * aspectRatio
+            var widthGrowth = Math.abs(horizontalGrowth) >= Math.abs(verticalGrowthAsWidth)
+                              ? horizontalGrowth : verticalGrowthAsWidth
+            var newWidth = boundedWidth(handle.pressWindowSize.width + widthGrowth)
+            var newHeight = Math.round(newWidth / aspectRatio)
+
+            if (fromLeft)
+                targetWindow.x = Math.round(handle.pressWindowPos.x
+                                             + handle.pressWindowSize.width - newWidth)
             targetWindow.width = newWidth
-        }
-
-        function resizeTop(delta) {
-            var oldHeight = targetWindow.height
-            var newHeight = boundedHeight(oldHeight - delta)
-            var applied = oldHeight - newHeight
-            targetWindow.y += applied
             targetWindow.height = newHeight
         }
 
-        MouseArea {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: resizeRoot.cornerSize
-            anchors.bottomMargin: resizeRoot.cornerSize
-            width: resizeRoot.edgeSize
-            cursorShape: Qt.SizeHorCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed)
-                    resizeRoot.resizeRight(mouse.x - width / 2)
-            }
+        function finishResize() {
+            if (!targetWindow || !resizeActive)
+                return
+            nativeResizeActive = false
+            resizeActive = false
+            mainWindow.finishFloatingWindowDrag(targetWindow, aspectRatio)
+            mainWindow.endFloatingGeometryInteraction()
         }
 
         MouseArea {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: resizeRoot.cornerSize
-            anchors.bottomMargin: resizeRoot.cornerSize
-            width: resizeRoot.edgeSize
-            cursorShape: Qt.SizeHorCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed)
-                    resizeRoot.resizeLeft(mouse.x)
-            }
-        }
-
-        MouseArea {
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: resizeRoot.cornerSize
-            anchors.rightMargin: resizeRoot.cornerSize
-            height: resizeRoot.edgeSize
-            cursorShape: Qt.SizeVerCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed)
-                    resizeRoot.resizeBottom(mouse.y - height / 2)
-            }
-        }
-
-        MouseArea {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: resizeRoot.cornerSize
-            anchors.rightMargin: resizeRoot.cornerSize
-            height: resizeRoot.edgeSize
-            cursorShape: Qt.SizeVerCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed)
-                    resizeRoot.resizeTop(mouse.y)
-            }
-        }
-
-        MouseArea {
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            width: resizeRoot.cornerSize
-            height: resizeRoot.cornerSize
-            cursorShape: Qt.SizeFDiagCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed) {
-                    resizeRoot.resizeRight(mouse.x - width / 2)
-                    resizeRoot.resizeBottom(mouse.y - height / 2)
-                }
-            }
-        }
-
-        MouseArea {
+            id: proportionalBottomLeft
             anchors.left: parent.left
             anchors.bottom: parent.bottom
-            width: resizeRoot.cornerSize
-            height: resizeRoot.cornerSize
+            width: proportionalResizeRoot.cornerSize
+            height: proportionalResizeRoot.cornerSize
+            acceptedButtons: Qt.LeftButton
             cursorShape: Qt.SizeBDiagCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed) {
-                    resizeRoot.resizeLeft(mouse.x)
-                    resizeRoot.resizeBottom(mouse.y - height / 2)
-                }
+            preventStealing: true
+            property point pressGlobalPos: Qt.point(0, 0)
+            property point pressWindowPos: Qt.point(0, 0)
+            property size pressWindowSize: Qt.size(0, 0)
+            onPressed: function(mouse) {
+                pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                pressWindowPos = Qt.point(proportionalResizeRoot.targetWindow.x,
+                                          proportionalResizeRoot.targetWindow.y)
+                pressWindowSize = Qt.size(proportionalResizeRoot.targetWindow.width,
+                                          proportionalResizeRoot.targetWindow.height)
+                proportionalResizeRoot.beginResize()
+                proportionalResizeRoot.nativeResizeActive =
+                        proportionalResizeRoot.startNativeResize(Qt.LeftEdge | Qt.BottomEdge)
             }
+            onPositionChanged: function(mouse) {
+                proportionalResizeRoot.applyBottomResize(proportionalBottomLeft, mouse, true)
+            }
+            onReleased: proportionalResizeRoot.finishResize()
+            onCanceled: proportionalResizeRoot.finishResize()
         }
 
         MouseArea {
+            id: proportionalBottomRight
             anchors.right: parent.right
-            anchors.top: parent.top
-            width: resizeRoot.cornerSize
-            height: resizeRoot.cornerSize
-            cursorShape: Qt.SizeBDiagCursor
+            anchors.bottom: parent.bottom
+            width: proportionalResizeRoot.cornerSize
+            height: proportionalResizeRoot.cornerSize
             acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed) {
-                    resizeRoot.resizeRight(mouse.x - width / 2)
-                    resizeRoot.resizeTop(mouse.y)
-                }
-            }
-        }
-
-        MouseArea {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            width: resizeRoot.cornerSize
-            height: resizeRoot.cornerSize
             cursorShape: Qt.SizeFDiagCursor
-            acceptedButtons: Qt.LeftButton
-            onPositionChanged: function(mouse) {
-                if (pressed) {
-                    resizeRoot.resizeLeft(mouse.x)
-                    resizeRoot.resizeTop(mouse.y)
-                }
+            preventStealing: true
+            property point pressGlobalPos: Qt.point(0, 0)
+            property point pressWindowPos: Qt.point(0, 0)
+            property size pressWindowSize: Qt.size(0, 0)
+            onPressed: function(mouse) {
+                pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                pressWindowPos = Qt.point(proportionalResizeRoot.targetWindow.x,
+                                          proportionalResizeRoot.targetWindow.y)
+                pressWindowSize = Qt.size(proportionalResizeRoot.targetWindow.width,
+                                          proportionalResizeRoot.targetWindow.height)
+                proportionalResizeRoot.beginResize()
+                proportionalResizeRoot.nativeResizeActive =
+                        proportionalResizeRoot.startNativeResize(Qt.RightEdge | Qt.BottomEdge)
             }
+            onPositionChanged: function(mouse) {
+                proportionalResizeRoot.applyBottomResize(proportionalBottomRight, mouse, false)
+            }
+            onReleased: proportionalResizeRoot.finishResize()
+            onCanceled: proportionalResizeRoot.finishResize()
         }
     }
 
@@ -600,6 +1514,7 @@ ApplicationWindow {
     }
 
     // Waterfall detached state
+    property bool waterfallPanelVisible: settingBool("uiWaterfallPanelVisible", true)
     property bool waterfallDetached: false
     property bool waterfallMinimized: false
 
@@ -614,6 +1529,7 @@ ApplicationWindow {
     property bool logWindowMinimized: false
     property bool astroWindowDetached: false
     property bool astroWindowMinimized: false
+    property bool satelliteWindowDetached: false
     property bool macroDialogDetached: false
     property bool macroDialogMinimized: false
     property bool rigControlDetached: false
@@ -626,12 +1542,97 @@ ApplicationWindow {
     // 1.0.229 — Compact mode Full Spectrum: row height ridotta per
     // raddoppiare le righe visibili nella stessa viewport quando i
     // decode sono tanti (es. FT8 burst 20+ per slot). Opt-in default OFF.
-    property bool compactFullSpectrum: bridge ? !!bridge.getSetting("CompactFullSpectrum", false) : false
+    property bool compactFullSpectrum: settingBool("CompactFullSpectrum", false)
     property int fullSpectrumRowHeight: compactFullSpectrum ? 14 : 26
+    // 1.0.255 — flag transitioning per disabilitare YAnimator displaced
+    // durante toggle compact/full (height cambia su TUTTI i delegate
+    // contemporaneamente -> blink per 100ms di animation displaced).
+    property bool compactToggling: false
+    // 1.0.428 — calmante FT2 "slot-machine": durante una risposta partner il
+    // modello RX puo' fare shift/reset rapidi (match-key instabile; fix radice
+    // separato) e gli YAnimator displaced facevano scorrere le righe come reel.
+    // false = riposizionamento istantaneo (calmo, default). Vedi diagnosi 2026-06-21.
+    property bool decodeRowSlideAnim: false
+    Timer {
+        id: compactToggleTimer
+        interval: 220  // > 100ms animation + 100ms padding
+        repeat: false
+        onTriggered: compactToggling = false
+    }
     function toggleCompactFullSpectrum() {
+        compactToggling = true
+        compactToggleTimer.restart()
         compactFullSpectrum = !compactFullSpectrum
-        if (bridge)
-            bridge.setSetting("CompactFullSpectrum", compactFullSpectrum)
+        persistUiSetting("CompactFullSpectrum", compactFullSpectrum)
+    }
+
+    // 1.0.412 — Schermo intero opt-in. Uscita SEMPRE disponibile: tasto F11, Esc, e il
+    // pulsante ✕ dell'overlay in alto. NON persistito (saveWindowState non salva la
+    // visibility) → un riavvio non riparte MAI bloccato in fullscreen senza barra titolo.
+    function toggleFullScreen() {
+        mainWindow.visibility = (mainWindow.visibility === Window.FullScreen)
+            ? Window.Windowed : Window.FullScreen
+    }
+    function exitFullScreen() {
+        if (mainWindow.visibility === Window.FullScreen)
+            mainWindow.visibility = Window.Windowed
+    }
+    Shortcut {
+        sequences: ["F11"]
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.toggleFullScreen()
+    }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        enabled: mainWindow.visibility === Window.FullScreen
+        onActivated: mainWindow.exitFullScreen()
+    }
+    // Overlay di uscita dallo schermo intero: sempre visibile e cliccabile in fullscreen,
+    // così non si resta mai intrappolati senza barra del titolo (lezione stato-finestra).
+    Rectangle {
+        id: fullScreenExitBar
+        visible: mainWindow.visibility === Window.FullScreen
+        z: 100000
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 8
+        width: fsExitRow.implicitWidth + 26
+        height: 32
+        radius: 16
+        color: Qt.rgba(0, 0, 0, 0.75)
+        border.color: secondaryCyan
+        border.width: 1
+        Row {
+            id: fsExitRow
+            anchors.centerIn: parent
+            spacing: 10
+            Text { text: qsTr("Full screen"); color: "#ffffff"; font.pixelSize: 12; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: qsTr("F11 / Esc"); color: textSecondary; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+            Rectangle {
+                width: 24; height: 24; radius: 12
+                anchors.verticalCenter: parent.verticalCenter
+                color: fsExitMA.containsMouse ? bridge.themeManager.ledRed : Qt.rgba(1, 1, 1, 0.18)
+                Text { anchors.centerIn: parent; text: "✕"; color: "#ffffff"; font.pixelSize: 12; font.bold: true }
+                MouseArea {
+                    id: fsExitMA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mainWindow.exitFullScreen()
+                }
+            }
+        }
+    }
+    // 1.0.253 — Compact mode Signal RX: stesso pattern di Full Spectrum
+    // ma indipendente. Opt-in default OFF.
+    property bool compactSignalRx: settingBool("CompactSignalRx", false)
+    property int signalRxRowHeight: compactSignalRx ? 14 : 26
+    function toggleCompactSignalRx() {
+        compactToggling = true
+        compactToggleTimer.restart()
+        compactSignalRx = !compactSignalRx
+        persistUiSetting("CompactSignalRx", compactSignalRx)
     }
     property bool period2Detached: false
     property bool period2Minimized: false
@@ -643,15 +1644,194 @@ ApplicationWindow {
     // TxPanel detached and minimized states
     property bool txPanelDetached: false
     property bool txPanelMinimized: false
+    property bool ft2LinkPanelDetached: false
     property bool liveMapDetached: false
     property bool liveMapMinimized: false
+    // 1.0.275 (fork-only) — DX Cluster floating window state
+    property bool dxClusterDetached: true   // default detached (era sempre floating)
+    property bool dxClusterMinimized: false
     property bool applicationClosing: false
+    function shutdownLoader(loader) {
+        if (!loader)
+            return
+        try {
+            loader.active = false
+        } catch (e) {
+        }
+        try {
+            loader.sourceComponent = null
+        } catch (e) {
+        }
+        try {
+            loader.source = ""
+        } catch (e) {
+        }
+    }
+    function shutdownAsyncLoaders() {
+        if (typeof waterfallEmbeddedLoader !== "undefined")
+            shutdownLoader(waterfallEmbeddedLoader)
+        if (typeof liveMapEmbeddedLoader !== "undefined")
+            shutdownLoader(liveMapEmbeddedLoader)
+        if (typeof dxPeditionLoader !== "undefined")
+            shutdownLoader(dxPeditionLoader)
+        if (typeof macroDialogLoader !== "undefined")
+            shutdownLoader(macroDialogLoader)
+        if (typeof astroWindowLoader !== "undefined")
+            shutdownLoader(astroWindowLoader)
+        if (typeof qsyQuickPickerLoader !== "undefined")
+            shutdownLoader(qsyQuickPickerLoader)
+        if (typeof devOverlayLoader !== "undefined")
+            shutdownLoader(devOverlayLoader)
+        if (typeof bugReportDialogLoader !== "undefined")
+            shutdownLoader(bugReportDialogLoader)
+        if (typeof settingsDialogLoader !== "undefined")
+            shutdownLoader(settingsDialogLoader)
+        if (typeof callsignLookupWindowLoader !== "undefined")
+            shutdownLoader(callsignLookupWindowLoader)
+        if (typeof logWindowLoader !== "undefined")
+            shutdownLoader(logWindowLoader)
+        if (typeof mamWindowLoader !== "undefined")
+            shutdownLoader(mamWindowLoader)
+        if (typeof infoDialogLoader !== "undefined")
+            shutdownLoader(infoDialogLoader)
+        if (typeof callDialogLoader !== "undefined")
+            shutdownLoader(callDialogLoader)
+        if (typeof historyDialogLoader !== "undefined")
+            shutdownLoader(historyDialogLoader)
+        if (typeof sstvWorkspaceLoader !== "undefined")
+            shutdownLoader(sstvWorkspaceLoader)
+    }
+
+    // Native SSTV is loaded only on first use. The C++ facade exists in the
+    // Decodium process, but its RX worker remains stopped until the user starts
+    // reception from this workspace.
+    function openSstvWorkspace() {
+        // Entering SSTV is an exclusive workspace transition, like opening
+        // RTTY: replace the previous decoder generation with an SSTV-only
+        // audio capture. The panadapter remains alive; mode/CAT are preserved
+        // and the normal monitor state is restored when SSTV closes.
+        if (!bridge.enterSstvWorkspace())
+            return
+        sstvWorkspaceLoader.active = true
+        if (sstvWorkspaceLoader.item) {
+            sstvWorkspaceLoader.item.show()
+            sstvWorkspaceLoader.item.raise()
+            sstvWorkspaceLoader.item.requestActivate()
+        }
+    }
+
+    Loader {
+        id: sstvWorkspaceLoader
+        active: false
+        asynchronous: true
+        source: "components/sstv/SstvWorkspace.qml"
+        onLoaded: {
+            item.engine = bridge
+            item.show()
+            item.raise()
+            item.requestActivate()
+        }
+        onStatusChanged: {
+            if (status === Loader.Error)
+                bridge.leaveSstvWorkspace()
+        }
+    }
+
+    // 1.0.571 - finestra DecoPort, creata alla prima apertura.
+    function openDecoPortWindow() {
+        decoPortWindowLoader.active = true
+        if (decoPortWindowLoader.item) {
+            decoPortWindowLoader.item.show()
+            decoPortWindowLoader.item.raise()
+            decoPortWindowLoader.item.requestActivate()
+        }
+    }
+
+    // Mostra la finestra gia' nel modo RTTY. Separata dal comando pubblico per
+    // evitare una ricorsione quando setMode emette modeChanged.
+    function showRttyWindow() {
+        rttyWindowLoader.active = true
+        if (rttyWindowLoader.item) {
+            rttyWindowLoader.item.show()
+            rttyWindowLoader.item.raise()
+            rttyWindowLoader.item.requestActivate()
+        }
+    }
+
+    // Aprire RTTY equivale a sceglierlo dal selettore dei modi: il cambio
+    // invalida le code del decoder precedente, ferma i suoi timer di slot e
+    // commuta CAT/frequenza secondo il profilo RTTY. Prima questa strada
+    // apriva soltanto la finestra e FT8/FT4/WSPR continuavano nel background.
+    function openRttyWindow() {
+        if (bridge.mode !== "RTTY")
+            bridge.mode = "RTTY"
+        if (bridge.mode === "RTTY")
+            mainWindow.showRttyWindow()
+    }
+
+    // Scegliere RTTY dal selettore dei modi apre la finestra: il modo e' attivo,
+    // la radio e' commutata, e senza la finestra non ci sarebbe niente da
+    // leggere ne' da scrivere. Non la chiude tornando a FT8 — chi ha una
+    // finestra aperta se la chiude da se', e chiudergliela sotto le mani mentre
+    // magari sta leggendo un collegamento sarebbe peggio che lasciarla li'.
+    Connections {
+        target: bridge
+        function onModeChanged() {
+            if (bridge.mode === "RTTY")
+                mainWindow.showRttyWindow()
+        }
+    }
+
+    Loader {
+        id: rttyWindowLoader
+        active: false
+        asynchronous: true
+        source: "rtty/RttyMain.qml"
+        onLoaded: {
+            item.show()
+            item.raise()
+            item.requestActivate()
+        }
+    }
+
+    Loader {
+        id: decoPortWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/DecoPortWindow.qml"
+        onLoaded: {
+            item.show()
+            item.raise()
+            item.requestActivate()
+        }
+    }
+
+    function syncSpectrumVisibility() {
+        if (bridge)
+            bridge.spectrumVisible = waterfallPanelVisible && startupWaterfallVisualReady
+    }
+    onWaterfallPanelVisibleChanged: {
+        persistUiSetting("uiWaterfallPanelVisible", waterfallPanelVisible)
+        syncSpectrumVisibility()
+        if (!waterfallPanelVisible) {
+            waterfallDetached = false
+            waterfallMinimized = false
+            if (typeof waterfallWindow !== "undefined" && waterfallWindow)
+                waterfallWindow.hide()
+        } else {
+            Qt.callLater(function() {
+                if (typeof waterfallPanel !== "undefined" && waterfallPanel)
+                    waterfallPanel.SplitView.preferredHeight = mainWindow.waterfallPanelHeight
+            })
+        }
+    }
     onWaterfallDetachedChanged: scheduleWindowStateSave()
     onWaterfallMinimizedChanged: scheduleWindowStateSave()
     onLogWindowDetachedChanged: scheduleWindowStateSave()
     onLogWindowMinimizedChanged: scheduleWindowStateSave()
     onAstroWindowDetachedChanged: scheduleWindowStateSave()
     onAstroWindowMinimizedChanged: scheduleWindowStateSave()
+    onSatelliteWindowDetachedChanged: scheduleWindowStateSave()
     onMacroDialogDetachedChanged: scheduleWindowStateSave()
     onMacroDialogMinimizedChanged: scheduleWindowStateSave()
     onRigControlDetachedChanged: scheduleWindowStateSave()
@@ -672,18 +1852,612 @@ ApplicationWindow {
         })
     }
     onLiveMapMinimizedChanged: scheduleWindowStateSave()
+    onFt2LinkModeActiveChanged: {
+        if (ft2LinkModeActive) {
+            if (bridge && !bridge.ft2LinkAccessUnlocked) {
+                Qt.callLater(requestFt2LinkAccess)
+                return
+            }
+            applyFt2LinkModeLayout()
+        } else {
+            dockFt2LinkPanel()
+            restoreFt2LinkModeLayout()
+        }
+    }
 
     // === GAP 3 — Nuovi pannelli (A3, B9, A4, C14) ===
-    property bool timeSyncPanelVisible:       !!bridge.getSetting("uiTimeSyncPanelVisible", false)
-    property bool activeStationsPanelVisible: !!bridge.getSetting("uiActiveStationsPanelVisible", false)
-    property bool callerQueuePanelVisible:    !!bridge.getSetting("uiCallerQueuePanelVisible", false)
-    property bool astroPanelVisible:          !!bridge.getSetting("uiAstroPanelVisible", false)
-    property bool dxClusterPanelVisible:      !!bridge.getSetting("uiDxClusterPanelVisible", false)
-    property bool dxClusterToolbarVisible:    !!bridge.getSetting("uiDxClusterToolbarVisible", true)
-    property bool pskReporterToolbarVisible: !!bridge.getSetting("uiPskReporterToolbarVisible", true)
-    property bool asyncIconVisible:          !!bridge.getSetting("uiAsyncIconVisible", true)
-    property bool liveMapPanelVisible:        bridge.getSetting("WorldMapDisplayed", true)
-    property bool decoSyncMonitorVisible:     !!bridge.getSetting("uiDecoSyncMonitorVisible", false)
+    property bool timeSyncPanelVisible:       settingBool("uiTimeSyncPanelVisible", false)
+    property bool activeStationsPanelVisible: settingBool("uiActiveStationsPanelVisible", false)
+    readonly property bool ft2LinkModeActive: bridge && String(bridge.mode || "").toUpperCase() === "FT2-LINK"
+    property bool ft2LinkAccessPromptActive: false
+    property string ft2LinkAccessError: ""
+    property bool ft2LinkAccessPendingMode: false
+    property bool callerQueuePanelVisible:    settingBool("uiCallerQueuePanelVisible", false)
+    property bool astroPanelVisible:          settingBool("uiAstroPanelVisible", false)
+    property bool dxClusterPanelVisible:      settingBool("uiDxClusterPanelVisible", false)
+    property bool dxClusterToolbarVisible:    settingBool("uiDxClusterToolbarVisible", true)
+    property bool pskReporterToolbarVisible: settingBool("uiPskReporterToolbarVisible", true)
+    property bool asyncIconVisible:           settingBool("uiAsyncIconVisible", true)
+    // 1.0.497 — in Modalità PC lento la Live Map (render mondo GPU, il pannello
+    // più pesante) parte NASCOSTA di default; resta riattivabile a mano.
+    property bool liveMapPanelVisible:        settingBool("WorldMapDisplayed", !(bridge && bridge.lowEndMode))
+    property bool decoSyncMonitorVisible:     settingBool("uiDecoSyncMonitorVisible", false)
+
+    // === Visibilità pulsanti UI (tab "Pulsanti UI" in Settings) — default tutti visibili ===
+    property bool uiBtnMonitorVisible:        settingBool("uiBtnMonitorVisible", true)
+    property bool uiBtnSetupVisible:          settingBool("uiBtnSetupVisible", true)
+    property bool uiBtnRecVisible:            settingBool("uiBtnRecVisible", true)
+    property bool uiBtnWavVisible:            settingBool("uiBtnWavVisible", true)
+    property bool uiBtnLogVisible:            settingBool("uiBtnLogVisible", true)
+    property bool uiBtnMacroVisible:          settingBool("uiBtnMacroVisible", true)
+    property bool uiBtnAstroVisible:          settingBool("uiBtnAstroVisible", true)
+    property bool uiBtnCatVisible:            settingBool("uiBtnCatVisible", true)
+    // 1.0.569 — scorciatoia per entrare nel workspace DX-Pedition (il gemello
+    // del pulsante EXIT che c'e' dentro il workspace).
+    property bool uiBtnDxPedVisible:          settingBool("uiBtnDxPedVisible", true)
+
+    // === Ordine pulsanti toolbar (drag&drop riordinabile, persistente) ===
+    readonly property string uiToolbarOrderDefault: "setup,rec,wav,sep1,log,macro,astro,layout,history,dxped,sep2,cat"
+    property var uiToolbarOrder: parseToolbarOrder(String(bridge.getSetting("uiToolbarOrder", "") || ""))
+
+    // Tutti gli id validi (pulsanti + separatori). Usato per validare/normalizzare.
+    readonly property var uiToolbarKnownIds: ["setup","rec","wav","log","macro","astro","layout","history","dxped","cat","sep1","sep2"]
+
+    function applyFt2LinkModeLayout() {
+        if (typeof period1FloatingWindow !== "undefined" && period1FloatingWindow)
+            period1FloatingWindow.hide()
+        if (typeof rxFreqFloatingWindow !== "undefined" && rxFreqFloatingWindow)
+            rxFreqFloatingWindow.hide()
+        Qt.callLater(restoreDecodePanelWidths)
+    }
+
+    function restoreFt2LinkModeLayout() {
+        if (period1Detached && !period1Minimized
+                && typeof period1FloatingWindow !== "undefined" && period1FloatingWindow)
+            period1FloatingWindow.show()
+        if (rxFreqDetached && !rxFreqMinimized
+                && typeof rxFreqFloatingWindow !== "undefined" && rxFreqFloatingWindow)
+            rxFreqFloatingWindow.show()
+        Qt.callLater(restoreDecodePanelWidths)
+    }
+
+    function popFt2LinkPanel() {
+        if (!ft2LinkModeActive)
+            return
+        ft2LinkPanelDetached = true
+        Qt.callLater(function() {
+            if (typeof ft2LinkFloatingWindow !== "undefined" && ft2LinkFloatingWindow)
+                ft2LinkFloatingWindow.requestActivate()
+        })
+    }
+
+    function dockFt2LinkPanel() {
+        ft2LinkPanelDetached = false
+    }
+
+    function toggleFt2LinkPanelDock() {
+        if (ft2LinkPanelDetached)
+            dockFt2LinkPanel()
+        else
+            popFt2LinkPanel()
+    }
+
+    function requestFt2LinkAccess() {
+        if (!bridge)
+            return
+        if (bridge.ft2LinkAccessUnlocked) {
+            bridge.mode = "FT2-Link"
+            applyFt2LinkModeLayout()
+            return
+        }
+        if (!bridge.ft2LinkAccessPasswordConfigured()) {
+            showStatusToast("FT2-Link locked: access hash not provisioned.", accentOrange)
+            rejectFt2LinkAccess()
+            return
+        }
+        ft2LinkAccessError = ""
+        ft2LinkAccessPendingMode = true
+        ft2LinkAccessPromptActive = true
+        ft2LinkAccessDialog.open()
+    }
+
+    function rejectFt2LinkAccess() {
+        ft2LinkAccessPromptActive = false
+        ft2LinkAccessPendingMode = false
+        ft2LinkAccessError = ""
+        if (ft2LinkPasswordField)
+            ft2LinkPasswordField.text = ""
+        if (ft2LinkAccessDialog && ft2LinkAccessDialog.opened)
+            ft2LinkAccessDialog.close()
+        if (bridge)
+            bridge.mode = "FT2"
+    }
+
+    function acceptFt2LinkAccess() {
+        if (!bridge)
+            return
+        var password = ft2LinkPasswordField.text
+        var ok = bridge.verifyFt2LinkAccessPassword(password)
+        if (!ok) {
+            rejectFt2LinkAccess()
+            return
+        }
+        ft2LinkAccessPromptActive = false
+        ft2LinkAccessPendingMode = false
+        ft2LinkAccessError = ""
+        ft2LinkPasswordField.text = ""
+        ft2LinkAccessDialog.close()
+        bridge.mode = "FT2-Link"
+        applyFt2LinkModeLayout()
+    }
+
+    // Parsa il CSV salvato in una lista di id; ripristina il default se assente/corrotto.
+    function parseToolbarOrder(csv) {
+        var def = uiToolbarOrderDefault.split(",")
+        if (!csv || csv.length === 0)
+            return def
+        var parts = String(csv).split(",")
+        var out = []
+        var seen = ({})
+        for (var i = 0; i < parts.length; ++i) {
+            var id = parts[i].trim()
+            if (id.length === 0)
+                continue
+            if (uiToolbarKnownIds.indexOf(id) < 0)
+                continue            // id sconosciuto -> scarta
+            if (seen[id])
+                continue            // dedup
+            seen[id] = true
+            out.push(id)
+        }
+        // Inserisci gli id mancanti (es. un pulsante nuovo) alla loro POSIZIONE
+        // di default, non in coda: appesi in fondo finirebbero oltre il bordo
+        // della toolbar e l'utente non li vedrebbe mai.
+        for (var j = 0; j < def.length; ++j) {
+            if (!seen[def[j]]) {
+                out.splice(Math.min(j, out.length), 0, def[j])
+                seen[def[j]] = true
+            }
+        }
+        if (out.length === 0)
+            return def
+        return out
+    }
+
+    function persistToolbarOrder() {
+        persistUiSetting("uiToolbarOrder", uiToolbarOrder.join(","))
+    }
+
+    function headerToolbarButtonVisible(id) {
+        switch (id) {
+        case "setup": return uiBtnSetupVisible
+        case "rec": return uiBtnRecVisible
+        case "wav": return uiBtnWavVisible
+        case "log": return uiBtnLogVisible
+        case "macro": return uiBtnMacroVisible
+        case "astro": return uiBtnAstroVisible
+        case "layout": return uiBtnFooterResetVisible
+        case "history": return uiBtnFooterHistoryVisible
+        case "dxped": return uiBtnDxPedVisible
+        case "cat": return uiBtnCatVisible
+        case "sep1":
+        case "sep2": return true
+        default: return false
+        }
+    }
+
+    function headerToolbarButtonWidth(id) {
+        switch (id) {
+        case "setup": return 50
+        case "rec": return 50
+        case "wav": return 45
+        case "log": return 45
+        case "macro": return 50
+        case "astro": return 48
+        case "layout": return 64
+        case "history": return 68
+        case "dxped": return 66
+        case "cat": return 48
+        case "sep1":
+        case "sep2": return 1
+        default: return 0
+        }
+    }
+
+    function headerToolbarPreferredWidth() {
+        var total = 4
+        var visibleCount = 0
+        for (var i = 0; i < uiToolbarOrder.length; ++i) {
+            var id = uiToolbarOrder[i]
+            if (!headerToolbarButtonVisible(id))
+                continue
+            total += headerToolbarButtonWidth(id)
+            if (visibleCount > 0)
+                total += 1
+            ++visibleCount
+        }
+        return visibleCount > 0 ? Math.max(1, total) : 0
+    }
+
+    // === Posizione World Clock fra i blocchi dell'header (snap magnetico via maniglia) ===
+    // L'orologio resta IN LINEA nel Flow header (non finestra OS, non overlay x/y): viene
+    // re-parentato in uno dei 6 host-slot fissi inseriti nei gap STABILI fra i blocchi
+    // (vedi headerFlow.clockSlots). L'indice = lo slot che ospita l'orologio:
+    //   0 = prima dell'hamburger      3 = prima dei Sliders
+    //   1 = fra hamburger e logo      4 = prima del blocco pulsanti toolbar ("before")
+    //   2 = fra logo e freq display   5 = subito DOPO il blocco pulsanti toolbar ("after", DEFAULT)
+    // Default = 5 (posizione attuale, toolbar PRIMA / clock DOPO) → ZERO regressione.
+    // I blocchi condizionali (restore/DX/PSK) NON sono posizioni di aggancio.
+    readonly property int worldClockSlotBeforeToolbar: 4
+    readonly property int worldClockSlotAfterToolbar: 5
+    readonly property int worldClockSlotDefault: worldClockSlotAfterToolbar
+    property int uiWorldClockHeaderSlot: resolveInitialWorldClockSlot()
+    onUiWorldClockHeaderSlotChanged: {
+        applyWorldClockSlot()
+        persistUiSetting("uiWorldClockHeaderSlot", uiWorldClockHeaderSlot)
+    }
+
+    // Init dell'indice slot: legge la nuova chiave; in sua assenza migra la VECCHIA chiave
+    // bool uiWorldClockBeforeToolbar (true→slot before, false→slot after) one-shot.
+    function resolveInitialWorldClockSlot() {
+        var raw = safeBridgeSetting("uiWorldClockHeaderSlot", null)
+        if (raw !== null && raw !== undefined && String(raw).trim().length > 0) {
+            var v = parseInt(raw, 10)
+            if (!isNaN(v))
+                return clampWorldClockSlot(v)
+        }
+        // Retrocompat: vecchio toggle bool (prima/dopo la toolbar).
+        var legacy = safeBridgeSetting("uiWorldClockBeforeToolbar", null)
+        if (legacy !== null && legacy !== undefined && String(legacy).trim().length > 0)
+            return coerceBool(legacy, false) ? worldClockSlotBeforeToolbar : worldClockSlotAfterToolbar
+        return worldClockSlotDefault
+    }
+
+    function clampWorldClockSlot(i) {
+        var n = (headerFlow && headerFlow.clockSlots) ? headerFlow.clockSlots.length : 6
+        var v = parseInt(i, 10)
+        if (isNaN(v))
+            v = worldClockSlotDefault
+        if (v < 0) v = 0
+        if (v > n - 1) v = n - 1
+        return v
+    }
+
+    property real worldClockTargetX: NaN   // posizione voluta dall'utente (pre-clamp)
+    property real worldClockTargetY: NaN
+    // L'orologio è un OVERLAY FLOATING: vive in mainWindow.contentItem a coordinate
+    // x,y libere (drag dalla maniglia), posizionabile ovunque nella finestra. NON usa
+    // più gli host-slot dell'header. Posizione persistita in uiWorldClockX/Y.
+    function applyWorldClockSlot() {
+        if (typeof worldClock === "undefined" || !worldClock)
+            return
+        var host = mainWindow.contentItem
+        if (!host)
+            return
+        if (worldClock.parent !== host)
+            worldClock.parent = host
+        worldClock.z = 1000
+        var rx = safeBridgeSetting("uiWorldClockX", null)
+        var ry = safeBridgeSetting("uiWorldClockY", null)
+        var px = (rx === null || rx === undefined || String(rx).length === 0) ? NaN : parseFloat(rx)
+        var py = (ry === null || ry === undefined || String(ry).length === 0) ? NaN : parseFloat(ry)
+        if (isNaN(px)) px = host.width - worldClock.width - 12
+        if (isNaN(py)) py = 6
+        worldClockTargetX = px   // posizione VOLUTA (pre-clamp), per recupero al resize
+        worldClockTargetY = py
+        worldClock.x = clampClockX(px)
+        worldClock.y = clampClockY(py)
+    }
+
+    function clampClockX(v) {
+        var host = mainWindow.contentItem
+        if (!host || host.width <= 0) return v
+        var maxX = Math.max(0, host.width - worldClock.width)
+        if (v < 0) return 0
+        if (v > maxX) return maxX
+        return v
+    }
+
+    function clampClockY(v) {
+        var host = mainWindow.contentItem
+        if (!host || host.height <= 0) return v
+        var maxY = Math.max(0, host.height - worldClock.height)
+        if (v < 0) return 0
+        if (v > maxY) return maxY
+        return v
+    }
+
+    function clampWorldClockNow() {
+        if (typeof worldClock === "undefined" || !worldClock) return
+        var tx = isNaN(worldClockTargetX) ? worldClock.x : worldClockTargetX
+        var ty = isNaN(worldClockTargetY) ? worldClock.y : worldClockTargetY
+        worldClock.x = clampClockX(tx)
+        worldClock.y = clampClockY(ty)
+    }
+
+    function persistWorldClockPos() {
+        if (typeof worldClock === "undefined" || !worldClock) return
+        worldClockTargetX = worldClock.x
+        worldClockTargetY = worldClock.y
+        persistUiSetting("uiWorldClockX", Math.round(worldClock.x))
+        persistUiSetting("uiWorldClockY", Math.round(worldClock.y))
+    }
+
+    function resetWorldClockPos() {
+        persistUiSetting("uiWorldClockX", "")
+        persistUiSetting("uiWorldClockY", "")
+        applyWorldClockSlot()
+    }
+
+    // Snap magnetico al rilascio: data la X (spazio headerFlow) del puntatore, sceglie
+    // l'host-slot col gap più vicino. Modellata su computeTargetIndex della toolbar:
+    // per gli slot vuoti (width 0) il "centro" coincide con la loro x (posizione del gap).
+    function computeClockSlot(sceneX) {
+        if (!headerFlow || !headerFlow.clockSlots)
+            return uiWorldClockHeaderSlot
+        var slots = headerFlow.clockSlots
+        var best = -1
+        var bestDist = Number.MAX_VALUE
+        for (var i = 0; i < slots.length; ++i) {
+            var s = slots[i]
+            if (!s)
+                continue
+            var mapped = s.mapToItem(headerFlow, s.width / 2, 0)
+            var center = mapped.x
+            var d = Math.abs(sceneX - center)
+            if (d < bestDist) {
+                bestDist = d
+                best = i
+            }
+        }
+        if (best < 0)
+            return uiWorldClockHeaderSlot
+        return best
+    }
+
+    // Sposta l'id dalla posizione 'from' alla posizione 'to' nel modello e committa.
+    function moveToolbarButton(from, to) {
+        if (from === to || from < 0 || to < 0)
+            return
+        var arr = uiToolbarOrder.slice()
+        if (from >= arr.length || to >= arr.length)
+            return
+        var item = arr.splice(from, 1)[0]
+        arr.splice(to, 0, item)
+        uiToolbarOrder = arr
+        persistToolbarOrder()
+    }
+
+    // === Ordine colonne pannelli decode (layout CLASSICO) — interscambiabili via drag ===
+    // Stadio 1: Full Spectrum / Signal RX / Live Map riposizionabili fra i 3 slot-host
+    // fissi dello SplitView (decodePanelsSplit). La mappa è un CSV di panelId; l'indice
+    // nella lista = posizione dello slot-host che ospita quel pannello. Gemella di
+    // uiToolbarOrder (parse/persist/listener). Default = ordine attuale → ZERO regressione.
+    // Lo SWAP avviene fra DUE slot (il pannello trascinato e quello sotto al puntatore):
+    // si scambiano i panelId nella mappa, si ri-assegnano i parent, si persiste.
+    //
+    // Stadio 2: aggiunto "txpanel" come 4° slot. Gli slot 0/1/2 = le 3 colonne dello
+    // SplitView (colSlot0/1/2), lo slot 3 = la TX area (txSlot, dentro txPanelContainer,
+    // FUORI dallo SplitView -> lo SplitView resta a 3 figli). Lo swap è ora CROSS-container:
+    // re-parenta un pannello fra un colSlot e txSlot (anchors.fill -> assume la geometria
+    // del nuovo host: colonna alta-stretta vs area TX larga-bassa, atteso/voluto).
+    //
+    // Stadio 3: aggiunta la Waterfall come 5° pannello (slot 4 = topSlot, il pannello
+    // superiore dello SplitView VERTICALE mainVerticalSplit). Lo slot 4 è gestito ad
+    // ALTEZZA (SplitView.preferredHeight) anziché a larghezza come i colSlot/txSlot; il
+    // pannello "waterfall" (waterfallPanelHost, wrapper attorno al Loader+Waterfall) si
+    // adatta via anchors.fill al nuovo host quando viene spostato. CRITICO: lo swap
+    // RE-PARENTA l'Item Waterfall esistente SENZA distruggerlo/ricrearlo (il Loader
+    // embedded NON tocca active/sourceComponent durante il re-parent -> il PanadapterItem
+    // e il feed PCM via bridge restano vivi, niente "freeze waterfall"). Il default mette
+    // "waterfall" in coda (indice 4 -> topSlot) per riflettere ESATTAMENTE il layout
+    // attuale -> ZERO regressione; una mappa salvata a 3/4 elementi riceve gli id mancanti
+    // (incluso "waterfall") appesi in coda nell'ordine di default -> migrazione indolore.
+    // 1.0.385 — DX Cluster come 6° pannello con una 4ª COLONNA dedicata (colSlot3, indice 3).
+    // La colonna collassa a 0 quando il Cluster è spento → default invariato (3 colonne).
+    // TX passa all'indice 4, Waterfall all'indice 5.
+    readonly property string uiClassicColumnOrderDefault: "fullspectrum,signalrx,livemap,dxcluster,txpanel,waterfall"
+    readonly property var uiClassicColumnKnownIds: ["fullspectrum","signalrx","livemap","dxcluster","txpanel","waterfall"]
+    property var uiClassicColumnOrder: parseClassicColumnOrder(String(bridge.getSetting("uiClassicColumnOrder", "") || ""))
+
+    // Parsa il CSV in lista di panelId; ripristina/completa col default se assente/corrotto.
+    // Garantisce sempre una permutazione completa dei 4 id noti (nessun doppione, nessun buco).
+    // MIGRAZIONE Stadio 1->2: una mappa salvata a 3 elementi (senza "txpanel") mantiene le
+    // 3 colonne dov'erano e riceve "txpanel" appeso in coda (slot 3) -> TX resta dov'è, zero
+    // regressione. Lo stesso meccanismo (append degli id mancanti nell'ordine di default)
+    // copre già qualunque sottoinsieme parziale.
+    function parseClassicColumnOrder(csv) {
+        var def = uiClassicColumnOrderDefault.split(",")
+        if (!csv || csv.length === 0)
+            return def
+        var parts = String(csv).split(",")
+        var out = []
+        var seen = ({})
+        for (var i = 0; i < parts.length; ++i) {
+            var id = parts[i].trim()
+            if (id.length === 0)
+                continue
+            if (uiClassicColumnKnownIds.indexOf(id) < 0)
+                continue            // id sconosciuto -> scarta
+            if (seen[id])
+                continue            // dedup
+            seen[id] = true
+            out.push(id)
+        }
+        // 1.0.385 — inserisci gli id mancanti alla LORO posizione di default (non in coda):
+        // così una mappa salvata a 5 id (senza "dxcluster") riceve dxcluster all'indice 3
+        // e TX/Waterfall restano correttamente a 4/5, mantenendo permutazione completa.
+        for (var j = 0; j < def.length; ++j) {
+            if (!seen[def[j]]) {
+                out.splice(Math.min(j, out.length), 0, def[j])
+                seen[def[j]] = true
+            }
+        }
+        if (out.length !== def.length)
+            return def
+        return out
+    }
+
+    function persistClassicColumnOrder() {
+        persistUiSetting("uiClassicColumnOrder", uiClassicColumnOrder.join(","))
+    }
+
+    // Restituisce lo slot-host (Item) corrispondente all'indice 0/1/2/3/4, o null.
+    // Slot 0/1/2 = colSlot0/1/2 (figli dello SplitView ORIZZONTALE decodePanelsSplit, a larghezza).
+    // Slot 3     = txSlot (dentro txPanelContainer, FUORI dallo SplitView, larga-bassa).
+    // Slot 4     = waterfallPanel (figlio TOP dello SplitView VERTICALE mainVerticalSplit, ad ALTEZZA).
+    function classicSlotForIndex(idx) {
+        switch (idx) {
+            case 0: return (typeof decodePanelsSplit !== "undefined" && decodePanelsSplit
+                            && typeof colSlot0 !== "undefined") ? colSlot0 : null
+            case 1: return (typeof decodePanelsSplit !== "undefined" && decodePanelsSplit
+                            && typeof colSlot1 !== "undefined") ? colSlot1 : null
+            case 2: return (typeof decodePanelsSplit !== "undefined" && decodePanelsSplit
+                            && typeof colSlot2 !== "undefined") ? colSlot2 : null
+            // 1.0.385 — 4ª colonna dedicata al DX Cluster
+            case 3: return (typeof decodePanelsSplit !== "undefined" && decodePanelsSplit
+                            && typeof colSlot3 !== "undefined") ? colSlot3 : null
+            case 4: return (typeof txSlot !== "undefined") ? txSlot : null
+            case 5: return (typeof waterfallPanel !== "undefined") ? waterfallPanel : null
+            default: return null
+        }
+    }
+
+    // Restituisce il pannello (Item) corrispondente al panelId, o null.
+    // "txpanel"   -> txPanelHostWrapper (wrapper re-parentabile attorno all'istanza TxPanel).
+    // "waterfall" -> waterfallPanelHost (wrapper attorno al Loader+Waterfall embedded; il
+    //                re-parent sposta QUESTO Item senza ricaricare il Loader -> feed PCM intatto).
+    function classicPanelForId(panelId) {
+        if (panelId === "fullspectrum")
+            return (typeof period1Panel !== "undefined") ? period1Panel : null
+        if (panelId === "signalrx")
+            return (typeof rxFreqPanel !== "undefined") ? rxFreqPanel : null
+        if (panelId === "livemap")
+            return (typeof liveMapPanelHost !== "undefined") ? liveMapPanelHost : null
+        if (panelId === "txpanel")
+            return (typeof txPanelHostWrapper !== "undefined") ? txPanelHostWrapper : null
+        if (panelId === "waterfall")
+            return (typeof waterfallPanelHost !== "undefined") ? waterfallPanelHost : null
+        if (panelId === "dxcluster")
+            return (typeof dxClusterPanelHost !== "undefined") ? dxClusterPanelHost : null
+        return null
+    }
+
+    // Assegna ad ogni pannello il parent = slot-host nella posizione indicata dalla mappa.
+    // Operazione che preserva id/stato/binding (re-parent, come applyWorldClockSlot).
+    // I pannelli usano anchors.fill: parent → riempiono lo slot che li ospita.
+    // Stadio 2: gestisce 4 pannelli; il re-parent fra un colSlot (SplitView) e txSlot
+    // (txPanelContainer) è cross-container ma `panel.parent = host` + anchors.fill funziona
+    // comunque (i due host sono in sotto-alberi diversi della stessa finestra).
+    // Stadio 3: gestisce 5 pannelli; il 5° (waterfall) può migrare fra il topSlot
+    // (mainVerticalSplit, ad ALTEZZA) e un colSlot/txSlot (a LARGHEZZA). Il re-parent usa
+    // SOLO `panel.parent = host` con guard `panel.parent !== slot` (no churn): NON tocca il
+    // Loader embedded della Waterfall (active/sourceComponent restano invariati) -> l'Item
+    // Waterfall e il suo PanadapterItem NON vengono mai distrutti/ricreati -> feed PCM e
+    // Connections col bridge restano vivi, nessun "freeze waterfall".
+    function applyClassicColumnOrder() {
+        if (typeof decodePanelsSplit === "undefined" || !decodePanelsSplit) {
+            Qt.callLater(applyClassicColumnOrder)
+            return
+        }
+        for (var i = 0; i < uiClassicColumnOrder.length; ++i) {
+            var panel = classicPanelForId(uiClassicColumnOrder[i])
+            var slot = classicSlotForIndex(i)
+            if (panel && slot && panel.parent !== slot)
+                panel.parent = slot
+        }
+    }
+
+    // Indice (0/1/2) della posizione che ospita il panelId nella mappa corrente; -1 se assente.
+    function classicSlotIndexOfId(panelId) {
+        return uiClassicColumnOrder.indexOf(panelId)
+    }
+
+    // panelId che occupa lo slot di indice idx (in base alla mappa corrente).
+    function classicIdInSlot(idx) {
+        return (idx >= 0 && idx < uiClassicColumnOrder.length) ? uiClassicColumnOrder[idx] : ""
+    }
+
+    // 1.0.388 — indice della colonna decode (0..3) che deve avere SplitView.fillWidth:
+    // il primo slot che ospita un pannello NON collassabile (così c'è sempre esattamente
+    // un riempitore visibile e lo spazio liberato da un pannello staccato viene assorbito).
+    // Preferisce Full Spectrum; ripiega su qualunque slot non-livemap/non-dxcluster.
+    function classicDecodeFillSlot() {
+        if (ft2LinkModeActive)
+            return -1
+        var i
+        for (i = 0; i < 4; ++i)
+            if (classicIdInSlot(i) === "fullspectrum") return i
+        for (i = 0; i < 4; ++i) {
+            var id = classicIdInSlot(i)
+            if (id !== "livemap" && id !== "dxcluster") return i
+        }
+        return 0
+    }
+
+    // Larghezza minima dello slot = minimo "naturale" del pannello che lo occupa
+    // (segue il pannello, non lo slot, anche se la larghezza-valore è per-slot).
+    // Read-only su mappa+occupante: non re-immette nulla nella width -> no binding loop.
+    function classicMinWidthForSlot(idx) {
+        switch (classicIdInSlot(idx)) {
+            case "fullspectrum": return 360
+            case "signalrx":     return 360
+            case "livemap":      return 280
+            case "txpanel":      return 320
+            // La Waterfall, se messa in una COLONNA stretta, accetta geometria insolita
+            // (scelta esplicita dell'utente): minimo modesto perché non collassi a 0.
+            // Nel topSlot (slot 4, ad ALTEZZA) questa minWidth non viene usata dallo
+            // SplitView verticale -> nessun effetto sul layout di default.
+            case "waterfall":    return 280
+            case "dxcluster":    return 320   // 1.0.385 — 4ª colonna DX Cluster
+            default:             return 260
+        }
+    }
+
+    // True se lo slot idx ospita la Live Map MA la Live Map è nascosta/staccata:
+    // in tal caso lo slot collassa (preferredWidth/minimumWidth -> 0), come faceva
+    // liveMapPanelHost.visible quando era figlio diretto dello SplitView.
+    function classicSlotCollapsed(idx) {
+        var id = classicIdInSlot(idx)
+        if (mainWindow.ft2LinkModeActive
+                && (id === "fullspectrum" || id === "signalrx"))
+            return true
+        if (id === "livemap")
+            return !(mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached)
+        // 1.0.385/386 — la 4ª colonna del DX Cluster esiste SOLO quando è dockato.
+        // Se spento o staccato (finestra flottante) la colonna sparisce del tutto.
+        if (id === "dxcluster")
+            return !(mainWindow.dxClusterPanelVisible && !mainWindow.dxClusterDetached)
+        return false
+    }
+
+    // SWAP dei panelId in due posizioni della mappa + ri-assegna parent + persiste.
+    function swapClassicColumns(a, b) {
+        if (a === b || a < 0 || b < 0)
+            return
+        var arr = uiClassicColumnOrder.slice()
+        if (a >= arr.length || b >= arr.length)
+            return
+        var tmp = arr[a]
+        arr[a] = arr[b]
+        arr[b] = tmp
+        uiClassicColumnOrder = arr
+        applyClassicColumnOrder()
+        persistClassicColumnOrder()
+    }
+
+    // Riporta l'ordine colonne al default (FS, Signal RX, Live Map) + re-parent + persist.
+    // Agganciato al Reset Layout esistente (Ctrl+Shift+L / resetLayoutConfirmDialog).
+    function resetClassicColumnOrder() {
+        uiClassicColumnOrder = uiClassicColumnOrderDefault.split(",")
+        applyClassicColumnOrder()
+        persistClassicColumnOrder()
+    }
+
+    property bool uiBtnFooterResetVisible:    settingBool("uiBtnFooterResetVisible", true)
+    property bool uiBtnFooterHistoryVisible:  settingBool("uiBtnFooterHistoryVisible", true)
+    property bool uiBtnFooterDxcVisible:      settingBool("uiBtnFooterDxcVisible", true)
+
     property string uiLanguage: normalizeUiLanguage(String(bridge.getSetting("UILanguage", "en") || "en"))
     readonly property var uiLanguageOptions: [
         { code: "en", name: "English" },
@@ -695,6 +2469,9 @@ ApplicationWindow {
         { code: "hu", name: "Magyar" },
         { code: "it", name: "Italiano" },
         { code: "ja", name: "日本語" },
+        { code: "lv", name: "Latviešu" },
+        { code: "nl", name: "Nederlands" },
+        { code: "ro", name: "Română" },
         { code: "ru", name: "Русский" },
         { code: "zh", name: "简体中文" },
         { code: "zh_TW", name: "繁體中文" }
@@ -721,6 +2498,9 @@ ApplicationWindow {
         case "hu": return "Nyelv"
         case "it": return "Lingua"
         case "ja": return "言語"
+        case "lv": return "Valoda"
+        case "nl": return "Taal"
+        case "ro": return "Limbă"
         case "ru": return "Язык"
         case "zh": return "语言"
         case "zh_TW": return "語言"
@@ -737,26 +2517,64 @@ ApplicationWindow {
     }
     function setDxClusterToolbarVisible(visible) {
         dxClusterToolbarVisible = visible
-        bridge.setSetting("uiDxClusterToolbarVisible", visible)
+        persistUiSetting("uiDxClusterToolbarVisible", visible)
         if (!visible)
             dxClusterPanelVisible = false
     }
+    function raiseDxClusterPanel() {
+        if (typeof dxClusterFloatingWindow === 'undefined' || !dxClusterFloatingWindow)
+            return
+        dxClusterMinimized = false
+        dxClusterFloatingWindow.visibility = Window.Windowed
+        dxClusterFloatingWindow.show()
+        dxClusterFloatingWindow.raise()
+        dxClusterFloatingWindow.requestActivate()
+    }
+    function openDxClusterPanel() {
+        mainWindow.dxClusterPanelVisible = true
+        Qt.callLater(function() { mainWindow.raiseDxClusterPanel() })
+    }
     function setPskReporterToolbarVisible(visible) {
         pskReporterToolbarVisible = visible
-        bridge.setSetting("uiPskReporterToolbarVisible", visible)
+        persistUiSetting("uiPskReporterToolbarVisible", visible)
         if (!visible && typeof pskSearchPopup !== "undefined")
             pskSearchPopup.close()
     }
     function setAsyncIconVisible(visible) {
         asyncIconVisible = visible
-        bridge.setSetting("uiAsyncIconVisible", visible)
+        persistUiSetting("uiAsyncIconVisible", visible)
     }
-    onTimeSyncPanelVisibleChanged: bridge.setSetting("uiTimeSyncPanelVisible", timeSyncPanelVisible)
-    onActiveStationsPanelVisibleChanged: bridge.setSetting("uiActiveStationsPanelVisible", activeStationsPanelVisible)
-    onCallerQueuePanelVisibleChanged: bridge.setSetting("uiCallerQueuePanelVisible", callerQueuePanelVisible)
-    onAstroPanelVisibleChanged: bridge.setSetting("uiAstroPanelVisible", astroPanelVisible)
-    onDxClusterPanelVisibleChanged: bridge.setSetting("uiDxClusterPanelVisible", dxClusterPanelVisible)
-    onDecoSyncMonitorVisibleChanged: bridge.setSetting("uiDecoSyncMonitorVisible", decoSyncMonitorVisible)
+    onTimeSyncPanelVisibleChanged: persistUiSetting("uiTimeSyncPanelVisible", timeSyncPanelVisible)
+    onActiveStationsPanelVisibleChanged: {
+        persistUiSetting("uiActiveStationsPanelVisible", activeStationsPanelVisible)
+        if (typeof activeStationsFloatingWindow !== "undefined") {
+            if (activeStationsPanelVisible) {
+                activeStationsFloatingWindow.showHostedWindow()
+            } else if (activeStationsFloatingWindow.visible) {
+                activeStationsFloatingWindow.hide()
+            }
+        }
+    }
+    onCallerQueuePanelVisibleChanged: persistUiSetting("uiCallerQueuePanelVisible", callerQueuePanelVisible)
+    onAstroPanelVisibleChanged: persistUiSetting("uiAstroPanelVisible", astroPanelVisible)
+    onDxClusterPanelVisibleChanged: {
+        persistUiSetting("uiDxClusterPanelVisible", dxClusterPanelVisible)
+        // 1.0.277 — dopo che la X della Window chiude DxClusterFloatingWindow,
+        // Qt rompe il binding `visible: dxClusterPanelVisible` (la Window resta
+        // hidden anche se il binding torna true). Forzo show()/hide() esplicito
+        // sulla Window per garantire riapertura affidabile dal footer toggle.
+        if (typeof dxClusterFloatingWindow !== 'undefined') {
+            // 1.0.385 — la finestra flottante si mostra solo se il Cluster è STACCATO;
+            // se è dockato (4ª colonna) la finestra resta nascosta e mostra l'inline.
+            if (dxClusterPanelVisible && dxClusterDetached) {
+                raiseDxClusterPanel()
+            } else {
+                dxClusterFloatingWindow.hide()
+            }
+        }
+        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+    }
+    onDecoSyncMonitorVisibleChanged: persistUiSetting("uiDecoSyncMonitorVisible", decoSyncMonitorVisible)
     function syncLiveMapFloatingVisibility(activate) {
         if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
             return
@@ -771,15 +2589,56 @@ ApplicationWindow {
             liveMapFloatingWindow.hide()
         }
     }
+
+    // A detached map is a real secondary Window. Restoring it from the child
+    // Window's Component.onCompleted is racy on some QPA backends: the menu
+    // state is restored, while the Window misses its initial show event. Do a
+    // second restore once the main Window has a native surface.
+    function restoreLiveMapPopoutAfterStartup() {
+        if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
+            return
+
+        var state = restoreFloatingWindowState(
+                    liveMapFloatingWindow,
+                    "liveMapFloatingWindow",
+                    "liveMapDetached",
+                    "")
+        var shouldShow = mainWindow.liveMapPanelVisible
+                && mainWindow.liveMapDetached
+                && !mainWindow.liveMapMinimized
+        if (!shouldShow) {
+            liveMapFloatingWindow.hide()
+            startupLog("live map popout restore: hidden visible="
+                       + mainWindow.liveMapPanelVisible
+                       + " detached=" + mainWindow.liveMapDetached)
+            return
+        }
+
+        // Explicitly reset the visibility state before showing. This is needed
+        // after a prior application shutdown closed the detached Window.
+        liveMapFloatingWindow.visibility = Window.Windowed
+        liveMapFloatingWindow.show()
+        startupLog("live map popout restore: shown detached="
+                   + mainWindow.liveMapDetached
+                   + " x=" + liveMapFloatingWindow.x
+                   + " y=" + liveMapFloatingWindow.y
+                   + " saved=" + (state.detached === true))
+    }
 	    function detachWaterfallPanel() {
+            mainWindow.waterfallPanelVisible = true
 	        mainWindow.waterfallDetached = true
 	        mainWindow.waterfallMinimized = false
 	        waterfallPanel.isDockHighlighted = false
-	        waterfallWindow.show()
-	        waterfallWindow.raise()
-	        waterfallWindow.requestActivate()
+	        Qt.callLater(function() {
+	            if (!mainWindow.waterfallDetached || mainWindow.waterfallMinimized)
+	                return
+	            waterfallWindow.show()
+	            waterfallWindow.raise()
+	            waterfallWindow.requestActivate()
+	        })
 	    }
 	    function dockWaterfallPanel() {
+            mainWindow.waterfallPanelVisible = true
 	        waterfallPanel.isDockHighlighted = false
 	        mainWindow.waterfallDetached = false
 	        mainWindow.waterfallMinimized = false
@@ -787,7 +2646,6 @@ ApplicationWindow {
 	    }
 	    function detachLiveMapPanel() {
 	        mainWindow.liveMapPanelVisible = true
-	        bridge.setSetting("WorldMapDisplayed", true)
 	        mainWindow.liveMapDetached = true
         mainWindow.liveMapMinimized = false
         mainWindow.syncLiveMapFloatingVisibility(true)
@@ -802,10 +2660,12 @@ ApplicationWindow {
 	    function detachFullSpectrumPanel() {
 	        mainWindow.period1Detached = true
 	        mainWindow.period1Minimized = false
-	        period1FloatingWindow.show()
-	        period1FloatingWindow.visibility = Window.Windowed
-	        period1FloatingWindow.raise()
-	        period1FloatingWindow.requestActivate()
+	        if (!mainWindow.ft2LinkModeActive) {
+	            period1FloatingWindow.show()
+	            period1FloatingWindow.visibility = Window.Windowed
+	            period1FloatingWindow.raise()
+	            period1FloatingWindow.requestActivate()
+	        }
 	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
 	    }
 	    function dockFullSpectrumPanel() {
@@ -818,10 +2678,12 @@ ApplicationWindow {
 	    function detachSignalRxPanel() {
 	        mainWindow.rxFreqDetached = true
 	        mainWindow.rxFreqMinimized = false
-	        rxFreqFloatingWindow.show()
-	        rxFreqFloatingWindow.visibility = Window.Windowed
-	        rxFreqFloatingWindow.raise()
-	        rxFreqFloatingWindow.requestActivate()
+	        if (!mainWindow.ft2LinkModeActive) {
+	            rxFreqFloatingWindow.show()
+	            rxFreqFloatingWindow.visibility = Window.Windowed
+	            rxFreqFloatingWindow.raise()
+	            rxFreqFloatingWindow.requestActivate()
+	        }
 	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
 	    }
 	    function dockSignalRxPanel() {
@@ -830,21 +2692,56 @@ ApplicationWindow {
 	        mainWindow.rxFreqMinimized = false
 	        rxFreqFloatingWindow.hide()
 	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
-	    }
+    }
+    // 1.0.385 — DX Cluster: stacca nella finestra flottante (colonna mostra il placeholder
+    // di dock) / aggancia nella 4ª colonna (colSlot3) nascondendo la finestra.
+    function detachDxClusterPanel() {
+        mainWindow.dxClusterPanelVisible = true
+        mainWindow.dxClusterDetached = true
+        mainWindow.dxClusterMinimized = false
+        raiseDxClusterPanel()
+        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+    }
+    function dockDxClusterPanel() {
+        mainWindow.dxClusterPanelVisible = true
+        mainWindow.dxClusterDetached = false
+        mainWindow.dxClusterMinimized = false
+        if (typeof dxClusterFloatingWindow !== "undefined" && dxClusterFloatingWindow)
+            dxClusterFloatingWindow.hide()
+        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+    }
+    // 1.0.386 — inserisce la colonna DX Cluster SUBITO DOPO il pannello refId
+    // ("fullspectrum" o "signalrx") riordinando la mappa, poi aggancia.
+    function dockDxClusterNextTo(refId) {
+        var arr = uiClassicColumnOrder.slice()
+        var ci = arr.indexOf("dxcluster")
+        if (ci >= 0)
+            arr.splice(ci, 1)
+        var ri = arr.indexOf(refId)
+        if (ri < 0)
+            ri = arr.indexOf("signalrx")   // fallback
+        if (ri < 0)
+            ri = 0
+        arr.splice(ri + 1, 0, "dxcluster")
+        uiClassicColumnOrder = arr
+        applyClassicColumnOrder()
+        persistClassicColumnOrder()
+        dockDxClusterPanel()
+    }
     onLiveMapPanelVisibleChanged: {
-        bridge.setSetting("WorldMapDisplayed", liveMapPanelVisible)
+        persistUiSetting("WorldMapDisplayed", liveMapPanelVisible)
         Qt.callLater(function() {
             mainWindow.syncLiveMapFloatingVisibility(false)
             if (mainWindow.decodePanelLayoutSaved)
                 mainWindow.restoreDecodePanelWidths()
-            else if (typeof period1Panel !== "undefined" && period1Panel)
-                period1Panel.applyCenterSplit()
+            else if (typeof colSlot0 !== "undefined" && colSlot0)
+                colSlot0.applyCenterSplit()
         })
     }
 
     // === Dialoghi ===
-    Loader { id: colorDialogLoader; source: "../dialogs/ColorHighlightingDialog.qml"; active: false }
-    Loader { id: qsyDialogLoader;   source: "../dialogs/QSYDialog.qml";              active: false }
+    Loader { id: colorDialogLoader; source: "../dialogs/ColorHighlightingDialog.qml"; active: false; asynchronous: true }
+    Loader { id: qsyDialogLoader;   source: "../dialogs/QSYDialog.qml";              active: false; asynchronous: true }
 
     function openColorDialog() {
         colorDialogLoader.active = true
@@ -855,13 +2752,104 @@ ApplicationWindow {
         qsyDialogLoader.item.open()
     }
 
+    // IU8LMC — Il BugReportDialog esisteva (con diagnostica, report e invio a
+    // GitHub) ma NESSUNO lo apriva: loader active:false e zero punti di ingresso
+    // = infrastruttura irraggiungibile. Da qui l'utente ci arriva davvero, e
+    // l'autodiagnosi gli mostra le cause note prima che scriva.
+    function openBugReportDialog() {
+        bugReportDialogLoader.active = true
+        runWhenLoaded(bugReportDialogLoader, function (item) { item.open() })
+    }
+
+    // IU8LMC — Aggiornamento: avviso + conferma.
+    Loader {
+        id: updateDialogLoader
+        source: "components/UpdateDialog.qml"
+        active: false
+        asynchronous: true
+        onLoaded: {
+            // The first update request used to create the asynchronous Loader
+            // without ever opening its item.  The second request worked only
+            // because the item had finished loading by then.
+            if (item)
+                item.open()
+        }
+    }
+
+    function openUpdateDialog() {
+        updateDialogLoader.active = true
+        if (updateDialogLoader.item)
+            updateDialogLoader.item.open()
+    }
+
+    // IU8LMC — Popup "info stazione + meteo" ricevuta (opt-in, vedi
+    // Settings > Station > "Show popup with correspondent's info").
+    Loader {
+        id: stationTelemetryLoader
+        source: "components/StationTelemetryDialog.qml"
+        active: false
+        asynchronous: true
+        property var pendingFields: ({})
+        onLoaded: {
+            if (item) {
+                item.fields = pendingFields
+                item.open()
+            }
+        }
+    }
+
+    Connections {
+        target: bridge
+        function onStationTelemetryDecoded(fields) {
+            if (stationTelemetryLoader.item) {
+                stationTelemetryLoader.item.fields = fields
+                stationTelemetryLoader.item.open()
+            } else {
+                stationTelemetryLoader.pendingFields = fields
+                stationTelemetryLoader.active = true
+            }
+        }
+    }
+
+    Connections {
+        target: updater
+        // Scatta sia dal controllo all'avvio sia da quello manuale: se c'e' una
+        // versione nuova (e non e' stata saltata) l'utente lo deve sapere.
+        function onUpdateFound(version) { openUpdateDialog() }
+        // Controllo manuale: l'utente ha cliccato, una risposta gliela diamo
+        // comunque (riuso il toast gia' esistente, niente UI nuova).
+        function onUpToDate(version) {
+            showStatusToast(qsTr("Decodium is up to date (%1).").arg(version), secondaryCyan)
+        }
+        function onErrorOccurred(message) {
+            showStatusToast(message, "#ff6b6b")
+        }
+    }
+
+    // Il controllo parte qualche secondo DOPO l'avvio: all'avvio audio e decoder
+    // stanno gia' lavorando e la finestra deve comparire subito, una richiesta di
+    // rete non deve entrarci in mezzo. checkOnStartupIfDue() rispetta comunque
+    // l'impostazione dell'utente e non ricontrolla piu' di una volta al giorno.
+    Timer {
+        interval: 8000
+        running: true
+        repeat: false
+        onTriggered: if (typeof updater !== "undefined") updater.checkOnStartupIfDue()
+    }
+
     function runWhenLoaded(loader, action) {
         if (loader.item) {
             action(loader.item)
             return
         }
         loader.pendingAction = action
-        loader.active = true
+        // Let the mouse/touch event return before starting a lazy dialog.  The
+        // loader is asynchronous, but activating it directly from a QML input
+        // handler still makes the first parse/layout part of that handler.
+        Qt.callLater(function() {
+            if (!loader.item && !loader.active)
+                loader.active = true
+        })
     }
 
     function closeLoaded(loader) {
@@ -869,12 +2857,131 @@ ApplicationWindow {
             loader.item.close()
     }
 
-    function openLogWindow() { logWindow.open() }
-    function openMacroDialog() { runWhenLoaded(macroDialogLoader, function(item) { item.open() }) }
-    function openAstroWindow() { runWhenLoaded(astroWindowLoader, function(item) { item.open() }) }
-    function openSettingsDialog() { settingsDialog.open() }
+    function suspendTopmostPopoutsForSettings() {
+        if (settingsTopmostPopoutsSuspended)
+            return
+
+        var candidates = [
+            waterfallWindow,
+            logFloatingWindow,
+            astroFloatingWindow,
+            satelliteFloatingWindow,
+            macroFloatingWindow,
+            mamFloatingWindow,
+            decometerFloatingWindow,
+            activeStationsFloatingWindow,
+            rigFloatingWindow,
+            period1FloatingWindow,
+            period2FloatingWindow,
+            rxFreqFloatingWindow,
+            txPanelFloatingWindow
+        ]
+        var suspended = []
+        for (var i = 0; i < candidates.length; ++i) {
+            var floatingWindow = candidates[i]
+            if (!floatingWindow || !floatingWindow.visible)
+                continue
+            suspended.push(floatingWindow)
+            floatingWindow.hide()
+        }
+
+        settingsSuspendedTopmostPopouts = suspended
+        settingsTopmostPopoutsSuspended = true
+        if (suspended.length > 0)
+            console.log("SETUP temporarily hid " + suspended.length + " always-on-top pop-out(s)")
+    }
+
+    function restoreTopmostPopoutsAfterSettings() {
+        if (!settingsTopmostPopoutsSuspended)
+            return
+
+        var suspended = settingsSuspendedTopmostPopouts
+        settingsSuspendedTopmostPopouts = []
+        settingsTopmostPopoutsSuspended = false
+        if (applicationClosing || !suspended || suspended.length === 0)
+            return
+
+        // Re-show after the QML modal overlay has been removed.  Do not raise
+        // or activate the panels: closing Settings should leave focus where
+        // the user expects it, while preserving every panel's geometry/state.
+        Qt.callLater(function() {
+            if (applicationClosing)
+                return
+            for (var i = 0; i < suspended.length; ++i) {
+                var floatingWindow = suspended[i]
+                if (floatingWindow && !floatingWindow.visible)
+                    floatingWindow.show()
+            }
+        })
+    }
+
+    function openLogWindow() {
+        logWindowDetached = true
+        logWindowMinimized = false
+        logFloatingWindow.showHostedWindow()
+    }
+    function openMacroDialog() {
+        macroDialogDetached = true
+        macroDialogMinimized = false
+        macroFloatingWindow.showHostedWindow()
+    }
+    function openAstroWindow() {
+        astroWindowDetached = true
+        astroWindowMinimized = false
+        astroFloatingWindow.showHostedWindow()
+    }
+    function openSatelliteWindow() {
+        satelliteWindowDetached = true
+        satelliteFloatingWindow.showHostedWindow()
+    }
+    function openSettingsDialog() {
+        var requestedAt = Date.now()
+        console.log("SETUP requested loaded=" + !!settingsDialogLoader.item)
+        var openStartedAt = Date.now()
+        console.log("SETUP open begin wait_ms=" + (openStartedAt - requestedAt))
+        suspendTopmostPopoutsForSettings()
+        settingsFloatingWindow.showHostedWindow(-1)
+        console.log("SETUP open returned elapsed_ms=" + (Date.now() - openStartedAt))
+    }
     function openSettingsTab(tabIndex) {
-        settingsDialog.openTab(tabIndex)
+        suspendTopmostPopoutsForSettings()
+        settingsFloatingWindow.showHostedWindow(tabIndex)
+    }
+    function openMamWindow() {
+        mamFloatingWindow.showHostedWindow()
+    }
+    function openInfoDialog(tabIndex) {
+        runWhenLoaded(infoDialogLoader, function(item) {
+            item.currentTab = tabIndex
+            item.open()
+        })
+    }
+    function openCallDialog() {
+        runWhenLoaded(callDialogLoader, function(item) { item.show() })
+    }
+    function openHistoryDialog() {
+        runWhenLoaded(historyDialogLoader, function(item) { item.show() })
+    }
+    function openDecometerWindow() {
+        decometerFloatingWindow.showHostedWindow()
+    }
+
+    function chooseWavFileForDecode() {
+        var path = bridge.openFileDialog(qsTr("Open WAV file for decoding"),
+                                         "",
+                                         [qsTr("File WAV (*.wav)"), qsTr("All files (*)")])
+        if (path.length === 0)
+            return
+        console.log("Opening WAV for decode: " + path)
+        bridge.openWavForDecode(path)
+    }
+
+    function chooseWavFolderForDecode() {
+        var path = bridge.openDirectoryDialog(qsTr("Select folder with WAV files"), "")
+        if (path.length === 0)
+            return
+        console.log("Batch decode folder: " + path)
+        bridge.openWavFolderDecode(path)
     }
 
     property string rigErrorDialogTitle: ""
@@ -885,39 +2992,8 @@ ApplicationWindow {
     property string warningDialogSummary: ""
     property string warningDialogDetails: ""
     property bool warningDialogDetailsVisible: false
+    property bool catFailureDialogShown: false
 
-    // WAV file open dialog - single file
-    FileDialog {
-        id: wavOpenDialog
-        title: "Open WAV file for decoding"
-        nameFilters: ["File WAV (*.wav)"]
-        onAccepted: {
-            var path = selectedFile.toString()
-            if (Qt.platform.os === "windows") {
-                path = path.replace("file:///", "")
-            } else {
-                path = path.replace("file://", "")
-            }
-            console.log("Opening WAV for decode: " + path)
-            bridge.openWavForDecode(path)
-        }
-    }
-
-    // WAV folder dialog - batch decode all WAVs in folder
-    FolderDialog {
-        id: wavFolderDialog
-        title: "Select folder with WAV files"
-        onAccepted: {
-            var path = selectedFolder.toString()
-            if (Qt.platform.os === "windows") {
-                path = path.replace("file:///", "")
-            } else {
-                path = path.replace("file://", "")
-            }
-            console.log("Batch decode folder: " + path)
-            bridge.openWavFolderDecode(path)
-        }
-    }
     property bool txPanelDockHighlighted: false
 
     // Dynamic theme colors from ThemeManager
@@ -934,13 +3010,29 @@ ApplicationWindow {
     property color successGreen: bridge.themeManager.successColor
     property color glassOverlay: bridge.themeManager.glassOverlay
     property color glassBorder: bridge.themeManager.glassBorder
+    // DX-Pedition Fase 1 — token aggiuntivi (validi su tutti i temi via fallback in ThemeManager)
+    property color accentDim: bridge.themeManager.accentDim
+    property color accentDeep: bridge.themeManager.accentDeep
+    property color pileColor: bridge.themeManager.pileColor
+    property color gridColor: bridge.themeManager.gridColor
+    property color txColor: bridge.themeManager.txColor
+    property color rxColor: bridge.themeManager.rxColor
+    // DX-Pedition Fase 2a — opt-in 3-column tactical workspace (default OFF)
+    property bool dxPeditionMode: false
     property bool showDxccInfo: bridge.getSetting("ShowDXCC", true)
+    property bool fullSpectrumShowDistColumn: settingBool("uiFullSpectrumShowDistColumn", true)
+    property bool fullSpectrumShowAzColumn: settingBool("uiFullSpectrumShowAzColumn", true)
+    property bool signalRxShowFreqColumn: settingBool("uiSignalRxShowFreqColumn", true)
+    property bool signalRxShowDistColumn: settingBool("uiSignalRxShowDistColumn", true)
+    property bool signalRxShowAzColumn: settingBool("uiSignalRxShowAzColumn", true)
+    property bool displayDistanceInMiles: settingBool("Miles", false)
     property bool showTxMessagesInRx: bridge.getSetting("TXMessagesToRX", true)
     property bool highlight73: bridge.getSetting("Highlight73", true)
     property bool highlightOrange: bridge.getSetting("HighlightOrange", false)
     property bool highlightBlue: bridge.getSetting("HighlightBlue", false)
     property string highlightOrangeCallsigns: bridge.getSetting("HighlightOrangeCallsigns", "")
     property string highlightBlueCallsigns: bridge.getSetting("HighlightBlueCallsigns", "")
+    property int decodeColorBoost: Math.max(0, Math.min(100, Number(bridge.getSetting("uiDecodeColorBoost", 35))))
     property string decodedTextFontFamily: bridge.fontSettingFamily("DecodedTextFont", "Courier", 10)
     property int decodedTextFontPixelSize: bridge.fontSettingPixelSize("DecodedTextFont", "Courier", 10)
     property int decodedTextHeaderPixelSize: Math.max(8, decodedTextFontPixelSize - 1)
@@ -958,6 +3050,9 @@ ApplicationWindow {
     Connections {
         target: bridge
         function onSettingValueChanged(key, value) {
+            if (key === "SuperFox")
+                mainWindow.superFoxOptionEnabled = value === true || value === 1
+                    || String(value).toLowerCase() === "true" || String(value) === "1"
             if (key === "ShowDXCC" || key === "DXCCEntity")
                 mainWindow.showDxccInfo = !!value
             else if (key === "TXMessagesToRX" || key === "Tx2QSO")
@@ -974,22 +3069,98 @@ ApplicationWindow {
                 mainWindow.highlightBlueCallsigns = String(value || "")
             else if (key === "DecodedTextFont")
                 mainWindow.refreshDecodedTextFont()
+            else if (key === "uiDecodeColorBoost") {
+                mainWindow.decodeColorBoost = Math.max(0, Math.min(100, Number(value)))
+                mainWindow.refreshDecodeColors()
+            }
             else if (key === "WorldMapDisplayed")
-                mainWindow.liveMapPanelVisible = !!value
+                mainWindow.liveMapPanelVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiTimeSyncPanelVisible")
+                mainWindow.timeSyncPanelVisible = mainWindow.coerceBool(value, false)
+            else if (key === "uiActiveStationsPanelVisible")
+                mainWindow.activeStationsPanelVisible = mainWindow.coerceBool(value, false)
+            else if (key === "uiCallerQueuePanelVisible")
+                mainWindow.callerQueuePanelVisible = mainWindow.coerceBool(value, false)
+            else if (key === "uiAstroPanelVisible")
+                mainWindow.astroPanelVisible = mainWindow.coerceBool(value, false)
+            else if (key === "uiDxClusterPanelVisible")
+                mainWindow.dxClusterPanelVisible = mainWindow.coerceBool(value, false)
             else if (key === "uiDxClusterToolbarVisible")
-                mainWindow.dxClusterToolbarVisible = !!value
+                mainWindow.dxClusterToolbarVisible = mainWindow.coerceBool(value, true)
             else if (key === "uiPskReporterToolbarVisible")
-                mainWindow.pskReporterToolbarVisible = !!value
+                mainWindow.pskReporterToolbarVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiAsyncIconVisible")
+                mainWindow.asyncIconVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiDecoSyncMonitorVisible")
+                mainWindow.decoSyncMonitorVisible = mainWindow.coerceBool(value, false)
+            else if (key === "uiBtnMonitorVisible")
+                mainWindow.uiBtnMonitorVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnSetupVisible")
+                mainWindow.uiBtnSetupVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnRecVisible")
+                mainWindow.uiBtnRecVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnWavVisible")
+                mainWindow.uiBtnWavVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnLogVisible")
+                mainWindow.uiBtnLogVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnMacroVisible")
+                mainWindow.uiBtnMacroVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnAstroVisible")
+                mainWindow.uiBtnAstroVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnCatVisible")
+                mainWindow.uiBtnCatVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiToolbarOrder") {
+                mainWindow.uiToolbarOrder = mainWindow.parseToolbarOrder(String(value || ""))
+            }
+            else if (key === "uiClassicColumnOrder") {
+                mainWindow.uiClassicColumnOrder = mainWindow.parseClassicColumnOrder(String(value || ""))
+                mainWindow.applyClassicColumnOrder()
+            }
+            else if (key === "uiWorldClockHeaderSlot") {
+                var slotVal = parseInt(value, 10)
+                if (isNaN(slotVal))
+                    slotVal = mainWindow.worldClockSlotDefault
+                mainWindow.uiWorldClockHeaderSlot = mainWindow.clampWorldClockSlot(slotVal)
+            }
+            else if (key === "uiWorldClockBeforeToolbar")
+                // Retrocompat: vecchio toggle bool → slot before/after toolbar.
+                mainWindow.uiWorldClockHeaderSlot = mainWindow.coerceBool(value, false)
+                    ? mainWindow.worldClockSlotBeforeToolbar : mainWindow.worldClockSlotAfterToolbar
+            else if (key === "uiBtnFooterResetVisible")
+                mainWindow.uiBtnFooterResetVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnFooterHistoryVisible")
+                mainWindow.uiBtnFooterHistoryVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiBtnFooterDxcVisible")
+                mainWindow.uiBtnFooterDxcVisible = mainWindow.coerceBool(value, true)
+            else if (key === "uiWorldClockVisible")
+                worldClock.showWorldClock = mainWindow.coerceBool(value, true)
+            else if (key === "CompactFullSpectrum")
+                mainWindow.compactFullSpectrum = mainWindow.coerceBool(value, false)
+            else if (key === "CompactSignalRx")
+                mainWindow.compactSignalRx = mainWindow.coerceBool(value, false)
+            else if (key === "uiFullSpectrumShowDistColumn")
+                mainWindow.fullSpectrumShowDistColumn = mainWindow.coerceBool(value, true)
+            else if (key === "uiFullSpectrumShowAzColumn")
+                mainWindow.fullSpectrumShowAzColumn = mainWindow.coerceBool(value, true)
+            else if (key === "uiSignalRxShowFreqColumn")
+                mainWindow.signalRxShowFreqColumn = mainWindow.coerceBool(value, true)
+            else if (key === "uiSignalRxShowDistColumn")
+                mainWindow.signalRxShowDistColumn = mainWindow.coerceBool(value, true)
+            else if (key === "uiSignalRxShowAzColumn")
+                mainWindow.signalRxShowAzColumn = mainWindow.coerceBool(value, true)
+            else if (key === "Miles")
+                mainWindow.displayDistanceInMiles = mainWindow.coerceBool(value, false)
             else if (key === "UILanguage")
                 mainWindow.uiLanguage = mainWindow.normalizeUiLanguage(String(value || "en"))
             else if (key === "uiDecodePanelsLayoutSaved")
-                mainWindow.decodePanelLayoutSaved = !!value
+                mainWindow.decodePanelLayoutSaved = mainWindow.coerceBool(value, false)
         }
         function onColorCQChanged() { mainWindow.refreshDecodeColors() }
         function onColorMyCallChanged() { mainWindow.refreshDecodeColors() }
         function onColorDXEntityChanged() { mainWindow.refreshDecodeColors() }
         function onColor73Changed() { mainWindow.refreshDecodeColors() }
         function onColorB4Changed() { mainWindow.refreshDecodeColors() }
+        function onColorDecodeTextChanged() { mainWindow.refreshDecodeColors() }
         function onColorTxMessageChanged() { mainWindow.refreshDecodeColors() }
         function onColorNewDxccChanged() { mainWindow.refreshDecodeColors() }
         function onColorNewDxccBandChanged() { mainWindow.refreshDecodeColors() }
@@ -1004,6 +3175,78 @@ ApplicationWindow {
         function onColorNewCallChanged() { mainWindow.refreshDecodeColors() }
         function onColorNewCallBandChanged() { mainWindow.refreshDecodeColors() }
         function onColorLotwUserChanged() { mainWindow.refreshDecodeColors() }
+        function onDecodeColorEnabledChanged(prop, enabled) { mainWindow.refreshDecodeColors() }
+        function onDecodeColorBoldChanged(prop, bold) { mainWindow.refreshDecodeColors() }
+        function onDecodeColorBgChanged() { mainWindow.refreshDecodeColors() }
+    }
+
+    function decodeClamp01(value) {
+        return Math.max(0, Math.min(1, Number(value)))
+    }
+
+    function decodeColorObject(value) {
+        if (value === undefined || value === null)
+            return null
+        if (typeof value === "object" && value.r !== undefined)
+            return value
+        var text = String(value)
+        if (text.length === 0)
+            return null
+        try {
+            return Qt.color(text)
+        } catch (e) {
+            return null
+        }
+    }
+
+    function boostedDecodeTextColor(value) {
+        mainWindow.decodeColorRevision
+        var boost = Math.max(0, Math.min(100, Number(mainWindow.decodeColorBoost))) / 100.0
+        if (boost <= 0)
+            return value
+        var c = decodeColorObject(value)
+        if (!c || c.a <= 0)
+            return value
+
+        var lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+        var sat = 0.85 * boost
+        var r = lum + (c.r - lum) * (1.0 + sat)
+        var g = lum + (c.g - lum) * (1.0 + sat)
+        var b = lum + (c.b - lum) * (1.0 + sat)
+        r = decodeClamp01(r)
+        g = decodeClamp01(g)
+        b = decodeClamp01(b)
+
+        var boostedLum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        var targetLum = lum < 0.55
+                ? lum + (0.68 - lum) * 0.75 * boost
+                : lum + (0.95 - lum) * 0.35 * boost
+        if (boostedLum < targetLum) {
+            var mix = Math.min(0.75, (targetLum - boostedLum) / Math.max(0.001, 1.0 - boostedLum))
+            r = r + (1.0 - r) * mix
+            g = g + (1.0 - g) * mix
+            b = b + (1.0 - b) * mix
+        }
+        return Qt.rgba(decodeClamp01(r), decodeClamp01(g), decodeClamp01(b), c.a)
+    }
+
+    function boostedDecodeBackgroundColor(value) {
+        mainWindow.decodeColorRevision
+        var boost = Math.max(0, Math.min(100, Number(mainWindow.decodeColorBoost))) / 100.0
+        if (boost <= 0)
+            return value
+        var c = decodeColorObject(value)
+        if (!c || c.a <= 0)
+            return value
+
+        var lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+        var sat = 0.55 * boost
+        var r = decodeClamp01(c.r + (c.r - lum) * sat)
+        var g = decodeClamp01(c.g + (c.g - lum) * sat)
+        var b = decodeClamp01(c.b + (c.b - lum) * sat)
+        var alphaLift = c.a < 0.12 ? 0.18 * boost : 0.28 * boost
+        var alphaCap = c.a < 0.12 ? 0.32 : 0.72
+        return Qt.rgba(r, g, b, Math.min(alphaCap, c.a + alphaLift))
     }
 
     // IU8LMC: DXCC color scheme (JTDX-style)
@@ -1038,33 +3281,88 @@ ApplicationWindow {
         return false
     }
 
-	    function customHighlightColor(modelData) {
-	        if (!modelData)
-	            return ""
-	        var message = modelData.message || ""
-	        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
-	            return "#E14B00"
+    function customHighlightColor(modelData) {
+        if (!modelData)
+            return ""
+        var message = modelData.message || ""
+        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
+            return "#E14B00"
         if (highlightBlue && highlightListMatches(message, highlightBlueCallsigns))
             return "#0064FF"
         return ""
     }
 
+    function effectiveDecodeColor(prop) {
+        mainWindow.decodeColorRevision
+        return bridge.effectiveDecodeColor(prop)
+    }
+
+    function decodeColorBoldEnabled(prop) {
+        mainWindow.decodeColorRevision
+        return !!(bridge.decodeColorEnabled(prop) && bridge.decodeColorBold(prop))
+    }
+
+    function decodeColorCategoryEnabled(prop) {
+        mainWindow.decodeColorRevision
+        return !!(bridge && bridge.decodeColorEnabled(prop))
+    }
+
+    function decodeTextColorProp(modelData) {
+        if (!modelData)
+            return "colorDecodeText"
+        if (modelData.isTx === true && decodeColorCategoryEnabled("colorTxMessage")) return "colorTxMessage"
+        if (modelData.isMyCall === true && decodeColorCategoryEnabled("colorMyCall")) return "colorMyCall"
+        if (highlight73 && isSignoffMessage(modelData.message) && decodeColorCategoryEnabled("color73")) return "color73"
+        if ((modelData.isB4 === true || modelData.dxIsWorked === true) && decodeColorCategoryEnabled("colorB4")) return "colorB4"
+        if (modelData.isCQ === true && decodeColorCategoryEnabled("colorCQ")) return "colorCQ"
+        if (modelData.dxIsNewDxccBand === true && decodeColorCategoryEnabled("colorNewDxccBand")) return "colorNewDxccBand"
+        if (modelData.dxIsNewDxcc === true && decodeColorCategoryEnabled("colorNewDxcc")) return "colorNewDxcc"
+        if (modelData.dxIsNewContinentBand === true && decodeColorCategoryEnabled("colorNewContinentBand")) return "colorNewContinentBand"
+        if (modelData.dxIsNewContinent === true && decodeColorCategoryEnabled("colorNewContinent")) return "colorNewContinent"
+        if (modelData.dxIsNewCqZoneBand === true && decodeColorCategoryEnabled("colorNewCqZoneBand")) return "colorNewCqZoneBand"
+        if (modelData.dxIsNewCqZone === true && decodeColorCategoryEnabled("colorNewCqZone")) return "colorNewCqZone"
+        if (modelData.dxIsNewItuZoneBand === true && decodeColorCategoryEnabled("colorNewItuZoneBand")) return "colorNewItuZoneBand"
+        if (modelData.dxIsNewItuZone === true && decodeColorCategoryEnabled("colorNewItuZone")) return "colorNewItuZone"
+        if (modelData.dxIsNewGridBand === true && decodeColorCategoryEnabled("colorNewGridBand")) return "colorNewGridBand"
+        if (modelData.dxIsNewGrid === true && decodeColorCategoryEnabled("colorNewGrid")) return "colorNewGrid"
+        if (modelData.dxIsNewCallBand === true && decodeColorCategoryEnabled("colorNewCallBand")) return "colorNewCallBand"
+        if (modelData.dxIsNewCall === true && decodeColorCategoryEnabled("colorNewCall")) return "colorNewCall"
+        if ((modelData.dxIsMostWanted === true || modelData.dxIsNewCountry === true || modelData.dxIsNewBand === true)
+                && decodeColorCategoryEnabled("colorDXEntity"))
+            return "colorDXEntity"
+        return "colorDecodeText"
+    }
+
+    function decodeEntryBoldForModel(modelData) {
+        mainWindow.decodeColorRevision
+        if (!modelData)
+            return false
+        if (customHighlightColor(modelData) !== "")
+            return false
+        return decodeColorBoldEnabled(decodeTextColorProp(modelData))
+    }
+
+    // 1.0.416 — colore di SFONDO riga scelto dall'utente per categoria (opt-in).
+    // null se per la categoria della riga lo sfondo non è abilitato → fallback al
+    // comportamento esistente. Dipende da decodeColorRevision per la reattività.
+    function decodeUserBgFill(modelData) {
+        mainWindow.decodeColorRevision
+        if (!modelData) return null
+        var hex = bridge.decodeHighlightUserBg(modelData)
+        return (hex && hex.length > 0) ? Qt.color(hex) : null
+    }
+
+    function lotwMarkerColor() {
+        return boostedDecodeTextColor(effectiveDecodeColor("colorLotwUser"))
+    }
+
 	    // Shannon-compatible color function (allineato a DecodeWindow.qml)
-	    function getDxccColor(modelData) {
-	        if (!modelData)
-	            return textPrimary
-	        var customColor = customHighlightColor(modelData)
-	        if (modelData.isTx)     return bridge.themeManager.warningColor
-        if (modelData.isMyCall) return bridge.colorMyCall
-        if (customColor !== "") return customColor
-        if (highlight73 && isSignoffMessage(modelData.message)) return bridge.color73
-        if (modelData.isB4 === true || modelData.dxIsWorked === true) return bridge.colorB4
-        if (modelData.isLotw === true) return "#44BBFF"
-        if ((modelData.dxCountry && String(modelData.dxCountry).length > 0)
-            || modelData.dxIsMostWanted === true || modelData.dxIsNewCountry === true || modelData.dxIsNewBand === true)
-            return bridge.colorDXEntity
-        if (modelData.isCQ) return bridge.colorCQ
-        return textPrimary
+    function getDxccColor(modelData) {
+        if (!modelData)
+            return boostedDecodeTextColor(textPrimary)
+        var customColor = customHighlightColor(modelData)
+        if (customColor !== "") return boostedDecodeTextColor(customColor)
+        return boostedDecodeTextColor(effectiveDecodeColor(decodeTextColorProp(modelData)))
     }
 
     function decodeHighlightHex(modelData) {
@@ -1108,7 +3406,7 @@ ApplicationWindow {
         if (hex.length === 0)
             return null
         var c = Qt.color(hex)
-        return Qt.rgba(c.r, c.g, c.b, 0.35)
+        return boostedDecodeBackgroundColor(Qt.rgba(c.r, c.g, c.b, 0.35))
     }
 
     function decodeHighlightBorder(modelData) {
@@ -1116,25 +3414,27 @@ ApplicationWindow {
         if (hex.length === 0)
             return null
         var c = Qt.color(hex)
-        return Qt.rgba(c.r, c.g, c.b, 0.85)
+        return boostedDecodeTextColor(Qt.rgba(c.r, c.g, c.b, 0.85))
     }
 
     function fullSpectrumTextColor(modelData) {
+        if (!modelData)
+            return textPrimary
         var rowHex = decodeRowHighlightHex(modelData)
         if (rowHex.length > 0)
             return readableTextOnHighlight(rowHex)
 
         var customColor = customHighlightColor(modelData)
         if (customColor !== "")
-            return customColor
+            return boostedDecodeTextColor(customColor)
         if (highlight73 && isSignoffMessage(modelData.message))
-            return bridge.color73
+            return boostedDecodeTextColor(effectiveDecodeColor("color73"))
         if (modelData.isB4 === true || modelData.dxIsWorked === true)
-            return bridge.colorB4
+            return boostedDecodeTextColor(effectiveDecodeColor("colorB4"))
 
         var textHex = decodePassiveHighlightTextColor(modelData)
         if (textHex.length > 0)
-            return textHex
+            return boostedDecodeTextColor(textHex)
 
         return getDxccColor(modelData)
     }
@@ -1208,6 +3508,19 @@ ApplicationWindow {
         return ""
     }
 
+    // IU8LMC: click destro su un decode -> apre la scheda del nominativo su QRZ.com nel browser.
+    // Usa la call base (i portable/prefix risolvono sulla scheda dell'operatore).
+    function openQrzLookup(modelData) {
+        if (!modelData)
+            return
+        var call = callsignBase(String(modelData.dxCallsign || ""))
+        if (call.length === 0)
+            call = callsignBase(firstMessageCallsign(modelData.message || ""))
+        if (call.length === 0)
+            return
+        Qt.openUrlExternally("https://www.qrz.com/db/" + call.toUpperCase())
+    }
+
     function isLocalDistanceEntry(modelData) {
         if (!modelData)
             return true
@@ -1224,22 +3537,48 @@ ApplicationWindow {
         if (isLocalDistanceEntry(modelData))
             return ""
         if (modelData && modelData.dxDistance !== undefined && modelData.dxDistance > 0)
-            return Math.round(modelData.dxDistance) + "km"
+            return formatDistanceText(modelData.dxDistance, false)
         return ""
+    }
+
+    function formatDistanceText(distanceKm, withSpace) {
+        var km = Number(distanceKm)
+        if (!isFinite(km) || km <= 0)
+            return ""
+        var value = displayDistanceInMiles ? km * 0.621371192 : km
+        return Math.round(value) + (withSpace ? " " : "") + (displayDistanceInMiles ? "mi" : "km")
+    }
+
+    function usStateLabel(modelData) {
+        if (!bridge || !bridge.showUsState || !modelData || !modelData.usState)
+            return ""
+        return String(modelData.usState).trim().toUpperCase()
+    }
+
+    function dxccDisplayText(modelData) {
+        if (!modelData)
+            return ""
+        var country = modelData.dxCountry ? String(modelData.dxCountry) : ""
+        var state = usStateLabel(modelData)
+        if (country.length > 0 && state.length > 0)
+            return country + " · " + state
+        return country.length > 0 ? country : state
     }
 
     // IU8LMC: Function to build tooltip text
     function getDxccTooltipText(modelData) {
-        if (!modelData.dxCountry) return ""
+        if (!modelData) return ""
+        var dxccText = dxccDisplayText(modelData)
+        if (!dxccText) return ""
         var lines = []
-        var header = modelData.dxCallsign + " - " + modelData.dxCountry
+        var header = modelData.dxCallsign + " - " + dxccText
         if (modelData.dxContinent) header += " (" + modelData.dxContinent + ")"
         lines.push(header)
         // Bearing and distance to DX station
         if (!isLocalDistanceEntry(modelData) && modelData.dxBearing !== undefined && modelData.dxBearing >= 0) {
             var bearingDist = "Az: " + Math.round(modelData.dxBearing) + "°"
             if (modelData.dxDistance !== undefined && modelData.dxDistance > 0) {
-                bearingDist += "  Dist: " + Math.round(modelData.dxDistance) + " km"
+                bearingDist += "  Dist: " + formatDistanceText(modelData.dxDistance, true)
             }
             lines.push(bearingDist)
         }
@@ -1295,6 +3634,321 @@ ApplicationWindow {
             : Text.ElideRight
     }
 
+    // ===================================================================
+    // Full Spectrum — colonne configurabili (larghezza / visibilità /
+    // ordine) + flip cronologico newest-first. Modello-config UNICO
+    // condiviso dal pannello embedded (evenPeriodList) e dalla finestra
+    // staccata (period1FloatingList). Solo UI/QML: il modello dati C++
+    // (bandActivityModel) e la pipeline decode restano INTATTI.
+    // By IU8LMC
+    // ===================================================================
+    // Ordine + visibilità: drive del Repeater header/righe. SEMPRE riassegnato
+    // (mai mutato in place) per notificare i binding.
+    property var fsColumnOrder: fsDefaultOrder()
+    // Larghezze per-id (mappa). Cambia durante il drag SENZA ricreare i Repeater
+    // (così il MouseArea trascinato non viene distrutto a metà gesto).
+    property var fsColWidthMap: fsDefaultWidths()
+    // Bump per forzare la rivalutazione delle Layout.preferredWidth durante il drag.
+    property int fsColWidthVer: 0
+    // Flip cronologico: true = più recenti in alto (ListView BottomToTop).
+    property bool fsNewestFirst: false
+
+    function fsDefaultOrder() {
+        return [
+            { id: "utc",  vis: true },
+            { id: "db",   vis: true },
+            { id: "dt",   vis: true },
+            { id: "freq", vis: true },
+            { id: "drift", vis: true },
+            { id: "msg",  vis: true },
+            { id: "dist", vis: true },
+            { id: "dxcc", vis: true },
+            { id: "az",   vis: true }
+        ]
+    }
+    function fsDefaultWidths() {
+        return { utc: 86, db: 38, dt: 48, freq: 45, drift: 42, msg: 140, dist: 58, dxcc: 200, az: 52 }
+    }
+    // Metadati statici per colonna (label, allineamento, flessibile, nascondibile, min px).
+    function fsColMeta(id) {
+        switch (id) {
+        case "utc":  return { label: qsTr("UTC"),     align: "left",  fill: false, canHide: true,  minW: 44 }
+        case "db":   return { label: qsTr("dB"),      align: "right", fill: false, canHide: true,  minW: 24 }
+        case "dt":   return { label: qsTr("DT"),      align: "right", fill: false, canHide: true,  minW: 28 }
+        case "freq": return { label: qsTr("Freq"),    align: "right", fill: false, canHide: true,  minW: 30 }
+        case "drift": return { label: qsTr("Drift"),  align: "right", fill: false, canHide: true,  minW: 34 }
+        case "msg":  return { label: qsTr("Message"), align: "left",  fill: true,  canHide: false, minW: 72 }
+        case "dist": return { label: qsTr("Dist"),    align: "right", fill: false, canHide: true,  minW: 36 }
+        case "dxcc": return { label: qsTr("DXCC"),    align: "right", fill: false, canHide: true,  minW: 90 }
+        case "az":   return { label: qsTr("Az"),      align: "right", fill: false, canHide: true,  minW: 34 }
+        }
+        return { label: id, align: "left", fill: false, canHide: true, minW: 30 }
+    }
+
+    // Colonne effettivamente visibili (filtro vis + gate DXCC/Az quando il
+    // lookup DXCC è disattivato, come da comportamento storico).
+    readonly property var fsVisibleColumns: {
+        var out = []
+        var arr = fsColumnOrder || []
+        for (var i = 0; i < arr.length; ++i) {
+            var c = arr[i]
+            if (!c || !c.vis) continue
+            if (c.id === "drift" && (!bridge || bridge.mode !== "WSPR")) continue
+            if ((c.id === "dxcc" || c.id === "az") && !mainWindow.showDxccInfo) continue
+            out.push(c)
+        }
+        return out
+    }
+
+    // Responsive column set for narrow embedded/floating monitors. The
+    // Message column must never overlap a trailing metadata column.
+    function fsColWidthForPanel(id, panelWidth) {
+        var base = fsColWidth(id)
+        var width = Math.max(0, Number(panelWidth) || 0)
+        if (width >= 760)
+            return base
+
+        // Persisted desktop widths are intentionally capped in compact
+        // panels; otherwise one old 200px DXCC width can evict Message/Dist.
+        var compact = {
+            utc: 66, db: 34, dt: 42, freq: 42, drift: 34,
+            dist: 52, dxcc: 120, az: 34
+        }
+        if (compact[id] !== undefined)
+            return Math.max(fsColMeta(id).minW, Math.min(base, compact[id]))
+        return base
+    }
+
+    function fsColumnsForWidth(panelWidth) {
+        var out = (fsVisibleColumns || []).slice()
+        var available = Math.max(0, Number(panelWidth) || 0)
+        var minMessageWidth = fsColMeta("msg").minW
+        var horizontalMargins = 16
+        var columnSpacing = 6
+        function requiredWidth(columns) {
+            var total = horizontalMargins + Math.max(0, columns.length - 1) * columnSpacing + minMessageWidth
+            for (var i = 0; i < columns.length; ++i) {
+                if (columns[i].id !== "msg")
+                    total += fsColWidthForPanel(columns[i].id, available)
+            }
+            return total
+        }
+
+        // Preserve Message and the core timing/frequency columns first.
+        var removable = ["az", "drift", "dxcc", "dist"]
+        for (var r = 0; r < removable.length && requiredWidth(out) > available; ++r) {
+            for (var i = 0; i < out.length; ++i) {
+                if (out[i].id === removable[r]) {
+                    out.splice(i, 1)
+                    break
+                }
+            }
+        }
+        return out
+    }
+
+    function fsColWidth(id) {
+        var m = fsColWidthMap || {}
+        var w = Number(m[id])
+        if (!isFinite(w) || w <= 0)
+            w = Number(fsDefaultWidths()[id]) || 48
+        return Math.max(fsColMeta(id).minW, Math.round(w))
+    }
+    function fsColVisible(id) {
+        var arr = fsColumnOrder || []
+        for (var i = 0; i < arr.length; ++i)
+            if (arr[i] && arr[i].id === id) return !!arr[i].vis
+        return false
+    }
+    function fsColIndex(id) {
+        var arr = fsColumnOrder || []
+        for (var i = 0; i < arr.length; ++i)
+            if (arr[i] && arr[i].id === id) return i
+        return -1
+    }
+    function fsCanMove(id, dir) {
+        var i = fsColIndex(id)
+        if (i < 0) return false
+        var j = i + dir
+        return j >= 0 && j < (fsColumnOrder ? fsColumnOrder.length : 0)
+    }
+
+    function fsLoadColumns() {
+        var order = fsDefaultOrder()
+        var widths = fsDefaultWidths()
+        try {
+            var rawO = safeBridgeSetting("uiFullSpectrumColumns", "")
+            if (rawO) {
+                var savedO = JSON.parse(rawO)
+                if (Array.isArray(savedO) && savedO.length) {
+                    var def = fsDefaultOrder()
+                    var known = {}
+                    for (var d = 0; d < def.length; ++d) known[def[d].id] = true
+                    var merged = []
+                    var seen = {}
+                    for (var s = 0; s < savedO.length; ++s) {
+                        var so = savedO[s]
+                        if (so && so.id && known[so.id] && !seen[so.id]) {
+                            var vis = (so.vis === false) ? false : true
+                            if (so.id === "msg") vis = true   // Message mai nascondibile
+                            merged.push({ id: so.id, vis: vis })
+                            seen[so.id] = true
+                        }
+                    }
+                    for (var k = 0; k < def.length; ++k)
+                        if (!seen[def[k].id]) merged.push(def[k])
+                    if (!seen["drift"]) {
+                        var driftAt = -1
+                        var freqAt = -1
+                        for (var mi = 0; mi < merged.length; ++mi) {
+                            if (merged[mi].id === "drift") driftAt = mi
+                            if (merged[mi].id === "freq") freqAt = mi
+                        }
+                        if (driftAt >= 0 && freqAt >= 0 && driftAt !== freqAt + 1) {
+                            var driftCol = merged.splice(driftAt, 1)[0]
+                            if (driftAt < freqAt) freqAt--
+                            merged.splice(freqAt + 1, 0, driftCol)
+                        }
+                    }
+                    if (merged.length) order = merged
+                }
+            }
+        } catch (e1) { console.log("fsLoadColumns order parse error: " + e1) }
+        try {
+            var rawW = safeBridgeSetting("uiFullSpectrumColWidths", "")
+            if (rawW) {
+                var savedW = JSON.parse(rawW)
+                if (savedW && typeof savedW === "object") {
+                    var def2 = fsDefaultWidths()
+                    for (var key in def2) {
+                        var wv = Number(savedW[key])
+                        if (isFinite(wv) && wv > 0)
+                            widths[key] = Math.max(fsColMeta(key).minW, Math.round(wv))
+                    }
+                }
+            }
+        } catch (e2) { console.log("fsLoadColumns widths parse error: " + e2) }
+
+        fsColumnOrder = order
+        fsColWidthMap = widths
+        fsColWidthVer++
+        fsNewestFirst = settingBool("uiFullSpectrumNewestFirst", false)
+    }
+
+    function fsPersistOrder() {
+        if (!bridge) return
+        bridge.setSetting("uiFullSpectrumColumns", JSON.stringify(fsColumnOrder))
+        if (!windowStateRestoreInProgress) scheduleSave()
+    }
+    function fsPersistWidths() {
+        if (!bridge) return
+        bridge.setSetting("uiFullSpectrumColWidths", JSON.stringify(fsColWidthMap))
+        if (!windowStateRestoreInProgress) scheduleSave()
+    }
+
+    function fsSetColumnVisible(id, on) {
+        var meta = fsColMeta(id)
+        if (!meta.canHide && !on) return
+        var arr = (fsColumnOrder || []).slice()
+        var i = fsColIndex(id)
+        if (i < 0) return
+        arr[i] = { id: arr[i].id, vis: !!on }
+        fsColumnOrder = arr
+        fsPersistOrder()
+    }
+    function fsToggleColumnVisible(id) { fsSetColumnVisible(id, !fsColVisible(id)) }
+
+    function fsMoveColumn(id, dir) {
+        if (!fsCanMove(id, dir)) return
+        var arr = (fsColumnOrder || []).slice()
+        var i = fsColIndex(id)
+        var j = i + dir
+        var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp
+        fsColumnOrder = arr
+        fsPersistOrder()
+    }
+    // Sposta la colonna `id` alla posizione della colonna `targetId` (drag libero).
+    // NON persiste: il controller di drag chiama fsPersistOrder() al rilascio.
+    function fsMoveColumnToId(id, targetId) {
+        if (id === targetId) return
+        var arr = (fsColumnOrder || []).slice()
+        var from = -1, to = -1
+        for (var i = 0; i < arr.length; ++i) {
+            if (arr[i].id === id) from = i
+            if (arr[i].id === targetId) to = i
+        }
+        if (from < 0 || to < 0 || from === to) return
+        var item = arr.splice(from, 1)[0]
+        // Inserisci alla posizione `to` dell'array già accorciato: la colonna
+        // trascinata finisce sotto il cursore sia da sinistra che da destra.
+        arr.splice(to, 0, item)
+        fsColumnOrder = arr
+    }
+
+    function fsSetColumnWidth(id, w) {
+        var meta = fsColMeta(id)
+        if (meta.fill) return
+        var m = {}
+        var src = fsColWidthMap || {}
+        for (var key in src) m[key] = src[key]
+        m[id] = Math.max(meta.minW, Math.round(w))
+        fsColWidthMap = m
+        fsColWidthVer++          // forza re-eval delle preferredWidth senza ricreare i Repeater
+    }
+
+    function fsResetColumns() {
+        fsColumnOrder = fsDefaultOrder()
+        fsColWidthMap = fsDefaultWidths()
+        fsColWidthVer++
+        fsPersistOrder()
+        fsPersistWidths()
+    }
+    function fsToggleNewestFirst() {
+        fsNewestFirst = !fsNewestFirst
+        persistUiSetting("uiFullSpectrumNewestFirst", fsNewestFirst)
+        if (typeof evenPeriodList !== "undefined" && evenPeriodList) evenPeriodList.forceTailFollow()
+        if (typeof period1FloatingList !== "undefined" && period1FloatingList) period1FloatingList.forceTailFollow()
+    }
+
+    // Risolutori contenuto cella. SEMPRE null-safe (guard !entry) per evitare il
+    // TypeError flood ~46/s durante i model-swap transient (lezione 1.0.205).
+    function fsCellText(entry, id) {
+        if (!entry) return ""
+        switch (id) {
+        case "utc":  return entry.formattedTime || decodePanel.formatUtcForDisplay(entry.time)
+        case "db":   return entry.db || ""
+        case "dt":   return entry.dt || ""
+        case "freq": return entry.freq || ""
+        case "drift": return entry.mode === "WSPR" ? (entry.drift || "0") : ""
+        case "msg":  return entry.displayMessage || entry.message || ""
+        case "dist": return decodePanel.distanceText(entry)
+        case "dxcc": return dxccDisplayText(entry)
+        case "az":   return formatBearingDegrees(entry.dxBearing)
+        }
+        return ""
+    }
+    function fsCellColor(entry, id) {
+        if (!entry) return boostedDecodeTextColor(textSecondary)
+        switch (id) {
+        case "msg":  return fullSpectrumTextColor(entry)
+        case "freq": return boostedDecodeTextColor(entry.isTx ? "#f1c40f" : secondaryCyan)
+        case "drift": return boostedDecodeTextColor(textSecondary)
+        case "db":   return boostedDecodeTextColor(entry.snrColor || (entry.isTx ? "#f1c40f" : textSecondary))
+        case "dxcc": return boostedDecodeTextColor((entry.dxCountry || entry.usState) && decodeColorCategoryEnabled("colorDXEntity") ? effectiveDecodeColor("colorDXEntity") : textSecondary)
+        case "az":   return boostedDecodeTextColor(secondaryCyan)
+        }
+        return boostedDecodeTextColor(entry.isTx ? "#f1c40f" : textSecondary)
+    }
+    function fsCellBold(entry, id) {
+        if (!entry) return false
+        switch (id) {
+        case "db":   return entry.isTx === true
+        case "freq": return entry.isTx === true
+        case "msg":  return decodePanel.decodeEntryBold(entry)
+        }
+        return false
+    }
+
     // Dock zones positions
     property rect waterfallDockZone: Qt.rect(8, 64, 450, contentArea.height - 108)
 
@@ -1307,6 +3961,95 @@ ApplicationWindow {
     Material.foreground: bridge.themeManager.textPrimary
     Material.background: bridge.themeManager.bgDeep
     color: bridge.themeManager.bgDeep
+
+    Dialog {
+        id: ft2LinkAccessDialog
+        modal: true
+        focus: true
+        closePolicy: Popup.NoAutoClose
+        width: Math.min(430, Math.max(300, mainWindow.width - 48))
+        x: Math.round((mainWindow.width - width) / 2)
+        y: Math.round((mainWindow.height - height) / 2)
+        padding: 0
+
+        onOpened: {
+            ft2LinkPasswordField.text = ""
+            Qt.callLater(function() { ft2LinkPasswordField.forceActiveFocus() })
+        }
+
+        background: Rectangle {
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: secondaryCyan
+            border.width: 1
+            radius: 8
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            anchors.margins: 16
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("FT2-Link access")
+                color: secondaryCyan
+                font.pixelSize: 18
+                font.bold: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Enter password to unlock this mode.")
+                color: textSecondary
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+
+            TextField {
+                id: ft2LinkPasswordField
+                Layout.fillWidth: true
+                placeholderText: qsTr("Password")
+                echoMode: TextInput.Password
+                selectByMouse: true
+                color: textPrimary
+                placeholderTextColor: textSecondary
+                background: Rectangle {
+                    color: bgMedium
+                    border.color: ft2LinkPasswordField.activeFocus
+                                  ? secondaryCyan
+                                  : glassBorder
+                    radius: 5
+                }
+                Keys.onEscapePressed: mainWindow.rejectFt2LinkAccess()
+                onAccepted: mainWindow.acceptFt2LinkAccess()
+            }
+
+            Text {
+                Layout.fillWidth: true
+                visible: mainWindow.ft2LinkAccessError.length > 0
+                text: mainWindow.ft2LinkAccessError
+                color: bridge.themeManager.warningColor
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: mainWindow.rejectFt2LinkAccess()
+                }
+
+                Button {
+                    text: qsTr("Unlock")
+                    highlighted: true
+                    onClicked: mainWindow.acceptFt2LinkAccess()
+                }
+            }
+        }
+    }
 
     // Font scale from settings (0.7 - 1.5)
     property double fs: bridge.fontScale || 1.0
@@ -1406,14 +4149,14 @@ ApplicationWindow {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Based on WSJT-X by K1JT et al."
+                text: qsTr("Based on WSJT-X by K1JT et al.")
                 font.pixelSize: 14
                 color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5)
             }
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "QML Interface by IU8LMC"
+                text: qsTr("QML Interface by IU8LMC")
                 font.pixelSize: 13
                 color: accentGreen
             }
@@ -1532,7 +4275,7 @@ ApplicationWindow {
                     color: secondaryCyan
 
                     SequentialAnimation on x {
-                        running: bridge.pskSearching && bridge && bridge.uiQuality !== "Low"
+                        running: bridge.pskSearching && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         NumberAnimation { to: loadingIndicatorBg.width * 0.7; duration: 800; easing.type: Easing.InOutQuad }
                         NumberAnimation { to: 0; duration: 800; easing.type: Easing.InOutQuad }
@@ -1547,7 +4290,8 @@ ApplicationWindow {
                 visible: !bridge.pskSearching && bridge.pskSearchFound
 
                 Text {
-                    text: "Active on bands:"
+                    text: qsTr("Active on bands during the last %1 minutes:")
+                          .arg(bridge.pskReporterTimeSpanMinutes)
                     font.pixelSize: 12
                     color: textSecondary
                 }
@@ -1604,7 +4348,7 @@ ApplicationWindow {
             // Not found message
             Text {
                 Layout.fillWidth: true
-                text: "No recent activity found\n(last 15 minutes)"
+                text: qsTr("No recent activity found\n(last 15 minutes)")
                 font.pixelSize: 12
                 color: textSecondary
                 horizontalAlignment: Text.AlignHCenter
@@ -1672,7 +4416,7 @@ ApplicationWindow {
             }
 
             Text {
-                text: "Range valido: 100-5000 Hz"
+                text: qsTr("Valid range: 100-5000 Hz")
                 font.pixelSize: 11
                 color: textSecondary
             }
@@ -1681,12 +4425,12 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 12
 
-                TextField {
+                DecoTextField {
                     id: freqInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
                     font.pixelSize: 18
-                    font.family: "Monospace"
+                    font.family: decodiumMonoFontFamily
                     color: textPrimary
                     placeholderText: ""
                     selectByMouse: true
@@ -1755,7 +4499,7 @@ ApplicationWindow {
 
         Text {
             anchors.centerIn: parent
-            text: "Dock Waterfall Here"
+            text: qsTr("Dock the Waterfall here")
             color: secondaryCyan
             font.pixelSize: 16
             font.bold: true
@@ -1773,8 +4517,9 @@ ApplicationWindow {
         Rectangle {
             id: headerBar
             Layout.fillWidth: true
-            Layout.preferredHeight: headerFlow.height + 12
-            Layout.minimumHeight: 86
+            visible: !mainWindow.dxPeditionMode
+            Layout.preferredHeight: visible ? headerFlow.height + 12 : 0
+            Layout.minimumHeight: visible ? 86 : 0
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
             z: 100
 
@@ -1785,6 +4530,24 @@ ApplicationWindow {
                 anchors.top: parent.top
                 anchors.margins: 6
                 spacing: 8
+
+                // ── Host-slot dell'orologio fra i blocchi dell'header ──
+                // 6 Item "gancio" nei gap STABILI del Flow. L'orologio (worldClock) è
+                // re-parentato in UNO di essi (vedi mainWindow.applyWorldClockSlot). Quando
+                // uno slot NON ospita l'orologio è width 0 E visible:false, così il Flow lo
+                // salta del tutto (niente micro-gap residuo dallo spacing fra invisibili).
+                readonly property var clockSlots: [clockSlot0, clockSlot1, clockSlot2,
+                                                   clockSlot3, clockSlot4, clockSlot5]
+
+                Component.onCompleted: mainWindow.applyWorldClockSlot()
+
+                // slot 0 — prima dell'hamburger
+                Item {
+                    id: clockSlot0
+                    height: 80
+                    width: worldClock.parent === clockSlot0 ? worldClock.width : 0
+                    visible: worldClock.parent === clockSlot0
+                }
 
                 // Hamburger Menu Button
                 Rectangle {
@@ -1822,8 +4585,16 @@ ApplicationWindow {
                     Behavior on border.width { NumberAnimation { duration: 150 } }
 
                     ToolTip.visible: menuButtonMA.containsMouse
-                    ToolTip.text: "Menu"
+                    ToolTip.text: qsTr("Menu")
                     ToolTip.delay: 500
+                }
+
+                // slot 1 — fra hamburger e logo
+                Item {
+                    id: clockSlot1
+                    height: 80
+                    width: worldClock.parent === clockSlot1 ? worldClock.width : 0
+                    visible: worldClock.parent === clockSlot1
                 }
 
                 // Logo group
@@ -1843,10 +4614,19 @@ ApplicationWindow {
                         }
                         Text {
                             text: "v" + bridge.version()
-                            font.pixelSize: 9
-                            color: textSecondary
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: "#ffffff"
                         }
                     }
+                }
+
+                // slot 2 — fra logo e freq display
+                Item {
+                    id: clockSlot2
+                    height: 80
+                    width: worldClock.parent === clockSlot2 ? worldClock.width : 0
+                    visible: worldClock.parent === clockSlot2
                 }
 
                 // Radio Frequency Display with CAT status
@@ -1854,8 +4634,10 @@ ApplicationWindow {
                     width: bridge.catConnected ? 340 : 290
                     height: 74
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                    border.color: bridge.catConnected ? accentGreen : glassBorder
-                    border.width: bridge.catConnected ? 2 : 1
+                    border.color: mainWindow.txVisualActive ? bridge.themeManager.ledRed
+                                  : (mainWindow.txPttPending ? bridge.themeManager.warningColor
+                                     : (bridge.catConnected ? accentGreen : glassBorder))
+                    border.width: (mainWindow.txVisualActive || mainWindow.txPttPending || bridge.catConnected) ? 2 : 1
                     radius: 6
 
                     Behavior on width { NumberAnimation { duration: 200 } }
@@ -1879,7 +4661,7 @@ ApplicationWindow {
                                 color: bridge.catConnected ? accentGreen : "#555"
 
                                 SequentialAnimation on opacity {
-                                    running: bridge.catConnected && bridge.uiQuality !== "Low"
+                                    running: bridge.catConnected && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                     loops: Animation.Infinite
                                     NumberAnimation { to: 0.4; duration: 800 }
                                     OpacityAnimator { to: 1.0; duration: 800 }
@@ -1887,17 +4669,91 @@ ApplicationWindow {
                             }
 
                             // Frequency display - syncs with radio or band selection
-                            Text {
+                            Row {
                                 id: frequencyDisplay
-                                // bridge.frequency is synced with both CAT and BandManager
-                                text: (bridge.frequency / 1000000).toFixed(6)
-                                font.pixelSize: Math.round(26 * fs)
-                                font.family: "Monospace"
-                                font.bold: true
-                                color: mainWindow.txVisualActive ? "#ff6b6b" : accentGreen
+                                property int digitHeight: Math.round(34 * fs)
                                 Layout.fillWidth: true
+                                Layout.preferredHeight: digitHeight
+                                spacing: 0
 
-                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Repeater {
+                                    model: mainWindow.frequencyDisplayCells(bridge.displayFrequency)
+
+                                    delegate: Rectangle {
+                                        id: frequencyDigitCell
+                                        required property var modelData
+                                        readonly property bool digitCell: !!modelData.digit
+                                        readonly property int stepHz: Number(modelData.stepHz || 0)
+                                        readonly property color baseDigitColor: mainWindow.txVisualActive ? "#ff6b6b"
+                                                                           : (mainWindow.txPttPending ? bridge.themeManager.warningColor
+                                                                                                      : accentGreen)
+                                        width: digitCell ? Math.round(16 * fs) : Math.round(8 * fs)
+                                        height: frequencyDisplay.digitHeight
+                                        radius: 2
+                                        color: digitCell && digitUpArea.containsMouse
+                                               ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.20)
+                                               : digitCell && digitDownArea.containsMouse
+                                                 ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
+                                                 : "transparent"
+
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            height: 1
+                                            visible: frequencyDigitCell.digitCell && digitUpArea.containsMouse
+                                            color: accentGreen
+                                        }
+
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            height: 1
+                                            visible: frequencyDigitCell.digitCell && digitDownArea.containsMouse
+                                            color: secondaryCyan
+                                        }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: frequencyDigitCell.modelData.text
+                                            font.pixelSize: Math.round(26 * fs)
+                                            font.family: decodiumMonoFontFamily
+                                            font.bold: true
+                                            color: digitCell && digitUpArea.containsMouse
+                                                   ? "#8cffb8"
+                                                   : digitCell && digitDownArea.containsMouse
+                                                     ? "#8fd7ff"
+                                                     : frequencyDigitCell.baseDigitColor
+
+                                            Behavior on color { ColorAnimation { duration: 90 } }
+                                        }
+
+                                        MouseArea {
+                                            id: digitUpArea
+                                            enabled: frequencyDigitCell.digitCell && !bridge.transmitting && !bridge.tuning
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            height: parent.height / 2
+                                            hoverEnabled: true
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: mainWindow.tuneDialByStep(frequencyDigitCell.stepHz, 1)
+                                        }
+
+                                        MouseArea {
+                                            id: digitDownArea
+                                            enabled: frequencyDigitCell.digitCell && !bridge.transmitting && !bridge.tuning
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            height: parent.height / 2
+                                            hoverEnabled: true
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: mainWindow.tuneDialByStep(frequencyDigitCell.stepHz, -1)
+                                        }
+                                    }
+                                }
                             }
 
                             Text {
@@ -1934,7 +4790,8 @@ ApplicationWindow {
                                 text: "TX:"
                                 font.pixelSize: 10
                                 font.bold: true
-                                color: mainWindow.txVisualActive ? bridge.themeManager.ledRed : textSecondary
+                                color: mainWindow.txVisualActive ? bridge.themeManager.ledRed
+                                       : (mainWindow.txPttPending ? bridge.themeManager.warningColor : textSecondary)
                             }
                             // TX frequency - click to edit
                             Rectangle {
@@ -1943,7 +4800,7 @@ ApplicationWindow {
                                 Text {
                                     id: txFreqText; anchors.centerIn: parent
                                     text: bridge.txFrequency + " Hz"
-                                    font.pixelSize: 10; font.family: "Monospace"
+                                    font.pixelSize: 10; font.family: decodiumMonoFontFamily
                                     color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : bridge.themeManager.ledRed
                                 }
                                 MouseArea {
@@ -1968,7 +4825,7 @@ ApplicationWindow {
                                 Text {
                                     id: rxFreqText; anchors.centerIn: parent
                                     text: bridge.rxFrequency + " Hz"
-                                    font.pixelSize: 10; font.family: "Monospace"
+                                    font.pixelSize: 10; font.family: decodiumMonoFontFamily
                                     color: accentGreen
                                 }
                                 MouseArea {
@@ -2036,15 +4893,15 @@ ApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging && bridge.uiQuality !== "Low"
+                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.5; duration: 400 }
                                 OpacityAnimator { to: 1.0; duration: 400 }
                             }
 
                             ToolTip.visible: maCoherent.containsMouse
-                            ToolTip.text: "Coherent Avg: " + (bridge.coherentAvgEnabled
-                                ? (bridge.ledCoherentAveraging ? bridge.coherentCount + " signals" : "ON (idle)")
+                            ToolTip.text: "Coherent averaging: " + (bridge.coherentAvgEnabled
+                                ? (bridge.ledCoherentAveraging ? bridge.coherentCount + " signals" : "ON (waiting)")
                                 : "OFF (disabled)") + "  -  click to toggle"
 
                             MouseArea {
@@ -2071,15 +4928,15 @@ ApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync && bridge.uiQuality !== "Low"
+                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.5; duration: 300 }
                                 OpacityAnimator { to: 1.0; duration: 300 }
                             }
 
                             ToolTip.visible: maNeural.containsMouse
-                            ToolTip.text: "Neural Sync: " + (bridge.neuralSyncEnabled
-                                ? (bridge.ledNeuralSync ? (bridge.neuralScore * 100).toFixed(0) + "%" : "ON (idle)")
+                            ToolTip.text: "Neural sync: " + (bridge.neuralSyncEnabled
+                                ? (bridge.ledNeuralSync ? (bridge.neuralScore * 100).toFixed(0) + "%" : "ON (waiting)")
                                 : "OFF (disabled)") + "  -  click to toggle"
 
                             MouseArea {
@@ -2106,15 +4963,15 @@ ApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback && bridge.uiQuality !== "Low"
+                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.5; duration: 350 }
                                 OpacityAnimator { to: 1.0; duration: 350 }
                             }
 
                             ToolTip.visible: maTurbo.containsMouse
-                            ToolTip.text: "Turbo Feedback: " + (bridge.turboFeedbackEnabled
-                                ? (bridge.ledTurboFeedback ? bridge.turboIterations + " iter" : "ON (idle)")
+                            ToolTip.text: "Turbo feedback: " + (bridge.turboFeedbackEnabled
+                                ? (bridge.ledTurboFeedback ? bridge.turboIterations + " iter" : "ON (waiting)")
                                 : "OFF (disabled)") + "  -  click to toggle"
 
                             MouseArea {
@@ -2149,7 +5006,7 @@ ApplicationWindow {
                             id: utcTimeLabel
                             text: bridge.utcTime
                             font.pixelSize: 8
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.bold: true
                             color: clockMouseArea.containsMouse
                                        ? bridge.themeManager.warningColor
@@ -2163,7 +5020,7 @@ ApplicationWindow {
                                 onClicked: bridge.syncNtpNow()
                                 ToolTip.visible: containsMouse
                                 ToolTip.delay: 600
-                                ToolTip.text: qsTr("Click: immediate NTP sync to align DT (FT8/FT4)")
+                                ToolTip.text: qsTr("Click: sync NTP now to align DT (FT8/FT4)")
                             }
                         }
                     }
@@ -2185,6 +5042,25 @@ ApplicationWindow {
                             OpacityAnimator { to: 0.3; duration: 250 }
                         }
                     }
+
+                    // PTT command sent, waiting for positive rig feedback.
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: "transparent"
+                        border.color: bridge.themeManager.warningColor
+                        border.width: 2
+                        visible: mainWindow.txPttPending
+                        opacity: 0.85
+                    }
+                }
+
+                // slot 3 — fra freq display e Sliders
+                Item {
+                    id: clockSlot3
+                    height: 80
+                    width: worldClock.parent === clockSlot3 ? worldClock.width : 0
+                    visible: worldClock.parent === clockSlot3
                 }
 
                 // RX/TX Sliders + LVL/Monitor
@@ -2209,12 +5085,41 @@ ApplicationWindow {
                                 anchors.margins: 2
                                 spacing: 0
 
-                                RowLayout {
-                                    spacing: 2
-                                    Text { text: "RX"; color: secondaryCyan; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 16 }
-                                    Slider {
-                                        id: rxSliderHeader
-                                        Layout.fillWidth: true
+	                                RowLayout {
+	                                    spacing: 2
+	                                    Text { text: "RX"; color: secondaryCyan; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 16 }
+	                                    Rectangle {
+	                                        id: rxAutoLevelToggle
+	                                        Layout.preferredWidth: 30
+	                                        Layout.preferredHeight: 12
+	                                        radius: 3
+	                                        color: bridge && bridge.autoRxInputLevel
+	                                               ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.22)
+	                                               : Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.85)
+	                                        border.color: bridge && bridge.autoRxInputLevel ? secondaryCyan : glassBorder
+	                                        border.width: 1
+	                                        Text {
+	                                            anchors.centerIn: parent
+	                                            text: "AUTO"
+	                                            color: bridge && bridge.autoRxInputLevel ? secondaryCyan : textSecondary
+	                                            font.pixelSize: 7
+	                                            font.bold: true
+	                                        }
+	                                        MouseArea {
+	                                            id: rxAutoLevelMouse
+	                                            anchors.fill: parent
+	                                            hoverEnabled: true
+	                                            cursorShape: Qt.PointingHandCursor
+	                                            onClicked: if (bridge) bridge.autoRxInputLevel = !bridge.autoRxInputLevel
+	                                        }
+	                                        ToolTip.visible: rxAutoLevelMouse.containsMouse
+	                                        ToolTip.text: bridge && bridge.autoRxInputLevel
+	                                                      ? qsTr("Auto RX level active")
+	                                                      : qsTr("Auto RX level disabled")
+	                                    }
+	                                    Slider {
+	                                        id: rxSliderHeader
+	                                        Layout.fillWidth: true
                                         Layout.preferredHeight: 14
                                         from: 0; to: 100; live: true; stepSize: 1
                                         Component.onCompleted: if (bridge) value = bridge.rxInputLevel
@@ -2241,7 +5146,7 @@ ApplicationWindow {
                                             width: 8; height: 8; radius: 4; color: secondaryCyan
                                         }
                                     }
-                                    Text { text: Math.round(bridge.rxInputLevel); color: secondaryCyan; font.pixelSize: 8; font.family: "Monospace"; Layout.preferredWidth: 18 }
+                                    Text { text: Math.round(bridge.rxInputLevel); color: secondaryCyan; font.pixelSize: 8; font.family: decodiumMonoFontFamily; Layout.preferredWidth: 18 }
                                 }
 
                                 RowLayout {
@@ -2269,94 +5174,21 @@ ApplicationWindow {
                                         text: bridge.txOutputLevel > 0 ? ("-" + (bridge.txOutputLevel / 10).toFixed(1)) : "0.0"
                                         color: accentGreen
                                         font.pixelSize: 8
-                                        font.family: "Monospace"
+                                        font.family: decodiumMonoFontFamily
                                         Layout.preferredWidth: 28
                                     }
                                 }
                             }
                         }
 
-                        // Row 2: Mode selector
+                        // Row 2: Monitor/Stop control
                         RowLayout {
                             spacing: 2
 
-                            // Mode selector
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 30
-                                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                                border.color: glassBorder; radius: 4
-
-                                ComboBox {
-                                    id: compactModeCombo
-                                    anchors.fill: parent
-                                    anchors.margins: 1
-                                    model: bridge.availableModes()
-                                    currentIndex: model.indexOf(bridge.mode)
-                                    onActivated: function(idx) {
-                                        bridge.mode = model[idx]
-                                    }
-                                    font.pixelSize: 11; font.bold: true
-                                    leftPadding: 8
-                                    rightPadding: 22
-                                    topPadding: 4
-                                    bottomPadding: 4
-                                    background: Rectangle { color: "transparent" }
-                                    contentItem: Text {
-                                        text: compactModeCombo.displayText
-                                        font.pixelSize: 11; font.bold: true
-                                        color: secondaryCyan
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignLeft
-                                        elide: Text.ElideRight
-                                    }
-                                    delegate: ItemDelegate {
-                                        width: compactModePopup.width
-                                        height: 34
-                                        contentItem: Text {
-                                            text: modelData
-                                            font.pixelSize: 11; font.bold: true
-                                            color: bridge.mode === modelData ? secondaryCyan : textPrimary
-                                            verticalAlignment: Text.AlignVCenter
-                                            elide: Text.ElideRight
-                                        }
-                                        background: Rectangle {
-                                            color: hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-                                        }
-                                    }
-                                    popup: Popup {
-                                        id: compactModePopup
-                                        y: compactModeCombo.height + 1
-                                        width: Math.max(compactModeCombo.width, 168)
-                                        implicitHeight: Math.min(contentItem.implicitHeight + 2, 360)
-                                        padding: 1
-
-                                        contentItem: ListView {
-                                            clip: true
-                                            implicitHeight: contentHeight
-                                            model: compactModeCombo.popup.visible ? compactModeCombo.delegateModel : null
-                                            currentIndex: compactModeCombo.highlightedIndex
-
-                                            ScrollBar.vertical: ScrollBar {
-                                                policy: ScrollBar.AsNeeded
-                                            }
-                                        }
-
-                                        background: Rectangle {
-                                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.97)
-                                            border.color: glassBorder
-                                            radius: 4
-                                        }
-                                    }
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Select decoder mode")
-                                }
-                            }
-
-                            // Monitor/Stop Button
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 16
+                                visible: mainWindow.uiBtnMonitorVisible
                                 color: bridge.monitoring ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
                                 border.color: bridge.monitoring ? accentGreen : glassBorder
                                 border.width: 1
@@ -2373,7 +5205,7 @@ ApplicationWindow {
                                         anchors.verticalCenter: parent.verticalCenter
 
                                         SequentialAnimation on opacity {
-                                            running: bridge.monitoring && bridge.uiQuality !== "Low"
+                                            running: bridge.monitoring && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                             loops: Animation.Infinite
                                             OpacityAnimator { to: 0.4; duration: 500 }
                                             OpacityAnimator { to: 1.0; duration: 500 }
@@ -2400,15 +5232,105 @@ ApplicationWindow {
                                 ToolTip.visible: monitorMA.containsMouse
                                 ToolTip.text: bridge.monitoring ? "Stop monitoring" : "Start monitoring"
                             }
+
+                            // Gallager — toggle scavo profondo weak-signal (ft8SubpassHarvest)
+                            Rectangle {
+                                Layout.preferredWidth: 38
+                                Layout.preferredHeight: 16
+                                color: bridge.ft8SubpassHarvest ? Qt.rgba(0.55, 0.43, 0.92, 0.18) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                                border.color: bridge.ft8SubpassHarvest ? "#8f74e8" : glassBorder
+                                border.width: 1
+                                radius: 2
+
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 2
+                                    Text {
+                                        text: "◆"
+                                        font.pixelSize: 8
+                                        color: bridge.ft8SubpassHarvest ? "#bda9ff" : secondaryCyan
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "GAL"
+                                        font.pixelSize: 7
+                                        font.bold: true
+                                        color: bridge.ft8SubpassHarvest ? "#bda9ff" : textPrimary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: gallagerMA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: bridge.ft8SubpassHarvest = !bridge.ft8SubpassHarvest
+                                }
+
+                                ToolTip.visible: gallagerMA.containsMouse
+                                ToolTip.text: qsTr("Gallager — deep dig for weak signals.\nEnables a second decoding pass (LDPC subpass\nparallelized across cores, named after R. Gallager, father of LDPC)\nthat recovers near-noise stations missed by the normal decode.\nRequires a multi-core CPU: on old PCs it may burden the audio\n→ in that case leave it off.")
+                            }
+
+                            // fastldpc — decoder LDPC SIMD per FT2 (AVX2 o NEON)
+                            Rectangle {
+                                Layout.preferredWidth: 38
+                                Layout.preferredHeight: 16
+                                color: bridge.fastLdpcEnabled ? Qt.rgba(0.98, 0.68, 0.20, 0.18) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                                border.color: bridge.fastLdpcEnabled ? "#f0ae33" : glassBorder
+                                border.width: 1
+                                radius: 2
+
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 2
+                                    Text {
+                                        text: "⚡"
+                                        font.pixelSize: 8
+                                        color: bridge.fastLdpcEnabled ? "#ffd48a" : secondaryCyan
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "LDPC"
+                                        font.pixelSize: 7
+                                        font.bold: true
+                                        color: bridge.fastLdpcEnabled ? "#ffd48a" : textPrimary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: fastLdpcMA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: bridge.fastLdpcEnabled = !bridge.fastLdpcEnabled
+                                }
+
+                                ToolTip.visible: fastLdpcMA.containsMouse
+                                ToolTip.text: qsTr("Fast LDPC — vectorized FT2 decoder (NEON on Apple Silicon/ARM64, AVX2 on x86).\nDecodes the same words far quicker than the original decoder,\nfreeing CPU for the rest of the cycle. Falls back to the original\ndecoder automatically when the required SIMD backend is unavailable.\nTurn it off if you see decodes that look wrong.")
+                            }
                         }
                     }
                 } // End Sliders Item
 
+                // slot 4 — prima del blocco pulsanti toolbar (= "before toolbar")
+                Item {
+                    id: clockSlot4
+                    height: 80
+                    width: worldClock.parent === clockSlot4 ? worldClock.width : 0
+                    visible: worldClock.parent === clockSlot4
+                }
+
                 // Grouped buttons: Settings, REC, WAV, Log, Macro, Astro, CAT
+                // (ex figlio del Row reorderableHeaderPair, ora figlio diretto del Flow:
+                // l'orologio non è più appaiato qui ma vive negli host-slot — vedi clockSlots).
                 Item {
                     id: headerUtilityButtons
-                    width: 360
+                    readonly property int computedWidth: Math.ceil(mainWindow.headerToolbarPreferredWidth())
+                    width: computedWidth
                     height: 74
+                    visible: computedWidth > 0
 
                     Rectangle {
                         width: parent.width
@@ -2419,57 +5341,287 @@ ApplicationWindow {
                         border.color: glassBorder
                         radius: 4
 
+                        // ── Toolbar riordinabile via drag&drop (vedi mainWindow.uiToolbarOrder) ──
+                        // Ogni pulsante è un Component indicizzato per id; un Repeater itera
+                        // il modello ORDINATO e un Loader per slot carica il Component giusto.
+                        // Click breve = azione; long-press = drag magnetico (riordino in barra).
                         RowLayout {
+                            id: headerUtilityRow
                             anchors.fill: parent
                             anchors.margins: 2
                             spacing: 1
 
-                        // Settings
-                        Rectangle {
-                            id: settingsButton
-                            Layout.preferredWidth: 50
-                            Layout.fillHeight: true
-                            radius: 3
-                            color: settingsMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
+                            // Stato drag condiviso fra gli slot
+                            property int dragIndex: -1        // indice modello in trascinamento (-1 = nessuno)
+                            property int dropIndex: -1        // indice di inserimento proposto durante il drag
 
+                            // Mappa id -> Component visuale
+                            function componentForId(id) {
+                                switch (id) {
+                                    case "setup":  return comp_setup
+                                    case "rec":    return comp_rec
+                                    case "wav":    return comp_wav
+                                    case "log":    return comp_log
+                                    case "macro":  return comp_macro
+                                    case "astro":  return comp_astro
+                                    case "layout": return comp_layout
+                                    case "history": return comp_history
+                                    case "dxped": return comp_dxped
+                                    case "cat":    return comp_cat
+                                    case "sep1":
+                                    case "sep2":   return comp_sep
+                                    default:       return null
+                                }
+                            }
+                            function isSeparator(id) { return id === "sep1" || id === "sep2" }
+
+                            Repeater {
+                                id: headerUtilityRepeater
+                                model: mainWindow.uiToolbarOrder
+
+                                // Ogni slot è un Item Layout-managed che ospita il Component del pulsante.
+                                delegate: Item {
+                                    id: slot
+                                    property string buttonId: modelData
+                                    property bool isSep: headerUtilityRow.isSeparator(buttonId)
+                                    // Il pulsante interno espone btnVisible / prefWidth via il Loader.item
+                                    property bool slotVisible: btnLoader.item ? btnLoader.item.btnVisible : true
+                                    property bool dragging: headerUtilityRow.dragIndex === index
+
+                                    visible: slotVisible
+                                    Layout.preferredWidth: btnLoader.item ? btnLoader.item.prefWidth : 0
+                                    Layout.fillHeight: true
+                                    Layout.topMargin: isSep ? 4 : 0
+                                    Layout.bottomMargin: isSep ? 4 : 0
+                                    z: dragging ? 10 : 0
+
+                                    Loader {
+                                        id: btnLoader
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        height: parent.height
+                                        sourceComponent: headerUtilityRow.componentForId(slot.buttonId)
+                                        // L'opacità cala mentre lo slot è in drag (il ghost lo rappresenta)
+                                        opacity: slot.dragging ? 0.25 : 1.0
+                                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                                        // Spostamento magnetico: gli slot fra origine e destinazione del drag
+                                        // scorrono per "aprire" il varco; animato (NO layer.enabled/FBO).
+                                        x: {
+                                            var d = headerUtilityRow.dragIndex
+                                            var t = headerUtilityRow.dropIndex
+                                            if (d < 0 || t < 0 || index === d)
+                                                return 0
+                                            var dragged = headerUtilityRepeater.itemAt(d)
+                                            var shift = (dragged ? dragged.width : 0) + headerUtilityRow.spacing
+                                            if (t > d && index > d && index <= t)
+                                                return -shift   // si spostano a sinistra
+                                            if (t < d && index >= t && index < d)
+                                                return shift    // si spostano a destra
+                                            return 0
+                                        }
+                                        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                                        onLoaded: {
+                                            if (item) {
+                                                item.hovered = Qt.binding(function() { return dragMA.containsMouse && !slot.isSep && headerUtilityRow.dragIndex < 0 })
+                                            }
+                                        }
+                                    }
+
+                                    // MouseArea unica per slot: hover + click + long-press->drag.
+                                    // I separatori non sono interattivi.
+                                    MouseArea {
+                                        id: dragMA
+                                        anchors.fill: parent
+                                        enabled: !slot.isSep
+                                        visible: !slot.isSep
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        preventStealing: true
+
+                                        property bool armed: false      // long-press scattato -> in drag
+                                        property real pressSceneX: 0
+                                        property bool moved: false
+
+                                        // Timer per armare il drag dopo ~350ms di pressione
+                                        Timer {
+                                            id: holdTimer
+                                            interval: 350
+                                            repeat: false
+                                            onTriggered: {
+                                                // Solo tasto sinistro avvia il drag
+                                                if (dragMA.pressedButtons & Qt.LeftButton) {
+                                                    dragMA.armed = true
+                                                    headerUtilityRow.dragIndex = index
+                                                    headerUtilityRow.dropIndex = index
+                                                    dragGhost.startFor(slot, index)
+                                                }
+                                            }
+                                        }
+
+                                        onPressed: function(mouse) {
+                                            armed = false
+                                            moved = false
+                                            pressSceneX = mapToItem(headerUtilityRow, mouse.x, mouse.y).x
+                                            if (mouse.button === Qt.LeftButton)
+                                                holdTimer.start()
+                                        }
+
+                                        onPositionChanged: function(mouse) {
+                                            var sx = mapToItem(headerUtilityRow, mouse.x, mouse.y).x
+                                            if (Math.abs(sx - pressSceneX) > 6)
+                                                moved = true
+                                            if (armed) {
+                                                dragGhost.updateX(sx)
+                                                // Feedback magnetico: marca lo slot target (gap) sotto al puntatore.
+                                                // NON muta il modello durante il drag (eviterebbe la distruzione
+                                                // del delegate e la perdita del mouse grab) -> commit al rilascio.
+                                                headerUtilityRow.dropIndex = headerUtilityRow.computeTargetIndex(index, sx)
+                                            } else if (moved) {
+                                                // Movimento prima del long-press: annulla il click,
+                                                // ma NON avvia drag (serve il long-press) -> niente azione.
+                                                holdTimer.stop()
+                                            }
+                                        }
+
+                                        onReleased: function(mouse) {
+                                            holdTimer.stop()
+                                            if (armed) {
+                                                // Fine drag: snap allo slot più vicino e commit (una volta).
+                                                var sx = mapToItem(headerUtilityRow, mouse.x, mouse.y).x
+                                                var target = headerUtilityRow.computeTargetIndex(index, sx)
+                                                dragGhost.stop()
+                                                headerUtilityRow.dragIndex = -1
+                                                headerUtilityRow.dropIndex = -1
+                                                armed = false
+                                                if (target !== index)
+                                                    mainWindow.moveToolbarButton(index, target)
+                                                return
+                                            }
+                                            // Click breve senza drag -> esegui azione del pulsante.
+                                            if (!moved && btnLoader.item)
+                                                btnLoader.item.activate(mouse)
+                                        }
+
+                                        onCanceled: {
+                                            holdTimer.stop()
+                                            if (armed) {
+                                                dragGhost.stop()
+                                                headerUtilityRow.dragIndex = -1
+                                                headerUtilityRow.dropIndex = -1
+                                                armed = false
+                                            }
+                                        }
+
+                                        ToolTip.visible: containsMouse && !slot.isSep && headerUtilityRow.dragIndex < 0 && btnLoader.item
+                                        ToolTip.text: btnLoader.item ? btnLoader.item.tip : ""
+                                    }
+                                }
+                            }
+
+                            // Calcola l'indice modello di destinazione in base alla X (scena) del puntatore.
+                            // 'from' = indice dello slot trascinato; sceneX = X corrente nel RowLayout.
+                            // Restituisce l'indice (post-spostamento) dove finirebbe il pulsante.
+                            function computeTargetIndex(from, sceneX) {
+                                var n = headerUtilityRepeater.count
+                                var target = from
+                                for (var i = 0; i < n; ++i) {
+                                    if (i === from)
+                                        continue
+                                    var it = headerUtilityRepeater.itemAt(i)
+                                    if (!it || !it.visible)
+                                        continue
+                                    var mid = it.x + it.width / 2
+                                    if (i < from && sceneX < mid) { target = i; break }
+                                    if (i > from) {
+                                        if (sceneX > mid) target = i
+                                    }
+                                }
+                                return target
+                            }
+                        }
+
+                        // ── Ghost trascinato (proxy visuale che segue il puntatore) ──
+                        // Parentato al Rectangle barra; assoluto SOLO durante il drag (non è nel layout).
+                        Item {
+                            id: dragGhost
+                            visible: false
+                            height: parent.height - 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            z: 50
+                            property Item sourceSlot: null
+
+                            function startFor(s, idx) {
+                                sourceSlot = s
+                                width = s.width
+                                ghostLoader.sourceComponent = headerUtilityRow.componentForId(s.buttonId)
+                                visible = true
+                            }
+                            function updateX(sceneX) {
+                                // Centra il ghost sotto il puntatore, clamp nella barra.
+                                var nx = sceneX - width / 2
+                                if (nx < 0) nx = 0
+                                if (nx > parent.width - width) nx = parent.width - width
+                                x = nx
+                            }
+                            function stop() {
+                                visible = false
+                                sourceSlot = null
+                                ghostLoader.sourceComponent = null
+                            }
+
+                            Behavior on x { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
+
+                            Loader {
+                                id: ghostLoader
+                                anchors.fill: parent
+                                opacity: 0.9
+                                onLoaded: { if (item) item.hovered = true }
+                            }
+                        }
+                    } // End Rectangle
+
+                    // ════════ Component dei pulsanti toolbar ════════
+                    // Ogni Component conserva l'aspetto e la logica originali del pulsante.
+                    // Contratto comune: btnVisible (gate), prefWidth (larghezza Layout),
+                    // hovered (impostato dallo slot/ghost), tip (testo ToolTip),
+                    // activate(mouse) (azione eseguita al click breve).
+
+                    // Settings ⚙
+                    Component {
+                        id: comp_setup
+                        Rectangle {
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnSetupVisible
+                            readonly property real prefWidth: 50
+                            readonly property string tip: "Settings"
+                            function activate(mouse) { openSettingsDialog() }
+                            radius: 3
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
-                                Text {
-                                    text: "⚙"
-                                    font.pixelSize: 14
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: "Setup"
-                                    font.pixelSize: 9
-                                    color: textPrimary
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
+                                Text { text: "⚙"; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
+                                Text { text: qsTr("Setup"); font.pixelSize: 9; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                             }
-
-                            MouseArea {
-                                id: settingsMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: openSettingsDialog()
-                            }
-
-                            ToolTip.visible: settingsMA.containsMouse
-                            ToolTip.text: "Settings"
                         }
+                    }
 
-                        // REC
+                    // REC
+                    Component {
+                        id: comp_rec
                         Rectangle {
-                            Layout.preferredWidth: 50
-                            Layout.fillHeight: true
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnRecVisible
+                            readonly property real prefWidth: 50
+                            readonly property string tip: bridge.recordRxEnabled && bridge.wavManager ?
+                                          "Recording: " + bridge.wavManager.recordedSeconds + "s" : "Start recording"
+                            function activate(mouse) { bridge.recordRxEnabled = !bridge.recordRxEnabled }
                             radius: 3
-                            color: recMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
                                    (bridge.recordRxEnabled ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent")
                             border.color: bridge.recordRxEnabled ? bridge.themeManager.ledRed : "transparent"
                             border.width: bridge.recordRxEnabled ? 1 : 0
-
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
@@ -2486,109 +5638,69 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
-
-                            MouseArea {
-                                id: recMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.recordRxEnabled = !bridge.recordRxEnabled
-                            }
-
-                            ToolTip.visible: recMA.containsMouse
-                            ToolTip.text: bridge.recordRxEnabled && bridge.wavManager ?
-                                          "Recording: " + bridge.wavManager.recordedSeconds + "s" : "Start Recording"
                         }
+                    }
 
-                        // Open WAV for decode
+                    // WAV 📂 (sinistro: file; destro: cartella)
+                    Component {
+                        id: comp_wav
                         Rectangle {
-                            Layout.preferredWidth: 45
-                            Layout.fillHeight: true
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnWavVisible
+                            readonly property real prefWidth: 45
+                            readonly property string tip: qsTr("Click: open a WAV file\nRight-click: decode a folder")
+                            function activate(mouse) {
+                                if (mouse && mouse.button === Qt.RightButton)
+                                    mainWindow.chooseWavFolderForDecode()   // Right-click: batch folder
+                                else
+                                    mainWindow.chooseWavFileForDecode()     // Left-click: single file
+                            }
                             radius: 3
-                            color: wavMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
-
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
-                                Text {
-                                    text: "📂"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: "WAV"
-                                    font.pixelSize: 9
-                                    color: textPrimary
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
+                                Text { text: "📂"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                                Text { text: "WAV"; font.pixelSize: 9; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                             }
-
-                            MouseArea {
-                                id: wavMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onClicked: function(mouse) {
-                                    if (mouse.button === Qt.RightButton)
-                                        wavFolderDialog.open()  // Right-click: batch folder
-                                    else
-                                        wavOpenDialog.open()    // Left-click: single file
-                                }
-                            }
-
-                            ToolTip.visible: wavMA.containsMouse
-                            ToolTip.text: qsTr("Click: open one WAV file\nRight-click: decode a folder")
                         }
+                    }
 
-                        // Separator
-                        Rectangle { width: 1; Layout.fillHeight: true; Layout.topMargin: 4; Layout.bottomMargin: 4; color: glassBorder }
-
-                        // Log
+                    // Log 📋
+                    Component {
+                        id: comp_log
                         Rectangle {
-                            Layout.preferredWidth: 45
-                            Layout.fillHeight: true
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnLogVisible
+                            readonly property real prefWidth: 45
+                            readonly property string tip: "Log QSO"
+                            function activate(mouse) { openLogWindow() }
                             radius: 3
-                            color: logMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
-
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
-                                Text {
-                                    text: "📋"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: "Log"
-                                    font.pixelSize: 9
-                                    color: secondaryCyan
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
+                                Text { text: "📋"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                                Text { text: "Log"; font.pixelSize: 9; color: secondaryCyan; anchors.verticalCenter: parent.verticalCenter }
                             }
-
-                            MouseArea {
-                                id: logMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: openLogWindow()
-                            }
-
-                            ToolTip.visible: logMA.containsMouse
-                            ToolTip.text: "QSO Log"
                         }
+                    }
 
-                        // Macro
+                    // Macro M
+                    Component {
+                        id: comp_macro
                         Rectangle {
-                            Layout.preferredWidth: 50
-                            Layout.fillHeight: true
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnMacroVisible
+                            readonly property real prefWidth: 50
+                            readonly property string tip: bridge.macroManager && bridge.macroManager.contestMode ?
+                                          "Contest: " + bridge.macroManager.contestName : "Macro TX"
+                            function activate(mouse) { openMacroDialog() }
                             radius: 3
-                            color: macroMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
                                    (bridge.macroManager && bridge.macroManager.contestMode ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : "transparent")
                             border.color: bridge.macroManager && bridge.macroManager.contestMode ? accentGreen : "transparent"
                             border.width: bridge.macroManager && bridge.macroManager.contestMode ? 1 : 0
-
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
@@ -2606,80 +5718,153 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
-
-                            MouseArea {
-                                id: macroMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: openMacroDialog()
-                            }
-
-                            ToolTip.visible: macroMA.containsMouse
-                            ToolTip.text: bridge.macroManager && bridge.macroManager.contestMode ?
-                                          "Contest: " + bridge.macroManager.contestName : "TX Macros"
                         }
+                    }
 
-                        // Astro
+                    // Astro 🌙
+                    Component {
+                        id: comp_astro
                         Rectangle {
-                            Layout.preferredWidth: 48
-                            Layout.fillHeight: true
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnAstroVisible
+                            readonly property real prefWidth: 48
+                            readonly property string tip: "Astronomical data"
+                            function activate(mouse) { openAstroWindow() }
                             radius: 3
-                            color: astroMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
-
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) : "transparent"
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
-                                Text {
-                                    text: "🌙"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: "Astro"
-                                    font.pixelSize: 9
-                                    color: textPrimary
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
+                                Text { text: "🌙"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                                Text { text: "Astro"; font.pixelSize: 9; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                             }
-
-                            MouseArea {
-                                id: astroMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: openAstroWindow()
-                            }
-
-                            ToolTip.visible: astroMA.containsMouse
-                            ToolTip.text: "Astronomical Data"
                         }
+                    }
 
-                        // Separator
-                        Rectangle { width: 1; Layout.fillHeight: true; Layout.topMargin: 4; Layout.bottomMargin: 4; color: glassBorder }
-
-                        // CAT - native HvRigControl
+                    // Layout reset
+                    Component {
+                        id: comp_layout
                         Rectangle {
-                            Layout.preferredWidth: 48
-                            Layout.fillHeight: true
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnFooterResetVisible
+                            readonly property real prefWidth: 64
+                            readonly property string tip: qsTr("Reset layout (Ctrl+Shift+L)")
+                            function activate(mouse) { resetLayoutConfirmDialog.open() }
                             radius: 3
-                            color: catMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
+                            color: hovered ? Qt.rgba(255/255, 155/255, 58/255, 0.20) : "transparent"
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    text: "☰"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Qt.rgba(255/255, 175/255, 88/255, 1.0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Text {
+                                    text: qsTr("Layout")
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Qt.rgba(255/255, 175/255, 88/255, 1.0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+                        }
+                    }
+
+                    // 1.0.569 — passa al workspace DX-Pedition. Si torna al
+                    // classico con il pulsante EXIT della barra tattica.
+                    Component {
+                        id: comp_dxped
+                        Rectangle {
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnDxPedVisible
+                            readonly property real prefWidth: 66
+                            readonly property string tip: qsTr("Switch to the DX-Pedition workspace (3-column tactical layout)")
+                            function activate(mouse) {
+                                mainWindow.dxPeditionMode = true
+                                bridge.setSetting("uiDxPeditionMode", true)
+                            }
+                            radius: 3
+                            color: hovered ? Qt.rgba(25/255, 255/255, 136/255, 0.20) : "transparent"
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    text: "◤"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Qt.rgba(25/255, 255/255, 136/255, 1.0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Text {
+                                    text: qsTr("DX-Ped")
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Qt.rgba(25/255, 255/255, 136/255, 1.0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+                        }
+                    }
+
+                    // Decode history
+                    Component {
+                        id: comp_history
+                        Rectangle {
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnFooterHistoryVisible
+                            readonly property real prefWidth: 68
+                            readonly property string tip: qsTr("Decode history (Ctrl+Shift+H)")
+                            function activate(mouse) {
+                                mainWindow.openHistoryDialog()
+                            }
+                            radius: 3
+                            color: hovered ? Qt.rgba(58/255, 157/255, 255/255, 0.20) : "transparent"
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    text: "▤"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Qt.rgba(88/255, 175/255, 255/255, 1.0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Text {
+                                    text: qsTr("History")
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Qt.rgba(88/255, 175/255, 255/255, 1.0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+                        }
+                    }
+
+                    // CAT
+                    Component {
+                        id: comp_cat
+                        Rectangle {
+                            property bool hovered: false
+                            readonly property bool btnVisible: mainWindow.uiBtnCatVisible
+                            readonly property real prefWidth: 48
+                            readonly property string tip: bridge.catConnected ? "CAT: " + bridge.catRigName : "Click to configure CAT"
+                            function activate(mouse) { openSettingsTab(1) }
+                            radius: 3
+                            color: hovered ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
                                    (bridge.catConnected ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : "transparent")
                             border.color: bridge.catConnected ? accentGreen : "transparent"
                             border.width: bridge.catConnected ? 1 : 0
-
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
-
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 8; height: 8; radius: 4
                                     anchors.verticalCenter: parent.verticalCenter
                                     color: bridge.catConnected ? accentGreen : bridge.themeManager.ledRed
                                 }
-
                                 Text {
                                     text: "CAT"
                                     font.pixelSize: 9
@@ -2688,27 +5873,76 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
-
-                            MouseArea {
-                                id: catMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: openSettingsTab(1)
-                            }
-
-                            ToolTip.visible: catMA.containsMouse
-                            ToolTip.text: bridge.catConnected ? "CAT: " + bridge.catRigName : "Click to configure CAT"
                         }
                     }
-                    } // End Rectangle
+
+                    // Separatore (non interattivo, sempre visibile, larghezza 1px)
+                    Component {
+                        id: comp_sep
+                        Rectangle {
+                            property bool hovered: false
+                            readonly property bool btnVisible: true
+                            readonly property real prefWidth: 1
+                            readonly property string tip: ""
+                            function activate(mouse) {}
+                            color: glassBorder
+                        }
+                    }
                 } // End Grouped buttons Item
+
+                // 1.0.384 — Profili pronti: selettore rapido in toolbar (accanto a Setup).
+                // Applica in blocco i toggle FT2/decode; la sezione descrittiva è in Settings.
+                Item {
+                    id: readyProfileToolbarSlot
+                    width: 132
+                    height: 74
+                    Rectangle {
+                        width: parent.width
+                        height: 28
+                        anchors.top: parent.top
+                        anchors.topMargin: 6
+                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                        border.color: glassBorder
+                        radius: 4
+                        DecoComboBox {
+                            id: readyProfileCombo
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            font.pixelSize: 10
+                            readonly property var ids: ["balanced", "weak", "contest", "cpu"]
+                            model: [qsTr("Balanced"), qsTr("Weak-signal / DX"), qsTr("Contest"), qsTr("CPU-limited")]
+                            displayText: currentIndex < 0 ? qsTr("Profiles...") : model[currentIndex]
+                            Component.onCompleted: currentIndex = bridge ? ids.indexOf(bridge.activeReadyProfile) : -1
+                            onActivated: if (bridge && currentIndex >= 0) bridge.applyReadyProfile(ids[currentIndex])
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 500
+                            ToolTip.text: qsTr("Ready profiles - apply FT2/decode toggles as a group. Details in Setup -> TX.")
+                            Connections {
+                                target: bridge
+                                function onActiveReadyProfileChanged() {
+                                    readyProfileCombo.currentIndex = readyProfileCombo.ids.indexOf(bridge.activeReadyProfile)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // slot 5 — subito dopo il blocco pulsanti toolbar (= "after toolbar", DEFAULT)
+                Item {
+                    id: clockSlot5
+                    height: 80
+                    width: worldClock.parent === clockSlot5 ? worldClock.width : 0
+                    visible: worldClock.parent === clockSlot5
+                }
 
 	                // World Clock with Analog Display
 	                Item {
 	                    id: worldClock
-	                    visible: showWorldClock
-	                    width: showWorldClock ? compactWidth : 0
+	                    // 1.0.569 — in DX-Pedition il workspace occupa tutto lo
+	                    // schermo e l'orologio draggabile ci finiva sopra: qui la
+	                    // barra tattica ha gia' il suo orologio UTC.
+	                    visible: showWorldClock && !mainWindow.dxPeditionMode
+	                    width: (showWorldClock && !mainWindow.dxPeditionMode) ? compactWidth : 0
 	                    height: 80
 	                    readonly property int analogClockWidth: 60
 	                    readonly property int cardMargins: 10
@@ -2729,10 +5963,10 @@ ApplicationWindow {
 	                    property int minutes: 0
 	                    property int seconds: 0
 	                    property string dateStr: ""
-	                    property bool showWorldClock: !!bridge.getSetting("uiWorldClockVisible", true)
-	                    property bool showAnalogClock: !!bridge.getSetting("uiWorldClockShowAnalog", true)
-	                    property bool showDigitalClock: !!bridge.getSetting("uiWorldClockShowDigital", true)
-	                    property bool showWorldClockCities: !!bridge.getSetting("uiWorldClockShowCities", true)
+	                    property bool showWorldClock: mainWindow.settingBool("uiWorldClockVisible", true)
+	                    property bool showAnalogClock: mainWindow.settingBool("uiWorldClockShowAnalog", true)
+	                    property bool showDigitalClock: mainWindow.settingBool("uiWorldClockShowDigital", true)
+	                    property bool showWorldClockCities: mainWindow.settingBool("uiWorldClockShowCities", true)
 
 	                    Timer {
 	                        interval: 1000
@@ -2745,6 +5979,12 @@ ApplicationWindow {
 	                        ensureVisiblePart()
 	                        refreshCitySearch()
 	                        updateTime()
+	                    }
+
+	                    Connections {
+	                        target: mainWindow
+	                        function onWidthChanged() { mainWindow.clampWorldClockNow() }
+	                        function onHeightChanged() { mainWindow.clampWorldClockNow() }
 	                    }
 
 	                    function ensureVisiblePart() {
@@ -2763,9 +6003,9 @@ ApplicationWindow {
 	                        }
 
 	                        ensureVisiblePart()
-	                        bridge.setSetting("uiWorldClockShowAnalog", showAnalogClock)
-	                        bridge.setSetting("uiWorldClockShowDigital", showDigitalClock)
-	                        bridge.setSetting("uiWorldClockShowCities", showWorldClockCities)
+	                        mainWindow.persistUiSetting("uiWorldClockShowAnalog", showAnalogClock)
+	                        mainWindow.persistUiSetting("uiWorldClockShowDigital", showDigitalClock)
+	                        mainWindow.persistUiSetting("uiWorldClockShowCities", showWorldClockCities)
 	                    }
 
 	                    function setClockVisible(visible) {
@@ -2774,7 +6014,7 @@ ApplicationWindow {
 	                            ensureVisiblePart()
 	                            updateTime()
 	                        }
-	                        bridge.setSetting("uiWorldClockVisible", showWorldClock)
+	                        mainWindow.persistUiSetting("uiWorldClockVisible", showWorldClock)
 	                    }
 
                     function refreshCitySearch() {
@@ -2790,8 +6030,8 @@ ApplicationWindow {
                             return
                         selectedZoneId = option.zoneId
                         selectedCityName = option.name || option.zoneId
-                        bridge.setSetting("uiWorldClockZoneId", selectedZoneId)
-                        bridge.setSetting("uiWorldClockCityName", selectedCityName)
+                        mainWindow.persistUiSetting("uiWorldClockZoneId", selectedZoneId)
+                        mainWindow.persistUiSetting("uiWorldClockCityName", selectedCityName)
                         updateTime()
                         citySearchPopup.close()
                     }
@@ -2829,6 +6069,97 @@ ApplicationWindow {
 
                         HoverHandler {
                             id: clockHover
+                        }
+
+                        // ── Maniglia di trascinamento del World Clock ──
+                        // SOLO questa presa avvia il drag: il resto del clock conserva
+                        // intatti il selettore città (timezoneSelectorMA), il right-click
+                        // (worldClockMenu) e ogni altra interazione. Long-press 350ms +
+                        // soglia 6px (come STEP 1); al rilascio swap before/after toolbar
+                        // se il puntatore supera la metà del blocco pulsanti.
+                        Rectangle {
+                            id: worldClockDragHandle
+                            z: 30
+                            width: 14
+                            height: 14
+                            radius: 3
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.topMargin: 3
+                            anchors.rightMargin: 3
+                            color: worldClockHandleMA.containsMouse || worldClockHandleMA.armed
+                                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                                   : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.12)
+                            border.color: worldClockHandleMA.containsMouse ? secondaryCyan : "transparent"
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "⠿"               // ⠿ braille pattern (presa)
+                                font.pixelSize: 11
+                                color: worldClockHandleMA.containsMouse ? secondaryCyan
+                                                                        : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.6)
+                            }
+
+                            MouseArea {
+                                id: worldClockHandleMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.SizeAllCursor
+                                acceptedButtons: Qt.LeftButton
+                                preventStealing: true
+
+                                property bool armed: false
+                                property real pressSceneX: 0
+                                property bool moved: false
+                                property real grabDX: 0
+                                property real grabDY: 0
+
+                                Timer {
+                                    id: worldClockHoldTimer
+                                    interval: 350
+                                    repeat: false
+                                    onTriggered: {
+                                        if (worldClockHandleMA.pressedButtons & Qt.LeftButton) {
+                                            worldClockHandleMA.armed = true
+                                            worldClockDragGhost.startAt(worldClockHandleMA.pressSceneX)
+                                        }
+                                    }
+                                }
+
+                                function sceneX(mouse) {
+                                    return mapToItem(headerFlow, mouse.x, mouse.y).x
+                                }
+
+                                onPressed: function(mouse) {
+                                    armed = true
+                                    moved = false
+                                    var pp = mapToItem(worldClock.parent, mouse.x, mouse.y)
+                                    grabDX = pp.x - worldClock.x
+                                    grabDY = pp.y - worldClock.y
+                                }
+                                onPositionChanged: function(mouse) {
+                                    if (!armed)
+                                        return
+                                    moved = true
+                                    var pp = mapToItem(worldClock.parent, mouse.x, mouse.y)
+                                    worldClock.x = mainWindow.clampClockX(pp.x - grabDX)
+                                    worldClock.y = mainWindow.clampClockY(pp.y - grabDY)
+                                }
+                                onReleased: function(mouse) {
+                                    if (armed) {
+                                        armed = false
+                                        if (moved)
+                                            mainWindow.persistWorldClockPos()
+                                    }
+                                }
+                                onCanceled: {
+                                    armed = false
+                                }
+                                ToolTip.visible: containsMouse && !armed
+                                ToolTip.text: qsTr("Drag to reposition the clock")
+                                ToolTip.delay: 500
+                            }
                         }
 
 	                        Rectangle {
@@ -2904,7 +6235,7 @@ ApplicationWindow {
 	                                font.pixelSize: 22
 	                                minimumPixelSize: 17
 	                                fontSizeMode: Text.Fit
-	                                font.family: "Monospace"
+	                                font.family: decodiumMonoFontFamily
 	                                font.bold: true
 	                                color: textPrimary
 	                                elide: Text.ElideRight
@@ -2923,7 +6254,7 @@ ApplicationWindow {
 	                                height: 13
 	                                text: worldClock.dateStr
 	                                font.pixelSize: 11
-	                                font.family: "Monospace"
+	                                font.family: decodiumMonoFontFamily
 	                                color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
 	                                elide: Text.ElideRight
 	                            }
@@ -3009,7 +6340,7 @@ ApplicationWindow {
 	                                }
 
 		                                contentItem: Item {
-		                                    TextField {
+		                                    DecoTextField {
 		                                        id: citySearchField
 		                                        anchors.left: parent.left
 		                                        anchors.right: parent.right
@@ -3180,7 +6511,7 @@ ApplicationWindow {
 	                            }
 	                        }
 	                    }
-	                }
+	                } // End World Clock Item
 
                 // Waterfall restore button (visible when minimized)
                 Rectangle {
@@ -3227,7 +6558,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: waterfallMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: waterfallMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3279,7 +6610,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: logWindowMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: logWindowMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3327,11 +6658,11 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: astroRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Astronomical Data")
+                    ToolTip.text: qsTr("Restore astronomical data")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: astroWindowMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: astroWindowMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3379,7 +6710,6 @@ ApplicationWindow {
                                 liveMapFloatingWindow.requestActivate()
                             } else {
                                 mainWindow.liveMapPanelVisible = true
-                                bridge.setSetting("WorldMapDisplayed", true)
                             }
                         }
                     }
@@ -3389,7 +6719,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: liveMapMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: liveMapMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3451,9 +6781,11 @@ ApplicationWindow {
                             if (mouse.button === Qt.RightButton) {
                                 // Destro: disconnetti
                                 bridge.disconnectDxCluster()
+                                if (mainWindow.dxClusterPanelVisible)
+                                    Qt.callLater(function() { mainWindow.raiseDxClusterPanel() })
                             } else {
                                 // Sinistro: mostra pannello e connetti se non connesso
-                                dxClusterPanelVisible = true
+                                mainWindow.openDxClusterPanel()
                                 if (bridge.dxCluster && !bridge.dxCluster.connected) {
                                     bridge.connectDxCluster(bridge.dxCluster.host, bridge.dxCluster.port)
                                 }
@@ -3500,7 +6832,7 @@ ApplicationWindow {
                             }
 
                             Text {
-                                text: "Auto Spot"
+                                text: qsTr("Auto Spot")
                                 width: Math.max(0, autoSpotContent.width - autoSpotBox.width - autoSpotContent.spacing)
                                 color: bridge.autoSpotEnabled ? accentGreen : textSecondary
                                 font.pixelSize: 8
@@ -3535,14 +6867,35 @@ ApplicationWindow {
                     width: 86
                     height: 74
                     radius: 8
+                    // 1.0.388 — bypass attivo = ROSSO (era arancione) con lampeggio fade
+                    readonly property color bypassRed: (bridge.themeManager ? bridge.themeManager.ledRed : "#e53935")
                     color: bridge.filtersBypassed
-                           ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.26)
+                           ? Qt.rgba(bypassRed.r, bypassRed.g, bypassRed.b, 0.26)
                            : bypassFiltersMA.containsMouse
-                             ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.14)
+                             ? Qt.rgba(bypassRed.r, bypassRed.g, bypassRed.b, 0.14)
                              : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.85)
-                    border.color: bridge.filtersBypassed ? accentOrange
-                                  : bypassFiltersMA.containsMouse ? accentOrange : glassBorder
+                    border.color: bridge.filtersBypassed ? bypassRed
+                                  : bypassFiltersMA.containsMouse ? bypassRed : glassBorder
                     border.width: bridge.filtersBypassed || bypassFiltersMA.containsMouse ? 2 : 1
+
+                    // Overlay rosso che pulsa in fade-in/fade-out quando il bypass è attivo.
+                    // 1.0.388: usa OpacityAnimator (pattern affidabile come il pulse del MON)
+                    // su un FILL rosso, così il lampeggio è ben visibile.
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: Qt.rgba(parent.bypassRed.r, parent.bypassRed.g, parent.bypassRed.b, 0.45)
+                        border.color: parent.bypassRed
+                        border.width: 2
+                        visible: bridge.filtersBypassed
+                        opacity: 1.0
+                        SequentialAnimation on opacity {
+                            running: bridge.filtersBypassed && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                            loops: Animation.Infinite
+                            OpacityAnimator { to: 0.15; duration: 650 }
+                            OpacityAnimator { to: 1.0; duration: 650 }
+                        }
+                    }
 
                     Column {
                         anchors.centerIn: parent
@@ -3552,21 +6905,21 @@ ApplicationWindow {
                             text: "⌀"
                             font.pixelSize: 24
                             font.bold: true
-                            color: bridge.filtersBypassed ? accentOrange : textSecondary
+                            color: bridge.filtersBypassed ? parent.parent.bypassRed : textSecondary
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Bypass"
+                            text: qsTr("Bypass")
                             font.pixelSize: 9
                             font.bold: true
-                            color: bridge.filtersBypassed ? accentOrange : textSecondary
+                            color: bridge.filtersBypassed ? parent.parent.bypassRed : textSecondary
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Filters"
+                            text: qsTr("Filters")
                             font.pixelSize: 9
                             font.bold: true
-                            color: bridge.filtersBypassed ? accentOrange : textSecondary
+                            color: bridge.filtersBypassed ? parent.parent.bypassRed : textSecondary
                         }
                     }
 
@@ -3581,7 +6934,7 @@ ApplicationWindow {
                     ToolTip.visible: bypassFiltersMA.containsMouse
                     ToolTip.text: bridge.filtersBypassed
                                   ? qsTr("Disable filter bypass")
-                                  : qsTr("Bypass CQ/My Call and setup decode filters")
+                                  : qsTr("Bypass CQ/My Call and setup filters")
                     ToolTip.delay: 500
 
                     Behavior on color { ColorAnimation { duration: 150 } }
@@ -3628,11 +6981,11 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: macroRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Macro Configuration")
+                    ToolTip.text: qsTr("Restore Macro configuration")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: macroDialogMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: macroDialogMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3684,7 +7037,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: rigControlMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: rigControlMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3737,7 +7090,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: period1Minimized && bridge && bridge.uiQuality !== "Low"
+                        running: period1Minimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3789,7 +7142,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: period2Minimized && bridge && bridge.uiQuality !== "Low"
+                        running: period2Minimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3840,7 +7193,7 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: rxFreqMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: rxFreqMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3888,11 +7241,11 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: txRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore TX Panel")
+                    ToolTip.text: qsTr("Restore TX panel")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: txPanelMinimized && bridge && bridge.uiQuality !== "Low"
+                        running: txPanelMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -3915,7 +7268,7 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "PSK Reporter"
+                            text: qsTr("PSK Reporter")
                             font.pixelSize: 10
                             font.bold: true
                             color: secondaryCyan
@@ -3933,14 +7286,14 @@ ApplicationWindow {
                                 border.color: pskSearchInput.activeFocus ? secondaryCyan : glassBorder
                                 radius: 4
 
-                                TextField {
+                                DecoTextField {
                                     id: pskSearchInput
                                     anchors.fill: parent
                                     anchors.margins: 2
                                     placeholderText: (activeFocus || text.length > 0) ? "" : "Callsign..."
                                     font.pixelSize: 11
                                     font.capitalization: Font.AllUppercase
-                                    font.family: "Monospace"
+                                    font.family: decodiumMonoFontFamily
                                     color: textPrimary
                                     placeholderTextColor: textSecondary
                                     verticalAlignment: TextInput.AlignVCenter
@@ -4023,17 +7376,20 @@ ApplicationWindow {
 
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            spacing: 4
+                            // 3 × 20 px + 2 × 2 px fits the 66 px inner width
+                            // of this 74 px header tile.  The previous 30 px
+                            // controls overflowed into the adjacent Reset area.
+                            spacing: 2
 
                             Rectangle {
-                                width: 30; height: 24; radius: 4
+                                width: 20; height: 20; radius: 3
                                 color: fontMinusMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                                 border.color: fontMinusMA.containsMouse ? secondaryCyan : glassBorder
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: "A-"
-                                    font.pixelSize: 11
+                                    font.pixelSize: 10
                                     font.bold: true
                                     color: textPrimary
                                 }
@@ -4048,14 +7404,14 @@ ApplicationWindow {
                             }
 
                             Rectangle {
-                                width: 30; height: 24; radius: 4
+                                width: 20; height: 20; radius: 3
                                 color: fontPlusMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                                 border.color: fontPlusMA.containsMouse ? secondaryCyan : glassBorder
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: "A+"
-                                    font.pixelSize: 13
+                                    font.pixelSize: 10
                                     font.bold: true
                                     color: textPrimary
                                 }
@@ -4068,6 +7424,51 @@ ApplicationWindow {
                                     onClicked: bridge.increaseFontScale()
                                 }
                             }
+
+                            // Chiaro/scuro, stessa forma e misura dei due sopra.
+                            // Mostra il simbolo di DOVE si va, non di dove si e':
+                            // premendo la luna si passa allo scuro.
+                            Rectangle {
+                                id: themeToggle
+                                width: 20; height: 20; radius: 3
+                                property bool lightNow: !!(bridge.themeManager && bridge.themeManager.isLightTheme)
+                                // Ricorda quale scuro si stava usando, cosi' il
+                                // ritorno non butta via Darkcodium per Ocean Blue.
+                                property string lastDarkTheme: "Ocean Blue"
+                                color: themeToggleMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                                border.color: themeToggleMA.containsMouse ? secondaryCyan : glassBorder
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: themeToggle.lightNow ? "☾" : "☀"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: textPrimary
+                                }
+
+                                ToolTip.visible: themeToggleMA.containsMouse
+                                ToolTip.delay: 600
+                                ToolTip.text: themeToggle.lightNow ? qsTr("Switch to the dark theme")
+                                                                   : qsTr("Switch to the light theme")
+
+                                MouseArea {
+                                    id: themeToggleMA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        var tm = bridge.themeManager
+                                        if (!tm)
+                                            return
+                                        if (tm.isLightTheme) {
+                                            tm.currentTheme = themeToggle.lastDarkTheme
+                                        } else {
+                                            themeToggle.lastDarkTheme = tm.currentTheme
+                                            tm.currentTheme = "Stellar Light"
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Reset button
@@ -4078,7 +7479,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "Reset"
+                                text: qsTr("Reset")
                                 font.pixelSize: 8
                                 color: textSecondary
                             }
@@ -4096,14 +7497,70 @@ ApplicationWindow {
 
 
             } // End headerFlow
+
+            // ── Ghost del World Clock durante il drag dalla maniglia ──
+            // Proxy visuale parentato a headerBar (NON nel Flow, così non viene
+            // posizionato dal layout); segue il puntatore con Behavior on x.
+            // NESSUN layer.enabled/FBO. Le coordinate sono in spazio headerFlow,
+            // riportate a headerBar aggiungendo l'offset headerFlow.x.
+            Rectangle {
+                id: worldClockDragGhost
+                visible: false
+                z: 200
+                width: 90
+                height: 30
+                radius: 6
+                y: headerFlow.y + 6
+                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+                border.color: secondaryCyan
+                border.width: 1
+                opacity: 0.9
+
+                function startAt(sceneX) {
+                    visible = true
+                    updateX(sceneX)
+                }
+                function updateX(sceneX) {
+                    var nx = headerFlow.x + sceneX - width / 2
+                    var minX = headerFlow.x
+                    var maxX = headerFlow.x + headerFlow.width - width
+                    if (nx < minX) nx = minX
+                    if (nx > maxX) nx = maxX
+                    x = nx
+                }
+                function stop() {
+                    visible = false
+                }
+
+                Behavior on x { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
+                    Text {
+                        text: "⠿"
+                        font.pixelSize: 12
+                        color: secondaryCyan
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: "🕐 " + qsTr("Clock")
+                        font.pixelSize: 11
+                        color: textPrimary
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
         } // End Header Bar Rectangle
 
         // Content area for dockable panels (wrapped in Flickable for vertical scroll
         // when the window is shorter than the minimum usable layout height)
         Flickable {
             id: contentScroll
+            visible: !mainWindow.dxPeditionMode
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.fillHeight: visible
+            Layout.preferredHeight: visible ? -1 : 0
             Layout.margins: 8
             Layout.topMargin: 0
             contentWidth: width
@@ -4130,14 +7587,14 @@ ApplicationWindow {
                 orientation: Qt.Vertical
 
                 // Magnetic snap points for waterfall height
-                property var snapPoints: [150, 200, 250, 300, 350, 400]
-                property int snapThreshold: 20  // Pixels to trigger snap
+                property var snapPoints: [120, 200, 280, 360, 440]  // 1.0.288: >= minimumHeight 120, range ampio per restringere/allargare
+                property int snapThreshold: 0  // 1.0.288: snap disabilitato — resize altezza waterfall totalmente libero (richiesta utente)
 
                 // Vertical drag handle with magnetic snap indicator
                 handle: Rectangle {
                     id: splitHandle
-                    implicitWidth: 6
-                    implicitHeight: 6
+                    implicitWidth: 10
+                    implicitHeight: 10  // 1.0.288: era 6 → handle più alto = più facile da afferrare
                     color: SplitHandle.hovered || SplitHandle.pressed ? "#00e6e6" : "#505070"
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -4207,8 +7664,20 @@ ApplicationWindow {
                 // ========== TOP: Waterfall Panel (embedded or placeholder) ==========
                 Rectangle {
                     id: waterfallPanel
-                    SplitView.preferredHeight: waterfallDetached ? 40 : mainWindow.waterfallPanelHeight
-                    SplitView.minimumHeight: waterfallDetached ? 40 : 260
+                    // 1.0.288 — preferredHeight NON è più bindato reattivamente a
+                    // waterfallPanelHeight: quel binding combatteva il drag dello splitter
+                    // (loop preferredHeight←waterfallPanelHeight←uiWaterfallHeight←onHeightChanged)
+                    // e impediva di restringere il waterfall ("superiore bloccata"). Ora è
+                    // gestito imperativamente: init one-shot in Component.onCompleted, drag/snap
+                    // liberi; un Binding dedicato forza 40px solo quando è staccato (placeholder).
+                    // Stadio 3: waterfallPanel è il TOP SLOT-HOST (slot 4). Quando ospita
+                    // davvero la Waterfall (hostsWaterfall) usa la logica visibilità/altezza
+                    // waterfall-specifica; quando invece ospita un ALTRO pannello (Waterfall
+                    // spostata in una colonna) lo slot resta visibile e senza vincoli di altezza
+                    // waterfall, lasciando che il pannello ospite gestisca la propria visibilità.
+                    readonly property bool hostsWaterfall: mainWindow.classicIdInSlot(5) === "waterfall"
+                    visible: hostsWaterfall ? (mainWindow.waterfallPanelVisible || waterfallDetached) : true
+                    SplitView.minimumHeight: !hostsWaterfall ? 0 : (!mainWindow.waterfallPanelVisible ? 0 : (waterfallDetached ? 40 : 0))  // 1.0.288: nessun vincolo di altezza quando ancorato (resize completamente libero, richiesta utente). Era 260 → 120 → 0.
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                     radius: 8
                     border.color: isDockHighlighted ? secondaryCyan : glassBorder
@@ -4224,21 +7693,62 @@ ApplicationWindow {
                         globalDockZone = Qt.rect(globalPos.x, globalPos.y, waterfallPanel.width, waterfallPanel.height)
                     }
 
-                    Component.onCompleted: updateDockZone()
+                    Component.onCompleted: {
+                        updateDockZone()
+                        // 1.0.288 — init one-shot (no binding reattivo che combatte il drag)
+                        if (mainWindow.waterfallPanelVisible && !waterfallDetached)
+                            SplitView.preferredHeight = mainWindow.waterfallPanelHeight
+                    }
                     onWidthChanged: updateDockZone()
                     onHeightChanged: {
                         updateDockZone()
-                        if (!waterfallDetached && height > 40) {
-                            mainWindow.waterfallPanelHeight = height
-                            bridge.uiWaterfallHeight = height
-                            mainWindow.scheduleSave()
+                        // 1.0.288 — persisti SOLO su bridge.uiWaterfallHeight (per il save).
+                        // NON riscrivere mainWindow.waterfallPanelHeight: romperebbe il binding
+                        // di riga 310 e rialimenterebbe il loop che bloccava il resize.
+                        if (mainWindow.waterfallPanelVisible && !waterfallDetached && height > 40) {
+                            var roundedHeight = Math.round(height)
+                            if (Math.abs(bridge.uiWaterfallHeight - roundedHeight) >= 1) {
+                                bridge.uiWaterfallHeight = roundedHeight
+                                mainWindow.scheduleSave()
+                            }
                         }
                     }
 
-                    // Placeholder when detached - magnetic dock zone
+                    // 1.0.288 — quando il waterfall è staccato, il pannello collassa al
+                    // placeholder 40px; tornato embedded ripristina l'altezza precedente.
+                    // Stadio 3: questi override di ALTEZZA sono specifici della Waterfall, ma
+                    // waterfallPanel è ora un SLOT-HOST che può ospitare un ALTRO pannello (se
+                    // la Waterfall è stata spostata in una colonna). Quindi si applicano SOLO
+                    // quando il topSlot (slot 4) ospita davvero la Waterfall: altrimenti il
+                    // topSlot conserva la sua preferredHeight normale per il pannello ospite.
+                    Binding {
+                        target: waterfallPanel
+                        property: "SplitView.preferredHeight"
+                        value: 40
+                        when: mainWindow.waterfallPanelVisible && waterfallDetached
+                              && mainWindow.classicIdInSlot(5) === "waterfall"
+                        restoreMode: Binding.RestoreBindingOrValue
+                    }
+
+                    Binding {
+                        target: waterfallPanel
+                        property: "SplitView.preferredHeight"
+                        value: 0
+                        when: !mainWindow.waterfallPanelVisible
+                              && mainWindow.classicIdInSlot(5) === "waterfall"
+                        restoreMode: Binding.RestoreBindingOrValue
+                    }
+
+                    // Placeholder when detached - magnetic dock zone.
+                    // Stadio 3: figlio diretto dello SLOT-HOST (waterfallPanel), NON del
+                    // pannello re-parentabile -> resta nel topSlot e serve da zona di dock.
+                    // Mostrato solo quando il topSlot ospita davvero la Waterfall (id "waterfall"
+                    // in slot 4): se la Waterfall è stata spostata in una colonna e un altro
+                    // pannello occupa il topSlot, il placeholder non deve coprirlo. Il dock-back
+                    // resta possibile via la finestra flottante (zona = waterfallPanel) comunque.
                     Rectangle {
                         anchors.fill: parent
-                        visible: waterfallDetached
+                        visible: waterfallDetached && mainWindow.classicIdInSlot(5) === "waterfall"
                         color: waterfallPanel.isDockHighlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.4)
                         radius: 8
                         border.color: waterfallPanel.isDockHighlighted ? secondaryCyan : glassBorder
@@ -4252,7 +7762,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-	                            text: waterfallPanel.isDockHighlighted ? "Dock Waterfall" : "Waterfall detached"
+	                            text: waterfallPanel.isDockHighlighted ? qsTr("Dock Waterfall") : qsTr("Waterfall detached")
                                 color: waterfallPanel.isDockHighlighted ? secondaryCyan : textSecondary
                                 font.pixelSize: waterfallPanel.isDockHighlighted ? 16 : 12
                                 font.bold: waterfallPanel.isDockHighlighted
@@ -4260,7 +7770,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-	                                text: "Use Dock to reattach it"
+	                                text: qsTr("Use Dock to re-attach it")
                                 color: textSecondary
                                 font.pixelSize: 10
                                 visible: !waterfallPanel.isDockHighlighted
@@ -4278,7 +7788,7 @@ ApplicationWindow {
                             opacity: 0.8
 
                             SequentialAnimation on opacity {
-                                running: waterfallPanel.isDockHighlighted && bridge && bridge.uiQuality !== "Low"
+                                running: waterfallPanel.isDockHighlighted && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.4; duration: 300 }
                                 OpacityAnimator { to: 1.0; duration: 300 }
@@ -4286,10 +7796,21 @@ ApplicationWindow {
                         }
                     }
 
-                    // Embedded waterfall content
+                    // ════════ PANNELLO RE-PARENTABILE "waterfall" (Stadio 3) ════════
+                    // Questo Item è il contenuto re-parentabile (panelId "waterfall"): contiene
+                    // il Loader+Waterfall embedded + gli overlay (label, maniglia ⠿, Pop).
+                    // Di DEFAULT è figlio del topSlot (waterfallPanel) e lo riempie via
+                    // anchors.fill: parent. Lo SWAP (applyClassicColumnOrder/swapClassicColumns)
+                    // RE-PARENTA QUESTO Item in un colSlot/txSlot (o lo riporta nel topSlot)
+                    // -> anchors.fill assume la geometria del nuovo host (colonna alta-stretta,
+                    // area TX larga-bassa, o top largo-basso). CRITICO PCM: il re-parent NON
+                    // tocca waterfallEmbeddedLoader.active/sourceComponent -> il Loader resta
+                    // attivo, l'istanza Waterfall e il suo PanadapterItem NON vengono
+                    // distrutti/ricreati, il feed PCM via bridge prosegue (no freeze).
                     Rectangle {
+                        id: waterfallPanelHost
                         anchors.fill: parent
-                        visible: !waterfallDetached
+                        visible: mainWindow.waterfallPanelVisible && !waterfallDetached
                         color: "transparent"
 
 
@@ -4300,8 +7821,15 @@ ApplicationWindow {
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             anchors.margins: 4
-                            visible: !waterfallDetached
-                            active: !waterfallDetached
+                            // Reserve a header row for the drag handle, title and Pop.
+                            // The controls inside Waterfall must not sit under them.
+                            anchors.topMargin: 30
+                            visible: mainWindow.waterfallPanelVisible && !waterfallDetached
+                                     && mainWindow.startupWaterfallVisualReady
+                            // active NON dipende dal parent: il re-parent dello swap NON lo
+                            // cambia -> Loader mai ricaricato -> PanadapterItem/feed PCM vivi.
+                            active: mainWindow.waterfallPanelVisible && !waterfallDetached
+                                    && mainWindow.startupWaterfallVisualReady
                             // 1.0.175 — Carica off-thread come gia' fa il
                             // detached (Loader asynchronous:true a r.8304),
                             // per evitare stallo del main thread sul mount
@@ -4316,9 +7844,10 @@ ApplicationWindow {
                             Waterfall {
                                 id: waterfallDisplayEmbedded
                                 anchors.fill: parent
-                                visible: !waterfallDetached
+                            visible: mainWindow.waterfallPanelVisible && !waterfallDetached
+                                     && mainWindow.startupWaterfallVisualReady
                                 showControls: true
-                                minFreq: 0
+                                minFreq: 200
                                 maxFreq: 3200
                                 spectrumHeight: 150
                                 // 1.0.178 — Rimosso layer.enabled FBO (1.0.175):
@@ -4337,12 +7866,31 @@ ApplicationWindow {
                             }
                         }
 
+                        // Maniglia di drag pannello (Stadio 3) — overlay sull'angolo
+                        // alto-SINISTRO (il pulsante Pop è in alto a destra), sopra il
+                        // Waterfall. Stesso colDragHandleComponent degli altri pannelli;
+                        // panelId "waterfall". Viaggia con waterfallPanelHost quando
+                        // re-parentato in un colSlot/txSlot. active: !waterfallDetached
+                        // (mentre è staccato il pannello mostra il placeholder, niente drag).
+                        Loader {
+                            z: 50
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.leftMargin: 6
+                            anchors.topMargin: 5
+                            width: 16
+                            height: 16
+                            active: !waterfallDetached
+                            sourceComponent: colDragHandleComponent
+                            onLoaded: if (item) item.panelId = "waterfall"
+                        }
+
                         // Etichetta "Waterfall" integrata come overlay (non occupa spazio)
                         Text {
                             anchors.top: parent.top
                             anchors.left: parent.left
                             anchors.topMargin: 6
-                            anchors.leftMargin: 10
+                            anchors.leftMargin: 28
                             text: "Waterfall"
                             font.pixelSize: 10
                             font.bold: true
@@ -4390,7 +7938,7 @@ ApplicationWindow {
                                 }
 
                                 ToolTip.visible: waterfallPopMA.containsMouse
-                                ToolTip.text: "Pop out Waterfall"
+                                ToolTip.text: qsTr("Detach Waterfall")
                                 ToolTip.delay: 500
                             }
                         }
@@ -4407,15 +7955,103 @@ ApplicationWindow {
                     // Current active period tracking
                     property bool isCurrentPeriodEven: true
                     property int currentSecond: 0
-                    property real periodLength: bridge.mode === "FT2" ? 3.75 : (bridge.mode === "FT4" ? 7.5 : (bridge.mode === "WSPR" ? 120 : 15))
+                    property string normalizedMode: bridge ? String(bridge.mode || "").toUpperCase() : ""
+                    property bool ft2LinkPeriodMode: normalizedMode === "FT2-LINK" || normalizedMode === "FT2LINK"
+                    property bool ft2CadenceMode: normalizedMode === "FT2"
+                    function configuredPeriodSeconds() {
+                        var ms = bridge ? Number(bridge.periodMilliseconds || 0) : 0
+                        if (ms > 0)
+                            return ms / 1000.0
+                        if (ft2CadenceMode)
+                            return 3.75
+                        if (ft2LinkPeriodMode)
+                            return 15
+                        if (normalizedMode === "FT4")
+                            return 7.5
+                        if (normalizedMode === "WSPR")
+                            return 120
+                        if (normalizedMode.indexOf("Q65") === 0)
+                            return 60
+                        return 15
+                    }
+                    function txDurationSecondsForMode() {
+                        var period = configuredPeriodSeconds()
+                        if (ft2CadenceMode)
+                            return 2.87
+                        if (ft2LinkPeriodMode)
+                            return 10.0
+                        if (normalizedMode === "FT4")
+                            return 5.04
+                        if (normalizedMode === "WSPR")
+                            return 110.6
+                        if (normalizedMode === "MSK144")
+                            return Math.max(0.5, period - 0.5)
+                        if (normalizedMode.indexOf("Q65") === 0) {
+                            if (period <= 15.5)
+                                return 0.5 + (85 * 1800 / 12000.0)
+                            if (period <= 30.5)
+                                return 0.5 + (85 * 3600 / 12000.0)
+                            if (period <= 60.5)
+                                return 1.0 + (85 * 7200 / 12000.0)
+                            if (period <= 120.5)
+                                return 1.0 + (85 * 16000 / 12000.0)
+                            if (period <= 300.5)
+                                return 1.0 + (85 * 41472 / 12000.0)
+                            return Math.min(period, 52.0)
+                        }
+                        return 12.64
+                    }
+                    property real periodLength: configuredPeriodSeconds()
 
                     // IU8LMC: Reactive property for all decodes (Band Activity)
                     property bool showTxMessagesInRx: mainWindow.showTxMessagesInRx
                     property bool hideTelemetryOnlyDecodes: Qt.platform.os === "windows"
-                    property var allDecodes: visibleDecodeEntries(bridge.decodeList)
-                    property var rxDecodes: currentRxDecodes()
+                    property var allDecodes: (bridge && bridge.bandActivityModel) ? [] : visibleDecodeEntries(bridge.decodeList)
+                    property var rxDecodes: (bridge && bridge.rxDecodeModel) ? [] : currentRxDecodes()
                     property var clearedRxDecodeKeys: ({})
                     property int decodeListVersion: 0
+                    // Il modello applica le righe a tranche, ma QML aggiorna contatori
+                    // e tail-follow una sola volta quando la snapshot e' completa.
+                    property int bandActivityCountVersion: 0
+                    property bool bandActivitySnapshotPending: false
+                    property bool rxSnapshotPending: false
+                    function queueDecodeSnapshotUiCommit(bandPending, rxPending) {
+                        bandActivitySnapshotPending = bandActivitySnapshotPending || bandPending
+                        rxSnapshotPending = rxSnapshotPending || rxPending
+                        decodeSnapshotUiCommitTimer.restart()
+                    }
+                    Timer {
+                        id: decodeSnapshotUiCommitTimer
+                        interval: 60
+                        repeat: false
+                        onTriggered: {
+                            if (decodePanel.bandActivitySnapshotPending) {
+                                decodePanel.bandActivitySnapshotPending = false
+                                decodePanel.bandActivityCountVersion++
+                                decodePanel.decodeListVersion++
+                                decodePanel.updateCurrentPeriodDecodeCountFromCount(
+                                            bridge.bandActivityModel.count())
+                            }
+                            if (decodePanel.rxSnapshotPending) {
+                                decodePanel.rxSnapshotPending = false
+                                decodePanel.rxDecodeListVersion++
+                            }
+                        }
+                    }
+                    Connections {
+                        target: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : null
+                        ignoreUnknownSignals: true
+                        function onSnapshotApplied() {
+                            decodePanel.queueDecodeSnapshotUiCommit(true, false)
+                        }
+                    }
+                    Connections {
+                        target: (bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : null
+                        ignoreUnknownSignals: true
+                        function onSnapshotApplied() {
+                            decodePanel.queueDecodeSnapshotUiCommit(false, true)
+                        }
+                    }
                     property int rxDecodeListVersion: 0
                     property int lastSyncCount: 0
                     property real currentPeriodIndex: -1
@@ -4438,16 +8074,25 @@ ApplicationWindow {
 
                     function fullSpectrumModelCount() {
                         void(decodePanel.decodeListVersion)
-                        if (bridge && bridge.bandActivityModel)
+                        void(decodePanel.bandActivityCountVersion)
+                        if (decodePanel.hasNativeBandActivityModel())
                             return bridge.bandActivityModel.count()
                         return decodePanel.allDecodes ? decodePanel.allDecodes.length : 0
                     }
 
                     function signalRxModelCount() {
                         void(decodePanel.rxDecodeListVersion)
-                        if (bridge && bridge.rxDecodeModel)
+                        if (decodePanel.hasNativeRxDecodeModel())
                             return bridge.rxDecodeModel.count()
                         return decodePanel.rxDecodes ? decodePanel.rxDecodes.length : 0
+                    }
+
+                    function hasNativeBandActivityModel() {
+                        return bridge && bridge.bandActivityModel
+                    }
+
+                    function hasNativeRxDecodeModel() {
+                        return bridge && bridge.rxDecodeModel
                     }
 
                     function updatePeriodState() {
@@ -4470,8 +8115,7 @@ ApplicationWindow {
                         }
                     }
 
-                    function updateCurrentPeriodDecodeCount(src) {
-                        var newCount = src ? src.length : 0
+                    function updateCurrentPeriodDecodeCountFromCount(newCount) {
                         if (newCount >= decodePanel.lastSyncCount) {
                             decodePanel.currentPeriodDecodeCount += newCount - decodePanel.lastSyncCount
                         } else {
@@ -4482,14 +8126,22 @@ ApplicationWindow {
                         decodePanel.lastSyncCount = newCount
                     }
 
+                    function updateCurrentPeriodDecodeCount(src) {
+                        updateCurrentPeriodDecodeCountFromCount(src ? src.length : 0)
+                    }
+
 	                    Component.onCompleted: {
 	                        updatePeriodState()
-	                        lastSyncCount = decodePanel.visibleDecodeEntries(bridge.decodeList).length
+	                        lastSyncCount = decodePanel.hasNativeBandActivityModel()
+	                            ? bridge.bandActivityModel.count()
+	                            : decodePanel.visibleDecodeEntries(bridge.decodeList).length
 	                    }
 
 	                    function refreshRxDecodeModel(resetCleared) {
 	                        if (resetCleared)
 	                            decodePanel.clearedRxDecodeKeys = ({})
+	                        if (decodePanel.hasNativeRxDecodeModel())
+	                            return
 	                        decodePanel.rxDecodes = decodePanel.currentRxDecodes()
 	                        decodePanel.rxDecodeListVersion++
 	                        if (rxFrequencyList)
@@ -4513,57 +8165,63 @@ ApplicationWindow {
 	                    }
 
 	                    function clearSignalRxDecodes() {
-	                        var hidden = {}
-	                        for (var i = 0; i < decodePanel.rxDecodes.length; ++i) {
-	                            var item = decodePanel.rxDecodes[i]
-	                            if (!item || item.isSeparator === true)
-	                                continue
-	                            hidden[decodePanel.rxEntryKey(item)] = true
+	                        if (decodePanel.hasNativeRxDecodeModel()) {
+	                            decodePanel.clearedRxDecodeKeys = ({})
+	                        } else {
+	                            var hidden = {}
+	                            for (var i = 0; i < decodePanel.rxDecodes.length; ++i) {
+	                                var item = decodePanel.rxDecodes[i]
+	                                if (!item || item.isSeparator === true)
+	                                    continue
+	                                hidden[decodePanel.rxEntryKey(item)] = true
+	                            }
+	                            decodePanel.clearedRxDecodeKeys = hidden
+	                            decodePanel.rxDecodes = []
 	                        }
-	                        decodePanel.clearedRxDecodeKeys = hidden
-	                        decodePanel.rxDecodes = []
-	                        decodePanel.rxDecodeListVersion++
 	                        bridge.clearRxDecodes()
-	                        if (rxFrequencyList)
-	                            rxFrequencyList.forceTailFollow()
-	                        if (rxFrequencyFloatingList)
-	                            rxFrequencyFloatingList.forceTailFollow()
+	                        if (!decodePanel.hasNativeRxDecodeModel()) {
+	                            decodePanel.rxDecodeListVersion++
+	                            if (rxFrequencyList)
+	                                rxFrequencyList.forceTailFollow()
+	                            if (rxFrequencyFloatingList)
+	                                rxFrequencyFloatingList.forceTailFollow()
+	                        }
 	                    }
 
 	                    // Update decode list incrementalmente (solo nuovi elementi)
 	                    Connections {
                         target: bridge
                         function onDecodeListChanged() {
-                            decodePanel.decodeListVersion++
-                            var src = decodePanel.visibleDecodeEntries(bridge.decodeList)
-                            decodePanel.updateCurrentPeriodDecodeCount(src)
-                            decodePanel.allDecodes = src
-                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            decodePanel.rxDecodeListVersion++
-                            // 1.0.227 — forceTailFollow solo sulla ListView attiva
-                            // (embedded VS floating in base a period1Detached).
-                            // Pre-1.0.227 chiamava SEMPRE entrambe: ognuna schedulava
-                            // Qt.callLater + NumberAnimation main thread anche se
-                            // invisibile = main saturation = freeze Full Spectrum.
-                            if (period1Detached) {
-                                if (period1FloatingList)
-                                    period1FloatingList.forceTailFollow()
-                            } else {
-                                if (evenPeriodList)
-                                    evenPeriodList.forceTailFollow()
-                            }
-                            if (rxFrequencyList)
-                                rxFrequencyList.forceTailFollow()
-                            if (rxFrequencyFloatingList)
-                                rxFrequencyFloatingList.forceTailFollow()
+	                            if (!decodePanel.hasNativeBandActivityModel()) {
+	                                decodePanel.decodeListVersion++
+	                                var src = decodePanel.visibleDecodeEntries(bridge.decodeList)
+	                                decodePanel.updateCurrentPeriodDecodeCount(src)
+	                                decodePanel.allDecodes = src
+	                                if (period1Detached) {
+	                                    if (period1FloatingList)
+	                                        period1FloatingList.forceTailFollow()
+	                                } else if (evenPeriodList) {
+	                                    evenPeriodList.forceTailFollow()
+	                                }
+	                            }
+	                            if (!decodePanel.hasNativeRxDecodeModel()) {
+	                                decodePanel.rxDecodes = decodePanel.currentRxDecodes()
+	                                decodePanel.rxDecodeListVersion++
+	                                if (rxFrequencyList)
+	                                    rxFrequencyList.forceTailFollow()
+	                                if (rxFrequencyFloatingList)
+	                                    rxFrequencyFloatingList.forceTailFollow()
+	                            }
                         }
                         function onRxDecodeListChanged() {
-                            decodePanel.rxDecodeListVersion++
-                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            if (rxFrequencyList)
-                                rxFrequencyList.forceTailFollow()
-	                            if (rxFrequencyFloatingList)
-	                                rxFrequencyFloatingList.forceTailFollow()
+	                            if (!decodePanel.hasNativeRxDecodeModel()) {
+	                                decodePanel.rxDecodes = decodePanel.currentRxDecodes()
+	                                decodePanel.rxDecodeListVersion++
+	                                if (rxFrequencyList)
+	                                    rxFrequencyList.forceTailFollow()
+	                                if (rxFrequencyFloatingList)
+	                                    rxFrequencyFloatingList.forceTailFollow()
+	                            }
 	                        }
 	                        function onDxCallChanged() {
 	                            decodePanel.refreshRxDecodeModel(true)
@@ -4574,18 +8232,20 @@ ApplicationWindow {
 	                    }
 
                     onShowTxMessagesInRxChanged: {
-                        decodePanel.rxDecodes = currentRxDecodes()
-                        decodePanel.rxDecodeListVersion++
-                        if (rxFrequencyList)
-                            rxFrequencyList.forceTailFollow()
-                        if (rxFrequencyFloatingList)
-                            rxFrequencyFloatingList.forceTailFollow()
+	                        if (decodePanel.hasNativeRxDecodeModel())
+	                            return
+	                        decodePanel.rxDecodes = currentRxDecodes()
+	                        decodePanel.rxDecodeListVersion++
+	                        if (rxFrequencyList)
+	                            rxFrequencyList.forceTailFollow()
+	                        if (rxFrequencyFloatingList)
+	                            rxFrequencyFloatingList.forceTailFollow()
                     }
 
                     Timer {
                         id: periodTimer
                         interval: 200  // Update 5 times per second for smooth indicator
-                        running: true
+                        running: !mainWindow.ft2LinkModeActive
                         repeat: true
                         onTriggered: {
                             decodePanel.updatePeriodState()
@@ -4596,7 +8256,7 @@ ApplicationWindow {
                     Timer {
                         id: ledStatusTimer
                         interval: 500  // Update LED status every 500ms
-                        running: true
+                        running: !mainWindow.ft2LinkModeActive
                         repeat: true
                         property int resetCounter: 0
                         onTriggered: {
@@ -4623,11 +8283,7 @@ ApplicationWindow {
 		                    }
 
 		                    function decodeEntryBold(md) {
-		                        return !!(md && ((md.isTx === true) ||
-		                                        (md.isCQ === true) ||
-		                                        (md.isMyCall === true) ||
-		                                        (md.dxIsNewCountry === true) ||
-		                                        (md.dxIsMostWanted === true)))
+		                        return mainWindow.decodeEntryBoldForModel(md)
 		                    }
 
 		                    function decodeEntryStrikeout(md) {
@@ -4727,7 +8383,7 @@ ApplicationWindow {
 	                        var activeMatch = messageContainsCallBase(message, activeBase)
 	                            || mainWindow.callsignBase(item.fromCall || "") === activeBase
 	                            || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
-	                        return activeMatch && myMatch
+	                        return activeMatch
 	                    }
 
 	                    function rxSortSeconds(item) {
@@ -4889,20 +8545,27 @@ ApplicationWindow {
                         height: 28
                         radius: 4
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                        border.color: timingBar.isTxPhase ? bridge.themeManager.ledRed : Qt.rgba(76/255, 175/255, 80/255, 0.55)
+                        border.color: !timingBar.timerActive ? glassBorder : (timingBar.isTxPhase ? bridge.themeManager.ledRed : Qt.rgba(76/255, 175/255, 80/255, 0.55))
                         border.width: 1
 
                         property real periodLen: decodePanel.periodLength
-                        property real txDuration: bridge.mode === "FT2" ? 2.87 : (bridge.mode === "FT4" ? 5.04 : (bridge.mode === "WSPR" ? 110.6 : 12.64))
+                        property real txDuration: decodePanel.txDurationSecondsForMode()
                         property real progress: 0.0
                         property real secInPeriod: 0.0
                         property bool isTxPhase: !!(bridge && bridge.transmitting)
+                        property bool timerActive: !!(bridge && ((bridge.transmitting || bridge.tuning) || (!mainWindow.ft2LinkModeActive && bridge.monitoring)))
                         property bool isEvenPeriod: true
                         property string periodLabel: isTxPhase ? "TX" : "RX"
+                        onTimerActiveChanged: {
+                            if (!timerActive) {
+                                progress = 0.0
+                                secInPeriod = 0.0
+                            }
+                        }
 
                         Timer {
                             interval: 50
-                            running: true
+                            running: timingBar.timerActive
                             repeat: true
                             onTriggered: {
                                 var now = new Date()
@@ -4947,6 +8610,7 @@ ApplicationWindow {
 
                             // Playhead marker
                             Rectangle {
+                                visible: timingBar.timerActive
                                 x: parent.width * timingBar.progress - 2
                                 y: -2
                                 width: 4
@@ -4975,8 +8639,8 @@ ApplicationWindow {
                             text: timingBar.periodLabel
                             font.pixelSize: 11
                             font.bold: true
-                            font.family: "Monospace"
-                            color: timingBar.isTxPhase ? bridge.themeManager.ledRed : bridge.themeManager.successColor
+                            font.family: decodiumMonoFontFamily
+                            color: !timingBar.timerActive ? textSecondary : (timingBar.isTxPhase ? bridge.themeManager.ledRed : bridge.themeManager.successColor)
                         }
 
                         // Mode + phase label (left of bar)
@@ -4988,7 +8652,7 @@ ApplicationWindow {
                             text: ""
                             font.pixelSize: 10
                             font.bold: true
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: timingBar.isTxPhase ? bridge.themeManager.ledRed : accentGreen
                         }
 
@@ -4999,7 +8663,7 @@ ApplicationWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             text: timingBar.secInPeriod.toFixed(1) + " / " + timingBar.periodLen.toFixed(1) + "s"
                             font.pixelSize: 10
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: textSecondary
                         }
                     }
@@ -5030,42 +8694,138 @@ ApplicationWindow {
                             // inizia a trascinare — disattiva il ri-centramento automatico
                             // al resize della finestra.
                             SplitHandle.onPressedChanged: {
-                                if (SplitHandle.pressed && typeof period1Panel !== "undefined")
-                                    period1Panel.userDraggedSplit = true
+                                if (SplitHandle.pressed && typeof colSlot0 !== "undefined")
+                                    colSlot0.userDraggedSplit = true
                             }
                         }
 
-                        // ========== LEFT: Band Activity ==========
-                        Rectangle {
-                            id: period1Panel
+                        // ════════ SLOT-HOST FISSI (Stadio 1 pannelli interscambiabili) ════════
+                        // ft2LinkModeSlot è il pannello applicativo inline, visibile solo nel
+                        // modo FT2-Link. Gli slot classici restano a ordine fisso
+                        // (colSlot0=sx, colSlot1=centro, colSlot2=dx, colSlot3=extra): portano loro le
+                        // attached property SplitView.* + la larghezza-valore (per-slot). Ogni
+                        // colSlot DICHIARA al suo interno il proprio pannello di DEFAULT come
+                        // figlio naturale (anchors.fill: parent): colSlot0->period1Panel,
+                        // colSlot1->rxFreqPanel, colSlot2->liveMapPanelHost. Lo SWAP re-parenta
+                        // imperativamente i pannelli tra i colSlot (applyClassicColumnOrder /
+                        // swapClassicColumns), mentre ft2LinkModeSlot resta un host separato
+                        // che prende larghezza solo quando il modo FT2-Link è attivo.
+                        //
+                        // Larghezza-valore: per-SLOT (posizione). Larghezza-MINIMA: segue il
+                        // pannello che occupa lo slot (classicMinWidthForSlot). Lo slot che
+                        // ospita la Live Map collassa a 0 quando la mappa è nascosta/staccata
+                        // (classicSlotCollapsed), com'era con liveMapPanelHost.visible.
+
+                        Item {
+                            id: ft2LinkModeSlot
+                            visible: mainWindow.ft2LinkModeActive
+                            SplitView.fillWidth: mainWindow.ft2LinkModeActive
+                            SplitView.preferredWidth: mainWindow.ft2LinkModeActive ? 820 : 0
+                            SplitView.minimumWidth: mainWindow.ft2LinkModeActive ? 560 : 0
+
+	                            Loader {
+	                                id: ft2LinkInlineLoader
+	                                anchors.fill: parent
+	                                active: mainWindow.ft2LinkModeActive && !mainWindow.ft2LinkPanelDetached
+	                                asynchronous: true
+	                                source: "../panels/FT2LinkPanel.qml"
+	                                onLoaded: {
+	                                    if (item) {
+	                                        item.dragTarget = null
+	                                        item.toolTabsExternal = true
+	                                        item.poppedOut = false
+	                                    }
+	                                }
+	                            }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: mainWindow.ft2LinkModeActive && mainWindow.ft2LinkPanelDetached
+                                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.55)
+                                    radius: 8
+                                    border.color: glassBorder
+                                    border.width: 1
+
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 10
+
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: qsTr("FT2-Link popped out")
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: textSecondary
+                                        }
+
+                                        Rectangle {
+                                            width: 54
+                                            height: 24
+                                            radius: 4
+                                            color: ft2InlineDockMA.containsMouse
+                                                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.30)
+                                                   : "transparent"
+                                            border.color: ft2InlineDockMA.containsMouse
+                                                          ? secondaryCyan
+                                                          : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
+                                            border.width: 1
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "Dock"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                color: ft2InlineDockMA.containsMouse ? secondaryCyan : textPrimary
+                                            }
+
+                                            MouseArea {
+                                                id: ft2InlineDockMA
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: mainWindow.dockFt2LinkPanel()
+                                            }
+                                        }
+                                    }
+                                }
+
+	                            Connections {
+	                                target: ft2LinkInlineLoader.item
+	                                ignoreUnknownSignals: true
+	                                function onCloseRequested() {
+	                                    mainWindow.dockFt2LinkPanel()
+	                                }
+	                                function onPopDockRequested() {
+	                                    mainWindow.popFt2LinkPanel()
+	                                }
+	                            }
+	                        }
+
+	                        // ========== SLOT 0 (default: LEFT Band Activity / Full Spectrum) ==========
+	                        Item {
+                            id: colSlot0
                             property int targetPanelWidth: mainWindow.savedPeriod1PanelWidth
-                            SplitView.preferredWidth: targetPanelWidth
-                            SplitView.minimumWidth: 360
-                            readonly property bool compactColumns: width < 620
-                            readonly property int utcColumnWidth: compactColumns ? 66 : 86
-                            readonly property int dbColumnWidth: compactColumns ? 34 : 38
-                            readonly property int dbDtGapWidth: compactColumns ? 4 : 6
-                            readonly property int dtColumnWidth: compactColumns ? 42 : 48
-                            readonly property int dtFreqGapWidth: compactColumns ? 6 : 8
-                            readonly property int freqColumnWidth: compactColumns ? 42 : 45
-                            readonly property int gapColumnWidth: compactColumns ? 8 : 12
-                            readonly property int distanceColumnWidth: compactColumns ? 0 : 58
-                            readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 108 : Math.min(300, Math.max(190, Math.round(width * 0.24)))) : 0
-                            readonly property int azColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 42 : 52) : 0
-                            readonly property int messageMinWidth: compactColumns ? 72 : 140
-                            // Divisore Full Spectrum / Signal RX: 50/50 affidabile.
-                            // Se `parent.width==0` al momento del callback (timing race),
-                            // applyCenterSplit() si ri-schedula finché il parent non ha width.
-                            // Il flag userDraggedSplit (settato su onPressedChanged del handle)
-                            // disattiva il ri-centramento se l'utente ha trascinato il separatore.
+                            // Centro-split affidabile 50/50 (ex-period1Panel): ricalcola la metà
+                            // sinistra finché il parent non ha width; disattivato se l'utente
+                            // ha trascinato il separatore.
                             property bool userDraggedSplit: false
+                            readonly property bool slotCollapsed: mainWindow.classicSlotCollapsed(0)
+                            // 1.0.388 — slot collassato = invisibile (lo SplitView lo esclude del
+                            // tutto: niente colonna, niente maniglia, niente spazio residuo).
+                            visible: !slotCollapsed
+                            // fillWidth segue lo slot che ospita Full Spectrum (mai collassabile,
+                            // sempre presente) → c'è sempre esattamente un riempitore valido.
+                            SplitView.fillWidth: mainWindow.classicDecodeFillSlot() === 0
+                            SplitView.preferredWidth: slotCollapsed ? 0 : targetPanelWidth
+                            SplitView.minimumWidth: slotCollapsed ? 0 : mainWindow.classicMinWidthForSlot(0)
                             function applyCenterSplit() {
                                 if (userDraggedSplit) return
+                                if (mainWindow.decodePanelLayoutSaved) return
                                 if (parent && parent.width > 0) {
-                                    var liveMapWidth = (typeof liveMapPanelHost !== "undefined" && liveMapPanelHost.visible)
-                                                     ? liveMapPanelHost.targetPanelWidth
-                                                     : 0
-                                    period1Panel.targetPanelWidth = Math.max(360, Math.round((parent.width - liveMapWidth) * 0.5))
+                                    var mapW = 0
+                                    if (typeof colSlot2 !== "undefined" && !colSlot2.slotCollapsed)
+                                        mapW = colSlot2.targetPanelWidth
+                                    colSlot0.targetPanelWidth = Math.max(360, Math.round((parent.width - mapW) * 0.5))
                                 } else {
                                     Qt.callLater(applyCenterSplit)
                                 }
@@ -5077,20 +8837,46 @@ ApplicationWindow {
                                     applyCenterSplit()
                             })
                             onWidthChanged: {
-                                if (width >= 360 && Math.abs(targetPanelWidth - width) >= 1) {
+                                if (!slotCollapsed && width >= 360 && Math.abs(targetPanelWidth - width) >= 1) {
+                                    // Variazione di width non originata da applyCenterSplit/restore
+                                    // = drag manuale del separatore: marca lo split come spostato a
+                                    // mano (ridondante col SplitHandle.onPressedChanged, ma copre il
+                                    // caso in cui il press non venga intercettato) e persiste.
+                                    if (!mainWindow.windowStateRestoreInProgress && !userDraggedSplit)
+                                        userDraggedSplit = true
                                     targetPanelWidth = Math.round(width)
                                     if (!mainWindow.windowStateRestoreInProgress)
                                         mainWindow.scheduleWindowStateSave()
                                 }
                             }
                             Connections {
-                                target: period1Panel.parent
+                                target: colSlot0.parent
                                 ignoreUnknownSignals: true
                                 function onWidthChanged() {
-                                    if (!period1Panel.userDraggedSplit)
-                                        period1Panel.applyCenterSplit()
+                                    if (!colSlot0.userDraggedSplit && !mainWindow.decodePanelLayoutSaved)
+                                        colSlot0.applyCenterSplit()
                                 }
                             }
+
+                        // ========== LEFT: Band Activity ==========
+                        Rectangle {
+                            id: period1Panel
+                            anchors.fill: parent
+                            readonly property bool compactColumns: width < 620
+                            readonly property int utcColumnWidth: compactColumns ? 66 : 86
+                            readonly property int dbColumnWidth: compactColumns ? 34 : 38
+                            readonly property int dbDtGapWidth: compactColumns ? 4 : 6
+                            readonly property int dtColumnWidth: compactColumns ? 42 : 48
+                            readonly property int dtFreqGapWidth: compactColumns ? 6 : 8
+                            readonly property int freqColumnWidth: compactColumns ? 42 : 45
+                            readonly property int gapColumnWidth: compactColumns ? 8 : 12
+                            readonly property int distanceColumnWidth: mainWindow.fullSpectrumShowDistColumn && !compactColumns ? 58 : 0
+                            readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 108 : Math.min(300, Math.max(190, Math.round(width * 0.24)))) : 0
+                            readonly property int azColumnWidth: mainWindow.showDxccInfo && mainWindow.fullSpectrumShowAzColumn ? (compactColumns ? 42 : 52) : 0
+                            readonly property int messageMinWidth: compactColumns ? 72 : 140
+                            // Stadio 1: questo pannello riempie il suo slot-host (colSlot0 di
+                            // default; spostabile via mappa). La larghezza-valore e il
+                            // centro-split sono ora su colSlot0; qui resta solo il contenuto.
                             color: "transparent"
 
                             // Placeholder when detached - magnetic dock zone
@@ -5118,7 +8904,7 @@ ApplicationWindow {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: "Trascina la finestra qui"
+                                        text: qsTr("Drag the window here")
                                         color: textSecondary
                                         font.pixelSize: 10
                                         visible: !period1DockHighlighted
@@ -5163,7 +8949,7 @@ ApplicationWindow {
                                     opacity: 0.8
 
                                     SequentialAnimation on opacity {
-                                        running: period1DockHighlighted && bridge && bridge.uiQuality !== "Low"
+                                        running: period1DockHighlighted && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                         loops: Animation.Infinite
                                         OpacityAnimator { to: 0.4; duration: 300 }
                                         OpacityAnimator { to: 1.0; duration: 300 }
@@ -5192,6 +8978,15 @@ ApplicationWindow {
                                         anchors.margins: 6
                                         spacing: 8
 
+                                        // Maniglia di drag colonna (Stadio 1)
+                                        Loader {
+                                            Layout.preferredWidth: 16
+                                            Layout.preferredHeight: 16
+                                            Layout.alignment: Qt.AlignVCenter
+                                            sourceComponent: colDragHandleComponent
+                                            onLoaded: if (item) item.panelId = "fullspectrum"
+                                        }
+
                                         // Active period indicator (pulsing)
                                         Rectangle {
                                             width: 10
@@ -5200,7 +8995,7 @@ ApplicationWindow {
                                             color: bridge.themeManager.successColor
 
                                             SequentialAnimation on opacity {
-                                                running: decodePanel.isCurrentPeriodEven && bridge && bridge.uiQuality !== "Low"
+                                                running: decodePanel.isCurrentPeriodEven && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                                 loops: Animation.Infinite
                                                 OpacityAnimator { to: 0.3; duration: 500 }
                                                 OpacityAnimator { to: 1.0; duration: 500 }
@@ -5235,7 +9030,7 @@ ApplicationWindow {
                                             }
 
                                             SequentialAnimation on opacity {
-                                                running: decodePanel.isCurrentPeriodEven && bridge && bridge.uiQuality !== "Low"
+                                                running: decodePanel.isCurrentPeriodEven && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                                 loops: Animation.Infinite
                                                 OpacityAnimator { to: 0.6; duration: 600 }
                                                 OpacityAnimator { to: 1.0; duration: 600 }
@@ -5245,21 +9040,44 @@ ApplicationWindow {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: decodePanel.fullSpectrumModelCount() + " decodes"
+                                            text: decodePanel.displayedDecodeCount() + " " + qsTr("decodes")
                                             font.pixelSize: 10
                                             color: textSecondary
                                         }
 
-                                        Text {
-                                            text: "Clear"
-                                            font.pixelSize: 10
-                                            color: textSecondary
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: bridge.clearDecodes()
-                                            }
-                                        }
+	                                        Rectangle {
+	                                            Layout.preferredWidth: 40
+	                                            Layout.preferredHeight: 18
+	                                            radius: 4
+	                                            color: p1ClearMA.containsMouse
+	                                                ? Qt.rgba(244/255, 67/255, 54/255, 0.25)
+	                                                : "transparent"
+	                                            border.color: p1ClearMA.containsMouse
+	                                                ? bridge.themeManager.ledRed
+	                                                : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.16)
+	                                            border.width: 1
+
+	                                            Text {
+	                                                anchors.centerIn: parent
+	                                                text: qsTr("Clear")
+	                                                font.pixelSize: 10
+	                                                color: p1ClearMA.containsMouse
+	                                                    ? bridge.themeManager.ledRed
+	                                                    : textSecondary
+	                                            }
+
+	                                            MouseArea {
+	                                                id: p1ClearMA
+	                                                anchors.fill: parent
+	                                                hoverEnabled: true
+	                                                cursorShape: Qt.PointingHandCursor
+	                                                onClicked: bridge.clearDecodes()
+	                                            }
+
+	                                            ToolTip.visible: p1ClearMA.containsMouse
+	                                            ToolTip.text: qsTr("Clear Full Spectrum")
+	                                            ToolTip.delay: 500
+	                                        }
 
 	                                        // 1.0.229 — Compact mode toggle Full Spectrum.
 	                                        // Quando ON, row height passa da 26px a 14px:
@@ -5279,7 +9097,7 @@ ApplicationWindow {
 	                                            border.width: 1
 	                                            Text {
 	                                                anchors.centerIn: parent
-	                                                text: mainWindow.compactFullSpectrum ? "Full" : "Compact"
+		                                                text: mainWindow.compactFullSpectrum ? "Full" : "Cmp"
 	                                                font.pixelSize: mainWindow.compactFullSpectrum ? 10 : 9
 	                                                font.bold: true
 	                                                color: (p1CompactMA.containsMouse || mainWindow.compactFullSpectrum)
@@ -5294,8 +9112,8 @@ ApplicationWindow {
 	                                            }
 	                                            ToolTip.visible: p1CompactMA.containsMouse
 	                                            ToolTip.text: mainWindow.compactFullSpectrum
-	                                                ? qsTr("Switch to normal row height")
-	                                                : qsTr("Compact rows (2x more visible decodes)")
+	                                                ? qsTr("Return to normal row height")
+	                                                : qsTr("Compact rows (2x visible decodes)")
 	                                            ToolTip.delay: 500
 	                                        }
 
@@ -5331,59 +9149,159 @@ ApplicationWindow {
                                     }
                                 }
 
-                                // Column headers
+                                // Column headers — data-driven (larghezza/visibilità/ordine
+                                // configurabili). Tasto destro = menu colonne; trascina il
+                                // bordo destro di una colonna per ridimensionarla.
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 20
                                     color: Qt.rgba(76/255, 175/255, 80/255, 0.2)
                                     radius: 2
 
+                                    Menu {
+                                        id: fsHeaderMenuEmbedded
+                                        property string targetId: ""
+                                        MenuItem { text: qsTr("◀  Move left"); enabled: mainWindow.fsCanMove(fsHeaderMenuEmbedded.targetId, -1); onTriggered: mainWindow.fsMoveColumn(fsHeaderMenuEmbedded.targetId, -1) }
+                                        MenuItem { text: qsTr("Move right  ▶"); enabled: mainWindow.fsCanMove(fsHeaderMenuEmbedded.targetId, 1); onTriggered: mainWindow.fsMoveColumn(fsHeaderMenuEmbedded.targetId, 1) }
+                                        MenuItem { text: qsTr("Hide this column"); enabled: mainWindow.fsColMeta(fsHeaderMenuEmbedded.targetId).canHide; onTriggered: mainWindow.fsSetColumnVisible(fsHeaderMenuEmbedded.targetId, false) }
+                                        MenuSeparator {}
+                                        MenuItem { text: (mainWindow.fsColVisible("utc")  ? "✓  " : "      ") + qsTr("UTC");     onTriggered: mainWindow.fsToggleColumnVisible("utc") }
+                                        MenuItem { text: (mainWindow.fsColVisible("db")   ? "✓  " : "      ") + qsTr("dB");      onTriggered: mainWindow.fsToggleColumnVisible("db") }
+                                        MenuItem { text: (mainWindow.fsColVisible("dt")   ? "✓  " : "      ") + qsTr("DT");      onTriggered: mainWindow.fsToggleColumnVisible("dt") }
+                                        MenuItem { text: (mainWindow.fsColVisible("freq") ? "✓  " : "      ") + qsTr("Freq");    onTriggered: mainWindow.fsToggleColumnVisible("freq") }
+                                        MenuItem { text: qsTr("✓  Message"); enabled: false }
+                                        MenuItem { text: (mainWindow.fsColVisible("dist") ? "✓  " : "      ") + qsTr("Dist");    onTriggered: mainWindow.fsToggleColumnVisible("dist") }
+                                        MenuItem { text: (mainWindow.fsColVisible("dxcc") ? "✓  " : "      ") + qsTr("DXCC");    enabled: mainWindow.showDxccInfo; onTriggered: mainWindow.fsToggleColumnVisible("dxcc") }
+                                        MenuItem { text: (mainWindow.fsColVisible("az")   ? "✓  " : "      ") + qsTr("Az");      enabled: mainWindow.showDxccInfo; onTriggered: mainWindow.fsToggleColumnVisible("az") }
+                                        MenuSeparator {}
+                                        MenuItem { text: (mainWindow.fsNewestFirst ? "✓  " : "      ") + qsTr("Newest on top"); onTriggered: mainWindow.fsToggleNewestFirst() }
+                                        MenuSeparator {}
+                                        MenuItem { text: qsTr("Reset columns"); onTriggered: mainWindow.fsResetColumns() }
+                                    }
+
                                     RowLayout {
+                                        id: fsHeaderRowE
                                         anchors.fill: parent
                                         anchors.leftMargin: 8
                                         anchors.rightMargin: 8
-                                        spacing: 0
+                                        spacing: 6
 
-                                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
-                                        Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
-                                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                        Item { Layout.preferredWidth: period1Panel.dtFreqGapWidth }
-                                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
-                                        Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.fillWidth: true }
-                                        Text { visible: period1Panel.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
-                                        Item {
-                                            visible: mainWindow.showDxccInfo
-                                            Layout.preferredWidth: period1Panel.dxccColumnWidth
-                                            Layout.fillHeight: true
-                                            Text {
-                                                anchors.fill: parent
-                                                text: "DXCC"
-                                                font.family: mainWindow.decodedTextFontFamily
-                                                font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
-                                                font.bold: true
-                                                color: bridge.themeManager.successColor
-                                                horizontalAlignment: Text.AlignRight
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                        }
-                                        Item {
-                                            visible: mainWindow.showDxccInfo
-                                            Layout.preferredWidth: period1Panel.azColumnWidth
-                                            Layout.fillHeight: true
-                                            Text {
-                                                anchors.fill: parent
-                                                text: "Az"
-                                                font.family: mainWindow.decodedTextFontFamily
-                                                font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
-                                                font.bold: true
-                                                color: bridge.themeManager.successColor
-                                                horizontalAlignment: Text.AlignRight
-                                                verticalAlignment: Text.AlignVCenter
+                                        Repeater {
+                                            model: mainWindow.fsColumnsForWidth(period1Panel.width)
+                                            delegate: Item {
+                                                id: fsHCell
+                                                readonly property var col: modelData
+                                                readonly property var meta: mainWindow.fsColMeta(col.id)
+                                                Layout.fillWidth: meta.fill
+                                                Layout.preferredWidth: meta.fill ? -1 : mainWindow.fsColWidthForPanel(col.id, period1Panel.width)
+                                                Layout.minimumWidth: meta.fill ? meta.minW : mainWindow.fsColWidthForPanel(col.id, period1Panel.width)
+                                                Layout.fillHeight: true
+
+                                                Text {
+                                                    anchors.fill: parent
+                                                    anchors.rightMargin: fsHCell.meta.fill ? 0 : 5
+                                                    text: fsHCell.meta.label
+                                                    font.family: mainWindow.decodedTextFontFamily
+                                                    font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
+                                                    font.bold: true
+                                                    color: bridge.themeManager.successColor
+                                                    horizontalAlignment: fsHCell.meta.align === "right" ? Text.AlignRight : Text.AlignLeft
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    elide: Text.ElideRight
+                                                }
+                                                // Linea divisoria/grip visibile sul bordo destro (zona di resize).
+                                                Rectangle {
+                                                    visible: !fsHCell.meta.fill
+                                                    width: 1
+                                                    anchors.right: parent.right
+                                                    anchors.top: parent.top
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.topMargin: 3
+                                                    anchors.bottomMargin: 3
+                                                    color: Qt.rgba(bridge.themeManager.successColor.r, bridge.themeManager.successColor.g, bridge.themeManager.successColor.b, 0.45)
+                                                }
                                             }
                                         }
                                     }
+
+                                    // Controller UNICO sopra le celle (z alto, FUORI dal Repeater →
+                                    // sopravvive al rebuild durante il riordino live). Trascina l'etichetta
+                                    // per spostare la colonna (reorder live), trascina il bordo destro per
+                                    // ridimensionare, tasto destro = menu colonne.
+                                    MouseArea {
+                                        id: fsHdrCtlE
+                                            anchors.fill: parent
+                                            z: 100
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            hoverEnabled: true
+                                            preventStealing: true
+                                            property string grabId: ""
+                                            property bool resizing: false
+                                            property bool reordering: false
+                                            property real pressSceneX: 0
+                                            property int pressW: 0
+                                            function cellAt(localX) {
+                                                var p = mapToItem(fsHeaderRowE, localX, fsHeaderRowE.height / 2)
+                                                return fsHeaderRowE.childAt(p.x, p.y)
+                                            }
+                                            // Colonna il cui BORDO destro è entro ±7px dal cursore (zona resize,
+                                            // copre anche lo spacing fra colonne → facile da agganciare).
+                                            function resizeTargetAt(localX) {
+                                                var p = mapToItem(fsHeaderRowE, localX, 0)
+                                                var kids = fsHeaderRowE.children
+                                                for (var i = 0; i < kids.length; ++i) {
+                                                    var c = kids[i]
+                                                    if (!c || !c.col || mainWindow.fsColMeta(c.col.id).fill) continue
+                                                    if (Math.abs(p.x - (c.x + c.width)) <= 7) return c.col.id
+                                                }
+                                                return ""
+                                            }
+                                            cursorShape: {
+                                                if (resizing) return Qt.SplitHCursor
+                                                if (reordering) return Qt.ClosedHandCursor
+                                                return resizeTargetAt(mouseX) !== "" ? Qt.SplitHCursor : Qt.ArrowCursor
+                                            }
+                                            onPressed: function(m) {
+                                                pressSceneX = mapToItem(null, m.x, m.y).x
+                                                resizing = false; reordering = false
+                                                var rid = resizeTargetAt(m.x)
+                                                if (m.button === Qt.LeftButton && rid !== "") {
+                                                    grabId = rid
+                                                    resizing = true
+                                                    pressW = mainWindow.fsColWidth(rid)
+                                                } else {
+                                                    var c = cellAt(m.x)
+                                                    grabId = (c && c.col) ? c.col.id : ""
+                                                }
+                                            }
+                                            onPositionChanged: function(m) {
+                                                if (!pressed || grabId === "") return
+                                                var sx = mapToItem(null, m.x, m.y).x
+                                                if (resizing) {
+                                                    mainWindow.fsSetColumnWidth(grabId, pressW + (sx - pressSceneX))
+                                                    return
+                                                }
+                                                if (!(pressedButtons & Qt.LeftButton)) return
+                                                if (!reordering && Math.abs(sx - pressSceneX) < 6) return
+                                                reordering = true
+                                                var c = cellAt(m.x)
+                                                var overId = (c && c.col) ? c.col.id : ""
+                                                if (overId !== "" && overId !== grabId)
+                                                    mainWindow.fsMoveColumnToId(grabId, overId)
+                                            }
+                                            onReleased: function(m) {
+                                                if (resizing) mainWindow.fsPersistWidths()
+                                                else if (reordering) mainWindow.fsPersistOrder()
+                                                grabId = ""; resizing = false; reordering = false
+                                            }
+                                            onCanceled: { grabId = ""; resizing = false; reordering = false }
+                                            onClicked: function(m) {
+                                                if (m.button === Qt.RightButton) {
+                                                    var c = cellAt(m.x)
+                                                    if (c && c.col) { fsHeaderMenuEmbedded.targetId = c.col.id; fsHeaderMenuEmbedded.popup() }
+                                                }
+                                            }
+                                        }
                                 }
 
                                 // Even Period List
@@ -5401,50 +9319,62 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         anchors.margins: 2
                                         clip: true
-                                        model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes
+                                        model: !period1Detached
+                                               ? ((bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes)
+                                               : null
                                         spacing: 1
                                         // 1.0.228 — cacheBuffer 3000 → 600 (allineato a DecodeList.qml).
                                         // Pre-1.0.228 con 3000px buffer e delegate complessi (RowLayout
                                         // + 9 Text con highlight checks) si istanziavano ~115 row out-of-
                                         // viewport, ognuna ricalcolata su decodeListVersion++ -> picco
                                         // CPU che contribuiva al "effetto molla" su scrolling tail-follow.
-                                        cacheBuffer: 600
+                                        cacheBuffer: 360
                                         reuseItems: true
                                         interactive: true
+                                        verticalLayoutDirection: mainWindow.fsNewestFirst ? ListView.BottomToTop : ListView.TopToBottom
                                         property bool followTail: true
                                         property bool tailFollowPending: false
 	                                        property bool tailFollowQueued: false
 	                                        // 1.0.231 — counter pending decodes mentre user scrolla up.
 	                                        // Permette al floating button "↓ N new" di sapere quanti
 	                                        // decode sono arrivati dopo la perdita di tail-follow.
-	                                        property int pendingNewDecodes: 0
-	                                        function isNearTail() {
-	                                            return contentHeight <= height + 2
-	                                                || contentY >= Math.max(0, contentHeight - height - 48)
+		                                        property int pendingNewDecodes: 0
+		                                        function isNearTail() {
+		                                            if (contentHeight <= height + 2) return true
+		                                            if (mainWindow.fsNewestFirst) return contentY <= originY + 48
+		                                            return contentY >= tailContentY() - 48
+		                                        }
+	                                        function updateFollowTail() {
+	                                            if (tailFollowPending)
+	                                                return
+	                                            followTail = isNearTail()
+	                                            // 1.0.231 — reset counter "↓ N new" quando torna a tail
+	                                            if (followTail) evenPeriodList.pendingNewDecodes = 0
 	                                        }
-                                        function updateFollowTail() {
-                                            if (tailFollowPending)
-                                                return
-                                            followTail = isNearTail()
-                                            // 1.0.231 — reset counter "↓ N new" quando torna a tail
-                                            if (followTail) pendingNewDecodes = 0
-                                        }
-                                        function tailContentY() {
-                                            return Math.max(0, contentHeight - height)
-                                        }
-                                        function finishTailFollow() {
-                                            tailFollowPending = false
-                                            followTail = isNearTail()
-                                            if (followTail) pendingNewDecodes = 0
+	                                        function tailContentY() {
+	                                            if (mainWindow.fsNewestFirst) return originY
+	                                            var bottom = originY + contentHeight - height
+	                                            return Math.max(originY, bottom)
+	                                        }
+	                                        function finishTailFollow() {
+	                                            var shouldSnap = tailFollowPending || followTail
+	                                            tailFollowPending = false
+	                                            if (shouldSnap) {
+	                                                var targetY = tailContentY()
+	                                                if (Math.abs(contentY - targetY) > 0.5)
+	                                                    contentY = targetY
+	                                            }
+	                                            followTail = isNearTail()
+	                                            if (followTail) evenPeriodList.pendingNewDecodes = 0
                                         }
                                         function forceTailFollow() {
-    followTail = true
-    tailFollowPending = true
-    if (tailFollowQueued)
+    evenPeriodList.followTail = true
+    evenPeriodList.tailFollowPending = true
+    if (evenPeriodList.tailFollowQueued)
         return
-    tailFollowQueued = true
+    evenPeriodList.tailFollowQueued = true
     Qt.callLater(function() {
-        tailFollowQueued = false
+        evenPeriodList.tailFollowQueued = false
         if (!evenPeriodList)
             return
         var targetY = evenPeriodList.tailContentY()
@@ -5514,12 +9444,13 @@ NumberAnimation {
                                         // thread saturation -> Full Spectrum freeze.
                                         onCountChanged: {
                                             if (period1Detached) return
+	                                            if (decodePanel.hasNativeBandActivityModel()) return
                                             // 1.0.231 — se user e' in scroll-back, no forced tail
                                             // ma incrementa counter per il floating "↓ N new" button.
-                                            if (!followTail) {
-                                                pendingNewDecodes++
-                                                return
-                                            }
+	                                            if (!followTail) {
+	                                                evenPeriodList.pendingNewDecodes++
+	                                                return
+	                                            }
                                             forceTailFollow()
                                         }
                                         property int _ver: decodePanel.decodeListVersion
@@ -5528,24 +9459,26 @@ NumberAnimation {
                                             if (!followTail) return
                                             forceTailFollow()
                                         }
-	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
-	                                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
-	                                        // pattern allineato a DecodeList.qml:243-251.
+	                                        // Keep decode-row motion on the GUI animation path. On Windows/D3D,
+	                                        // first-use render-thread Animators can force a multi-second GPU sync.
+	                                        // 1.0.255: !mainWindow.compactToggling -> disabilita displaced
+	                                        // animations durante toggle compact (height change su tutti i
+	                                        // delegate causa blink di 100ms).
 	                                        add: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                                            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        addDisplaced: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                                        }
 	                                        moveDisplaced: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                                        }
 	                                        removeDisplaced: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                                        }
 
                                         ScrollBar.vertical: ScrollBar {
@@ -5554,23 +9487,27 @@ NumberAnimation {
                                             width: 8
                                         }
 
-                                        delegate: Rectangle {
-                                            // 1.0.155: separator meno invasivo — riga sottile, no label.
-                                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
-                                            width: evenPeriodList.width
+	                                        delegate: Rectangle {
+	                                            id: fsRowEmbedded
+	                                            // 1.0.155: separator meno invasivo — riga sottile, no label.
+	                                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
+	                                            readonly property var entry: modelData || ({})
+	                                            width: evenPeriodList.width
                                             // 1.0.229 — height adattiva via mainWindow.fullSpectrumRowHeight
                                             // (compact 14px / normal 26px). Toggle via toolbar o Ctrl+Shift+C.
                                             height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(mainWindow.fullSpectrumRowHeight * fs)
 	                                            property var highlightFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightFill(modelData)
 	                                            property var highlightBorder: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightBorder(modelData)
+                                            property var userBgFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeUserBgFill(modelData)
 	                                            // 1.0.205 — guard !modelData per evitare TypeError flood (~46/s) durante
 	                                            // model swap transients che saturava il main thread via logger sincrono.
 	                                            color: !modelData ? "transparent" :
 	                                                   isPeriodSeparator ? "transparent" :
-	                                                   highlightFill ? highlightFill :
-	                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
-	                                                   decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? Qt.rgba(76/255, 175/255, 80/255, 0.2) :
-	                                                   index % 2 === 0 ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+		                                                   userBgFill ? userBgFill :
+                                                   highlightFill ? highlightFill :
+			                                                   (entry.isCQ && bridge.decodeColorEnabled("colorCQ")) ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)) :
+			                                                   decodePanel.isAtRxFrequency(entry.freq || "0", entry) ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(76/255, 175/255, 80/255, 0.2)) :
+			                                                   index % 2 === 0 ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02)) : mainWindow.boostedDecodeBackgroundColor(Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05))
                                             border.color: highlightBorder ? highlightBorder : "transparent"
                                             border.width: highlightFill ? 1 : 0
                                             radius: 2
@@ -5594,26 +9531,29 @@ NumberAnimation {
                                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                                 onClicked: function(mouse) {
                                                     if (parent.isPeriodSeparator) return
-                                                    if (modelData.isTx) return
+	                                                    if (entry.isTx) return
                                                     if (mouse.button === Qt.LeftButton) {
                                                         // Sinistro = imposta TX freq
                                                         if (!bridge.holdTxFreq)
-                                                            bridge.txFrequency = parseInt(modelData.freq || "0")
+	                                                            bridge.txFrequency = parseInt(entry.freq || "0")
                                                     } else if (mouse.button === Qt.RightButton) {
-                                                        // Destro = imposta RX freq
-                                                        bridge.rxFrequency = parseInt(modelData.freq || "0")
+                                                        // Destro = imposta RX freq; Shift+Destro = QRZ.com (IU8LMC)
+	                                                        if (mouse.modifiers & Qt.ShiftModifier)
+	                                                            mainWindow.openQrzLookup(entry)
+	                                                        else
+	                                                            bridge.rxFrequency = parseInt(entry.freq || "0")
                                                     }
                                                 }
                                                 onDoubleClicked: function(mouse) {
                                                     if (parent.isPeriodSeparator) return
-                                                    if (!modelData.isTx && mouse.button === Qt.LeftButton)
-                                                        decodePanel.handleDecodeDoubleClick(modelData)
+	                                                    if (!entry.isTx && mouse.button === Qt.LeftButton)
+	                                                        decodePanel.handleDecodeDoubleClick(entry)
                                                 }
                                                 // IU8LMC: Show tooltip on hover
                                                 onContainsMouseChanged: {
                                                     if (parent.isPeriodSeparator) { dxccTooltipVisible = false; return }
                                                     if (containsMouse) {
-                                                        dxccTooltipText = getDxccTooltipText(modelData)
+	                                                        dxccTooltipText = getDxccTooltipText(entry)
                                                         var pos = mapToGlobal(mouseX, mouseY)
                                                         dxccTooltipX = pos.x - mainWindow.x
                                                         dxccTooltipY = pos.y - mainWindow.y
@@ -5631,52 +9571,70 @@ NumberAnimation {
                                                 }
                                             }
 
-	                                            RowLayout {
-	                                                visible: !parent.isPeriodSeparator
-	                                                anchors.fill: parent
-	                                                anchors.leftMargin: 6
-	                                                anchors.rightMargin: 6
-	                                                spacing: 0
+                                            RowLayout {
+                                                visible: !parent.isPeriodSeparator
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 6
+                                                anchors.rightMargin: 6
+                                                spacing: 6
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
-                                                Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
-                                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                                Item { Layout.preferredWidth: period1Panel.dtFreqGapWidth }
-                                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: (modelData.isTx === true) || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
-                                                Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.displayMessage || modelData.message) }
-                                                Text { visible: period1Panel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
-                                                Item {
-                                                    visible: mainWindow.showDxccInfo
-                                                    Layout.preferredWidth: period1Panel.dxccColumnWidth
-                                                    Layout.fillHeight: true
-                                                    Text {
-                                                        anchors.fill: parent
-                                                        text: modelData.dxCountry || ""
-                                                        font.family: mainWindow.decodedTextFontFamily
-                                                        font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
-                                                        color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
-                                                        horizontalAlignment: Text.AlignRight
-                                                        verticalAlignment: Text.AlignVCenter
-                                                        elide: Text.ElideNone
-                                                        fontSizeMode: Text.HorizontalFit
-                                                        minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65))
-                                                        maximumLineCount: 1
-                                                    }
-                                                }
-                                                Item {
-                                                    visible: mainWindow.showDxccInfo
-                                                    Layout.preferredWidth: period1Panel.azColumnWidth
-                                                    Layout.fillHeight: true
-                                                    Text {
-                                                        anchors.fill: parent
-                                                        text: formatBearingDegrees(modelData.dxBearing)
-                                                        font.family: mainWindow.decodedTextFontFamily
-                                                        font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
-                                                        color: secondaryCyan
-                                                        horizontalAlignment: Text.AlignRight
-                                                        verticalAlignment: Text.AlignVCenter
+                                                Repeater {
+                                                    model: mainWindow.fsColumnsForWidth(period1Panel.width)
+                                                    delegate: Item {
+                                                        id: fsCellE
+                                                        readonly property var col: modelData
+                                                        readonly property var meta: mainWindow.fsColMeta(col.id)
+                                                        Layout.fillWidth: meta.fill
+                                                        Layout.preferredWidth: meta.fill ? -1 : mainWindow.fsColWidthForPanel(col.id, period1Panel.width)
+                                                        Layout.minimumWidth: meta.fill ? meta.minW : mainWindow.fsColWidthForPanel(col.id, period1Panel.width)
+                                                        Layout.fillHeight: true
+                                                        clip: col.id === "dxcc"
+                                                        Text {
+                                                            visible: fsCellE.col.id !== "dxcc"
+                                                            anchors.fill: parent
+                                                            text: mainWindow.fsCellText(fsRowEmbedded.entry, fsCellE.col.id)
+                                                            color: mainWindow.fsCellColor(fsRowEmbedded.entry, fsCellE.col.id)
+                                                            font.bold: mainWindow.fsCellBold(fsRowEmbedded.entry, fsCellE.col.id)
+                                                            font.strikeout: fsCellE.col.id === "msg" ? decodePanel.decodeEntryStrikeout(fsRowEmbedded.entry) : false
+                                                            font.family: mainWindow.decodedTextFontFamily
+                                                            font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
+                                                            horizontalAlignment: fsCellE.meta.align === "right" ? Text.AlignRight : Text.AlignLeft
+                                                            verticalAlignment: Text.AlignVCenter
+                                                            maximumLineCount: 1
+                                                            elide: fsCellE.col.id === "msg" ? messageElideMode(fsRowEmbedded.entry.displayMessage || fsRowEmbedded.entry.message)
+                                                                 : (fsCellE.col.id === "dxcc" ? Text.ElideRight : Text.ElideNone)
+                                                            fontSizeMode: fsCellE.col.id === "dxcc" ? Text.HorizontalFit : Text.FixedSize
+                                                            minimumPixelSize: fsCellE.col.id === "dxcc" ? Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)) : 0
+                                                        }
+                                                        Item {
+                                                            visible: fsCellE.col.id === "dxcc"
+                                                            anchors.fill: parent
+                                                            Text {
+                                                                anchors.fill: parent
+                                                                anchors.rightMargin: fsRowEmbedded.entry.isLotw === true ? Math.max(9, Math.round(11 * fs)) : 0
+                                                                text: mainWindow.fsCellText(fsRowEmbedded.entry, fsCellE.col.id)
+                                                                color: mainWindow.fsCellColor(fsRowEmbedded.entry, fsCellE.col.id)
+                                                                font.family: mainWindow.decodedTextFontFamily
+                                                                font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
+                                                                horizontalAlignment: Text.AlignRight
+                                                                verticalAlignment: Text.AlignVCenter
+                                                                maximumLineCount: 1
+                                                                elide: Text.ElideRight
+                                                                fontSizeMode: Text.HorizontalFit
+                                                                minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65))
+                                                            }
+                                                            Rectangle {
+                                                                visible: fsRowEmbedded.entry.isLotw === true
+                                                                width: Math.max(5, Math.round(6 * fs))
+                                                                height: width
+                                                                radius: width / 2
+                                                                anchors.right: parent.right
+                                                                anchors.verticalCenter: parent.verticalCenter
+                                                                color: mainWindow.lotwMarkerColor()
+                                                                border.color: mainWindow.boostedDecodeTextColor(textSecondary)
+                                                                border.width: 1
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -5684,7 +9642,7 @@ NumberAnimation {
 
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "No decodes"
+                                            text: qsTr("No decodes")
                                             font.pixelSize: 12
                                             color: textSecondary
                                             horizontalAlignment: Text.AlignHCenter
@@ -5732,38 +9690,50 @@ NumberAnimation {
                                                 }
                                             }
                                             ToolTip.visible: pendingMA.containsMouse
-                                            ToolTip.text: qsTr("Jump to latest decode")
+                                            ToolTip.text: qsTr("Go to the latest decode")
                                             ToolTip.delay: 500
                                         }
                                     }
                                 }
                             }
                         }
+                        }
+
+                        // ========== SLOT 1 (default: RIGHT RX Frequency / Signal RX) ==========
+                        Item {
+                            id: colSlot1
+                            property int targetPanelWidth: mainWindow.savedRxFreqPanelWidth
+                            readonly property bool slotCollapsed: mainWindow.classicSlotCollapsed(1)
+                            visible: !slotCollapsed   // 1.0.388 — vedi colSlot0
+                            SplitView.fillWidth: mainWindow.classicDecodeFillSlot() === 1
+                            SplitView.preferredWidth: slotCollapsed ? 0 : targetPanelWidth
+                            SplitView.minimumWidth: slotCollapsed ? 0 : mainWindow.classicMinWidthForSlot(1)
+                            onWidthChanged: {
+                                if (!slotCollapsed && width >= 360 && Math.abs(targetPanelWidth - width) >= 1) {
+                                    targetPanelWidth = Math.round(width)
+                                    if (!mainWindow.windowStateRestoreInProgress)
+                                        mainWindow.scheduleWindowStateSave()
+                                }
+                            }
 
                         // ========== RIGHT: RX Frequency ==========
                         Rectangle {
                             id: rxFreqPanel
-                            property int targetPanelWidth: mainWindow.savedRxFreqPanelWidth
-                            SplitView.fillWidth: true
-                            SplitView.preferredWidth: targetPanelWidth
-                            SplitView.minimumWidth: 260
+                            anchors.fill: parent
                             readonly property bool compactColumns: width < 450
                             readonly property bool compactHeader: width < 350
                             readonly property int utcColumnWidth: compactColumns ? 62 : 78
                             readonly property int dbColumnWidth: compactColumns ? 34 : 38
                             readonly property int dbDtGapWidth: compactColumns ? 4 : 6
                             readonly property int dtColumnWidth: compactColumns ? 42 : 48
+                            readonly property int dtFreqGapWidth: mainWindow.signalRxShowFreqColumn ? (compactColumns ? 4 : 6) : 0
+                            readonly property int freqColumnWidth: mainWindow.signalRxShowFreqColumn ? (compactColumns ? 42 : 46) : 0
                             readonly property int gapColumnWidth: compactColumns ? 8 : 12
-                            readonly property int distanceColumnWidth: compactColumns ? 0 : 56
-                            readonly property int headerBadgeWidth: compactHeader ? 62 : 70
+                            readonly property int distanceColumnWidth: mainWindow.signalRxShowDistColumn && !compactColumns ? 56 : 0
+                            readonly property int azColumnWidth: mainWindow.signalRxShowAzColumn && !compactColumns ? 42 : 0
+                            // Stadio 1: riempie il suo slot-host (colSlot1 di default). La
+                            // larghezza-valore è ora su colSlot1; qui resta solo il contenuto.
                             color: "transparent"
-                            onWidthChanged: {
-                                if (width >= 260 && Math.abs(targetPanelWidth - width) >= 1) {
-                                    targetPanelWidth = Math.round(width)
-                                    if (!mainWindow.windowStateRestoreInProgress)
-                                        mainWindow.scheduleWindowStateSave()
-                                }
-                            }
 
                             // Placeholder when detached - magnetic dock zone
                             Rectangle {
@@ -5790,7 +9760,7 @@ NumberAnimation {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: "Trascina la finestra qui"
+                                        text: qsTr("Drag the window here")
                                         color: textSecondary
                                         font.pixelSize: 10
                                         visible: !rxFreqDockHighlighted
@@ -5835,7 +9805,7 @@ NumberAnimation {
                                     opacity: 0.8
 
                                     SequentialAnimation on opacity {
-                                        running: rxFreqDockHighlighted && bridge && bridge.uiQuality !== "Low"
+                                        running: rxFreqDockHighlighted && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                         loops: Animation.Infinite
                                         OpacityAnimator { to: 0.4; duration: 300 }
                                         OpacityAnimator { to: 1.0; duration: 300 }
@@ -5860,6 +9830,15 @@ NumberAnimation {
                                         anchors.margins: 6
                                         spacing: 6
 
+                                        // Maniglia di drag colonna (Stadio 1)
+                                        Loader {
+                                            Layout.preferredWidth: 16
+                                            Layout.preferredHeight: 16
+                                            Layout.alignment: Qt.AlignVCenter
+                                            sourceComponent: colDragHandleComponent
+                                            onLoaded: if (item) item.panelId = "signalrx"
+                                        }
+
                                         Rectangle {
                                             width: 10
                                             height: 10
@@ -5872,23 +9851,6 @@ NumberAnimation {
                                             font.pixelSize: rxFreqPanel.compactHeader ? 12 : 14
                                             font.bold: true
                                             color: primaryBlue
-                                        }
-
-                                        Rectangle {
-                                            width: rxFreqPanel.headerBadgeWidth
-                                            height: 18
-                                            color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
-                                            radius: 4
-                                            border.color: primaryBlue
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: bridge.rxFrequency + " Hz"
-                                                font.family: "Monospace"
-                                                font.pixelSize: 10
-                                                font.bold: true
-                                                color: primaryBlue
-                                            }
                                         }
 
                                         Item { Layout.fillWidth: true }
@@ -5916,6 +9878,42 @@ NumberAnimation {
                                             ToolTip.visible: rxClearMA.containsMouse
                                             ToolTip.text: qsTr("Clear Signal RX")
                                         }
+
+	                                        // 1.0.253 — Compact mode toggle Signal RX
+	                                        Rectangle {
+	                                            Layout.preferredWidth: 34
+	                                            Layout.preferredHeight: 18
+	                                            radius: 4
+	                                            color: rxCompactMA.containsMouse
+	                                                ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3)
+	                                                : (mainWindow.compactSignalRx
+	                                                    ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2)
+	                                                    : "transparent")
+	                                            border.color: (rxCompactMA.containsMouse || mainWindow.compactSignalRx)
+	                                                ? secondaryCyan
+	                                                : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+	                                            border.width: 1
+	                                            Text {
+	                                                anchors.centerIn: parent
+		                                                text: mainWindow.compactSignalRx ? "Full" : "Cmp"
+	                                                font.pixelSize: mainWindow.compactSignalRx ? 10 : 9
+	                                                font.bold: true
+	                                                color: (rxCompactMA.containsMouse || mainWindow.compactSignalRx)
+	                                                    ? secondaryCyan : textSecondary
+	                                            }
+	                                            MouseArea {
+	                                                id: rxCompactMA
+	                                                anchors.fill: parent
+	                                                hoverEnabled: true
+	                                                cursorShape: Qt.PointingHandCursor
+	                                                onClicked: mainWindow.toggleCompactSignalRx()
+	                                            }
+	                                            ToolTip.visible: rxCompactMA.containsMouse
+	                                            ToolTip.text: mainWindow.compactSignalRx
+	                                                ? qsTr("Return to normal row height")
+	                                                : qsTr("Compact rows (2x visible decodes)")
+	                                            ToolTip.delay: 500
+	                                        }
 
 	                                        // Pop button
 	                                        Rectangle {
@@ -5966,9 +9964,12 @@ NumberAnimation {
                                         Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
                                         Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
                                         Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                        Item { visible: rxFreqPanel.freqColumnWidth > 0; Layout.preferredWidth: rxFreqPanel.dtFreqGapWidth }
+                                        Text { visible: rxFreqPanel.freqColumnWidth > 0; text: qsTr("Freq"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.freqColumnWidth }
                                         Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
-                                        Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
+                                        Text { text: qsTr("Message"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight }
+                                        Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: qsTr("Dist"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
+                                        Text { visible: rxFreqPanel.azColumnWidth > 0; text: qsTr("Az"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.azColumnWidth }
                                     }
                                 }
 
@@ -5988,54 +9989,60 @@ NumberAnimation {
                                         anchors.margins: 2
 	                                        clip: true
 	                                        spacing: 1
-	                                        cacheBuffer: 600  // 1.0.228 — 3000 era eccessivo per delegate complessi
+                                        cacheBuffer: 360  // 1.0.478 — meno delegate offscreen durante pile-up FT8/4/2
 	                                        reuseItems: true
 	                                        interactive: true
-                                        property bool followTail: true
-                                        property bool tailFollowPending: false
-	                                        property bool tailFollowQueued: false
-	                                        function isNearTail() {
-	                                            return contentHeight <= height + 2
-	                                                || contentY >= Math.max(0, contentHeight - height - 48)
+	                                        property bool followTail: true
+	                                        property bool tailFollowPending: false
+		                                        property bool tailFollowQueued: false
+		                                        property int pendingNewDecodes: 0
+		                                        function isNearTail() {
+		                                            return contentHeight <= height + 2
+		                                                || contentY >= tailContentY() - 48
+		                                        }
+	                                        function updateFollowTail() {
+	                                            if (tailFollowPending)
+	                                                return
+	                                            followTail = isNearTail()
+	                                            // 1.0.231 — reset counter "↓ N new" quando torna a tail
+	                                            if (followTail) rxFrequencyList.pendingNewDecodes = 0
 	                                        }
-                                        function updateFollowTail() {
-                                            if (tailFollowPending)
-                                                return
-                                            followTail = isNearTail()
-                                            // 1.0.231 — reset counter "↓ N new" quando torna a tail
-                                            if (followTail) pendingNewDecodes = 0
-                                        }
-                                        function tailContentY() {
-                                            return Math.max(0, contentHeight - height)
-                                        }
-                                        function finishTailFollow() {
-                                            tailFollowPending = false
-                                            followTail = isNearTail()
-                                            if (followTail) pendingNewDecodes = 0
-                                        }
-                                        function forceTailFollow() {
-    followTail = true
-    tailFollowPending = true
-    if (tailFollowQueued)
+	                                        function tailContentY() {
+	                                            var bottom = originY + contentHeight - height
+	                                            return Math.max(originY, bottom)
+	                                        }
+	                                        function finishTailFollow() {
+	                                            var shouldSnap = tailFollowPending || followTail
+	                                            tailFollowPending = false
+	                                            if (shouldSnap) {
+	                                                var targetY = tailContentY()
+	                                                if (Math.abs(contentY - targetY) > 0.5)
+	                                                    contentY = targetY
+	                                            }
+	                                            followTail = isNearTail()
+	                                            if (followTail) rxFrequencyList.pendingNewDecodes = 0
+	                                        }
+	                                        function forceTailFollow() {
+    rxFrequencyList.followTail = true
+    rxFrequencyList.tailFollowPending = true
+    if (rxFrequencyList.tailFollowQueued)
         return
-    tailFollowQueued = true
+    rxFrequencyList.tailFollowQueued = true
     Qt.callLater(function() {
-        tailFollowQueued = false
+        rxFrequencyList.tailFollowQueued = false
         if (!rxFrequencyList)
             return
         var targetY = rxFrequencyList.tailContentY()
-        var distance = Math.abs(rxFrequencyList.contentY - targetY)
         rxFrequencyTailAnimation.stop()
         rxFrequencyList.tailFollowPending = true
-        if (distance < 1 || distance > Math.max(12000, rxFrequencyList.height * 18)) {
-            rxFrequencyList.contentY = targetY
-            rxFrequencyList.finishTailFollow()
-            return
-        }
-        rxFrequencyTailAnimation.from = rxFrequencyList.contentY
-        rxFrequencyTailAnimation.to = targetY
-        rxFrequencyTailAnimation.duration = Math.max(180, Math.min(620, 130 + distance * 0.24))
-        rxFrequencyTailAnimation.start()
+        // 1.0.434 - come evenPeriodList (1.0.228): assegnazione diretta, niente
+        // NumberAnimation. In FT2 i decode arrivano a raffica (piu' batch/periodo):
+        // lo scroll animato 180-620ms si sovrapponeva ai nuovi decode -> "slot
+        // machine" (righe che rimbalzano/saltano "nelle risposte"). Il tail-follow
+        // non necessita animazione (l'addDisplaced YAnimator copre gia' i delegate).
+        // NumberAnimation mantenuta nei floating detached (UX pop-out).
+        rxFrequencyList.contentY = targetY
+        rxFrequencyList.finishTailFollow()
     })
 }
 NumberAnimation {
@@ -6060,13 +10067,15 @@ NumberAnimation {
                                             updateFollowTail()
                                         })
                                         onContentYChanged: updateFollowTail()
-	                                        onContentHeightChanged: {
-	                                            if (followTail || tailFollowPending)
-	                                                rxFrequencyTailSettleTimer.restart()
-	                                        }
-	                                        onHeightChanged: {
-	                                            if (followTail || tailFollowPending)
-	                                                forceTailFollow()
+                                        onContentHeightChanged: {
+                                            if (rxFreqDetached) return
+                                            if (followTail || tailFollowPending)
+                                                rxFrequencyTailSettleTimer.restart()
+                                        }
+                                        onHeightChanged: {
+                                            if (rxFreqDetached) return
+                                            if (followTail || tailFollowPending)
+                                                forceTailFollow()
 	                                            else
 	                                                updateFollowTail()
 	                                        }
@@ -6078,32 +10087,40 @@ NumberAnimation {
 	                                            }
 	                                        }
                                         onCountChanged: {
+                                            if (rxFreqDetached) return
+	                                            if (decodePanel.hasNativeRxDecodeModel()) return
+                                            if (!followTail) {
+                                                rxFrequencyList.pendingNewDecodes++
+                                                return
+                                            }
                                             forceTailFollow()
                                         }
 
                                         property int _ver: decodePanel.rxDecodeListVersion
                                         on_VerChanged: {
+                                            if (rxFreqDetached) return
+                                            if (!followTail) return
                                             forceTailFollow()
                                         }
-                                        model: (bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodePanel.rxDecodes
-	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
-	                                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
-	                                        // pattern allineato a DecodeList.qml:243-251.
+                                        model: !rxFreqDetached
+                                               ? ((bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodePanel.rxDecodes)
+                                               : null
+	                                        // Preserve the fade/slide without starting render-thread Animators.
 	                                        add: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        addDisplaced: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                                        }
 	                                        moveDisplaced: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                                        }
 	                                        removeDisplaced: Transition {
-	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                                        }
 
                                         ScrollBar.vertical: ScrollBar {
@@ -6119,12 +10136,19 @@ NumberAnimation {
 	                                            readonly property var entry: modelData || ({})
                                             readonly property bool isPeriodSeparator: hasEntry && entry.isSeparator === true
                                             width: rxFrequencyList.width - 8
-                                            height: !hasEntry ? 0 : isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
+                                            // 1.0.253 — height adattiva compact mode Signal RX
+                                            // 1.0.254 fix: rimosso `!hasEntry ? 0` clamp. Quando
+                                            // modelData diventa transient-undefined durante shift-diff,
+                                            // height collassa a 0 -> addDisplaced YAnimator chain crea
+                                            // "blocchi neri mobili" durante scroll. Lasciare height
+                                            // stabile e affidarsi al guard color in 6171.
+                                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(mainWindow.signalRxRowHeight * fs)
                                             color: isPeriodSeparator ? "transparent" :
-                                                   entry.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.3) :
-                                                   entry.isMyCall ? Qt.rgba(244/255, 67/255, 54/255, 0.3) :
-                                                   entry.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
-                                                   index % 2 === 0 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.08) : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
+                                                   mainWindow.decodeUserBgFill(entry) ? mainWindow.decodeUserBgFill(entry) :
+                                                   entry.isTx ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(241/255, 196/255, 15/255, 0.3)) :
+                                                   entry.isMyCall ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(244/255, 67/255, 54/255, 0.3)) :
+                                                   (entry.isCQ && bridge.decodeColorEnabled("colorCQ")) ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)) :
+                                                   index % 2 === 0 ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.08)) : mainWindow.boostedDecodeBackgroundColor(Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15))
                                             radius: 2
 
 	                                            Rectangle {
@@ -6151,8 +10175,11 @@ NumberAnimation {
 	                                                        if (!bridge.holdTxFreq)
 	                                                            bridge.txFrequency = parseInt(rxFrequencyDelegate.entry.freq || "0")
 	                                                    } else if (mouse.button === Qt.RightButton) {
-	                                                        // Destro = imposta RX freq
-	                                                        bridge.rxFrequency = parseInt(rxFrequencyDelegate.entry.freq || "0")
+	                                                        // Destro = imposta RX freq; Shift+Destro = QRZ.com (IU8LMC)
+	                                                        if (mouse.modifiers & Qt.ShiftModifier)
+	                                                            mainWindow.openQrzLookup(rxFrequencyDelegate.entry)
+	                                                        else
+	                                                            bridge.rxFrequency = parseInt(rxFrequencyDelegate.entry.freq || "0")
 	                                                    }
 	                                                }
 	                                                onDoubleClicked: function(mouse) {
@@ -6189,51 +10216,432 @@ NumberAnimation {
 		                                                anchors.rightMargin: 4
 	                                                spacing: 0
 
-	                                                Text { text: decodePanel.formatUtcForDisplay(rxFrequencyDelegate.entry.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-	                                                Text { text: rxFrequencyDelegate.entry.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : parseInt(rxFrequencyDelegate.entry.db || "0") > -5 ? accentGreen : parseInt(rxFrequencyDelegate.entry.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+		                                                Text { text: rxFrequencyDelegate.entry.formattedTime || decodePanel.formatUtcForDisplay(rxFrequencyDelegate.entry.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary); Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+		                                                Text { text: rxFrequencyDelegate.entry.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(rxFrequencyDelegate.entry.snrColor || (rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary)); font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
 	                                                Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
-	                                                Text { text: rxFrequencyDelegate.entry.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
-	                                                Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-	                                                Text { text: rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(rxFrequencyDelegate.entry); font.strikeout: decodePanel.decodeEntryStrikeout(rxFrequencyDelegate.entry); color: getDxccColor(rxFrequencyDelegate.entry); Layout.fillWidth: true; elide: messageElideMode(rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message) }
-	                                                Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(rxFrequencyDelegate.entry); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
+		                                                Text { text: rxFrequencyDelegate.entry.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+	                                                Item { visible: rxFreqPanel.freqColumnWidth > 0; Layout.preferredWidth: rxFreqPanel.dtFreqGapWidth }
+		                                                Text { visible: rxFreqPanel.freqColumnWidth > 0; text: rxFrequencyDelegate.entry.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(rxFrequencyDelegate.entry.isTx ? "#f1c40f" : secondaryCyan); font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.freqColumnWidth }
+                                                Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
+                                                Rectangle { property int dotSize: Math.max(5, Math.round(6 * fs)); visible: rxFrequencyDelegate.entry.isLotw === true; width: dotSize; height: dotSize; Layout.preferredWidth: dotSize; Layout.preferredHeight: dotSize; Layout.alignment: Qt.AlignVCenter; radius: dotSize / 2; color: mainWindow.lotwMarkerColor(); border.color: mainWindow.boostedDecodeTextColor(textSecondary); border.width: 1 }
+                                                Text { text: rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(rxFrequencyDelegate.entry); font.strikeout: decodePanel.decodeEntryStrikeout(rxFrequencyDelegate.entry); color: getDxccColor(rxFrequencyDelegate.entry); Layout.fillWidth: true; Layout.minimumWidth: 0; elide: messageElideMode(rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message) }
+		                                                Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(rxFrequencyDelegate.entry); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(textSecondary); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
+		                                                Text { visible: rxFreqPanel.azColumnWidth > 0; text: formatBearingDegrees(rxFrequencyDelegate.entry.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(secondaryCyan); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.azColumnWidth }
 	                                            }
 	                                        }
 
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "No messages at\n" + bridge.rxFrequency + " Hz"
-                                            font.pixelSize: 12
-                                            color: textSecondary
-                                            horizontalAlignment: Text.AlignHCenter
-                                            visible: rxFrequencyList.count === 0
-                                        }
                                     }
                                 }
                             }
                         }
+                        }
 
-                        Rectangle {
-                            id: liveMapPanelHost
-                            visible: mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached
-                            color: "transparent"
+                        // ========== SLOT 2 (default: Live Map) ==========
+                        Item {
+                            id: colSlot2
                             property int targetPanelWidth: mainWindow.savedLiveMapPanelWidth
-                            SplitView.preferredWidth: visible ? targetPanelWidth : 0
-                            SplitView.minimumWidth: visible ? 280 : 0
+                            readonly property bool slotCollapsed: mainWindow.classicSlotCollapsed(2)
+                            visible: !slotCollapsed   // 1.0.388 — vedi colSlot0
+                            SplitView.fillWidth: mainWindow.classicDecodeFillSlot() === 2
+                            SplitView.preferredWidth: slotCollapsed ? 0 : targetPanelWidth
+                            SplitView.minimumWidth: slotCollapsed ? 0 : mainWindow.classicMinWidthForSlot(2)
                             onWidthChanged: {
-                                if (visible && width >= 280 && Math.abs(targetPanelWidth - width) >= 1) {
+                                if (!slotCollapsed && width >= 280 && Math.abs(targetPanelWidth - width) >= 1) {
                                     targetPanelWidth = Math.round(width)
                                     if (!mainWindow.windowStateRestoreInProgress)
                                         mainWindow.scheduleWindowStateSave()
                                 }
                             }
 
-                            LiveMapPanel {
+                        Rectangle {
+                            id: liveMapPanelHost
+                            anchors.fill: parent
+                            // Stadio 1: riempie il suo slot-host (colSlot2 di default). Il
+                            // collasso quando la mappa è nascosta/staccata è gestito dallo slot
+                            // (classicSlotCollapsed) -> segue il pannello in qualunque slot.
+                            visible: mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached
+                            color: "transparent"
+
+                            Loader {
+                                id: liveMapEmbeddedLoader
                                 anchors.fill: parent
-                                engine: bridge
-                                detachable: true
-                                detached: false
-                                visible: parent.visible
-                                onDetachRequested: mainWindow.detachLiveMapPanel()
+                                active: liveMapPanelHost.visible && mainWindow.startupLiveMapVisualReady
+                                asynchronous: true
+                                sourceComponent: liveMapEmbeddedComponent
+                            }
+
+                            // Maniglia di drag colonna (Stadio 1) — overlay sull'angolo
+                            // alto-SINISTRO (i controlli della mappa stanno in alto a destra),
+                            // sopra LiveMapPanel. Non tocca LiveMapPanel.qml.
+                            Loader {
+                                z: 50
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.leftMargin: 6
+                                anchors.topMargin: 6
+                                width: 16
+                                height: 16
+                                active: liveMapPanelHost.visible && mainWindow.startupLiveMapVisualReady
+                                sourceComponent: colDragHandleComponent
+                                onLoaded: if (item) item.panelId = "livemap"
+                            }
+
+                            Component {
+                                id: liveMapEmbeddedComponent
+
+                                LiveMapPanel {
+                                    engine: bridge
+                                    detachable: true
+                                    detached: false
+                                    onDetachRequested: mainWindow.detachLiveMapPanel()
+                                }
+                            }
+                        }
+                        }
+
+                        // ========== SLOT 3 (DX Cluster) — 1.0.385 4ª colonna dedicata ==========
+                        // Esiste SOLO quando il Cluster è dockato. Quando è spento o staccato
+                        // (finestra flottante) lo slot va `visible:false`: 1.0.388 — con
+                        // preferredWidth/minimumWidth=0 lo SplitView teneva comunque la
+                        // larghezza trascinata a mano (colonna non spariva); `visible:false`
+                        // lo esclude del tutto dal layout → niente colonna, niente handle.
+                        Item {
+                            id: colSlot3
+                            property int targetPanelWidth: mainWindow.savedDxClusterColumnWidth
+                            readonly property bool slotCollapsed: mainWindow.classicSlotCollapsed(3)
+                            visible: !slotCollapsed
+                            SplitView.fillWidth: mainWindow.classicDecodeFillSlot() === 3
+                            SplitView.preferredWidth: slotCollapsed ? 0 : targetPanelWidth
+                            SplitView.minimumWidth: slotCollapsed ? 0 : mainWindow.classicMinWidthForSlot(3)
+                            onWidthChanged: {
+                                if (!slotCollapsed && width >= 320 && Math.abs(targetPanelWidth - width) >= 1) {
+                                    targetPanelWidth = Math.round(width)
+                                    if (!mainWindow.windowStateRestoreInProgress)
+                                        mainWindow.scheduleWindowStateSave()
+                                }
+                            }
+
+                            // Pannello inline (Cluster dockato)
+                            Rectangle {
+                                id: dxClusterPanelHost
+                                anchors.fill: parent
+                                visible: mainWindow.dxClusterPanelVisible && !mainWindow.dxClusterDetached
+                                color: "transparent"
+
+                                DxClusterPanel {
+                                    anchors.fill: parent
+                                    embedded: true
+                                    onCloseRequested: mainWindow.dxClusterPanelVisible = false
+                                }
+
+                                // Maniglia di drag colonna (riusa colDragHandleComponent)
+                                Loader {
+                                    z: 50
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.leftMargin: 6
+                                    anchors.topMargin: 6
+                                    width: 16
+                                    height: 16
+                                    active: dxClusterPanelHost.visible
+                                    sourceComponent: colDragHandleComponent
+                                    onLoaded: if (item) item.panelId = "dxcluster"
+                                }
+
+                                // Pulsante "Stacca" leggibile → ri-flotta il Cluster in finestra
+                                // (1.0.388: era un'icona 16px poco leggibile, ora pill con testo)
+                                Rectangle {
+                                    z: 50
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.leftMargin: 28
+                                    anchors.topMargin: 6
+                                    height: 20
+                                    width: dxcDetachLabel.implicitWidth + 16
+                                    radius: 4
+                                    color: dxcDetachMA.containsMouse ? secondaryCyan
+                                                                     : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+                                    border.color: secondaryCyan
+                                    border.width: 1
+                                    Text {
+                                        id: dxcDetachLabel
+                                        anchors.centerIn: parent
+                                        text: "⤢ " + qsTr("Detach")
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        color: dxcDetachMA.containsMouse ? bgDeep : textPrimary
+                                    }
+                                    MouseArea {
+                                        id: dxcDetachMA
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: mainWindow.detachDxClusterPanel()
+                                        ToolTip.visible: containsMouse
+                                        ToolTip.text: qsTr("Detach the DX Cluster to a window")
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+
+                    // ════════ Drag-layer pannelli interscambiabili (Stadio 1+2) ════════
+                    // Dichiarato dentro decodePanel ma RE-PARENTATO a contentArea (parent:
+                    // contentArea) così copre SIA le 3 colonne (decodePanel) SIA la TX area
+                    // (txPanelContainer), entrambe figlie di contentArea -> targeting 2-D su
+                    // 4 slot cross-container. NON gestito da alcuno SplitView (non diventa
+                    // sezione/colonna). Ospita ghost + evidenziazione magnetica. NESSUN
+                    // layer.enabled/FBO. Coordinate in spazio contentArea.
+                    Item {
+                        id: colDragLayer
+                        parent: contentArea
+                        anchors.fill: parent
+                        z: 60
+                        // Trasparente agli eventi quando non si sta trascinando: NON deve
+                        // intercettare click/hover dei pannelli sottostanti.
+                        visible: dragSlotIndex >= 0
+                        enabled: false
+
+                        // Indice (0..4) dello slot di PARTENZA del drag corrente; -1 = nessun drag.
+                        property int dragSlotIndex: -1
+                        // Indice (0..4) dello slot target sotto il puntatore.
+                        property int dropSlotIndex: -1
+                        // Stadio 3: numero di slot interscambiabili (3 colonne + TX area + Waterfall top).
+                        readonly property int slotCount: 6   // 1.0.385 — +4ª colonna DX Cluster
+
+                        // Rettangolo (in spazio contentArea) dello slot di indice idx.
+                        // contentArea è l'antenato comune di colSlot0/1/2 (via decodePanel),
+                        // di txSlot (via txPanelContainer) e del topSlot waterfallPanel (via
+                        // mainVerticalSplit): mapToItem è valido per tutti e 5 gli slot.
+                        function slotRect(idx) {
+                            var slot = mainWindow.classicSlotForIndex(idx)
+                            if (!slot || slot.width <= 0 || slot.height <= 0)
+                                return null
+                            var p = slot.mapToItem(contentArea, 0, 0)
+                            return Qt.rect(p.x, p.y, slot.width, slot.height)
+                        }
+
+                        // Slot il cui CENTRO 2-D è più vicino al puntatore (spazio contentArea).
+                        // Stadio 3: targeting in 2 dimensioni su 5 slot — la Waterfall (topSlot,
+                        // in alto a tutta larghezza) + i 3 colSlot affiancati al centro + il
+                        // txSlot largo-basso in basso. Ignora gli slot collassati (Live Map
+                        // nascosta) e quelli senza rettangolo (pannello staccato -> host a 0).
+                        function computeTargetSlot(panelX, panelY) {
+                            var best = -1
+                            var bestDist = 1e24
+                            for (var i = 0; i < slotCount; ++i) {
+                                if (mainWindow.classicSlotCollapsed(i))
+                                    continue
+                                var r = slotRect(i)
+                                if (!r)
+                                    continue
+                                var midX = r.x + r.width / 2
+                                var midY = r.y + r.height / 2
+                                var dx = panelX - midX
+                                var dy = panelY - midY
+                                var d = dx * dx + dy * dy
+                                if (d < bestDist) { bestDist = d; best = i }
+                            }
+                            return best
+                        }
+
+                        // ── Evidenziazione magnetica dello slot target ──
+                        Rectangle {
+                            id: colDropHighlight
+                            visible: colDragLayer.dragSlotIndex >= 0 && colDragLayer.dropSlotIndex >= 0
+                            color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
+                            border.color: secondaryCyan
+                            border.width: 2
+                            radius: 8
+                            property var r: visible ? colDragLayer.slotRect(colDragLayer.dropSlotIndex) : null
+                            x: r ? r.x : 0
+                            y: r ? r.y : 0
+                            width: r ? r.width : 0
+                            height: r ? r.height : 0
+                            Behavior on x { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+                            Behavior on width { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+                        }
+
+                        // ── Ghost del pannello trascinato (proxy visuale) ──
+                        Rectangle {
+                            id: colDragGhost
+                            visible: false
+                            z: 70
+                            radius: 8
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+                            border.color: secondaryCyan
+                            border.width: 1
+                            opacity: 0.92
+                            property string label: ""
+
+                            function startFor(idx, panelX, panelY) {
+                                var r = colDragLayer.slotRect(idx)
+                                width = r ? Math.min(220, r.width) : 200
+                                height = 40
+                                label = colDragGhost.labelForId(mainWindow.classicIdInSlot(idx))
+                                updateAt(panelX, panelY)
+                                visible = true
+                            }
+                            function labelForId(panelId) {
+                                if (panelId === "fullspectrum") return "Full Spectrum"
+                                if (panelId === "signalrx")     return "Signal RX"
+                                if (panelId === "livemap")      return "Live Map"
+                                if (panelId === "txpanel")      return "TX Panel"
+                                if (panelId === "waterfall")    return "Waterfall"
+                                if (panelId === "dxcluster")    return "DX Cluster"
+                                return panelId
+                            }
+                            function updateAt(panelX, panelY) {
+                                var nx = panelX - width / 2
+                                var ny = panelY - height / 2
+                                if (nx < 0) nx = 0
+                                if (nx > contentArea.width - width) nx = contentArea.width - width
+                                if (ny < 0) ny = 0
+                                if (ny > contentArea.height - height) ny = contentArea.height - height
+                                x = nx
+                                y = ny
+                            }
+                            function stop() {
+                                visible = false
+                                label = ""
+                            }
+
+                            Behavior on x { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
+                            Behavior on y { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Text {
+                                    text: "⠿"
+                                    font.pixelSize: 13
+                                    color: secondaryCyan
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Text {
+                                    text: colDragGhost.label
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: textPrimary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+                        }
+                    }
+
+                    // ════════ Maniglia di drag riusabile per gli header dei 3 pannelli ════════
+                    // Pattern World Clock (commit 8c6ce2b): piccola presa ⠿, z alto,
+                    // SizeAllCursor; SOLO la presa avvia long-press 350ms + soglia 6px.
+                    // È un elemento separato e piccolo: NON interferisce con l'header-drag
+                    // del detach (che vive sull'header/finestra). Espone:
+                    //   panelId  -> id logico del pannello cui appartiene ("fullspectrum"/…)
+                    // Trova lo slot di partenza a runtime via classicSlotIndexOfId(panelId),
+                    // così funziona qualunque sia l'ordine corrente della mappa.
+                    Component {
+                        id: colDragHandleComponent
+                        Rectangle {
+                            id: colHandle
+                            property string panelId: ""
+                            width: 16
+                            height: 16
+                            radius: 3
+                            z: 40
+                            color: colHandleMA.containsMouse || colHandleMA.armed
+                                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                                   : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.12)
+                            border.color: colHandleMA.containsMouse ? secondaryCyan : "transparent"
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "⠿"
+                                font.pixelSize: 12
+                                color: colHandleMA.containsMouse ? secondaryCyan
+                                                                 : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.6)
+                            }
+
+                            MouseArea {
+                                id: colHandleMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.SizeAllCursor
+                                acceptedButtons: Qt.LeftButton
+                                preventStealing: true
+
+                                property bool armed: false
+                                property int srcSlot: -1
+                                property real pressX: 0
+                                property real pressY: 0
+                                property bool moved: false
+
+                                function panelPt(mouse) {
+                                    return mapToItem(contentArea, mouse.x, mouse.y)
+                                }
+
+                                Timer {
+                                    id: colHandleHoldTimer
+                                    interval: 350
+                                    repeat: false
+                                    onTriggered: {
+                                        if (colHandleMA.pressedButtons & Qt.LeftButton) {
+                                            colHandleMA.srcSlot = mainWindow.classicSlotIndexOfId(colHandle.panelId)
+                                            if (colHandleMA.srcSlot < 0)
+                                                return
+                                            colHandleMA.armed = true
+                                            colDragLayer.dragSlotIndex = colHandleMA.srcSlot
+                                            colDragLayer.dropSlotIndex = colHandleMA.srcSlot
+                                            colDragGhost.startFor(colHandleMA.srcSlot,
+                                                                  colHandleMA.pressX, colHandleMA.pressY)
+                                        }
+                                    }
+                                }
+
+                                onPressed: function(mouse) {
+                                    armed = false
+                                    moved = false
+                                    var p = panelPt(mouse)
+                                    pressX = p.x
+                                    pressY = p.y
+                                    colHandleHoldTimer.start()
+                                }
+                                onPositionChanged: function(mouse) {
+                                    var p = panelPt(mouse)
+                                    if (Math.abs(p.x - pressX) > 6 || Math.abs(p.y - pressY) > 6)
+                                        moved = true
+                                    if (armed) {
+                                        colDragGhost.updateAt(p.x, p.y)
+                                        colDragLayer.dropSlotIndex = colDragLayer.computeTargetSlot(p.x, p.y)
+                                    } else if (moved) {
+                                        colHandleHoldTimer.stop()
+                                    }
+                                }
+                                onReleased: function(mouse) {
+                                    colHandleHoldTimer.stop()
+                                    if (armed) {
+                                        var p = panelPt(mouse)
+                                        var target = colDragLayer.computeTargetSlot(p.x, p.y)
+                                        colDragGhost.stop()
+                                        var src = colDragLayer.dragSlotIndex
+                                        colDragLayer.dragSlotIndex = -1
+                                        colDragLayer.dropSlotIndex = -1
+                                        armed = false
+                                        if (target >= 0 && target !== src)
+                                            mainWindow.swapClassicColumns(src, target)
+                                    }
+                                }
+                                onCanceled: {
+                                    colHandleHoldTimer.stop()
+                                    if (armed) {
+                                        colDragGhost.stop()
+                                        colDragLayer.dragSlotIndex = -1
+                                        colDragLayer.dropSlotIndex = -1
+                                        armed = false
+                                    }
+                                }
+                                ToolTip.visible: containsMouse && !armed
+                                ToolTip.text: qsTr("Drag to swap the column")
+                                ToolTip.delay: 500
                             }
                         }
                     }
@@ -6273,15 +10681,16 @@ NumberAnimation {
                         startTxHeight = txPanelContainer.height
                     }
 
-                    onPositionChanged: {
-                        if (pressed) {
-                            var dy = startMouseY - mouseY
-                            var newHeight = startTxHeight + dy
-                            if (newHeight >= 100 && newHeight <= 350) {
-                                txPanelContainer.height = newHeight
-                            }
-                        }
-                    }
+	                    onPositionChanged: {
+	                        if (pressed) {
+	                            var dy = startMouseY - mouseY
+	                            var newHeight = startTxHeight + dy
+	                            if (newHeight >= txPanelContainer.minHeight
+	                                    && newHeight <= txPanelContainer.maxHeight) {
+	                                txPanelContainer.height = newHeight
+	                            }
+	                        }
+	                    }
                 }
             }
 
@@ -6290,20 +10699,27 @@ NumberAnimation {
 
             // TX Panel Container (resizable at bottom) - delegates to HvTxW via bridge
             Rectangle {
-                id: txPanelContainer
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 160
-                color: "transparent"
+	                id: txPanelContainer
+	                anchors.left: parent.left
+	                anchors.right: parent.right
+	                anchors.bottom: parent.bottom
+	                height: mainWindow.ft2LinkModeActive && !txPanelDetached
+	                        ? Math.max(minHeight, Math.min(maxHeight, txPanelAutoHeight))
+	                        : 160
+	                color: "transparent"
 
-                property int minHeight: 100
-                property int maxHeight: 350
+	                readonly property int txPanelAutoHeight: Math.ceil((txPanelComponent ? txPanelComponent.implicitHeight : 92) + 2)
+	                property int minHeight: mainWindow.ft2LinkModeActive ? 72 : 100
+	                property int maxHeight: 350
 
-                // Placeholder when detached - magnetic dock zone
+                // Placeholder when detached - magnetic dock zone.
+                // Stadio 2: mostrato solo quando la TX area (slot 3) ospita davvero il TX
+                // (id "txpanel"); se il TX è stato spostato in una colonna, l'area TX ospita
+                // un altro pannello e il placeholder non deve coprirlo. Il dock-back resta
+                // possibile via la finestra flottante (zona = txPanelContainer) in ogni caso.
                 Rectangle {
                     anchors.fill: parent
-                    visible: txPanelDetached
+                    visible: txPanelDetached && mainWindow.classicIdInSlot(4) === "txpanel"
                     color: txPanelDockHighlighted ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.4)
                     radius: 12
                     border.color: txPanelDockHighlighted ? bridge.themeManager.ledRed : glassBorder
@@ -6325,7 +10741,7 @@ NumberAnimation {
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Trascina la finestra qui"
+                            text: qsTr("Drag the window here")
                             color: textSecondary
                             font.pixelSize: 10
                             visible: !txPanelDockHighlighted
@@ -6343,7 +10759,7 @@ NumberAnimation {
                         opacity: 0.8
 
                         SequentialAnimation on opacity {
-                            running: txPanelDockHighlighted && bridge && bridge.uiQuality !== "Low"
+                            running: txPanelDockHighlighted && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                             loops: Animation.Infinite
                             OpacityAnimator { to: 0.4; duration: 300 }
                             OpacityAnimator { to: 1.0; duration: 300 }
@@ -6351,51 +10767,95 @@ NumberAnimation {
                     }
                 }
 
-                // Actual TxPanel content
-                TxPanel {
-                    id: txPanelComponent
+                // ════════ SLOT-HOST 4 (Stadio 2 — TX area interscambiabile) ════════
+                // txSlot riempie l'area TX (txPanelContainer) ed ospita il pannello
+                // assegnato allo slot 3 dalla mappa. Di DEFAULT contiene txPanelHostWrapper
+                // (wrapper re-parentabile attorno all'istanza TxPanel). Lo SWAP cross-container
+                // re-parenta txPanelHostWrapper in un colSlot (e una colonna in txSlot) via
+                // applyClassicColumnOrder/swapClassicColumns. txSlot NON è figlio dello
+                // SplitView -> lo SplitView resta a 3 figli. Placeholder detach + resize
+                // handle restano figli DIRETTI di txPanelContainer (operano sull'AREA, non
+                // sul pannello): detach/verticalResize del TX preservati in ogni ordine.
+                Item {
+                    id: txSlot
                     anchors.fill: parent
-                    engine: bridge
-                    showAsyncIcon: mainWindow.asyncIconVisible
-                    visible: !txPanelDetached
-                    onMamWindowRequested: mamWindow.open()
 
-                    // Detach button overlay at top-right
-                    Rectangle {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: 5
-                        anchors.rightMargin: 8
-                        width: 34
-                        height: 18
-                        radius: 4
-                        z: 200
-                        color: txDetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
-                        border.color: txDetachMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
-                        border.width: 1
+                    // Wrapper re-parentabile (panelId "txpanel"). anchors.fill -> assume la
+                    // geometria del nuovo host (txSlot largo-basso, o un colSlot alto-stretto).
+                    Item {
+                        id: txPanelHostWrapper
+                        anchors.fill: parent
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Pop"
-                            font.pixelSize: 10
-                            font.bold: true
-                            color: txDetachMA.containsMouse ? secondaryCyan : textSecondary
-                        }
+                        // Actual TxPanel content
+                        TxPanel {
+	                            id: txPanelComponent
+	                            anchors.fill: parent
+	                            engine: bridge
+	                            ft2LinkToolPanel: mainWindow.ft2LinkPanelDetached
+	                                              ? ft2LinkFloatingLoader.item
+	                                              : ft2LinkInlineLoader.item
+                            showAsyncIcon: mainWindow.asyncIconVisible
+                            handleLogPrompt: !txPanelDetached
+                            visible: !txPanelDetached
+                            onMamWindowRequested: mainWindow.openMamWindow()
+                            onCallRequested: mainWindow.openCallDialog()
+                            onFt2LinkAccessRequested: mainWindow.requestFt2LinkAccess()
 
-                        MouseArea {
-                            id: txDetachMA
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                txPanelDetached = true
-                                txPanelFloatingWindow.show()
+                            // Maniglia di drag colonna (Stadio 2) — overlay sull'angolo
+                            // alto-SINISTRO dell'header TX (il pulsante Pop è in alto a
+                            // destra), sopra TxPanel. Non tocca TxPanel.qml. Viaggia col
+                            // pannello quando re-parentato in un colSlot.
+                            Loader {
+                                z: 210
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.leftMargin: 6
+                                anchors.topMargin: 5
+                                width: 16
+                                height: 16
+                                active: !txPanelDetached
+                                sourceComponent: colDragHandleComponent
+                                onLoaded: if (item) item.panelId = "txpanel"
+                            }
+
+                            // Detach button overlay at top-right
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.topMargin: 5
+                                anchors.rightMargin: 8
+                                width: 34
+                                height: 18
+                                radius: 4
+                                z: 200
+                                color: txDetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
+                                border.color: txDetachMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Pop"
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: txDetachMA.containsMouse ? secondaryCyan : textSecondary
+                                }
+
+                                MouseArea {
+                                    id: txDetachMA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        txPanelDetached = true
+                                        txPanelFloatingWindow.show()
+                                    }
+                                }
+
+                                ToolTip.visible: txDetachMA.containsMouse
+                                ToolTip.text: qsTr("Detach TX panel")
+                                ToolTip.delay: 500
                             }
                         }
-
-                        ToolTip.visible: txDetachMA.containsMouse
-                        ToolTip.text: qsTr("Detach TX Panel")
-                        ToolTip.delay: 500
                     }
                 }
 
@@ -6465,22 +10925,160 @@ NumberAnimation {
                     text: dxccTooltipText
                     color: textPrimary
                     font.pixelSize: 11
-                    font.family: "Segoe UI"
                 }
             }
         }
         } // End contentScroll Flickable
 
+        // DX-Pedition Fase 2a — alternative 3-column tactical workspace (opt-in).
+        // Loader is inactive (zero cost) unless mainWindow.dxPeditionMode is ON, in
+        // which case the classic header / contentScroll / StatusBar above collapse to 0.
+        Loader {
+            id: dxPeditionLoader
+            Layout.fillWidth: true
+            Layout.fillHeight: active
+            Layout.preferredHeight: active ? -1 : 0
+            visible: active
+            active: mainWindow.dxPeditionMode
+            asynchronous: true
+            source: "components/DxPeditionWorkspace.qml"
+            onLoaded: {
+                item.bridge = bridge
+                item.engine = bridge
+                item.txPanelDetached = Qt.binding(function() { return mainWindow.txPanelDetached })
+                // Let the workspace exit the mode / open Settings (its EXIT + SETUP
+                // buttons) — the classic footer/menu is collapsed while DX-Ped is ON.
+                item.requestExitDxPedition.connect(function() {
+                    mainWindow.dxPeditionMode = false
+                    bridge.setSetting("uiDxPeditionMode", false)
+                })
+                item.requestOpenSettings.connect(function() {
+                    mainWindow.openSettingsDialog()
+                })
+                // 1.0.344 — LOG header + finestra MAM dalla DX-Pedition.
+                item.requestOpenLog.connect(function() {
+                    mainWindow.openLogWindow()
+                })
+                item.requestOpenMam.connect(function() {
+                    mainWindow.openMamWindow()
+                })
+                // 1.0.345 — MACRO + CAT dalla DX-Pedition.
+                item.requestOpenMacro.connect(function() {
+                    mainWindow.openMacroDialog()
+                })
+                item.requestOpenCat.connect(function() {
+                    if (bridge && bridge.openCatSettings)
+                        bridge.openCatSettings()
+                })
+            }
+        }
+
         // Status Bar
         StatusBar {
             Layout.fillWidth: true
+            visible: !mainWindow.dxPeditionMode
+            Layout.preferredHeight: visible ? implicitHeight : 0
             audioLevel: bridge ? bridge.audioLevel : 0.0
             signalLevel: bridge ? bridge.sMeter : 0.0
             monitoring: bridge ? bridge.monitoring : false
             transmitting: bridge ? bridge.transmitting : false
+            pttPending: bridge ? (bridge.pttPending && !bridge.pttConfirmed) : false
             tuning: bridge ? bridge.tuning : false
             decoding: bridge ? bridge.decoding : false
             catStatus: bridge && bridge.catConnected ? "Connected" : "Disconnected"
+        }
+    }
+
+    Dialog {
+        id: resetLayoutConfirmDialog
+        modal: true
+        width: Math.max(360, Math.min(parent ? parent.width - 48 : 520, 520))
+        implicitWidth: 480
+        implicitHeight: 190
+        anchors.centerIn: parent
+        title: qsTr("Reset Layout")
+        standardButtons: Dialog.Yes | Dialog.No
+
+        background: Rectangle {
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: accentOrange
+            border.width: 1
+            radius: 8
+        }
+
+        contentItem: Item {
+            implicitWidth: 440
+            implicitHeight: 92
+
+            Text {
+                anchors.fill: parent
+                text: qsTr("Bring all floating windows back into the main window\nand re-center Decodium on the primary monitor?\n\nThe saved coordinates will be cleared.")
+                color: textPrimary
+                wrapMode: Text.WordWrap
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        onAccepted: {
+            mainWindow.resetClassicColumnOrder()
+            if (bridge)
+                bridge.resetWindowLayout()
+        }
+    }
+
+    // 1.0.498 — Offerta una-tantum della Modalità PC lento. Neutra (non dà del
+    // "vecchio" al PC): la propone e basta, l'utente sceglie. Si mostra una sola
+    // volta (flag LowEndModeOffered) e solo se la modalità non è già attiva.
+    Timer {
+        id: slowPcOfferTimer
+        interval: 5000
+        repeat: false
+        running: !!bridge && !bridge.lowEndMode && !mainWindow.settingBool("LowEndModeOffered", false)
+        onTriggered: {
+            if (bridge && !bridge.lowEndMode && !mainWindow.settingBool("LowEndModeOffered", false))
+                slowPcOfferDialog.open()
+        }
+    }
+
+    Dialog {
+        id: slowPcOfferDialog
+        modal: true
+        width: Math.max(380, Math.min(parent ? parent.width - 48 : 560, 560))
+        implicitWidth: 520
+        implicitHeight: 250
+        anchors.centerIn: parent
+        title: qsTr("Slow-PC mode")
+        standardButtons: Dialog.Yes | Dialog.No
+
+        background: Rectangle {
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: primaryBlue
+            border.width: 1
+            radius: 8
+        }
+
+        contentItem: Item {
+            implicitWidth: 480
+            implicitHeight: 160
+
+            Text {
+                anchors.fill: parent
+                text: qsTr("If Decodium feels slow or the graphics freeze on this computer, you can turn on Slow-PC mode: it switches to OpenGL graphics (stable on older video cards), lightens CPU usage, and hides the heavy Live Map.\n\nTurn it on now? You can change this anytime in Settings.")
+                color: textPrimary
+                wrapMode: Text.WordWrap
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        onAccepted: {
+            if (bridge) {
+                bridge.lowEndMode = true
+                bridge.setSetting("LowEndModeOffered", true)
+            }
+        }
+        onRejected: {
+            if (bridge)
+                bridge.setSetting("LowEndModeOffered", true)
         }
     }
 
@@ -6540,7 +11138,7 @@ NumberAnimation {
                     }
 
                     Text {
-                        text: "The legacy radio backend reported a problem."
+                        text: qsTr("The legacy radio backend reported a problem.")
                         font.pixelSize: 11
                         color: textSecondary
                     }
@@ -6560,7 +11158,7 @@ NumberAnimation {
             }
 
             Button {
-                text: rigErrorDetailsVisible ? "Hide details" : "Show details"
+                text: rigErrorDetailsVisible ? qsTr("Hide details") : qsTr("Show details")
                 Layout.alignment: Qt.AlignLeft
                 onClicked: rigErrorDetailsVisible = !rigErrorDetailsVisible
 
@@ -6607,7 +11205,7 @@ NumberAnimation {
             alignment: Qt.AlignRight
 
             Button {
-                text: "Configure radio"
+                text: qsTr("Configure radio")
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
@@ -6616,7 +11214,7 @@ NumberAnimation {
             }
 
             Button {
-                text: "Retry"
+                text: qsTr("Retry")
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
@@ -6683,7 +11281,7 @@ NumberAnimation {
 
                 Text {
                     text: badgeText
-                    font.family: "Monospace"
+                    font.family: decodiumMonoFontFamily
                     font.pixelSize: 36
                     font.bold: true
                     font.letterSpacing: 3
@@ -6692,7 +11290,7 @@ NumberAnimation {
 
                 Text {
                     text: badgeSubText
-                    font.family: "Monospace"
+                    font.family: decodiumMonoFontFamily
                     font.pixelSize: 18
                     color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.8)
                 }
@@ -6723,50 +11321,98 @@ NumberAnimation {
         z: 9997
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: 72
+        // 1.0.308 (#7) — slide-in dall'alto: scende quando appare (più evidente del solo fade)
+        anchors.topMargin: statusToastVisible ? 76 : 40
         anchors.rightMargin: 24
-        width: Math.min(parent.width * 0.42, 520)
-        implicitHeight: toastContent.implicitHeight + 24
+        width: Math.min(parent.width * 0.5, 600)
+        implicitHeight: toastContent.implicitHeight + 28
         radius: 12
-        visible: statusToastVisible
-        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.96)
-        border.color: Qt.rgba(statusToastColor.r, statusToastColor.g, statusToastColor.b, 0.55)
-        border.width: 1
+        // resta renderizzato durante il fade-out
+        visible: opacity > 0.01
+        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.97)
+        border.color: statusToastColor
+        border.width: 2
         opacity: statusToastVisible ? 1.0 : 0.0
 
-        Column {
+        // 1.0.308 (#7) — glow pulsante: attira l'occhio anche con la visione periferica
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -4
+            radius: parent.radius + 4
+            color: "transparent"
+            border.color: statusToastColor
+            border.width: 3
+            opacity: 0.0
+            z: -1
+            SequentialAnimation on opacity {
+                running: statusToastVisible && (!bridge || bridge.uiQuality !== "Low")
+                loops: Animation.Infinite
+                NumberAnimation { from: 0.0; to: 0.65; duration: 600; easing.type: Easing.OutQuad }
+                NumberAnimation { from: 0.65; to: 0.0; duration: 600; easing.type: Easing.InQuad }
+            }
+        }
+
+        Row {
             id: toastContent
             anchors.fill: parent
-            anchors.margins: 12
-            spacing: 6
+            anchors.margins: 14
+            spacing: 11
 
-            Text {
-                text: "Aggiornamento"
-                font.pixelSize: 12
-                font.bold: true
+            Rectangle {
+                width: 10; height: 10; radius: 5
                 color: statusToastColor
+                anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
-                width: parent.width
-                text: statusToastText
-                wrapMode: Text.Wrap
-                font.pixelSize: 12
-                color: textPrimary
+            Column {
+                width: parent.width - 21
+                spacing: 5
+
+                Text {
+                    text: qsTr("Notifica")
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: statusToastColor
+                }
+
+                Text {
+                    width: parent.width
+                    text: statusToastText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: 14
+                    color: textPrimary
+                }
             }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: statusToastVisible ? 180 : 260; easing.type: statusToastVisible ? Easing.OutQuad : Easing.InQuad }
+            NumberAnimation { duration: statusToastVisible ? 220 : 300; easing.type: statusToastVisible ? Easing.OutQuad : Easing.InQuad }
+        }
+        Behavior on anchors.topMargin {
+            NumberAnimation { duration: 260; easing.type: Easing.OutBack }
         }
     }
 
-    LogWindow {
-        id: logWindow
+    Loader {
+        id: logWindowLoader
+        anchors.fill: parent
+        active: false
+        asynchronous: true
+        source: "components/LogWindow.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: LogWindow")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
     Loader {
         id: macroDialogLoader
+        anchors.fill: parent
         active: false
         asynchronous: true
         source: "components/MacroDialog.qml"
@@ -6783,6 +11429,7 @@ NumberAnimation {
 
     Loader {
         id: astroWindowLoader
+        anchors.fill: parent
         active: false
         asynchronous: true
         source: "components/AstroWindow.qml"
@@ -6797,8 +11444,261 @@ NumberAnimation {
         }
     }
 
-    SettingsDialog {
-        id: settingsDialog
+    Loader {
+        id: satelliteWindowLoader
+        // A Popup/Dialog must keep its own dimensions.  Filling the main
+        // window here forces the loaded SatelliteWindow to become a giant
+        // transparent overlay and stretches every child layout with it.
+        anchors.centerIn: parent
+        active: false
+        asynchronous: true
+        source: "components/SatelliteWindow.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: SatelliteWindow")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
+    }
+
+    Connections {
+        target: bridge
+        ignoreUnknownSignals: true
+        function onSatelliteTrackingWindowRequested() {
+            openSatelliteWindow()
+        }
+    }
+
+    // Setup is hosted by a real top-level window.  Popup coordinates are local
+    // to Main.qml and cannot cross a monitor boundary on macOS; this host uses
+    // desktop-global coordinates while preserving the existing themed dialog.
+    Window {
+        id: settingsFloatingWindow
+        property int requestedTab: -1
+        property bool desktopMoveActive: false
+        // Su un portatile 1366x768 una finestra da 1500x900 non ci sta: usciva
+        // dallo schermo, e con lei la colonna di destra delle impostazioni -
+        // dove vive il campo della porta. Si parte dalla misura voluta, ma
+        // senza mai arrivare a occupare tutto lo schermo.
+        readonly property int availableScreenWidth: Screen.desktopAvailableWidth > 0
+                                                    ? Screen.desktopAvailableWidth
+                                                    : Screen.width
+        readonly property int availableScreenHeight: Screen.desktopAvailableHeight > 0
+                                                     ? Screen.desktopAvailableHeight
+                                                     : Screen.height
+        readonly property int preferredWidth: Math.max(minimumWidth,
+                                                       Math.min(1500, Math.round(availableScreenWidth * 0.88)))
+        readonly property int preferredHeight: Math.max(minimumHeight,
+                                                        Math.min(900, Math.round(availableScreenHeight * 0.88)))
+        width: preferredWidth
+        height: preferredHeight
+        minimumWidth: 800
+        minimumHeight: 560
+        visible: false
+        // Setup must stay above the Decodium main window, but it must not stay
+        // above unrelated desktop applications (for example XFCE's screenshot
+        // tool).  The transient relationship gives the required application
+        // stacking without a global always-on-top window flag.
+        transientParent: mainWindow
+        flags: Qt.Dialog | Qt.FramelessWindowHint
+        title: qsTr("Settings - Decodium")
+        color: "transparent"
+
+        // The settings dialog is hosted in its own top-level Window.  Keep
+        // the Material palette here as well as on mainWindow: without it,
+        // buttons that do not provide a custom background fall back to the
+        // platform's light button (white on the Darkcodium theme), making
+        // their label and enabled/disabled state hard to read.
+        Material.theme: bridge.themeManager.isLightTheme ? Material.Light : Material.Dark
+        Material.accent: bridge.themeManager.primaryColor
+        Material.primary: bridge.themeManager.secondaryColor
+        Material.foreground: bridge.themeManager.textPrimary
+        Material.background: bridge.themeManager.bgDeep
+
+        x: mainWindow.x + Math.max(24, Math.round((mainWindow.width - width) / 2))
+        y: mainWindow.y + Math.max(48, Math.round((mainWindow.height - height) / 2))
+
+        function beginDesktopMove() {
+            if (desktopMoveActive)
+                return
+            desktopMoveActive = true
+            mainWindow.beginFloatingGeometryInteraction()
+        }
+
+        function finishDesktopMove() {
+            if (!desktopMoveActive)
+                return
+            mainWindow.finishFloatingWindowDrag(settingsFloatingWindow)
+            desktopMoveActive = false
+            mainWindow.endFloatingGeometryInteraction()
+        }
+
+        function fitToCurrentScreen() {
+            var target = mainWindow.geometryForWindowScreen(settingsFloatingWindow)
+            if (!target)
+                return
+
+            mainWindow.fitWindowSizeToGeometry(settingsFloatingWindow, target)
+            if (target.screen && settingsFloatingWindow.screen !== target.screen)
+                settingsFloatingWindow.screen = target.screen
+            settingsFloatingWindow.x = Math.max(
+                        target.x,
+                        Math.min(settingsFloatingWindow.x,
+                                 target.x + Math.max(0, target.width - settingsFloatingWindow.width)))
+            settingsFloatingWindow.y = Math.max(
+                        target.y,
+                        Math.min(settingsFloatingWindow.y,
+                                 target.y + Math.max(0, target.height - settingsFloatingWindow.height)))
+        }
+
+        function showHostedWindow(tabIndex) {
+            requestedTab = Number(tabIndex)
+            if (!isFinite(requestedTab))
+                requestedTab = -1
+            settingsDialogLoader.active = true
+            fitToCurrentScreen()
+            show()
+            raise()
+            requestActivate()
+            // Some window managers update Window.screen only after mapping the
+            // native window. Re-apply the clamp on the next event-loop turn.
+            Qt.callLater(settingsFloatingWindow.fitToCurrentScreen)
+            if (settingsDialogLoader.item) {
+                settingsDialogLoader.item.nativeHostWindow = settingsFloatingWindow
+                if (requestedTab >= 0)
+                    settingsDialogLoader.item.currentTab = Math.max(0, Math.min(13, Math.floor(requestedTab)))
+                if (!settingsDialogLoader.item.visible)
+                    settingsDialogLoader.item.open()
+            }
+        }
+
+        function hideAfterDialogClosed() {
+            hide()
+            mainWindow.restoreTopmostPopoutsAfterSettings()
+            mainWindow.scheduleWindowStateSave()
+        }
+
+        function hideHostedWindow() {
+            if (settingsDialogLoader.item && settingsDialogLoader.item.visible) {
+                settingsDialogLoader.item.close()
+                return
+            }
+            hideAfterDialogClosed()
+        }
+
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(
+                                   settingsFloatingWindow,
+                                   "settingsFloatingWindow",
+                                   "",
+                                   "")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onScreenChanged: Qt.callLater(settingsFloatingWindow.fitToCurrentScreen)
+        onClosing: function(close) {
+            if (!mainWindow.applicationClosing) {
+                close.accepted = false
+                hideHostedWindow()
+                return
+            }
+            close.accepted = true
+        }
+
+        Loader {
+            id: settingsDialogLoader
+            anchors.fill: parent
+            active: false
+            asynchronous: true
+            source: "components/SettingsDialog.qml"
+            property var pendingAction: null
+            onLoaded: {
+                item.nativeHostWindow = settingsFloatingWindow
+                console.log("Lazy component loaded: SettingsDialog tab=" + (item ? item.currentTab : -1))
+                if (settingsFloatingWindow.requestedTab >= 0)
+                    item.currentTab = Math.max(0, Math.min(13, Math.floor(settingsFloatingWindow.requestedTab)))
+                if (settingsFloatingWindow.visible && !item.visible)
+                    item.open()
+                if (pendingAction) {
+                    var action = pendingAction
+                    pendingAction = null
+                    action(item)
+                }
+            }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: settingsFloatingWindow
+            maxWidth: 2400
+            maxHeight: 1600
+        }
+
+        Shortcut {
+            enabled: settingsFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: settingsFloatingWindow.hideHostedWindow()
+        }
+    }
+
+    Connections {
+        // The Settings dialog is lazily loaded, therefore connect through the
+        // Loader item rather than coupling the dialog component to Main.qml.
+        // Its Popup.closed signal also covers Escape, the header X and the
+        // footer buttons.
+        target: settingsDialogLoader.item
+        ignoreUnknownSignals: true
+        function onClosed() {
+            settingsFloatingWindow.hideAfterDialogClosed()
+        }
+    }
+
+    // Callsign Intelligence resta lazy: con l'impostazione predefinita OFF non
+    // crea alcuna finestra quando cambia il DX call. Se l'utente abilita
+    // l'apertura automatica, il servizio chiede questa finestra dopo aver
+    // avviato lookup/cache e il contenuto segue il risultato in tempo reale.
+    Loader {
+        id: callsignLookupWindowLoader
+        anchors.fill: parent
+        active: false
+        asynchronous: true
+        source: "components/CallsignLookupWindow.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: CallsignLookupWindow")
+            if (item)
+                item.service = bridge ? bridge.callsignIntelligence : null
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
+    }
+
+    Connections {
+        target: bridge && bridge.callsignIntelligence ? bridge.callsignIntelligence : null
+        ignoreUnknownSignals: true
+        function onLookupWindowRequested() {
+            mainWindow.runWhenLoaded(callsignLookupWindowLoader, function(item) {
+                if (item)
+                    item.openForCall(bridge.callsignIntelligence.currentCall)
+            })
+        }
+        function onLookupWindowCloseRequested() {
+            if (callsignLookupWindowLoader.item)
+                callsignLookupWindowLoader.item.close()
+        }
+    }
+
+    Connections {
+        target: settingsDialogLoader.item
+        ignoreUnknownSignals: true
+        function onFullScreenRequested() { mainWindow.toggleFullScreen() }
     }
 
     // 1.0.195 — QSY Quick Picker (F2 shortcut). Lazy Loader async per evitare
@@ -6835,6 +11735,85 @@ NumberAnimation {
         sequence: "Ctrl+Shift+C"
         context: Qt.ApplicationShortcut
         onActivated: mainWindow.toggleCompactFullSpectrum()
+    }
+    // 1.0.233 — DevOverlay toggle (Sprint 2 Phase 7 perf roadmap).
+    Shortcut {
+        sequences: ["Ctrl+Shift+F"]
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (bridge) bridge.devOverlayActive = !bridge.devOverlayActive
+        }
+    }
+    // 1.0.264 (fork-only) — Reset Layout (recupera finestre fuori monitor)
+    Shortcut {
+        sequence: "Ctrl+Shift+L"
+        context: Qt.ApplicationShortcut
+        onActivated: { mainWindow.resetClassicColumnOrder(); if (bridge) bridge.resetWindowLayout() }
+    }
+    // 1.0.268 (Phase 5.3) — apre Decode History Dialog
+    Shortcut {
+        sequence: "Ctrl+Shift+H"
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.openHistoryDialog()
+    }
+
+    // 1.0.308 (#10) — scorciatoie operative: erano documentate nell'Info dialog (KEYBOARD
+    // SHORTCUTS) ma NON implementate → il tester le premeva e "non funzionavano". Ora reali.
+    Shortcut {
+        sequence: "F1"
+        context: Qt.ApplicationShortcut
+        onActivated: { if (bridge) { bridge.monitoring ? bridge.stopMonitor() : bridge.startMonitor() } }
+    }
+    Shortcut {
+        sequence: "F3"
+        context: Qt.ApplicationShortcut
+        onActivated: { if (bridge) bridge.autoSeq = !bridge.autoSeq }
+    }
+    Shortcut {
+        sequence: "F4"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (!bridge)
+                return
+            if (bridge.requestManualLogQso)
+                bridge.requestManualLogQso()
+            else
+                bridge.promptLogQso()
+        }
+    }
+    Shortcut {
+        sequence: "Esc"
+        context: Qt.ApplicationShortcut
+        onActivated: { if (bridge) bridge.halt() }
+    }
+    Shortcut {
+        sequence: "Ctrl+S"
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.openSettingsDialog()
+    }
+    Shortcut {
+        sequence: "Ctrl+L"
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.openLogWindow()
+    }
+    Shortcut {
+        sequence: "Ctrl+M"
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.openMacroDialog()
+    }
+
+    // 1.0.233 — DevOverlay floating panel (async Loader, zero overhead
+    // quando bridge.devOverlayActive == false).
+    Loader {
+        id: devOverlayLoader
+        active: bridge && bridge.devOverlayActive
+        asynchronous: true
+        source: "components/DevOverlay.qml"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 12
+        anchors.rightMargin: 12
+        z: 9999
     }
 
     Loader {
@@ -6874,19 +11853,13 @@ NumberAnimation {
                     return
             }
             console.error("[Bridge ERROR]", msg)
+
             // Estrai prefisso "Sorgente: dettaglio" per titolo specifico
             // (es. "DX Cluster: Cannot send spot..." → title=DX Cluster, summary=Cannot send spot...)
             var prefixMatch = String(msg).match(/^([^:]{1,40}):\s*([\s\S]+)$/)
-            if (prefixMatch) {
-                warningDialogTitle = prefixMatch[1].trim()
-                warningDialogSummary = prefixMatch[2].trim()
-            } else {
-                warningDialogTitle = "Error"
-                warningDialogSummary = msg
-            }
-            warningDialogDetails = ""
-            warningDialogDetailsVisible = false
-            warningDialog.open()
+            var title = prefixMatch ? prefixMatch[1].trim() : "Error"
+            var summary = prefixMatch ? prefixMatch[2].trim() : String(msg)
+            mainWindow.openWarningDialog(title, summary, "")
         }
         function onWarningRaised(title, summary, details) {
             // Quando il CAT nativo gestisce il rig, i warning Hamlib dal legacy
@@ -6905,11 +11878,7 @@ NumberAnimation {
                     lower.indexOf("com ") >= 0 || lower.indexOf("timed out") >= 0)
                     return
             }
-            warningDialogTitle = title
-            warningDialogSummary = summary
-            warningDialogDetails = details
-            warningDialogDetailsVisible = details.length > 0
-            warningDialog.open()
+            mainWindow.openWarningDialog(title, summary, details)
         }
         function onTimeSyncSettingsRequested() {
             timeSyncPanelVisible = true
@@ -6934,10 +11903,36 @@ NumberAnimation {
         }
     }
 
+    function warningLooksLikeCatFailure(title, summary, details) {
+        var lower = (String(title) + " " + String(summary) + " " + String(details)).toLowerCase()
+        return lower.indexOf("cat failure") >= 0
+                || lower.indexOf("comunicazione cat") >= 0
+                || (lower.indexOf("hamlib") >= 0
+                    && (lower.indexOf("communication") >= 0
+                        || lower.indexOf("timed out") >= 0
+                        || lower.indexOf("bus error") >= 0))
+    }
+
+    function openWarningDialog(title, summary, details) {
+        var safeDetails = details || ""
+        if (warningLooksLikeCatFailure(title, summary, safeDetails)) {
+            if (catFailureDialogShown)
+                return
+            catFailureDialogShown = true
+        }
+        warningDialogTitle = title || "Error"
+        warningDialogSummary = summary || ""
+        warningDialogDetails = safeDetails
+        warningDialogDetailsVisible = false
+        if (warningDialog.visible)
+            warningDialog.close()
+        warningDialog.open()
+    }
+
     Dialog {
         id: warningDialog
         modal: true
-        width: Math.max(360, Math.min(parent ? parent.width - 48 : 560, 620))
+        width: Math.max(420, Math.min(parent ? parent.width - 48 : 640, 760))
         anchors.centerIn: parent
         closePolicy: Popup.NoAutoClose
         title: warningDialogTitle
@@ -7001,7 +11996,7 @@ NumberAnimation {
                         // altrimenti il title è già descrittivo (es. "DX Cluster") e il
                         // sottotitolo statico aggiunge solo rumore.
                         visible: warningDialogTitle === "" || warningDialogTitle === "Error" || warningDialogTitle === "Errore"
-                        text: "Decodium reported a non-blocking problem."
+                        text: qsTr("Decodium reported a non-blocking problem.")
                         font.pixelSize: 11
                         color: textSecondary
                         elide: Text.ElideRight
@@ -7012,7 +12007,7 @@ NumberAnimation {
         }
 
         contentItem: ColumnLayout {
-            spacing: 14
+            spacing: 16
 
             Text {
                 Layout.fillWidth: true
@@ -7024,7 +12019,7 @@ NumberAnimation {
 
             Button {
                 visible: warningDialogDetails.length > 0
-                text: warningDialogDetailsVisible ? "Hide details" : "Show details"
+                text: warningDialogDetailsVisible ? qsTr("Hide details") : qsTr("Show details")
                 Layout.alignment: Qt.AlignLeft
                 onClicked: warningDialogDetailsVisible = !warningDialogDetailsVisible
 
@@ -7065,51 +12060,367 @@ NumberAnimation {
                     }
                 }
             }
-        }
 
-        footer: DialogButtonBox {
-            alignment: Qt.AlignRight
-            background: Rectangle {
-                color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.72)
-                radius: 8
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: glassBorder
             }
 
-            Button {
-                text: "OK"
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                onClicked: warningDialog.close()
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
 
-                contentItem: Text {
-                    text: parent.text
-                    color: textPrimary
-                    font.pixelSize: 13
-                    font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                Item { Layout.fillWidth: true }
 
-                background: Rectangle {
-                    implicitWidth: 112
-                    implicitHeight: 38
-                    color: parent.hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.22)
-                                          : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
-                    border.color: secondaryCyan
-                    border.width: 1
-                    radius: 8
+                Button {
+                    text: "OK"
+                    Layout.preferredWidth: 128
+                    Layout.preferredHeight: 40
+                    onClicked: warningDialog.close()
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: textPrimary
+                        font.pixelSize: 14
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        color: parent.hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.22)
+                                              : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
+                        border.color: secondaryCyan
+                        border.width: 1
+                        radius: 8
+                    }
                 }
             }
         }
     }
 
     // Info Dialog
-    InfoDialog {
-        id: infoDialog
+    Loader {
+        id: infoDialogLoader
+        anchors.fill: parent
+        active: false
+        asynchronous: true
+        source: "components/InfoDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: InfoDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
-    // MAM Window - Multi-Answer Mode
-    MamWindow {
-        id: mamWindow
-        engine: bridge
+    // MAM Window - Multi-Answer Mode.  Use a desktop Window so its position is
+    // global and it can be moved to any monitor on every supported platform.
+    Window {
+        id: mamFloatingWindow
+        width: 700
+        height: 450
+        minimumWidth: 500
+        minimumHeight: 360
+        visible: false
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        title: qsTr("Multi-Answer Mode - Decodium")
+        color: "transparent"
+
+        x: mainWindow.x + Math.max(24, Math.round((mainWindow.width - width) / 2))
+        y: mainWindow.y + Math.max(48, Math.round((mainWindow.height - height) / 2))
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(mamFloatingWindow)
+        }
+
+        function showHostedWindow() {
+            mamWindowLoader.active = true
+            show()
+            raise()
+            requestActivate()
+            if (mamWindowLoader.item) {
+                mamWindowLoader.item.engine = bridge
+                mamWindowLoader.item.nativeHostWindow = mamFloatingWindow
+                if (!mamWindowLoader.item.visible)
+                    mamWindowLoader.item.open()
+            }
+        }
+
+        function hideAfterDialogClosed() {
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
+
+        function hideHostedWindow() {
+            if (mamWindowLoader.item && mamWindowLoader.item.visible) {
+                mamWindowLoader.item.close()
+                return
+            }
+            hideAfterDialogClosed()
+        }
+
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(
+                                   mamFloatingWindow,
+                                   "mamFloatingWindow",
+                                   "",
+                                   "")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onClosing: function(close) {
+            if (!mainWindow.applicationClosing) {
+                close.accepted = false
+                hideHostedWindow()
+                return
+            }
+            close.accepted = true
+        }
+
+        Loader {
+            id: mamWindowLoader
+            anchors.fill: parent
+            active: false
+            asynchronous: true
+            source: "components/MamWindow.qml"
+            property var pendingAction: null
+            onLoaded: {
+                item.engine = bridge
+                item.nativeHostWindow = mamFloatingWindow
+                console.log("Lazy component loaded: MamWindow")
+                if (mamFloatingWindow.visible && !item.visible)
+                    item.open()
+                if (pendingAction) {
+                    var action = pendingAction
+                    pendingAction = null
+                    action(item)
+                }
+            }
+        }
+
+        Connections {
+            target: mamWindowLoader.item
+            ignoreUnknownSignals: true
+            function onClosed() { mamFloatingWindow.hideAfterDialogClosed() }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: mamFloatingWindow
+            maxWidth: 1400
+            maxHeight: 1000
+        }
+
+        Shortcut {
+            enabled: mamFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: mamFloatingWindow.hideHostedWindow()
+        }
+    }
+
+    // DECOMETER uses a real desktop window so its RF face can be placed on a
+    // dedicated external display without changing the CAT/telemetry path.
+    Window {
+        id: decometerFloatingWindow
+        property bool contentRequested: false
+        property bool showPending: false
+        readonly property real faceAspectRatio: 15 / 7
+        readonly property int screenLimitedMaximumWidth: {
+            if (!screen || !screen.availableGeometry)
+                return maximumWidth
+            var usableWidth = Math.max(minimumWidth,
+                                       Number(screen.availableGeometry.width) - 24)
+            var usableHeightAsWidth = Math.max(minimumWidth,
+                                               (Number(screen.availableGeometry.height) - 24)
+                                               * faceAspectRatio)
+            return Math.round(Math.min(maximumWidth, usableWidth, usableHeightAsWidth))
+        }
+        width: 900
+        height: 420
+        minimumWidth: 450
+        minimumHeight: 210
+        maximumWidth: 1800
+        maximumHeight: 840
+        visible: false
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        title: qsTr("DECØMETER - RF Meter - Decodium")
+        color: "transparent"
+
+        // Do not bind the desktop position to width/height.  A native move does
+        // not necessarily remove a QML binding, so the old centred bindings
+        // could move the instrument back whenever its proportional size was
+        // normalised after a drag or a resize.
+        x: 0
+        y: 0
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(decometerFloatingWindow, faceAspectRatio)
+            setProportionalWidth(width)
+            mainWindow.finishFloatingWindowDrag(decometerFloatingWindow, faceAspectRatio)
+        }
+
+        function setProportionalWidth(requestedWidth) {
+            var boundedWidth = Math.max(minimumWidth,
+                                        Math.min(screenLimitedMaximumWidth,
+                                                 Math.round(requestedWidth)))
+            width = boundedWidth
+            height = Math.round(boundedWidth / faceAspectRatio)
+        }
+
+        function normalizeProportionalSize() {
+            var restoredWidth = Number(width)
+            var restoredHeight = Number(height)
+            if (!isFinite(restoredWidth) || restoredWidth <= 0
+                    || !isFinite(restoredHeight) || restoredHeight <= 0) {
+                setProportionalWidth(900)
+                return
+            }
+            // Fit the old rectangle inside the 15:7 face.  This also migrates
+            // the obsolete 924x444 host-with-gutter geometry without bars.
+            var scale = Math.min(restoredWidth / 900, restoredHeight / 420)
+            setProportionalWidth(900 * scale)
+        }
+
+        function presentHostedWindow() {
+            normalizeProportionalSize()
+            show()
+            raise()
+            requestActivate()
+            if (decometerFloatingLoader.item)
+                decometerFloatingLoader.item.activateHostedPanel()
+        }
+
+        function showHostedWindow() {
+            // Build the relatively complex Canvas face while this native
+            // window is still hidden.  Exposing the window first and then
+            // attaching an asynchronously-created scene graph can race the
+            // Qt 6.11 Metal render thread (the crash is in
+            // QSGThreadedRenderLoop::update).  The Loader completes this
+            // request from onLoaded.
+            contentRequested = true
+            if (!decometerFloatingLoader.item) {
+                showPending = true
+                return
+            }
+            showPending = false
+            presentHostedWindow()
+        }
+
+        function hideHostedContent() {
+            showPending = false
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
+
+        function hideHostedWindow() {
+            hideHostedContent()
+        }
+
+        Component.onCompleted: {
+            var restoredState = mainWindow.restoreFloatingWindowState(decometerFloatingWindow,
+                                                                       "decometerFloatingWindow",
+                                                                       "",
+                                                                       "")
+            normalizeProportionalSize()
+            // A first launch has no saved geometry.  Centre it once, but leave
+            // x/y as ordinary values afterwards so every edge and corner of the
+            // active screen remains reachable.
+            if (!isFinite(Number(restoredState.x)) || !isFinite(Number(restoredState.y))) {
+                x = mainWindow.x + Math.max(24, Math.round((mainWindow.width - width) / 2))
+                y = mainWindow.y + Math.max(48, Math.round((mainWindow.height - height) / 2))
+                mainWindow.finishFloatingWindowDrag(decometerFloatingWindow, faceAspectRatio)
+            }
+        }
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: {
+            mainWindow.scheduleWindowStateSave()
+            if (decometerResizeHandles.nativeResizeActive)
+                decometerResizeHandles.constrainNativeAspect()
+        }
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onClosing: function(close) {
+            if (!mainWindow.applicationClosing) {
+                close.accepted = false
+                hideHostedWindow()
+                return
+            }
+            close.accepted = true
+        }
+
+        Loader {
+            id: decometerFloatingLoader
+            anchors.fill: parent
+            active: decometerFloatingWindow.contentRequested
+            asynchronous: true
+            source: "components/DecometerWindow.qml"
+            onLoaded: {
+                item.nativeHostWindow = decometerFloatingWindow
+                if (decometerFloatingWindow.showPending) {
+                    decometerFloatingWindow.showPending = false
+                    decometerFloatingWindow.presentHostedWindow()
+                }
+            }
+        }
+
+        ProportionalResizeHandles {
+            id: decometerResizeHandles
+            // The face is now a normal Loader item, so z-ordering is sufficient
+            // and no cross-overlay reparenting is required.
+            targetWindow: decometerFloatingWindow
+            aspectRatio: decometerFloatingWindow.faceAspectRatio
+            minWidth: decometerFloatingWindow.minimumWidth
+            maxWidth: decometerFloatingWindow.screenLimitedMaximumWidth
+        }
+
+        Shortcut {
+            enabled: decometerFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: decometerFloatingWindow.hideHostedWindow()
+        }
+    }
+
+    // 1.0.262 — CALL Dialog (chiamata diretta a target callsign con retry/timeout)
+    Loader {
+        id: callDialogLoader
+        anchors.fill: parent
+        active: false
+        asynchronous: true
+        source: "components/CallDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: CallDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
+    }
+
+    // 1.0.268 (Phase 5.3) — Decode History Dialog (esplora DB SQLite)
+    Loader {
+        id: historyDialogLoader
+        anchors.fill: parent
+        active: false
+        asynchronous: true
+        source: "components/DecodeHistoryDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: DecodeHistoryDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
     // Auto-open MAM window when MAM mode is enabled
@@ -7117,7 +12428,7 @@ NumberAnimation {
         target: bridge
         function onMultiAnswerModeChanged() {
             if (bridge.multiAnswerMode) {
-                mamWindow.open()
+                mainWindow.openMamWindow()
             }
         }
     }
@@ -7141,7 +12452,7 @@ NumberAnimation {
 
     // QSO Progress Badge - Auto-hide timer
     Timer { id: badgeHideTimer; interval: 2500; onTriggered: badgeVisible = false }
-    Timer { id: statusToastHideTimer; interval: 3200; onTriggered: statusToastVisible = false }
+    Timer { id: statusToastHideTimer; interval: 5000; onTriggered: statusToastVisible = false }  // 1.0.308 (#7): più tempo per notarlo
 
     // Main Menu (Hamburger)
     Menu {
@@ -7187,9 +12498,68 @@ NumberAnimation {
         }
 
         MenuItem {
+            text: qsTr("SSTV - image radio... (BETA)")
+            icon.source: ""
+            enabled: bridge.sstvAvailable
+            onTriggered: mainWindow.openSstvWorkspace()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: parent.enabled ? secondaryCyan : textSecondary
+                leftPadding: 10
+            }
+        }
+
+        // RTTY: la finestra. Le bande e le frequenze NON stanno qui — RTTY e'
+        // un modo come gli altri e si sceglie dal selettore dei modi, dove
+        // sceglierlo commuta la radio. Un secondo elenco di bande in un menu
+        // a parte sarebbe una seconda strada per fare la stessa cosa, e le due
+        // prima o poi direbbero cose diverse.
+        MenuItem {
+            text: qsTr("Open the RTTY window...")
+            icon.source: ""
+            onTriggered: mainWindow.openRttyWindow()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: textPrimary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            // 1.0.571 - DecoPort: pubblica la radio in rete e usa quelle degli
+            // altri. La finestra e' un Loader: chi non la apre non paga nulla.
+            text: qsTr("DecoPort - radio on the network...")
+            icon.source: ""
+            onTriggered: mainWindow.openDecoPortWindow()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: textPrimary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
             text: qsTr("About Decodium")
             icon.source: ""
-            onTriggered: { infoDialog.currentTab = 0; infoDialog.open() }
+            onTriggered: mainWindow.openInfoDialog(0)
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -7205,7 +12575,7 @@ NumberAnimation {
 
         MenuItem {
             text: qsTr("Useful Links...")
-            onTriggered: { infoDialog.currentTab = 4; infoDialog.open() }
+            onTriggered: mainWindow.openInfoDialog(4)
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -7276,8 +12646,8 @@ NumberAnimation {
         }
 
         MenuItem {
-            text: qsTr("MAM Window...")
-            onTriggered: mamWindow.open()
+            text: "📡 DECØMETER — " + qsTr("RF Meter...")
+            onTriggered: mainWindow.openDecometerWindow()
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -7292,7 +12662,23 @@ NumberAnimation {
         }
 
         MenuItem {
-            text: "📂 " + qsTr("Open ALL.TXT Folder")
+            text: qsTr("MAM Window...")
+            onTriggered: mainWindow.openMamWindow()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: textSecondary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            text: "📂 " + qsTr("Open ALL.TXT folder")
             onTriggered: bridge.openAllTxtFolder()
 
             background: Rectangle {
@@ -7570,11 +12956,27 @@ NumberAnimation {
             }
         }
 
+        // IU8LMC: punto di ingresso all'assistenza (prima il dialog era irraggiungibile).
         MenuItem {
-            enabled: false
-            text: "☁ " + qsTr("Update checks disabled")
+            text: "🛟 " + qsTr("Report a problem...")
+            onTriggered: openBugReportDialog()
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text; font.pixelSize: 12; color: textSecondary; leftPadding: 10
+            }
+        }
+
+        // IU8LMC: era enabled:false ("Update checks disabled") perche' il checker
+        // del bridge e' spento dalla 1.0.62. Ora usa DecodiumUpdater, che avvisa
+        // davvero e sa scaricare e installare.
+        MenuItem {
+            enabled: !updater.busy
+            text: "☁ " + (updater.busy ? qsTr("Checking...") : qsTr("Check for updates..."))
             onTriggered: {
-                bridge.checkForUpdates()
+                updater.check(false)   // manuale: rispondi anche se non c'e' nulla di nuovo
             }
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -7587,7 +12989,7 @@ NumberAnimation {
         }
 
         MenuItem {
-            text: "📂 " + qsTr("Export Cabrillo...")
+            text: "📂 " + qsTr("Esporta Cabrillo...")
             onTriggered: cabrilloDlg.open()
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -7615,7 +13017,7 @@ NumberAnimation {
 	        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
 
 		        MenuItem {
-		            text: (worldClock.showWorldClock ? "✓ " : "☐ ") + qsTr("Show Clock")
+		            text: (worldClock.showWorldClock ? "✓ " : "☐ ") + qsTr("Show clock")
 		            onTriggered: worldClock.setClockVisible(!worldClock.showWorldClock)
 		            background: Rectangle {
 	                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -7738,10 +13140,31 @@ NumberAnimation {
 		            }
 
 		            MenuItem {
+		                text: uiLanguage === "lv" ? "✓ Latviešu" : "☐ Latviešu"
+		                onTriggered: mainWindow.setUiLanguage("lv")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "lv" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
+
+		            MenuItem {
+		                text: uiLanguage === "nl" ? "✓ Nederlands" : "☐ Nederlands"
+		                onTriggered: mainWindow.setUiLanguage("nl")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "nl" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
+
+		            MenuItem {
 		                text: uiLanguage === "ru" ? "✓ Русский" : "☐ Русский"
 		                onTriggered: mainWindow.setUiLanguage("ru")
 		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
 		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ru" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
+
+		            MenuItem {
+		                text: uiLanguage === "ro" ? "✓ Română" : "☐ Română"
+		                onTriggered: mainWindow.setUiLanguage("ro")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ro" ? successGreen : textSecondary; leftPadding: 10 }
 		            }
 
 		            MenuItem {
@@ -7790,11 +13213,23 @@ NumberAnimation {
         }
 
         MenuItem {
-            text: (liveMapPanelVisible ? "✓ " : "☐ ") + qsTr("Live Map")
-            onTriggered: {
-                liveMapPanelVisible = !liveMapPanelVisible
-                bridge.setSetting("WorldMapDisplayed", liveMapPanelVisible)
+            text: (waterfallPanelVisible ? "✓ " : "☐ ") + qsTr("Waterfall / Panadapter")
+            onTriggered: waterfallPanelVisible = !waterfallPanelVisible
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
             }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: waterfallPanelVisible ? successGreen : textSecondary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            text: (liveMapPanelVisible ? "✓ " : "☐ ") + qsTr("Live Map")
+            onTriggered: liveMapPanelVisible = !liveMapPanelVisible
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
                 radius: 6
@@ -7803,34 +13238,6 @@ NumberAnimation {
                 text: parent.text
                 font.pixelSize: 12
                 color: liveMapPanelVisible ? successGreen : textSecondary
-                leftPadding: 10
-            }
-        }
-
-	        MenuItem {
-	            text: (bridge.foxMode ? "✓ " : "☐ ") + qsTr("Fox Mode (Caller Queue)")
-	            onTriggered: { bridge.foxMode = !bridge.foxMode; callerQueuePanelVisible = bridge.foxMode }
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text; font.pixelSize: 12
-                color: bridge.foxMode ? "#FF9800" : textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: (bridge.houndMode ? "✓ " : "☐ ") + qsTr("Hound Mode")
-            onTriggered: { bridge.houndMode = !bridge.houndMode; callerQueuePanelVisible = bridge.foxMode }
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text; font.pixelSize: 12
-                color: bridge.houndMode ? "#FF9800" : textSecondary
                 leftPadding: 10
             }
         }
@@ -7898,7 +13305,7 @@ NumberAnimation {
     // ===== B11 CABRILLO EXPORT DIALOG =====
     Dialog {
         id: cabrilloDlg
-        title: "Export Cabrillo"
+        title: qsTr("Export Cabrillo")
         anchors.centerIn: parent
         width: 400
         modal: true
@@ -7910,14 +13317,14 @@ NumberAnimation {
 
         contentItem: Column {
             spacing: 12; padding: 16
-            Text { text: "Output file path:"; font.pixelSize: 12; color: textPrimary }
-            TextField {
+            Text { text: qsTr("Output file path:"); font.pixelSize: 12; color: textPrimary }
+            DecoTextField {
                 id: cabrilloPath
                 width: 360
                 text: (Qt.platform.os === "windows"
                        ? "C:/Users/IU8LMC/Documents/" : "~/")
                       + bridge.callsign + "_" + Qt.formatDate(new Date(), "yyyyMMdd") + ".cbr"
-                font.family: "Monospace"; font.pixelSize: 11
+                font.family: decodiumMonoFontFamily; font.pixelSize: 11
                 color: textPrimary
                 background: Rectangle {
                     color: Qt.rgba(textPrimary.r,textPrimary.g,textPrimary.b,0.07); border.color: glassBorder; radius: 4
@@ -7927,7 +13334,7 @@ NumberAnimation {
 
         footer: DialogButtonBox {
             Button {
-                text: "Export"
+                text: qsTr("Export")
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 onClicked: {
                     if (bridge.exportCabrillo(cabrilloPath.text))
@@ -7962,7 +13369,7 @@ NumberAnimation {
             padding: 20
 
             Text {
-                text: "Watchdog Mode"
+                text: qsTr("Watchdog Mode")
                 font.pixelSize: 14
                 font.bold: true
                 color: textPrimary
@@ -7972,19 +13379,19 @@ NumberAnimation {
                 spacing: 10
                 RadioButton {
                     id: wdOff
-                    text: "Off"
+                    text: qsTr("Off")
                     checked: bridge.txWatchdogMode === 0
                     onClicked: bridge.txWatchdogMode = 0
                 }
                 RadioButton {
                     id: wdTime
-                    text: "Time"
+                    text: qsTr("Time")
                     checked: bridge.txWatchdogMode === 1
                     onClicked: bridge.txWatchdogMode = 1
                 }
                 RadioButton {
                     id: wdCount
-                    text: "Count"
+                    text: qsTr("Count")
                     checked: bridge.txWatchdogMode === 2
                     onClicked: bridge.txWatchdogMode = 2
                 }
@@ -7993,22 +13400,22 @@ NumberAnimation {
             Row {
                 spacing: 10
                 visible: bridge.txWatchdogMode === 1
-                Text { text: "Time (min):"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: qsTr("Time (min):"); color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                 SpinBox {
-                    from: 1; to: 30
+                    from: 1; to: 999
                     value: bridge.txWatchdogTime
-                    onValueChanged: bridge.txWatchdogTime = value
+                    onValueChanged: if (bridge.txWatchdogTime !== value) bridge.txWatchdogTime = value
                 }
             }
 
             Row {
                 spacing: 10
                 visible: bridge.txWatchdogMode === 2
-                Text { text: "Max TX:"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: qsTr("Max TX:"); color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                 SpinBox {
                     from: 1; to: 50
                     value: bridge.txWatchdogCount
-                    onValueChanged: bridge.txWatchdogCount = value
+                    onValueChanged: if (bridge.txWatchdogCount !== value) bridge.txWatchdogCount = value
                 }
             }
         }
@@ -8039,13 +13446,13 @@ NumberAnimation {
             padding: 20
 
             Text {
-                text: "Contest Type"
+                text: qsTr("Contest Type")
                 font.pixelSize: 14
                 font.bold: true
                 color: textPrimary
             }
 
-            ComboBox {
+            DecoComboBox {
                 id: contestTypeCombo
                 width: 300
                 model: bridge.contestTypeNames
@@ -8053,26 +13460,36 @@ NumberAnimation {
                 onCurrentIndexChanged: bridge.contestType = currentIndex
             }
 
+            // 1.0.441 - regola award selezionato (documenta lo scoring; nessun contatore)
             Text {
-                text: "Exchange"
+                text: qsTr("Rule: 1 point per worked station")
+                font.pixelSize: 12
+                color: secondaryCyan
+                wrapMode: Text.WordWrap
+                width: 300
+                visible: bridge.contestTypeNames[bridge.contestType] === "Ft2.it Award 2026"
+            }
+
+            Text {
+                text: qsTr("Exchange")
                 font.pixelSize: 14
                 font.bold: true
                 color: textPrimary
                 visible: bridge.contestType > 0
             }
 
-            TextField {
+            DecoTextField {
                 width: 300
                 text: bridge.contestExchange
                 onTextChanged: bridge.contestExchange = text
-                placeholderText: "Example: 599 001"
+                placeholderText: qsTr("Example: 599 001")
                 visible: bridge.contestType > 0
             }
 
             Row {
                 spacing: 10
                 visible: bridge.contestType > 0
-                Text { text: "Serial Number:"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: qsTr("Serial Number:"); color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                 SpinBox {
                     from: 1; to: 9999
                     value: bridge.contestNumber
@@ -8107,38 +13524,38 @@ NumberAnimation {
             padding: 20
 
             Text {
-                text: "TRANSMISSION"
+                text: qsTr("TRANSMISSION")
                 font.pixelSize: 14
                 font.bold: true
                 color: accentOrange
             }
-            Text { text: "F1 - F7: Select TX1 - TX7"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "F9: Toggle RX Only First/Second"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Escape: Halt (immediate TX stop)"; font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("F1 - F7: Select TX1 - TX7"); font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("F9: toggle RX-only 1st/2nd"); font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Escape: Halt (immediate TX stop)"); font.pixelSize: 12; color: textPrimary }
 
             Rectangle { height: 1; width: parent.width - 40; color: glassBorder }
 
             Text {
-                text: "CONTROLS (Ctrl+)"
+                text: qsTr("CONTROLS (Ctrl+)")
                 font.pixelSize: 14
                 font.bold: true
                 color: secondaryCyan
             }
-            Text { text: "Ctrl+A: Toggle Auto Sequence"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Ctrl+G: Generate all TX messages"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Ctrl+Z: Toggle ZAP mode"; font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Ctrl+A: toggle Auto Sequence"); font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Ctrl+G: Generate all TX messages"); font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Ctrl+Z: toggle ZAP mode"); font.pixelSize: 12; color: textPrimary }
 
             Rectangle { height: 1; width: parent.width - 40; color: glassBorder }
 
             Text {
-                text: "ACTIONS (Alt+)"
+                text: qsTr("ACTIONS (Alt+)")
                 font.pixelSize: 14
                 font.bold: true
                 color: successGreen
             }
-            Text { text: "Alt+L: Log current QSO"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Alt+M: Clear decode list (Monitor)"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Alt+S: Stop TX"; font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Alt+L: log the current QSO"); font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Alt+M: clear the decode list (Monitor)"); font.pixelSize: 12; color: textPrimary }
+            Text { text: qsTr("Alt+S: stop TX"); font.pixelSize: 12; color: textPrimary }
         }
 
         footer: DialogButtonBox {
@@ -8161,19 +13578,15 @@ NumberAnimation {
         flags: (bridge && bridge.uiFramelessPopouts)
                ? (Qt.Window | Qt.FramelessWindowHint)
                : (Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        title: "Waterfall - Decodium"
+        title: qsTr("Waterfall - Decodium")
         color: "transparent"
 
-        // 1.0.180 — Drag handle per Frameless windows: usa native window
-        // manager (DragHandler.startSystemMove non blocca main thread).
-        DragHandler {
-            id: waterfallDragHandler
-            target: null
-            enabled: bridge ? bridge.uiFramelessPopouts : false
-            onActiveChanged: {
-                if (active) waterfallWindow.startSystemMove()
-            }
-        }
+        // 1.0.286 — RIMOSSO il DragHandler root: era figlio del Window (non
+        // dell'header), quindi trascinava la finestra da QUALSIASI punto del corpo
+        // (bug: perdendo il pollice di uno Slider partiva startSystemMove e la
+        // finestra si muoveva). Il move-to-window resta SOLO sul MouseArea header
+        // 'dragArea' (sotto), header-only come tutte le altre pop-out, e mantiene il
+        // dock magnetico (che startSystemMove invece bypassava).
 
         // Position to right of main window initially
         x: mainWindow.x + mainWindow.width + 20
@@ -8199,7 +13612,11 @@ NumberAnimation {
 
 	        // Handle window close
 	        onClosing: function(close) {
-	            mainWindow.dockWaterfallPanel()
+                if (!mainWindow.applicationClosing) {
+                    mainWindow.waterfallPanelVisible = false
+                    mainWindow.waterfallDetached = false
+                    mainWindow.waterfallMinimized = false
+                }
 	            close.accepted = true
 	        }
 
@@ -8214,218 +13631,17 @@ NumberAnimation {
             border.color: secondaryCyan
             border.width: 2
 
-            // ===== RESIZE HANDLES (Smooth) =====
-            // Right edge
-            MouseArea {
-                id: rightResize
-                width: 10
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.topMargin: 16
-                anchors.bottomMargin: 16
-                cursorShape: Qt.SizeHorCursor
-                preventStealing: true
-
-                onMouseXChanged: {
-                    if (pressed) {
-                        var newW = waterfallWindow.width + (mouseX - width/2)
-                        if (newW >= waterfallWindow.minimumWidth && newW <= 1600)
-                            waterfallWindow.width = newW
-                    }
-                }
-            }
-
-            // Left edge
-            MouseArea {
-                id: leftResize
-                width: 10
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.topMargin: 16
-                anchors.bottomMargin: 16
-                cursorShape: Qt.SizeHorCursor
-                preventStealing: true
-
-                onMouseXChanged: {
-                    if (pressed) {
-                        var delta = mouseX
-                        var newW = waterfallWindow.width - delta
-                        if (newW >= waterfallWindow.minimumWidth && newW <= 1600) {
-                            waterfallWindow.x += delta
-                            waterfallWindow.width = newW
-                        }
-                    }
-                }
-            }
-
-            // Bottom edge
-            MouseArea {
-                id: bottomResize
-                height: 10
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                cursorShape: Qt.SizeVerCursor
-                preventStealing: true
-
-                onMouseYChanged: {
-                    if (pressed) {
-                        var newH = waterfallWindow.height + (mouseY - height/2)
-                        if (newH >= waterfallWindow.minimumHeight && newH <= 900)
-                            waterfallWindow.height = newH
-                    }
-                }
-            }
-
-            // Top edge
-            MouseArea {
-                id: topResize
-                height: 10
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                cursorShape: Qt.SizeVerCursor
-                preventStealing: true
-
-                onMouseYChanged: {
-                    if (pressed) {
-                        var delta = mouseY
-                        var newH = waterfallWindow.height - delta
-                        if (newH >= waterfallWindow.minimumHeight && newH <= 900) {
-                            waterfallWindow.y += delta
-                            waterfallWindow.height = newH
-                        }
-                    }
-                }
-            }
-
-            // Bottom-right corner
-            MouseArea {
-                id: brResize
-                width: 20; height: 20
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                cursorShape: Qt.SizeFDiagCursor
-                preventStealing: true
-
-                onMouseXChanged: {
-                    if (pressed) {
-                        var newW = waterfallWindow.width + (mouseX - width/2)
-                        if (newW >= waterfallWindow.minimumWidth && newW <= 1600)
-                            waterfallWindow.width = newW
-                    }
-                }
-                onMouseYChanged: {
-                    if (pressed) {
-                        var newH = waterfallWindow.height + (mouseY - height/2)
-                        if (newH >= waterfallWindow.minimumHeight && newH <= 900)
-                            waterfallWindow.height = newH
-                    }
-                }
-
-                // Visual indicator
-                Text {
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    anchors.margins: 2
-                    text: "◢"
-                    font.pixelSize: 14
-                    color: secondaryCyan
-                    opacity: 0.8
-                }
-            }
-
-            // Bottom-left corner
-            MouseArea {
-                id: blResize
-                width: 20; height: 20
-                anchors.left: parent.left
-                anchors.bottom: parent.bottom
-                cursorShape: Qt.SizeBDiagCursor
-                preventStealing: true
-
-                onMouseXChanged: {
-                    if (pressed) {
-                        var delta = mouseX
-                        var newW = waterfallWindow.width - delta
-                        if (newW >= waterfallWindow.minimumWidth && newW <= 1600) {
-                            waterfallWindow.x += delta
-                            waterfallWindow.width = newW
-                        }
-                    }
-                }
-                onMouseYChanged: {
-                    if (pressed) {
-                        var newH = waterfallWindow.height + (mouseY - height/2)
-                        if (newH >= waterfallWindow.minimumHeight && newH <= 900)
-                            waterfallWindow.height = newH
-                    }
-                }
-            }
-
-            // Top-right corner
-            MouseArea {
-                id: trResize
-                width: 20; height: 20
-                anchors.right: parent.right
-                anchors.top: parent.top
-                cursorShape: Qt.SizeBDiagCursor
-                preventStealing: true
-
-                onMouseXChanged: {
-                    if (pressed) {
-                        var newW = waterfallWindow.width + (mouseX - width/2)
-                        if (newW >= waterfallWindow.minimumWidth && newW <= 1600)
-                            waterfallWindow.width = newW
-                    }
-                }
-                onMouseYChanged: {
-                    if (pressed) {
-                        var delta = mouseY
-                        var newH = waterfallWindow.height - delta
-                        if (newH >= waterfallWindow.minimumHeight && newH <= 900) {
-                            waterfallWindow.y += delta
-                            waterfallWindow.height = newH
-                        }
-                    }
-                }
-            }
-
-            // Top-left corner
-            MouseArea {
-                id: tlResize
-                width: 20; height: 20
-                anchors.left: parent.left
-                anchors.top: parent.top
-                cursorShape: Qt.SizeFDiagCursor
-                preventStealing: true
-
-                onMouseXChanged: {
-                    if (pressed) {
-                        var delta = mouseX
-                        var newW = waterfallWindow.width - delta
-                        if (newW >= waterfallWindow.minimumWidth && newW <= 1600) {
-                            waterfallWindow.x += delta
-                            waterfallWindow.width = newW
-                        }
-                    }
-                }
-                onMouseYChanged: {
-                    if (pressed) {
-                        var delta = mouseY
-                        var newH = waterfallWindow.height - delta
-                        if (newH >= waterfallWindow.minimumHeight && newH <= 900) {
-                            waterfallWindow.y += delta
-                            waterfallWindow.height = newH
-                        }
-                    }
-                }
+            // ===== RESIZE HANDLES =====
+            // 1.0.288 — sostituiti gli 8 MouseArea inline (che facevano
+            // waterfallWindow.width= da onMouseXChanged) con il componente
+            // condiviso FloatingResizeHandles (z:1000, onPositionChanged), lo
+            // stesso usato dalla Full Spectrum. Gli handle inline stavano SOTTO
+            // l'header dragArea (dichiarati prima del ColumnLayout) e in frameless
+            // ON (senza Qt.WindowStaysOnTopHint) perdevano il grab ai bordi →
+            // resize bloccato + "barra superiore bloccata". FloatingResizeHandles
+            // sta sopra l'header e funziona in entrambe le modalità frameless.
+            FloatingResizeHandles {
+                targetWindow: waterfallWindow
             }
 
             ColumnLayout {
@@ -8529,7 +13745,7 @@ NumberAnimation {
                         Text {
                             text: "RX: " + bridge.rxFrequency + " Hz | TX: " + bridge.txFrequency + " Hz"
                             font.pixelSize: 12
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: textSecondary
                         }
 
@@ -8540,7 +13756,7 @@ NumberAnimation {
                             spacing: 8
 
                             Text {
-                                text: "Zoom:"
+                                text: qsTr("Zoom:")
                                 color: textSecondary
                                 font.pixelSize: 11
                             }
@@ -8604,9 +13820,9 @@ NumberAnimation {
                             Text {
                                 text: waterfallDetachedLoader.item
                                       ? waterfallDetachedLoader.item.minFreq + "-" + waterfallDetachedLoader.item.maxFreq + " Hz"
-                                      : "0-3200 Hz"
+                                      : "200-3200 Hz"
                                 font.pixelSize: 10
-                                font.family: "Monospace"
+                                font.family: decodiumMonoFontFamily
                                 color: textSecondary
                             }
                         }
@@ -8667,7 +13883,7 @@ NumberAnimation {
                             }
 
                             ToolTip.visible: minimizeMA.containsMouse
-	                            ToolTip.text: "Minimize"
+	                            ToolTip.text: qsTr("Minimize")
                             ToolTip.delay: 500
                         }
 
@@ -8678,7 +13894,7 @@ NumberAnimation {
                     id: waterfallDetachedLoader
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: waterfallWindow.visible
+                    active: waterfallWindow.visible && mainWindow.waterfallPanelVisible
                     asynchronous: true
                     sourceComponent: waterfallDetachedComponent
                 }
@@ -8688,9 +13904,9 @@ NumberAnimation {
 
                     Waterfall {
                         id: waterfallDisplayDetached
-                        visible: waterfallDetached
+                        visible: mainWindow.waterfallPanelVisible && waterfallDetached
                         showControls: true
-                        minFreq: 0
+                        minFreq: 200
                         maxFreq: 3200
                         spectrumHeight: 150
 
@@ -8716,7 +13932,7 @@ NumberAnimation {
                         spacing: 16
 
                         Text {
-                            text: "Mode: " + bridge.mode
+                            text: "Mode: " + bridge.mode + (mainWindow.dxpeditionModeLabel ? " · " + mainWindow.dxpeditionModeLabel : "")
                             font.pixelSize: 11
                             color: secondaryCyan
                         }
@@ -8724,7 +13940,7 @@ NumberAnimation {
                         Text {
                             text: "Freq: " + (bridge.frequency / 1000000).toFixed(6) + " MHz"
                             font.pixelSize: 11
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: accentGreen
                         }
 
@@ -8744,7 +13960,7 @@ NumberAnimation {
                             color: bridge.monitoring ? accentGreen : "#555"
 
                             SequentialAnimation on opacity {
-                                running: bridge.monitoring && bridge.uiQuality !== "Low"
+                                running: bridge.monitoring && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.4; duration: 600 }
                                 OpacityAnimator { to: 1.0; duration: 600 }
@@ -8759,13 +13975,13 @@ NumberAnimation {
     // ========== DETACHABLE LOG WINDOW ==========
     Window {
         id: logFloatingWindow
-        width: 900
-        height: 600
+        property bool contentRequested: false
+        width: 960
+        height: 720
         minimumWidth: 600
         minimumHeight: 400
-        visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "QSO Log - Decodium"
+        title: qsTr("QSO Log - Decodium")
         color: "transparent"
 
         x: mainWindow.x + mainWindow.width + 20
@@ -8775,13 +13991,61 @@ NumberAnimation {
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onVisibleChanged: {
+            if (visible) {
+                contentRequested = true
+                if (logNativePopupLoader.item && !logNativePopupLoader.item.visible)
+                    logNativePopupLoader.item.open()
+            }
+        }
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(logFloatingWindow)
+        }
+
+        function showHostedWindow() {
+            contentRequested = true
+            show()
+            raise()
+            requestActivate()
+            if (logNativePopupLoader.item && !logNativePopupLoader.item.visible)
+                logNativePopupLoader.item.open()
+        }
+
+        function hideAfterDialogClosed() {
+            logWindowDetached = false
+            logWindowMinimized = false
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
+
+        function hideHostedWindow() {
+            if (logNativePopupLoader.item && logNativePopupLoader.item.visible) {
+                logNativePopupLoader.item.close()
+                return
+            }
+            hideAfterDialogClosed()
+        }
+
+        function minimizeHostedWindow() {
+            logWindowMinimized = true
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
 
         onClosing: function(close) {
-            logWindowDetached = false
+            if (!mainWindow.applicationClosing) {
+                close.accepted = false
+                hideHostedWindow()
+                return
+            }
             close.accepted = true
         }
 
         Rectangle {
+            // Legacy duplicate shell retained inert during the transition to
+            // the complete LogWindow popup hosted below.
+            visible: false
             anchors.fill: parent
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
             radius: 10
@@ -8802,17 +14066,40 @@ NumberAnimation {
 
                     MouseArea {
                         id: logDragArea
-                        anchors.fill: parent
-                        property point clickPos: Qt.point(0, 0)
+                        z: 2
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.right: parent.right
+                        anchors.rightMargin: 88
+                        acceptedButtons: Qt.LeftButton
+                        preventStealing: true
+                        property point pressGlobalPos: Qt.point(0, 0)
+                        property point pressWindowPos: Qt.point(0, 0)
+                        property bool nativeMoveActive: false
                         cursorShape: Qt.SizeAllCursor
-
-                        onPressed: function(mouse) { clickPos = Qt.point(mouse.x, mouse.y) }
+                        onPressed: function(mouse) {
+                            pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                            pressWindowPos = Qt.point(logFloatingWindow.x, logFloatingWindow.y)
+                            nativeMoveActive = mainWindow.startNativeFloatingWindowMove(logFloatingWindow)
+                            mouse.accepted = true
+                        }
                         onPositionChanged: function(mouse) {
-                            if (pressed) {
-                                var delta = Qt.point(mouse.x - clickPos.x, mouse.y - clickPos.y)
-                                logFloatingWindow.x += delta.x
-                                logFloatingWindow.y += delta.y
-                            }
+                            if (!pressed || nativeMoveActive)
+                                return
+                            mainWindow.dragFloatingWindowToGlobal(logFloatingWindow,
+                                                                  pressWindowPos,
+                                                                  pressGlobalPos,
+                                                                  mapToGlobal(mouse.x, mouse.y))
+                            mouse.accepted = true
+                        }
+                        onReleased: {
+                            nativeMoveActive = false
+                            mainWindow.finishFloatingWindowDrag(logFloatingWindow)
+                        }
+                        onCanceled: {
+                            nativeMoveActive = false
+                            mainWindow.finishFloatingWindowDrag(logFloatingWindow)
                         }
                     }
 
@@ -8822,7 +14109,7 @@ NumberAnimation {
                         spacing: 12
 
                         Text { text: "⋮⋮"; font.pixelSize: 14; color: textSecondary }
-                        Text { text: "📋 QSO Log"; font.pixelSize: 16; font.bold: true; color: secondaryCyan }
+                        Text { text: qsTr("📋 QSO Log"); font.pixelSize: 16; font.bold: true; color: secondaryCyan }
                         Item { Layout.fillWidth: true }
 
                         // Minimize button
@@ -8853,11 +14140,44 @@ NumberAnimation {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: logFloatingWindow.visible
+                    active: false
                     asynchronous: true
                     sourceComponent: logContentComponent
                 }
             }
+        }
+
+        Loader {
+            id: logNativePopupLoader
+            anchors.fill: parent
+            active: logFloatingWindow.contentRequested
+            asynchronous: true
+            source: "components/LogWindow.qml"
+            onLoaded: {
+                item.nativeHostWindow = logFloatingWindow
+                if (logFloatingWindow.visible && !item.visible)
+                    item.open()
+            }
+        }
+
+        Connections {
+            target: logNativePopupLoader.item
+            ignoreUnknownSignals: true
+            function onClosed() { logFloatingWindow.hideAfterDialogClosed() }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: logFloatingWindow
+            maxWidth: 2200
+            maxHeight: 1400
+        }
+
+        Shortcut {
+            enabled: logFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: logFloatingWindow.hideHostedWindow()
         }
     }
 
@@ -8869,120 +14189,198 @@ NumberAnimation {
         }
     }
 
-    // ========== DETACHABLE ASTRO WINDOW ==========
+    // ========== NATIVE ASTRONOMICAL DATA WINDOW ==========
+    // The complete Astro dialog is hosted by a real top-level Window.  Its
+    // coordinates are desktop-global, so the system move operation can cross
+    // monitor boundaries and WindowState can restore the same display later.
     Window {
         id: astroFloatingWindow
-        width: 500
-        height: 550
-        minimumWidth: 400
-        minimumHeight: 400
-        visible: false
+        property bool contentRequested: false
+        width: 680
+        height: 780
+        minimumWidth: 520
+        minimumHeight: 520
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "Astro - Decodium"
+        title: qsTr("Astronomical Data - Decodium")
         color: "transparent"
 
-        x: mainWindow.x + mainWindow.width + 20
-        y: mainWindow.y + 100
-        Component.onCompleted: mainWindow.restoreFloatingWindowState(astroFloatingWindow, "astroFloatingWindow", "astroWindowDetached", "astroWindowMinimized")
+        x: mainWindow.x + Math.max(24, Math.round((mainWindow.width - width) / 2))
+        y: mainWindow.y + Math.max(48, Math.round((mainWindow.height - height) / 2))
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(astroFloatingWindow)
+        }
+
+        function showHostedWindow() {
+            contentRequested = true
+            show()
+            raise()
+            requestActivate()
+            if (astroFloatingLoader.item && !astroFloatingLoader.item.visible)
+                astroFloatingLoader.item.open()
+        }
+
+        function hideHostedWindow() {
+            astroWindowDetached = false
+            astroWindowMinimized = false
+            mainWindow.scheduleWindowStateSave()
+            hide()
+        }
+
+        function minimizeHostedWindow() {
+            astroWindowMinimized = true
+            mainWindow.scheduleWindowStateSave()
+            astroFloatingWindow.hide()
+        }
+
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(
+                                   astroFloatingWindow,
+                                   "astroFloatingWindow",
+                                   "astroWindowDetached",
+                                   "astroWindowMinimized")
         onXChanged: mainWindow.scheduleWindowStateSave()
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onVisibleChanged: {
+            if (visible) {
+                contentRequested = true
+                if (astroFloatingLoader.item && !astroFloatingLoader.item.visible)
+                    astroFloatingLoader.item.open()
+            }
+        }
 
         onClosing: function(close) {
-            astroWindowDetached = false
+            if (!mainWindow.applicationClosing) {
+                astroWindowDetached = false
+                astroWindowMinimized = false
+            }
+            mainWindow.scheduleWindowStateSave()
             close.accepted = true
         }
 
-        Rectangle {
+        Loader {
+            id: astroFloatingLoader
             anchors.fill: parent
-            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
-            radius: 10
-            border.color: secondaryCyan
-            border.width: 2
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 6
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 40
-                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-                    radius: 6
-
-                    MouseArea {
-                        anchors.fill: parent
-                        property point clickPos: Qt.point(0, 0)
-                        cursorShape: Qt.SizeAllCursor
-                        onPressed: function(mouse) { clickPos = Qt.point(mouse.x, mouse.y) }
-                        onPositionChanged: function(mouse) {
-                            if (pressed) {
-                                var delta = Qt.point(mouse.x - clickPos.x, mouse.y - clickPos.y)
-                                astroFloatingWindow.x += delta.x
-                                astroFloatingWindow.y += delta.y
-                            }
-                        }
-                    }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 12
-
-                        Text { text: "⋮⋮"; font.pixelSize: 14; color: textSecondary }
-                        Text { text: "🌙 Astronomical Data"; font.pixelSize: 16; font.bold: true; color: secondaryCyan }
-                        Item { Layout.fillWidth: true }
-
-                        Rectangle {
-                            width: 28; height: 28; radius: 4
-                            color: astroFloatMinMA.containsMouse ? Qt.rgba(255/255, 193/255, 7/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: astroFloatMinMA.containsMouse ? "#ffc107" : glassBorder
-                            Text { anchors.centerIn: parent; text: "−"; font.pixelSize: 18; font.bold: true; color: astroFloatMinMA.containsMouse ? "#ffc107" : textPrimary }
-                            MouseArea { id: astroFloatMinMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { astroWindowMinimized = true; astroFloatingWindow.hide() }
-                            }
-                        }
-
-                        Rectangle {
-                            width: 28; height: 28; radius: 4
-                            color: astroFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: astroFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: astroFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
-                            MouseArea { id: astroFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { astroWindowDetached = false; astroWindowMinimized = false; astroFloatingWindow.close() }
-                            }
-                        }
-                    }
-                }
-
-                Loader {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    active: astroFloatingWindow.visible
-                    asynchronous: true
-                    sourceComponent: astroContentComponent
-                }
+            active: astroFloatingWindow.contentRequested
+            asynchronous: true
+            source: "components/AstroWindow.qml"
+            onLoaded: {
+                item.nativeHostWindow = astroFloatingWindow
+                item.open()
             }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: astroFloatingWindow
+            maxWidth: 1600
+            maxHeight: 1400
+        }
+
+        Shortcut {
+            enabled: astroFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: astroFloatingWindow.hideHostedWindow()
         }
     }
 
-    Component {
-        id: astroContentComponent
-        AstroWindowContent { }
+    // ========== NATIVE SATELLITE TRACKING WINDOW ==========
+    Window {
+        id: satelliteFloatingWindow
+        property bool contentRequested: false
+        width: 880
+        height: 740
+        minimumWidth: 640
+        minimumHeight: 560
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        title: qsTr("Satellite tracking - Decodium")
+        color: "transparent"
+
+        x: mainWindow.x + Math.max(24, Math.round((mainWindow.width - width) / 2))
+        y: mainWindow.y + Math.max(48, Math.round((mainWindow.height - height) / 2))
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(satelliteFloatingWindow)
+        }
+
+        function showHostedWindow() {
+            contentRequested = true
+            show()
+            raise()
+            requestActivate()
+            if (satelliteFloatingLoader.item && !satelliteFloatingLoader.item.visible)
+                satelliteFloatingLoader.item.open()
+        }
+
+        function hideHostedWindow() {
+            satelliteWindowDetached = false
+            mainWindow.scheduleWindowStateSave()
+            hide()
+        }
+
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(
+                                   satelliteFloatingWindow,
+                                   "satelliteFloatingWindow",
+                                   "satelliteWindowDetached",
+                                   "")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onVisibleChanged: {
+            if (visible) {
+                contentRequested = true
+                if (satelliteFloatingLoader.item && !satelliteFloatingLoader.item.visible)
+                    satelliteFloatingLoader.item.open()
+            }
+        }
+        onClosing: function(close) {
+            if (!mainWindow.applicationClosing)
+                satelliteWindowDetached = false
+            mainWindow.scheduleWindowStateSave()
+            close.accepted = true
+        }
+
+        Loader {
+            id: satelliteFloatingLoader
+            anchors.fill: parent
+            active: satelliteFloatingWindow.contentRequested
+            asynchronous: true
+            source: "components/SatelliteWindow.qml"
+            onLoaded: {
+                item.nativeHostWindow = satelliteFloatingWindow
+                item.open()
+            }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: satelliteFloatingWindow
+            maxWidth: 1800
+            maxHeight: 1400
+        }
+
+        Shortcut {
+            enabled: satelliteFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: satelliteFloatingWindow.hideHostedWindow()
+        }
     }
 
     // ========== DETACHABLE MACRO WINDOW ==========
     Window {
         id: macroFloatingWindow
+        property bool contentRequested: false
         width: 700
         height: 600
         minimumWidth: 500
         minimumHeight: 400
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "Macro - Decodium"
+        title: qsTr("Macro - Decodium")
         color: "transparent"
 
         x: mainWindow.x + mainWindow.width + 20
@@ -8992,13 +14390,61 @@ NumberAnimation {
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onVisibleChanged: {
+            if (visible) {
+                contentRequested = true
+                if (macroNativeDialogLoader.item && !macroNativeDialogLoader.item.visible)
+                    macroNativeDialogLoader.item.open()
+            }
+        }
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(macroFloatingWindow)
+        }
+
+        function showHostedWindow() {
+            contentRequested = true
+            show()
+            raise()
+            requestActivate()
+            if (macroNativeDialogLoader.item && !macroNativeDialogLoader.item.visible)
+                macroNativeDialogLoader.item.open()
+        }
+
+        function hideAfterDialogClosed() {
+            macroDialogDetached = false
+            macroDialogMinimized = false
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
+
+        function hideHostedWindow() {
+            if (macroNativeDialogLoader.item && macroNativeDialogLoader.item.visible) {
+                macroNativeDialogLoader.item.close()
+                return
+            }
+            hideAfterDialogClosed()
+        }
+
+        function minimizeHostedWindow() {
+            macroDialogMinimized = true
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
 
         onClosing: function(close) {
-            macroDialogDetached = false
+            if (!mainWindow.applicationClosing) {
+                close.accepted = false
+                hideHostedWindow()
+                return
+            }
             close.accepted = true
         }
 
         Rectangle {
+            // The old reduced floating editor is kept inert; the complete
+            // MacroDialog is hosted below so no functionality is lost.
+            visible: false
             anchors.fill: parent
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
             radius: 10
@@ -9017,16 +14463,43 @@ NumberAnimation {
                     radius: 6
 
                     MouseArea {
-                        anchors.fill: parent
-                        property point clickPos: Qt.point(0, 0)
+                        id: macroFloatDragArea
+                        z: 2
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.right: parent.right
+                        anchors.rightMargin: 88
+                        acceptedButtons: Qt.LeftButton
+                        preventStealing: true
+                        property point pressGlobalPos: Qt.point(0, 0)
+                        property point pressWindowPos: Qt.point(0, 0)
+                        property bool nativeMoveActive: false
                         cursorShape: Qt.SizeAllCursor
-                        onPressed: function(mouse) { clickPos = Qt.point(mouse.x, mouse.y) }
+                        onPressed: function(mouse) {
+                            pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                            pressWindowPos = Qt.point(macroFloatingWindow.x, macroFloatingWindow.y)
+                            nativeMoveActive = mainWindow.startNativeFloatingWindowMove(macroFloatingWindow)
+                            mouse.accepted = true
+                        }
                         onPositionChanged: function(mouse) {
-                            if (pressed) {
-                                var delta = Qt.point(mouse.x - clickPos.x, mouse.y - clickPos.y)
-                                macroFloatingWindow.x += delta.x
-                                macroFloatingWindow.y += delta.y
-                            }
+                            if (!pressed)
+                                return
+                            if (nativeMoveActive)
+                                return
+                            mainWindow.dragFloatingWindowToGlobal(macroFloatingWindow,
+                                                                  pressWindowPos,
+                                                                  pressGlobalPos,
+                                                                  mapToGlobal(mouse.x, mouse.y))
+                            mouse.accepted = true
+                        }
+                        onReleased: {
+                            nativeMoveActive = false
+                            mainWindow.finishFloatingWindowDrag(macroFloatingWindow)
+                        }
+                        onCanceled: {
+                            nativeMoveActive = false
+                            mainWindow.finishFloatingWindowDrag(macroFloatingWindow)
                         }
                     }
 
@@ -9036,7 +14509,7 @@ NumberAnimation {
                         spacing: 12
 
                         Text { text: "⋮⋮"; font.pixelSize: 14; color: textSecondary }
-                        Text { text: "⌨️ TX Macro Configuration"; font.pixelSize: 16; font.bold: true; color: secondaryCyan }
+                        Text { text: qsTr("⌨️ TX Macro Configuration"); font.pixelSize: 16; font.bold: true; color: secondaryCyan }
                         Item { Layout.fillWidth: true }
 
                         Rectangle {
@@ -9064,11 +14537,44 @@ NumberAnimation {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: macroFloatingWindow.visible
+                    active: false
                     asynchronous: true
                     sourceComponent: macroContentComponent
                 }
             }
+        }
+
+        Loader {
+            id: macroNativeDialogLoader
+            anchors.fill: parent
+            active: macroFloatingWindow.contentRequested
+            asynchronous: true
+            source: "components/MacroDialog.qml"
+            onLoaded: {
+                item.nativeHostWindow = macroFloatingWindow
+                if (macroFloatingWindow.visible && !item.visible)
+                    item.open()
+            }
+        }
+
+        Connections {
+            target: macroNativeDialogLoader.item
+            ignoreUnknownSignals: true
+            function onClosed() { macroFloatingWindow.hideAfterDialogClosed() }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: macroFloatingWindow
+            maxWidth: 1600
+            maxHeight: 1200
+        }
+
+        Shortcut {
+            enabled: macroFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: macroFloatingWindow.hideHostedWindow()
         }
     }
 
@@ -9086,7 +14592,7 @@ NumberAnimation {
         minimumHeight: 400
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "Rig Control - Decodium"
+        title: qsTr("Rig Control - Decodium")
         color: "transparent"
 
         x: mainWindow.x + mainWindow.width + 20
@@ -9140,7 +14646,7 @@ NumberAnimation {
                         spacing: 12
 
                         Text { text: "⋮⋮"; font.pixelSize: 14; color: textSecondary }
-                        Text { text: "📻 Rig Control (CAT)"; font.pixelSize: 16; font.bold: true; color: secondaryCyan }
+                        Text { text: qsTr("📻 Rig Control (CAT)"); font.pixelSize: 16; font.bold: true; color: secondaryCyan }
                         Item { Layout.fillWidth: true }
 
                         Rectangle {
@@ -9191,7 +14697,7 @@ NumberAnimation {
         visible: false
         flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
              | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
-        title: "Live Map - Decodium"
+        title: qsTr("Live Map - Decodium")
         color: bgDeep
 
         x: mainWindow.x + 80
@@ -9207,7 +14713,12 @@ NumberAnimation {
         onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
-            mainWindow.dockLiveMapPanel()
+            if (!mainWindow.applicationClosing) {
+                mainWindow.liveMapPanelVisible = false
+                mainWindow.liveMapDetached = false
+                mainWindow.liveMapMinimized = false
+                mainWindow.syncLiveMapFloatingVisibility(false)
+            }
             close.accepted = true
         }
 
@@ -9264,19 +14775,13 @@ NumberAnimation {
 	        flags: (bridge && bridge.uiFramelessPopouts)
 	               ? (Qt.Window | Qt.FramelessWindowHint)
 	               : (Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-		        title: "Full Spectrum - Decodium"
+		        title: qsTr("Full Spectrum - Decodium")
 	        color: "transparent"
 
-	        // 1.0.180 — Drag handle per Frameless windows: usa native window
-	        // manager (DragHandler.startSystemMove non blocca main thread).
-	        DragHandler {
-	            id: period1FloatingDragHandler
-	            target: null
-	            enabled: bridge ? bridge.uiFramelessPopouts : false
-	            onActiveChanged: {
-	                if (active) period1FloatingWindow.startSystemMove()
-	            }
-	        }
+	        // 1.0.286 — RIMOSSO il DragHandler root (stesso fix della Waterfall): era
+	        // figlio del Window, trascinava la finestra da qualsiasi punto del corpo. Il
+	        // move resta SOLO sull'header (MouseArea 'p1DragArea'), header-only come le
+	        // altre pop-out, con dock magnetico (che startSystemMove bypassava).
 	        readonly property bool compactColumns: width < 560
 	        readonly property int utcColumnWidth: compactColumns ? 66 : 84
 	        readonly property int dbColumnWidth: compactColumns ? 34 : 38
@@ -9285,9 +14790,9 @@ NumberAnimation {
 	        readonly property int dtFreqGapWidth: compactColumns ? 6 : 8
 	        readonly property int freqColumnWidth: compactColumns ? 42 : 46
 	        readonly property int gapColumnWidth: compactColumns ? 8 : 12
-	        readonly property int distanceColumnWidth: compactColumns ? 0 : 56
+	        readonly property int distanceColumnWidth: mainWindow.fullSpectrumShowDistColumn && !compactColumns ? 56 : 0
 	        readonly property int dxccColumnWidth: compactColumns ? 108 : Math.min(300, Math.max(190, Math.round(width * 0.24)))
-	        readonly property int azColumnWidth: compactColumns ? 38 : 48
+	        readonly property int azColumnWidth: mainWindow.fullSpectrumShowAzColumn ? (compactColumns ? 38 : 48) : 0
 
 	        x: mainWindow.x + 100
         y: mainWindow.y + 150
@@ -9299,14 +14804,23 @@ NumberAnimation {
             running: false
             repeat: false
             onTriggered: {
-                mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
+                var restoredState = mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
+                if (mainWindow.ft2LinkModeActive) {
+                    period1FloatingWindow.hide()
+                    return
+                }
                 // 1.0.186 — Auto-detach Full Spectrum di default. Pasquale-pattern:
                 // pop-out in Window separata -> render thread isolato -> niente stall
                 // main-thread durante drain ListView / texture upload waterfall.
                 // 1.0.201 — default ripristinato a true (1.0.197 upstream lo aveva
                 // spento, causando regressione performance progressiva).
                 // Disattivabile da Settings -> "Detach Full Spectrum".
+                // Non sovrascrivere pero' una scelta utente gia' salvata:
+                // se WindowState/period1FloatingWindow contiene "detached=false",
+                // l'utente ha dockato/chiuso il pannello e al riavvio deve restare docked.
+                var hasSavedDetachedChoice = restoredState && restoredState.detached !== undefined
                 if (!mainWindow.period1Detached
+                        && !hasSavedDetachedChoice
                         && bridge && bridge.autoDetachFullSpectrum) {
                     mainWindow.detachFullSpectrumPanel()
                 }
@@ -9417,7 +14931,7 @@ NumberAnimation {
 
 	                            Text {
 	                                visible: period1FloatingWindow.width >= 470
-	                                text: decodePanel.fullSpectrumModelCount() + " " + qsTr("decodes")
+	                                text: decodePanel.displayedDecodeCount() +" " + qsTr("decodes")
 	                                font.pixelSize: 10
 	                                color: textSecondary
 	                            }
@@ -9460,7 +14974,7 @@ NumberAnimation {
 		                            border.width: 1
 		                            Text {
 		                                anchors.centerIn: parent
-		                                text: mainWindow.compactFullSpectrum ? "Full" : "Compact"
+			                                text: mainWindow.compactFullSpectrum ? "Full" : "Cmp"
 		                                font.pixelSize: mainWindow.compactFullSpectrum ? 11 : 10
 		                                font.bold: true
 		                                color: (p1FloatCompactMA.containsMouse || mainWindow.compactFullSpectrum)
@@ -9475,8 +14989,8 @@ NumberAnimation {
 		                            }
 		                            ToolTip.visible: p1FloatCompactMA.containsMouse
 		                            ToolTip.text: mainWindow.compactFullSpectrum
-		                                ? qsTr("Switch to normal row height")
-		                                : qsTr("Compact rows (2x more visible decodes)")
+		                                ? qsTr("Return to normal row height")
+		                                : qsTr("Compact rows (2x visible decodes)")
 		                        }
 
 		                        Rectangle {
@@ -9534,24 +15048,146 @@ NumberAnimation {
 	                    color: Qt.rgba(76/255, 175/255, 80/255, 0.2)
 	                    radius: 2
 
-	                    RowLayout {
-	                        anchors.fill: parent
-		                        anchors.leftMargin: 8
-		                        anchors.rightMargin: 8
-	                        spacing: 0
+                    Menu {
+                        id: fsHeaderMenuFloating
+                        property string targetId: ""
+                        MenuItem { text: qsTr("◀  Move left"); enabled: mainWindow.fsCanMove(fsHeaderMenuFloating.targetId, -1); onTriggered: mainWindow.fsMoveColumn(fsHeaderMenuFloating.targetId, -1) }
+                        MenuItem { text: qsTr("Move right  ▶"); enabled: mainWindow.fsCanMove(fsHeaderMenuFloating.targetId, 1); onTriggered: mainWindow.fsMoveColumn(fsHeaderMenuFloating.targetId, 1) }
+                        MenuItem { text: qsTr("Hide this column"); enabled: mainWindow.fsColMeta(fsHeaderMenuFloating.targetId).canHide; onTriggered: mainWindow.fsSetColumnVisible(fsHeaderMenuFloating.targetId, false) }
+                        MenuSeparator {}
+                        MenuItem { text: (mainWindow.fsColVisible("utc")  ? "✓  " : "      ") + qsTr("UTC");     onTriggered: mainWindow.fsToggleColumnVisible("utc") }
+                        MenuItem { text: (mainWindow.fsColVisible("db")   ? "✓  " : "      ") + qsTr("dB");      onTriggered: mainWindow.fsToggleColumnVisible("db") }
+                        MenuItem { text: (mainWindow.fsColVisible("dt")   ? "✓  " : "      ") + qsTr("DT");      onTriggered: mainWindow.fsToggleColumnVisible("dt") }
+                        MenuItem { text: (mainWindow.fsColVisible("freq") ? "✓  " : "      ") + qsTr("Freq");    onTriggered: mainWindow.fsToggleColumnVisible("freq") }
+                        MenuItem { text: qsTr("✓  Message"); enabled: false }
+                        MenuItem { text: (mainWindow.fsColVisible("dist") ? "✓  " : "      ") + qsTr("Dist");    onTriggered: mainWindow.fsToggleColumnVisible("dist") }
+                        MenuItem { text: (mainWindow.fsColVisible("dxcc") ? "✓  " : "      ") + qsTr("DXCC");    enabled: mainWindow.showDxccInfo; onTriggered: mainWindow.fsToggleColumnVisible("dxcc") }
+                        MenuItem { text: (mainWindow.fsColVisible("az")   ? "✓  " : "      ") + qsTr("Az");      enabled: mainWindow.showDxccInfo; onTriggered: mainWindow.fsToggleColumnVisible("az") }
+                        MenuSeparator {}
+                        MenuItem { text: (mainWindow.fsNewestFirst ? "✓  " : "      ") + qsTr("Newest on top"); onTriggered: mainWindow.fsToggleNewestFirst() }
+                        MenuSeparator {}
+                        MenuItem { text: qsTr("Reset columns"); onTriggered: mainWindow.fsResetColumns() }
+                    }
 
-	                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
-	                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
-	                        Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
-	                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
-	                        Item { Layout.preferredWidth: period1FloatingWindow.dtFreqGapWidth }
-	                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
-	                        Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
-	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.fillWidth: true }
-	                        Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                        Text { visible: mainWindow.showDxccInfo; text: "DXCC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
-	                        Text { visible: mainWindow.showDxccInfo; text: "Az"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
-	                    }
+                    RowLayout {
+                        id: fsHeaderRowF
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 6
+
+                        Repeater {
+                            model: mainWindow.fsColumnsForWidth(period1FloatingWindow.width)
+                            delegate: Item {
+                                id: fsHCellF
+                                readonly property var col: modelData
+                                readonly property var meta: mainWindow.fsColMeta(col.id)
+                                Layout.fillWidth: meta.fill
+                            Layout.preferredWidth: meta.fill ? -1 : mainWindow.fsColWidthForPanel(col.id, period1FloatingWindow.width)
+                            Layout.minimumWidth: meta.fill ? meta.minW : mainWindow.fsColWidthForPanel(col.id, period1FloatingWindow.width)
+                                Layout.fillHeight: true
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.rightMargin: fsHCellF.meta.fill ? 0 : 5
+                                    text: fsHCellF.meta.label
+                                    font.family: mainWindow.decodedTextFontFamily
+                                    font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
+                                    font.bold: true
+                                    color: bridge.themeManager.successColor
+                                    horizontalAlignment: fsHCellF.meta.align === "right" ? Text.AlignRight : Text.AlignLeft
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                                // Linea divisoria/grip visibile sul bordo destro (zona di resize).
+                                Rectangle {
+                                    visible: !fsHCellF.meta.fill
+                                    width: 1
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    anchors.topMargin: 3
+                                    anchors.bottomMargin: 3
+                                    color: Qt.rgba(bridge.themeManager.successColor.r, bridge.themeManager.successColor.g, bridge.themeManager.successColor.b, 0.45)
+                                }
+                            }
+                        }
+                    }
+
+                    // Controller UNICO sopra le celle (floating): trascina l'etichetta per
+                    // riordinare (live, fuori dal Repeater), il bordo destro per ridimensionare,
+                    // tasto destro = menu colonne.
+                    MouseArea {
+                        id: fsHdrCtlF
+                        anchors.fill: parent
+                        z: 100
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        hoverEnabled: true
+                        preventStealing: true
+                        property string grabId: ""
+                        property bool resizing: false
+                        property bool reordering: false
+                        property real pressSceneX: 0
+                        property int pressW: 0
+                        function cellAt(localX) {
+                            var p = mapToItem(fsHeaderRowF, localX, fsHeaderRowF.height / 2)
+                            return fsHeaderRowF.childAt(p.x, p.y)
+                        }
+                        function resizeTargetAt(localX) {
+                            var p = mapToItem(fsHeaderRowF, localX, 0)
+                            var kids = fsHeaderRowF.children
+                            for (var i = 0; i < kids.length; ++i) {
+                                var c = kids[i]
+                                if (!c || !c.col || mainWindow.fsColMeta(c.col.id).fill) continue
+                                if (Math.abs(p.x - (c.x + c.width)) <= 7) return c.col.id
+                            }
+                            return ""
+                        }
+                        cursorShape: {
+                            if (resizing) return Qt.SplitHCursor
+                            if (reordering) return Qt.ClosedHandCursor
+                            return resizeTargetAt(mouseX) !== "" ? Qt.SplitHCursor : Qt.ArrowCursor
+                        }
+                        onPressed: function(m) {
+                            pressSceneX = mapToItem(null, m.x, m.y).x
+                            resizing = false; reordering = false
+                            var rid = resizeTargetAt(m.x)
+                            if (m.button === Qt.LeftButton && rid !== "") {
+                                grabId = rid
+                                resizing = true
+                                pressW = mainWindow.fsColWidth(rid)
+                            } else {
+                                var c = cellAt(m.x)
+                                grabId = (c && c.col) ? c.col.id : ""
+                            }
+                        }
+                        onPositionChanged: function(m) {
+                            if (!pressed || grabId === "") return
+                            var sx = mapToItem(null, m.x, m.y).x
+                            if (resizing) {
+                                mainWindow.fsSetColumnWidth(grabId, pressW + (sx - pressSceneX))
+                                return
+                            }
+                            if (!(pressedButtons & Qt.LeftButton)) return
+                            if (!reordering && Math.abs(sx - pressSceneX) < 6) return
+                            reordering = true
+                            var c = cellAt(m.x)
+                            var overId = (c && c.col) ? c.col.id : ""
+                            if (overId !== "" && overId !== grabId)
+                                mainWindow.fsMoveColumnToId(grabId, overId)
+                        }
+                        onReleased: function(m) {
+                            if (resizing) mainWindow.fsPersistWidths()
+                            else if (reordering) mainWindow.fsPersistOrder()
+                            grabId = ""; resizing = false; reordering = false
+                        }
+                        onCanceled: { grabId = ""; resizing = false; reordering = false }
+                        onClicked: function(m) {
+                            if (m.button === Qt.RightButton) {
+                                var c = cellAt(m.x)
+                                if (c && c.col) { fsHeaderMenuFloating.targetId = c.col.id; fsHeaderMenuFloating.popup() }
+                            }
+                        }
+                    }
 	                }
 
 	                // Content - Decode List
@@ -9569,56 +15205,60 @@ NumberAnimation {
                         anchors.margins: 4
                         clip: true
                         spacing: 1
-                        model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes
-                        cacheBuffer: 600  // 1.0.228 — 3000 era eccessivo per delegate complessi
+                        model: period1Detached && period1FloatingWindow.visible
+                               ? ((bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes)
+                               : null
+                        cacheBuffer: 360  // 1.0.478 — meno delegate offscreen durante pile-up FT8/4/2
                         reuseItems: true
                         interactive: true
+                        verticalLayoutDirection: mainWindow.fsNewestFirst ? ListView.BottomToTop : ListView.TopToBottom
                         property bool followTail: true
                         property bool tailFollowPending: false
 	                        property bool tailFollowQueued: false
 	                        // 1.0.231 — counter pending decodes (floating mode)
-	                        property int pendingNewDecodes: 0
-	                        function isNearTail() {
-	                            return contentHeight <= height + 2
-	                                || contentY >= Math.max(0, contentHeight - height - 48)
-	                        }
+		                        property int pendingNewDecodes: 0
+		                        function isNearTail() {
+		                            if (contentHeight <= height + 2) return true
+		                            if (mainWindow.fsNewestFirst) return contentY <= originY + 48
+		                            return contentY >= tailContentY() - 48
+		                        }
                         function updateFollowTail() {
                             if (tailFollowPending)
                                 return
                             followTail = isNearTail()
-                            if (followTail) pendingNewDecodes = 0
+                            if (followTail) period1FloatingList.pendingNewDecodes = 0
                         }
-                        function tailContentY() {
-                            return Math.max(0, contentHeight - height)
-                        }
-                        function finishTailFollow() {
-                            tailFollowPending = false
-                            followTail = isNearTail()
-                            if (followTail) pendingNewDecodes = 0
+	                        function tailContentY() {
+	                            if (mainWindow.fsNewestFirst) return originY
+	                            var bottom = originY + contentHeight - height
+	                            return Math.max(originY, bottom)
+	                        }
+	                        function finishTailFollow() {
+	                            var shouldSnap = tailFollowPending || followTail
+	                            tailFollowPending = false
+	                            if (shouldSnap) {
+	                                var targetY = tailContentY()
+	                                if (Math.abs(contentY - targetY) > 0.5)
+	                                    contentY = targetY
+	                            }
+	                            followTail = isNearTail()
+	                            if (followTail) period1FloatingList.pendingNewDecodes = 0
                         }
                         function forceTailFollow() {
-    followTail = true
-    tailFollowPending = true
-    if (tailFollowQueued)
+    period1FloatingList.followTail = true
+    period1FloatingList.tailFollowPending = true
+    if (period1FloatingList.tailFollowQueued)
         return
-    tailFollowQueued = true
+    period1FloatingList.tailFollowQueued = true
     Qt.callLater(function() {
-        tailFollowQueued = false
+        period1FloatingList.tailFollowQueued = false
         if (!period1FloatingList)
             return
         var targetY = period1FloatingList.tailContentY()
-        var distance = Math.abs(period1FloatingList.contentY - targetY)
         period1FloatingTailAnimation.stop()
         period1FloatingList.tailFollowPending = true
-        if (distance < 1 || distance > Math.max(12000, period1FloatingList.height * 18)) {
-            period1FloatingList.contentY = targetY
-            period1FloatingList.finishTailFollow()
-            return
-        }
-        period1FloatingTailAnimation.from = period1FloatingList.contentY
-        period1FloatingTailAnimation.to = targetY
-        period1FloatingTailAnimation.duration = Math.max(180, Math.min(620, 130 + distance * 0.24))
-        period1FloatingTailAnimation.start()
+        period1FloatingList.contentY = targetY
+        period1FloatingList.finishTailFollow()
     })
 }
 NumberAnimation {
@@ -9666,9 +15306,10 @@ NumberAnimation {
                         // floating ListView e' attivo solo quando period1Detached=true.
                         onCountChanged: {
                             if (!period1Detached) return
+	                            if (decodePanel.hasNativeBandActivityModel()) return
                             // 1.0.231 — se user in scroll-back, counter ↓N
                             if (!followTail) {
-                                pendingNewDecodes++
+                                period1FloatingList.pendingNewDecodes++
                                 return
                             }
                             forceTailFollow()
@@ -9679,24 +15320,22 @@ NumberAnimation {
                             if (!followTail) return
                             forceTailFollow()
                         }
-	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
-	                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
-	                        // pattern allineato a DecodeList.qml:243-251.
+	                        // Preserve the fade/slide without starting render-thread Animators.
 	                        add: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        addDisplaced: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                        }
 	                        moveDisplaced: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                        }
 	                        removeDisplaced: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                        }
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
@@ -9704,21 +15343,26 @@ NumberAnimation {
                             width: 8
                         }
 
-	                        delegate: Rectangle {
-		                            width: parent ? parent.width : 100
-	                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
-	                            // 1.0.229 — height adattiva compact mode (vedi mainWindow.fullSpectrumRowHeight)
+		                        delegate: Rectangle {
+                            id: fsRowFloating
+			                            width: parent ? parent.width : 100
+		                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
+		                            readonly property var entry: modelData || ({})
+		                            // 1.0.229 — height adattiva compact mode (vedi mainWindow.fullSpectrumRowHeight)
 	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(mainWindow.fullSpectrumRowHeight * fs)
 		                            radius: 3
 		                            property var highlightFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightFill(modelData)
 		                            property var highlightBorder: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightBorder(modelData)
+                                            property var userBgFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeUserBgFill(modelData)
 		                            // 1.0.205 — guard !modelData per evitare TypeError flood (~46/s) durante
 		                            // model swap transients che saturava il main thread via logger sincrono.
 		                            color: !modelData ? "transparent" :
 		                                   isPeriodSeparator ? "transparent" :
-		                                   highlightFill ? highlightFill :
-		                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
-		                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+			                                   userBgFill ? userBgFill :
+                                                   highlightFill ? highlightFill :
+				                                   entry.bgColorHex ? mainWindow.boostedDecodeBackgroundColor(entry.bgColorHex) :
+				                                   (entry.isCQ && bridge.decodeColorEnabled("colorCQ")) ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)) :
+				                                   mainWindow.boostedDecodeBackgroundColor(Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05))
 	                            border.color: !isPeriodSeparator && highlightBorder ? highlightBorder : "transparent"
 	                            border.width: !isPeriodSeparator && highlightFill ? 1 : 0
 
@@ -9733,28 +15377,79 @@ NumberAnimation {
 	                                color: Qt.rgba(0.85, 0.25, 0.25, 0.55)
 	                            }
 
-	                            RowLayout {
-	                                visible: !parent.isPeriodSeparator
-	                                anchors.fill: parent
-	                                anchors.margins: 4
-		                                spacing: 0
-	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
-	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
-	                                Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
-	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
-	                                Item { Layout.preferredWidth: period1FloatingWindow.dtFreqGapWidth }
-	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: (modelData.isTx === true) || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
-	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
-	                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
-	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
-	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
+                            RowLayout {
+                                visible: !parent.isPeriodSeparator
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                spacing: 6
+
+                                Repeater {
+                                    model: mainWindow.fsColumnsForWidth(period1FloatingWindow.width)
+                                    delegate: Item {
+                                        id: fsCellF
+                                        readonly property var col: modelData
+                                        readonly property var meta: mainWindow.fsColMeta(col.id)
+                                        Layout.fillWidth: meta.fill
+                                    Layout.preferredWidth: meta.fill ? -1 : mainWindow.fsColWidthForPanel(col.id, period1FloatingWindow.width)
+                                    Layout.minimumWidth: meta.fill ? meta.minW : mainWindow.fsColWidthForPanel(col.id, period1FloatingWindow.width)
+                                        Layout.fillHeight: true
+                                        clip: col.id === "dxcc"
+                                        Text {
+                                            visible: fsCellF.col.id !== "dxcc"
+                                            anchors.fill: parent
+                                            text: mainWindow.fsCellText(fsRowFloating.entry, fsCellF.col.id)
+                                            color: mainWindow.fsCellColor(fsRowFloating.entry, fsCellF.col.id)
+                                            font.bold: mainWindow.fsCellBold(fsRowFloating.entry, fsCellF.col.id)
+                                            font.strikeout: fsCellF.col.id === "msg" ? decodePanel.decodeEntryStrikeout(fsRowFloating.entry) : false
+                                            font.family: mainWindow.decodedTextFontFamily
+                                            font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
+                                            horizontalAlignment: fsCellF.meta.align === "right" ? Text.AlignRight : Text.AlignLeft
+                                            verticalAlignment: Text.AlignVCenter
+                                            maximumLineCount: 1
+                                            elide: fsCellF.col.id === "msg" ? messageElideMode(fsRowFloating.entry.displayMessage || fsRowFloating.entry.message)
+                                                 : (fsCellF.col.id === "dxcc" ? Text.ElideRight : Text.ElideNone)
+                                            fontSizeMode: fsCellF.col.id === "dxcc" ? Text.HorizontalFit : Text.FixedSize
+                                            minimumPixelSize: fsCellF.col.id === "dxcc" ? Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)) : 0
+                                        }
+                                        Item {
+                                            visible: fsCellF.col.id === "dxcc"
+                                            anchors.fill: parent
+                                            Text {
+                                                anchors.fill: parent
+                                                anchors.rightMargin: fsRowFloating.entry.isLotw === true ? Math.max(9, Math.round(11 * fs)) : 0
+                                                text: mainWindow.fsCellText(fsRowFloating.entry, fsCellF.col.id)
+                                                color: mainWindow.fsCellColor(fsRowFloating.entry, fsCellF.col.id)
+                                                font.family: mainWindow.decodedTextFontFamily
+                                                font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
+                                                horizontalAlignment: Text.AlignRight
+                                                verticalAlignment: Text.AlignVCenter
+                                                maximumLineCount: 1
+                                                elide: Text.ElideRight
+                                                fontSizeMode: Text.HorizontalFit
+                                                minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65))
+                                            }
+                                            Rectangle {
+                                                visible: fsRowFloating.entry.isLotw === true
+                                                width: Math.max(5, Math.round(6 * fs))
+                                                height: width
+                                                radius: width / 2
+                                                anchors.right: parent.right
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                color: mainWindow.lotwMarkerColor()
+                                                border.color: mainWindow.boostedDecodeTextColor(textSecondary)
+                                                border.width: 1
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
 	                            MouseArea {
 	                                enabled: !parent.isPeriodSeparator
 	                                anchors.fill: parent
-	                                onDoubleClicked: { if (!parent.isPeriodSeparator && !modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
+		                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                onClicked: (mouse) => { if (!parent.isPeriodSeparator && mouse.button === Qt.RightButton) mainWindow.openQrzLookup(entry) }
+                                                onDoubleClicked: { if (!parent.isPeriodSeparator && !entry.isTx) decodePanel.handleDecodeDoubleClick(entry) }
 	                            }
 	                        }
                     }
@@ -9807,7 +15502,7 @@ NumberAnimation {
         minimumHeight: 250
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "Period 2 - Decodium"
+        title: qsTr("Period 2 - Decodium")
         color: "transparent"
         x: mainWindow.x + 180
         y: mainWindow.y + 180
@@ -9842,19 +15537,26 @@ NumberAnimation {
         minimumHeight: 200
         visible: false
 	        flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-	        title: "Signal RX - Decodium"
+	        title: qsTr("Signal RX - Decodium")
 	        color: "transparent"
 	        readonly property bool compactColumns: width < 520
 	        readonly property int utcColumnWidth: compactColumns ? 66 : 84
 	        readonly property int dbColumnWidth: compactColumns ? 34 : 38
 	        readonly property int dbDtGapWidth: compactColumns ? 4 : 6
 	        readonly property int dtColumnWidth: compactColumns ? 42 : 48
+	        readonly property int dtFreqGapWidth: mainWindow.signalRxShowFreqColumn ? (compactColumns ? 4 : 6) : 0
+	        readonly property int freqColumnWidth: mainWindow.signalRxShowFreqColumn ? (compactColumns ? 42 : 46) : 0
 	        readonly property int gapColumnWidth: compactColumns ? 8 : 12
-	        readonly property int distanceColumnWidth: compactColumns ? 0 : 56
+	        readonly property int distanceColumnWidth: mainWindow.signalRxShowDistColumn && !compactColumns ? 56 : 0
+	        readonly property int azColumnWidth: mainWindow.signalRxShowAzColumn && !compactColumns ? 42 : 0
 
 	        x: mainWindow.x + 300
         y: mainWindow.y + 250
-        Component.onCompleted: mainWindow.restoreFloatingWindowState(rxFreqFloatingWindow, "rxFreqFloatingWindow", "rxFreqDetached", "rxFreqMinimized")
+        Component.onCompleted: {
+            mainWindow.restoreFloatingWindowState(rxFreqFloatingWindow, "rxFreqFloatingWindow", "rxFreqDetached", "rxFreqMinimized")
+            if (mainWindow.ft2LinkModeActive)
+                rxFreqFloatingWindow.hide()
+        }
         onXChanged: mainWindow.scheduleWindowStateSave()
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
@@ -9955,23 +15657,6 @@ NumberAnimation {
 	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: primaryBlue }
 	                        Text { text: "Signal RX"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
 
-	                        Rectangle {
-	                            Layout.preferredWidth: 70
-	                            Layout.preferredHeight: 20
-                            color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
-                            radius: 4
-                            border.color: primaryBlue
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: bridge.rxFrequency + " Hz"
-                                font.family: "Monospace"
-                                font.pixelSize: 10
-                                font.bold: true
-                                color: primaryBlue
-                            }
-	                        }
-
 		                        Item { Layout.fillWidth: true }
 
 	                            Text {
@@ -10004,6 +15689,42 @@ NumberAnimation {
 	                                    cursorShape: Qt.PointingHandCursor
 	                                    onClicked: decodePanel.clearSignalRxDecodes()
 	                                }
+	                            }
+
+	                            // 1.0.253 — Compact mode toggle Signal RX (floating window)
+	                            Rectangle {
+	                                Layout.preferredWidth: 50
+	                                Layout.preferredHeight: 22
+	                                radius: 4
+	                                color: rxFloatCompactMA.containsMouse
+	                                    ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3)
+	                                    : (mainWindow.compactSignalRx
+	                                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2)
+	                                        : "transparent")
+	                                border.color: (rxFloatCompactMA.containsMouse || mainWindow.compactSignalRx)
+	                                    ? secondaryCyan
+	                                    : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+	                                border.width: 1
+	                                Text {
+	                                    anchors.centerIn: parent
+		                                    text: mainWindow.compactSignalRx ? "Full" : "Cmp"
+	                                    font.pixelSize: mainWindow.compactSignalRx ? 11 : 10
+	                                    font.bold: true
+	                                    color: (rxFloatCompactMA.containsMouse || mainWindow.compactSignalRx)
+	                                        ? secondaryCyan : textSecondary
+	                                }
+	                                MouseArea {
+	                                    id: rxFloatCompactMA
+	                                    anchors.fill: parent
+	                                    hoverEnabled: true
+	                                    cursorShape: Qt.PointingHandCursor
+	                                    onClicked: mainWindow.toggleCompactSignalRx()
+	                                }
+	                                ToolTip.visible: rxFloatCompactMA.containsMouse
+	                                ToolTip.text: mainWindow.compactSignalRx
+	                                    ? qsTr("Return to normal row height")
+	                                    : qsTr("Compact rows (2x visible decodes)")
+	                                ToolTip.delay: 500
 	                            }
 
 		                        Rectangle {
@@ -10071,9 +15792,12 @@ NumberAnimation {
 	                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
 	                        Item { Layout.preferredWidth: rxFreqFloatingWindow.dbDtGapWidth }
 	                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
+	                        Item { visible: rxFreqFloatingWindow.freqColumnWidth > 0; Layout.preferredWidth: rxFreqFloatingWindow.dtFreqGapWidth }
+	                        Text { visible: rxFreqFloatingWindow.freqColumnWidth > 0; text: qsTr("Freq"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.freqColumnWidth }
 	                        Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
-	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
-	                        Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
+	                        Text { text: qsTr("Message"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight }
+	                        Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: qsTr("Dist"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
+	                        Text { visible: rxFreqFloatingWindow.azColumnWidth > 0; text: qsTr("Az"); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.azColumnWidth }
 	                    }
 	                }
 
@@ -10091,51 +15815,53 @@ NumberAnimation {
                         anchors.margins: 4
 	                        clip: true
 	                        spacing: 1
-	                        cacheBuffer: 600  // 1.0.228 — 3000 era eccessivo per delegate complessi
+                        cacheBuffer: 360  // 1.0.478 — meno delegate offscreen durante pile-up FT8/4/2
 	                        reuseItems: true
 	                        interactive: true
-                        property bool followTail: true
-                        property bool tailFollowPending: false
-	                        property bool tailFollowQueued: false
-	                        function isNearTail() {
-	                            return contentHeight <= height + 2
-	                                || contentY >= Math.max(0, contentHeight - height - 48)
-	                        }
+	                        property bool followTail: true
+	                        property bool tailFollowPending: false
+		                        property bool tailFollowQueued: false
+		                        property int pendingNewDecodes: 0
+		                        function isNearTail() {
+		                            return contentHeight <= height + 2
+		                                || contentY >= tailContentY() - 48
+		                        }
                         function updateFollowTail() {
                             if (tailFollowPending)
                                 return
                             followTail = isNearTail()
+                            if (followTail) rxFrequencyFloatingList.pendingNewDecodes = 0
                         }
-                        function tailContentY() {
-                            return Math.max(0, contentHeight - height)
-                        }
-                        function finishTailFollow() {
-                            tailFollowPending = false
-                            followTail = isNearTail()
-                        }
+	                        function tailContentY() {
+	                            var bottom = originY + contentHeight - height
+	                            return Math.max(originY, bottom)
+	                        }
+	                        function finishTailFollow() {
+	                            var shouldSnap = tailFollowPending || followTail
+	                            tailFollowPending = false
+	                            if (shouldSnap) {
+	                                var targetY = tailContentY()
+	                                if (Math.abs(contentY - targetY) > 0.5)
+	                                    contentY = targetY
+	                            }
+	                            followTail = isNearTail()
+	                            if (followTail) rxFrequencyFloatingList.pendingNewDecodes = 0
+	                        }
                         function forceTailFollow() {
-    followTail = true
-    tailFollowPending = true
-    if (tailFollowQueued)
+    rxFrequencyFloatingList.followTail = true
+    rxFrequencyFloatingList.tailFollowPending = true
+    if (rxFrequencyFloatingList.tailFollowQueued)
         return
-    tailFollowQueued = true
+    rxFrequencyFloatingList.tailFollowQueued = true
     Qt.callLater(function() {
-        tailFollowQueued = false
+        rxFrequencyFloatingList.tailFollowQueued = false
         if (!rxFrequencyFloatingList)
             return
         var targetY = rxFrequencyFloatingList.tailContentY()
-        var distance = Math.abs(rxFrequencyFloatingList.contentY - targetY)
         rxFrequencyFloatingTailAnimation.stop()
         rxFrequencyFloatingList.tailFollowPending = true
-        if (distance < 1 || distance > Math.max(12000, rxFrequencyFloatingList.height * 18)) {
-            rxFrequencyFloatingList.contentY = targetY
-            rxFrequencyFloatingList.finishTailFollow()
-            return
-        }
-        rxFrequencyFloatingTailAnimation.from = rxFrequencyFloatingList.contentY
-        rxFrequencyFloatingTailAnimation.to = targetY
-        rxFrequencyFloatingTailAnimation.duration = Math.max(180, Math.min(620, 130 + distance * 0.24))
-        rxFrequencyFloatingTailAnimation.start()
+        rxFrequencyFloatingList.contentY = targetY
+        rxFrequencyFloatingList.finishTailFollow()
     })
 }
 NumberAnimation {
@@ -10161,10 +15887,12 @@ NumberAnimation {
                         })
                         onContentYChanged: updateFollowTail()
 	                        onContentHeightChanged: {
+	                            if (!rxFreqDetached) return
 	                            if (followTail || tailFollowPending)
 	                                rxFrequencyFloatingTailSettleTimer.restart()
 	                        }
 	                        onHeightChanged: {
+	                            if (!rxFreqDetached) return
 	                            if (followTail || tailFollowPending)
 	                                forceTailFollow()
 	                            else
@@ -10178,31 +15906,39 @@ NumberAnimation {
 	                            }
 	                        }
 	                        onCountChanged: {
+	                            if (!rxFreqDetached) return
+	                            if (decodePanel.hasNativeRxDecodeModel()) return
+	                            if (!followTail) {
+	                                rxFrequencyFloatingList.pendingNewDecodes++
+	                                return
+	                            }
+	                            forceTailFollow()
+                        }
+	                        property int _ver: decodePanel.rxDecodeListVersion
+		                        on_VerChanged: {
+	                            if (!rxFreqDetached) return
+	                            if (!followTail) return
                             forceTailFollow()
                         }
-                        property int _ver: decodePanel.rxDecodeListVersion
-	                        on_VerChanged: {
-                            forceTailFollow()
-                        }
-                        model: (bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodePanel.rxDecodes
-	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
-	                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
-	                        // pattern allineato a DecodeList.qml:243-251.
+                        model: rxFreqDetached && rxFreqFloatingWindow.visible
+                               ? ((bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodePanel.rxDecodes)
+                               : null
+	                        // Preserve the fade/slide without starting render-thread Animators.
 	                        add: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        addDisplaced: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                        }
 	                        moveDisplaced: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                        }
 	                        removeDisplaced: Transition {
-	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
-	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low" && !mainWindow.compactToggling
+	                            NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100 : 0; easing.type: Easing.OutQuad }
 	                        }
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
@@ -10213,10 +15949,21 @@ NumberAnimation {
 	                        delegate: Rectangle {
 	                            width: parent ? parent.width - 8 : 100
 	                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
-	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
+	                            // 1.0.352 fix: guard !modelData via entry (era in period1FloatingWindow
+	                            // dal 1.0.205, dimenticato in questo 4° delegate). Evita TypeError flood.
+	                            readonly property var entry: modelData || ({})
+	                            // 1.0.253 — height adattiva compact mode Signal RX
+	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(mainWindow.signalRxRowHeight * fs)
 	                            radius: 3
-	                            color: isPeriodSeparator ? "transparent" :
-	                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05)
+	                            // 1.0.254 fix: guard !modelData mancante (era in evenPeriodList
+	                            // e period1FloatingList dal 1.0.205, dimenticato qui).
+	                            // Durante shift-diff + scroll concorrenti, modelData diventa
+	                            // undefined per 1-2 frame -> color="" -> Rectangle nero.
+	                            color: !modelData ? "transparent" :
+	                                   isPeriodSeparator ? "transparent" :
+		                                   mainWindow.decodeUserBgFill(modelData) ? mainWindow.decodeUserBgFill(modelData) :
+			                                   modelData.bgColorHex ? mainWindow.boostedDecodeBackgroundColor(modelData.bgColorHex) :
+		                                   (modelData.isCQ && bridge.decodeColorEnabled("colorCQ")) ? mainWindow.boostedDecodeBackgroundColor(Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)) : mainWindow.boostedDecodeBackgroundColor(Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05))
 
 	                            Rectangle {
 	                                visible: parent.isPeriodSeparator
@@ -10234,19 +15981,25 @@ NumberAnimation {
 	                                anchors.fill: parent
 	                                anchors.margins: 4
 		                                spacing: 0
-	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
-	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
+		                                Text { text: entry.formattedTime || decodePanel.formatUtcForDisplay(entry.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(entry.isTx ? "#f1c40f" : textSecondary); Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
+		                                Text { text: entry.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(entry.snrColor || (entry.isTx ? "#f1c40f" : textSecondary)); font.bold: entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
 	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.dbDtGapWidth }
-	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
-	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
-	                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
-	                                Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
+		                                Text { text: entry.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(entry.isTx ? "#f1c40f" : textSecondary); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
+	                                Item { visible: rxFreqFloatingWindow.freqColumnWidth > 0; Layout.preferredWidth: rxFreqFloatingWindow.dtFreqGapWidth }
+			                                Text { visible: rxFreqFloatingWindow.freqColumnWidth > 0; text: entry.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(entry.isTx ? "#f1c40f" : secondaryCyan); font.bold: entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.freqColumnWidth }
+                                Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
+                                Rectangle { property int dotSize: Math.max(5, Math.round(6 * fs)); visible: entry.isLotw === true; width: dotSize; height: dotSize; Layout.preferredWidth: dotSize; Layout.preferredHeight: dotSize; Layout.alignment: Qt.AlignVCenter; radius: dotSize / 2; color: mainWindow.lotwMarkerColor(); border.color: mainWindow.boostedDecodeTextColor(textSecondary); border.width: 1 }
+                                Text { text: entry.displayMessage || entry.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(entry); font.strikeout: decodePanel.decodeEntryStrikeout(entry); color: getDxccColor(entry); Layout.fillWidth: true; Layout.minimumWidth: 0; elide: messageElideMode(entry.displayMessage || entry.message) }
+		                                Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(entry); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(textSecondary); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
+		                                Text { visible: rxFreqFloatingWindow.azColumnWidth > 0; text: formatBearingDegrees(entry.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(secondaryCyan); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.azColumnWidth }
                             }
 
 	                            MouseArea {
 	                                enabled: !parent.isPeriodSeparator
 	                                anchors.fill: parent
-	                                onDoubleClicked: { if (!parent.isPeriodSeparator && !modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
+	                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                onClicked: (mouse) => { if (!parent.isPeriodSeparator && mouse.button === Qt.RightButton) mainWindow.openQrzLookup(modelData) }
+                                                onDoubleClicked: { if (!parent.isPeriodSeparator && !modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
 	                            }
 	                        }
                     }
@@ -10264,7 +16017,7 @@ NumberAnimation {
         minimumHeight: 200
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "TX Panel - Decodium"
+        title: qsTr("TX Panel - Decodium")
         color: "transparent"
 
         x: mainWindow.x + 150
@@ -10538,7 +16291,7 @@ NumberAnimation {
 	                                onClicked: { txPanelDockHighlighted = false; txPanelDetached = false; txPanelMinimized = false; txPanelFloatingWindow.close() }
 	                            }
 	                            ToolTip.visible: txFloatDockMA.containsMouse
-	                            ToolTip.text: qsTr("Dock TX Panel")
+	                            ToolTip.text: qsTr("Dock TX panel")
 	                        }
 
 	                        Rectangle {
@@ -10569,25 +16322,76 @@ NumberAnimation {
                 TxPanel {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    engine: bridge
+	                    engine: bridge
+	                    ft2LinkToolPanel: mainWindow.ft2LinkPanelDetached
+	                                      ? ft2LinkFloatingLoader.item
+	                                      : ft2LinkInlineLoader.item
                     showAsyncIcon: mainWindow.asyncIconVisible
-                    handleLogPrompt: false
-                    onMamWindowRequested: mamWindow.open()
+                    handleLogPrompt: txPanelDetached
+                    onMamWindowRequested: mainWindow.openMamWindow()
+                    onCallRequested: mainWindow.openCallDialog()
+                    onFt2LinkAccessRequested: mainWindow.requestFt2LinkAccess()
                 }
             }
-        }
-    }
+	        }
+	    }
 
-    // ===== GAP 3 — Pannelli floating draggabili =====
+	    // ========== DETACHABLE FT2-LINK PANEL WINDOW ==========
+	    Window {
+	        id: ft2LinkFloatingWindow
+	        width: 1180
+	        height: 620
+	        minimumWidth: 760
+	        minimumHeight: 360
+	        visible: mainWindow.ft2LinkModeActive && mainWindow.ft2LinkPanelDetached
+	        title: qsTr("FT2-Link - Decodium")
+	        color: bgDeep
+
+	        x: mainWindow.x + 80
+	        y: mainWindow.y + 120
+
+	        onClosing: function(close) {
+	            mainWindow.dockFt2LinkPanel()
+	            close.accepted = true
+	        }
+
+	        Loader {
+	            id: ft2LinkFloatingLoader
+	            anchors.fill: parent
+	            active: mainWindow.ft2LinkModeActive && mainWindow.ft2LinkPanelDetached
+	            asynchronous: true
+	            source: "../panels/FT2LinkPanel.qml"
+	            onLoaded: {
+	                if (item) {
+	                    item.dragTarget = null
+	                    item.toolTabsExternal = true
+	                    item.poppedOut = true
+	                }
+	            }
+	        }
+
+	        Connections {
+	            target: ft2LinkFloatingLoader.item
+	            ignoreUnknownSignals: true
+	            function onCloseRequested() {
+	                mainWindow.dockFt2LinkPanel()
+	            }
+	            function onPopDockRequested() {
+	                mainWindow.dockFt2LinkPanel()
+	            }
+	        }
+	    }
+
+	    // ===== GAP 3 — Pannelli floating draggabili =====
 
     // TimeSyncPanel — sotto il blocco Setup/REC/WAV, togglabile da menu
     Item {
         id: timeSyncOverlay
         readonly property int panelMargin: 12
         readonly property int topRailY: 10
-        property bool userPositioned: !!bridge.getSetting("uiTimeSyncPanelUserPositioned", false)
-        property real savedX: Number(bridge.getSetting("uiTimeSyncPanelX", -1))
-        property real savedY: Number(bridge.getSetting("uiTimeSyncPanelY", -1))
+        property bool userPositioned: mainWindow.settingBool("uiTimeSyncPanelUserPositioned", false)
+        property real savedX: Number(mainWindow.safeBridgeSetting("uiTimeSyncPanelX", -1))
+        property real savedY: Number(mainWindow.safeBridgeSetting("uiTimeSyncPanelY", -1))
         readonly property bool headerWrapped: headerFlow.height > 110
         readonly property bool headerRightRailOccupied: headerFlow.childrenRect.x + headerFlow.childrenRect.width
                                                    > mainWindow.width - width - panelMargin * 2
@@ -10606,9 +16410,9 @@ NumberAnimation {
             savedY = boundedY(y)
             x = savedX
             y = savedY
-            bridge.setSetting("uiTimeSyncPanelUserPositioned", true)
-            bridge.setSetting("uiTimeSyncPanelX", savedX)
-            bridge.setSetting("uiTimeSyncPanelY", savedY)
+            mainWindow.persistUiSetting("uiTimeSyncPanelUserPositioned", true)
+            mainWindow.persistUiSetting("uiTimeSyncPanelX", savedX)
+            mainWindow.persistUiSetting("uiTimeSyncPanelY", savedY)
         }
         function clampSavedPosition() {
             if (!userPositioned)
@@ -10617,8 +16421,8 @@ NumberAnimation {
             savedY = boundedY(savedY)
             x = savedX
             y = savedY
-            bridge.setSetting("uiTimeSyncPanelX", savedX)
-            bridge.setSetting("uiTimeSyncPanelY", savedY)
+            mainWindow.persistUiSetting("uiTimeSyncPanelX", savedX)
+            mainWindow.persistUiSetting("uiTimeSyncPanelY", savedY)
         }
         function headerRows() {
             var rows = []
@@ -10728,6 +16532,7 @@ NumberAnimation {
             id: timeSyncLoader
             anchors.fill: parent
             active: timeSyncPanelVisible
+            asynchronous: true
             source: "../panels/TimeSyncPanel.qml"
             onLoaded: {
                 if (item) {
@@ -10746,39 +16551,86 @@ NumberAnimation {
         }
     }
 
-    // ActiveStationsPanel — posizione sotto TimeSyncPanel
-    Item {
-        id: activeStationsOverlay
-        visible: activeStationsPanelVisible
-        z: 200
-        x: Math.max(12, mainWindow.width - width - 12)
-        y: Math.min(timeSyncPanelVisible ? timeSyncOverlay.y + timeSyncOverlay.height + 8
-                                         : Math.max(100, headerBar.y + headerBar.height + 8),
-                    Math.max(12, mainWindow.height - height - 12))
-        width: Math.min(360, Math.max(280, mainWindow.width - 24))
-        height: 280
+    // Active Stations is a desktop window rather than a Main.qml overlay.
+    // Its x/y values are therefore global and remain valid on external screens.
+    Window {
+        id: activeStationsFloatingWindow
+        width: 360
+        height: 300
+        minimumWidth: 300
+        minimumHeight: 220
+        visible: false
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        title: qsTr("Active Stations - Decodium")
+        color: "transparent"
 
-        MouseArea {
-            anchors.fill: parent
-            drag.target: activeStationsOverlay
-            drag.axis: Drag.XAndYAxis
-            drag.minimumX: 0; drag.maximumX: Math.max(0, mainWindow.width - activeStationsOverlay.width)
-            drag.minimumY: 0; drag.maximumY: Math.max(0, mainWindow.height - activeStationsOverlay.height)
+        x: mainWindow.x + Math.max(12, mainWindow.width - width - 24)
+        y: mainWindow.y + 120
+
+        function finishDesktopMove() {
+            mainWindow.finishFloatingWindowDrag(activeStationsFloatingWindow)
+        }
+
+        function showHostedWindow() {
+            activeStationsPanelVisible = true
+            activeStationsLoader.active = true
+            show()
+            raise()
+            requestActivate()
+        }
+
+        function hideHostedWindow() {
+            activeStationsPanelVisible = false
+            hide()
+            mainWindow.scheduleWindowStateSave()
+        }
+
+        Component.onCompleted: {
+            mainWindow.restoreFloatingWindowState(activeStationsFloatingWindow,
+                                                   "activeStationsFloatingWindow",
+                                                   "",
+                                                   "")
+            if (activeStationsPanelVisible)
+                Qt.callLater(showHostedWindow)
+        }
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onClosing: function(close) {
+            if (!mainWindow.applicationClosing)
+                activeStationsPanelVisible = false
+            mainWindow.scheduleWindowStateSave()
+            close.accepted = true
         }
 
         Loader {
             id: activeStationsLoader
             anchors.fill: parent
-            active: activeStationsPanelVisible
+            active: false
+            asynchronous: true
             source: "../panels/ActiveStationsPanel.qml"
+            onLoaded: item.nativeHostWindow = activeStationsFloatingWindow
         }
 
         Connections {
             target: activeStationsLoader.item
             ignoreUnknownSignals: true
-            function onCloseRequested() {
-                activeStationsPanelVisible = false
-            }
+            function onCloseRequested() { activeStationsFloatingWindow.hideHostedWindow() }
+        }
+
+        FloatingResizeHandles {
+            z: 100
+            targetWindow: activeStationsFloatingWindow
+            maxWidth: 900
+            maxHeight: 1000
+        }
+
+        Shortcut {
+            enabled: activeStationsFloatingWindow.visible
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: activeStationsFloatingWindow.hideHostedWindow()
         }
     }
 
@@ -10804,6 +16656,7 @@ NumberAnimation {
             id: callerQueueLoader
             anchors.fill: parent
             active: bridge.foxMode && callerQueuePanelVisible
+            asynchronous: true
             source: "../panels/CallerQueuePanel.qml"
         }
 
@@ -10820,7 +16673,8 @@ NumberAnimation {
         target: bridge
         ignoreUnknownSignals: true
         function onFoxModeChanged() {
-            callerQueuePanelVisible = bridge.foxMode
+            if (!bridge.foxMode)
+                callerQueuePanelVisible = false
         }
     }
 
@@ -10829,10 +16683,43 @@ NumberAnimation {
         id: astroPanelOverlay
         visible: astroPanelVisible
         z: 200
-        x: 12
-        y: mainWindow.height - height - 180
+        property bool userPositioned: mainWindow.settingBool("uiAstroPanelUserPositioned", false)
+        property real savedX: Number(mainWindow.safeBridgeSetting("uiAstroPanelX", -1))
+        property real savedY: Number(mainWindow.safeBridgeSetting("uiAstroPanelY", -1))
+        function boundedX(value) {
+            return Math.round(Math.min(Math.max(0, Number(value) || 0),
+                                       Math.max(0, mainWindow.width - width)))
+        }
+        function boundedY(value) {
+            return Math.round(Math.min(Math.max(0, Number(value) || 0),
+                                       Math.max(0, mainWindow.height - height)))
+        }
+        function savePosition() {
+            userPositioned = true
+            savedX = boundedX(x)
+            savedY = boundedY(y)
+            x = savedX
+            y = savedY
+            mainWindow.persistUiSetting("uiAstroPanelUserPositioned", true)
+            mainWindow.persistUiSetting("uiAstroPanelX", savedX)
+            mainWindow.persistUiSetting("uiAstroPanelY", savedY)
+        }
+        function clampSavedPosition() {
+            if (!userPositioned)
+                return
+            savedX = boundedX(savedX)
+            savedY = boundedY(savedY)
+            x = savedX
+            y = savedY
+            mainWindow.persistUiSetting("uiAstroPanelX", savedX)
+            mainWindow.persistUiSetting("uiAstroPanelY", savedY)
+        }
+        x: userPositioned ? boundedX(savedX) : 12
+        y: userPositioned ? boundedY(savedY) : mainWindow.height - height - 180
         width: 320
         height: 230
+        onWidthChanged: Qt.callLater(clampSavedPosition)
+        onHeightChanged: Qt.callLater(clampSavedPosition)
 
         MouseArea {
             anchors.fill: parent
@@ -10840,12 +16727,14 @@ NumberAnimation {
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0; drag.maximumX: mainWindow.width - astroPanelOverlay.width
             drag.minimumY: 0; drag.maximumY: mainWindow.height - 50
+            onReleased: astroPanelOverlay.savePosition()
         }
 
         Loader {
             id: astroPanelLoader
             anchors.fill: parent
             active: astroPanelVisible
+            asynchronous: true
             source: "../panels/AstroPanel.qml"
         }
 
@@ -10858,14 +16747,126 @@ NumberAnimation {
         }
     }
 
-    // DxClusterPanel — spot DX Cluster in tempo reale, draggabile
-    DxClusterPanel {
-        id: dxClusterOverlay
-        visible: dxClusterPanelVisible
-        z: 9000
-        x: Math.max(0, mainWindow.width - width - 12)
-        y: 60
-        onCloseRequested: dxClusterPanelVisible = false
+    // 1.0.275 (fork-only) — DxClusterPanel ora in una Window floating separata,
+    // spostabile ovunque sul monitor (anche fuori dalla mainWindow). Integrata
+    // con il Reset Layout via property dxClusterDetached/Minimized e persistence
+    // standard WindowState/dxClusterFloatingWindow.
+    Window {
+        id: dxClusterFloatingWindow
+        title: qsTr("DX Cluster - Decodium")
+        width: Math.max(500, Number(bridge.getSetting("uiDxClusterPanelWidth", 560)))
+        height: Math.max(300, Number(bridge.getSetting("uiDxClusterPanelHeight", 360)))
+        minimumWidth: 500
+        minimumHeight: 300
+        visible: mainWindow.dxClusterPanelVisible && mainWindow.dxClusterDetached   // 1.0.385 — solo se staccato
+        flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+             | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+             | Qt.WindowCloseButtonHint
+        color: "#1a1a2e"
+
+        x: mainWindow.x + Math.max(0, mainWindow.width - width - 60)
+        y: mainWindow.y + 80
+
+        Component.onCompleted: {
+            mainWindow.restoreFloatingWindowState(
+                dxClusterFloatingWindow, "dxClusterFloatingWindow", "dxClusterDetached", "dxClusterMinimized")
+            // La geometria del DX Cluster va ripristinata, ma la finestra non
+            // deve aprirsi da sola solo perche' e' floating/detached. La scelta
+            // dell'utente e' `uiDxClusterPanelVisible`: se e' false o assente
+            // resta chiusa anche quando esiste una vecchia WindowState salvata.
+            if (!mainWindow.dxClusterPanelVisible || !mainWindow.dxClusterDetached) {
+                dxClusterFloatingWindow.hide()   // 1.0.385 — dockato o spento → niente finestra
+            } else if (!mainWindow.dxClusterMinimized) {
+                dxClusterFloatingWindow.show()
+                dxClusterFloatingWindow.raise()
+            }
+        }
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onVisibilityChanged: function(visibility) {
+            if (visibility === Window.Minimized) {
+                mainWindow.dxClusterMinimized = true
+            } else if (dxClusterFloatingWindow.visible) {
+                mainWindow.dxClusterMinimized = false
+            }
+            mainWindow.scheduleWindowStateSave()
+        }
+        onClosing: function(close) {
+            mainWindow.dxClusterPanelVisible = false
+            close.accepted = true
+        }
+
+        Item {
+            anchors.fill: parent
+
+            // 1.0.386 — barra "Inserisci nel layout": aggancia il Cluster come 4ª colonna
+            // accanto a Full Spectrum o a Signal RX (l'inserimento è esplicito; staccato
+            // la colonna sparisce del tutto).
+            Rectangle {
+                id: dxcDockBar
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 30
+                color: "#16213e"
+                border.color: glassBorder
+                Row {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 8
+                    Text {
+                        text: qsTr("Insert into layout:")
+                        color: textPrimary
+                        font.pixelSize: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Repeater {
+                        model: [
+                            { ref: "fullspectrum", label: qsTr("◧ next to Full Spectrum") },
+                            { ref: "signalrx",     label: qsTr("◧ next to Signal RX") }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: dxcBtnText.implicitWidth + 16
+                            height: 20
+                            radius: 3
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: dxcDockBtnMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.30)
+                                                              : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.14)
+                            border.color: secondaryCyan
+                            border.width: 1
+                            Text {
+                                id: dxcBtnText
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                color: textPrimary
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: dxcDockBtnMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: mainWindow.dockDxClusterNextTo(modelData.ref)
+                            }
+                        }
+                    }
+                }
+            }
+
+            DxClusterPanel {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: dxcDockBar.bottom
+                anchors.bottom: parent.bottom
+                onCloseRequested: mainWindow.dxClusterPanelVisible = false
+                // positionCommitted non piu' usato: la Window OS gestisce drag/resize nativi
+            }
+        }
     }
 
     // ── DecoSyncTime Monitor floating window ─────────────────────────────
@@ -10919,5 +16920,60 @@ NumberAnimation {
         anchors.fill: parent
         visible: true
         onFinished: splash.visible = false
+    }
+
+    // ── Proposta di rilevamento radio al primo avvio ─────────────────────────
+    // Compare una sola volta, e solo a chi non ha ancora configurato il CAT:
+    // e' proprio la persona che non sa quale porta scegliere. Chi ha gia' una
+    // configurazione non viene disturbato. Il rilevamento e' passivo (nessuna
+    // porta aperta), e nulla cambia finche' non si preme Applica.
+    RigDetectResults {
+        id: firstRunRigDetect
+        onDismissed: bridge.setSetting("RigAutoDetectOffered", true)
+    }
+
+    Timer {
+        id: firstRunRigDetectTimer
+        interval: 8000          // dopo che le fasi di avvio si sono concluse
+        running: true
+        repeat: false
+        onTriggered: {
+            if (String(bridge.getSetting("RigAutoDetectOffered", false)) === "true")
+                return
+            // Il nominativo e' il segnale piu' affidabile di prima esecuzione:
+            // chi ha gia' usato il programma ce l'ha, e non dipende da quando
+            // il backend CAT finisce di caricare le proprie impostazioni.
+            var callsign = String(bridge.callsign || "").trim()
+            var cat = bridge.catManager
+            var catPort = cat ? String(cat.serialPort || "").trim() : ""
+            if (callsign.length > 0 && catPort.length > 0) {
+                console.log("[RigDetect] gia' configurato (" + callsign + " su " + catPort
+                            + "): nessuna proposta al primo avvio")
+                return
+            }
+            console.log("[RigDetect] prima esecuzione: nominativo='" + callsign
+                        + "' porta CAT='" + catPort + "'")
+
+            var found = bridge.detectConnectedRigs()
+            var worthShowing = false
+            for (var i = 0; i < found.length; ++i) {
+                if (found[i].confidence >= 60) {
+                    worthShowing = true
+                    break
+                }
+            }
+            if (!worthShowing) {
+                // Nulla di riconoscibile: si segna comunque, per non riproporsi
+                // a ogni avvio a chi non ha una radio collegata via USB.
+                bridge.setSetting("RigAutoDetectOffered", true)
+                return
+            }
+            console.log("[RigDetect] proposta mostrata: " + found.length + " candidati, il primo e' "
+                        + found[0].rigLabel + " su " + found[0].catPort)
+            firstRunRigDetect.candidates = found
+            firstRunRigDetect.introText =
+                qsTr("Decodium found a radio connected to this computer. Applying the proposal sets the CAT port, the model and the audio devices, so you can start without hunting for the right COM port.")
+            firstRunRigDetect.open()
+        }
     }
 }

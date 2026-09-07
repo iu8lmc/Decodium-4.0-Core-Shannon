@@ -860,7 +860,18 @@ Maybe<int> pack28_cpp (QString const& token)
       return {};
     }
 
-  QString six = (area == 2) ? QStringLiteral (" ") + callsign.left (5) : callsign.leftJustified (6, QLatin1Char (' '));
+  // Callsigns with the digit in position 2 use a leading space in the
+  // 6-character standard field.  The old expression only padded callsigns
+  // when the digit was in position 3, so a valid short token such as A1B
+  // produced a 4-character field and the indexed reads below aborted inside
+  // QString::operator[].
+  QString six = (area == 2)
+      ? (QStringLiteral (" ") + callsign.left (5)).leftJustified (6, QLatin1Char (' '))
+      : callsign.leftJustified (6, QLatin1Char (' '));
+  if (six.size () < 6)
+    {
+      return {};
+    }
   static QString const a1 = QStringLiteral (" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
   static QString const a2 = QStringLiteral ("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
   static QString const a4 = QStringLiteral (" ABCDEFGHIJKLMNOPQRSTUVWXYZ");
@@ -2277,7 +2288,27 @@ Maybe<PackedMessage> pack_message77_cpp (QString const& message)
       packed.bits = standard.value.bits;
       packed.i3 = standard.value.i3;
       packed.n3 = standard.value.n3;
-      Maybe<QByteArray> msgsent = unpack77_cpp (packed.bits, packed.i3, packed.n3);
+      // Hash-addressed special calls are necessarily represented by their
+      // 22-bit hash on air. Seed a local unpack context from the explicit
+      // bracketed tokens so the transmitter UI keeps showing the call the
+      // operator selected instead of the unresolved placeholder "<...>".
+      decodium::txmsg::Decode77Context local_context;
+      bool has_explicit_hash_call = false;
+      for (QString const& token : split77_cpp (normalized))
+        {
+          QString const trimmed = token.trimmed ();
+          if (trimmed.size () > 2
+              && trimmed.startsWith (QLatin1Char ('<'))
+              && trimmed.endsWith (QLatin1Char ('>'))
+              && trimmed != QStringLiteral ("<...>"))
+            {
+              local_context.saveHashCall (trimmed.mid (1, trimmed.size () - 2));
+              has_explicit_hash_call = true;
+            }
+        }
+      Maybe<QByteArray> msgsent = unpack77_cpp (
+          packed.bits, packed.i3, packed.n3,
+          has_explicit_hash_call ? &local_context : nullptr);
       if (!msgsent.ok)
         {
           return {};
@@ -3128,7 +3159,7 @@ void Decode77Context::saveHashCall (QString const& call)
     }
   m_hash22.prepend (h22.value);
   m_calls22.prepend (cw);
-  while (m_hash22.size () > 1000)
+  while (m_hash22.size () > 4096)
     {
       m_hash22.removeLast ();
       m_calls22.removeLast ();
@@ -3202,6 +3233,11 @@ Decode77Context& sharedDecode77Context ()
 {
   static Decode77Context context;
   return context;
+}
+
+QString bracketHashCall (QString const& call)
+{
+  return bracket_hash_call (call);
 }
 
 EncodedMessage encodeFt2 (QString const& message, bool check_only)
@@ -3683,6 +3719,19 @@ QString build_ft8_a8_candidate_message (int imsg, QString const& mycall,
 }
 }
 
+namespace decodium
+{
+namespace txmsg
+{
+
+bool isStandardFtxCall (QString const& call)
+{
+  return is_standard_callsign_ftx (call);
+}
+
+}
+}
+
 extern "C"
 {
 int ftx_prepare_ft8_a7_candidate_c (int imsg, char const call_1[12], char const call_2[12],
@@ -3803,6 +3852,56 @@ void ftx_prepare_ft8_ap_c (char const mycall[12], char const hiscall[12], int nc
       if (apsym) apsym[29] = 99;
       if (aph10) aph10[0] = 99;
     }
+}
+
+// I 29 bit che dicono "il MITTENTE e' questo nominativo", cioe' le posizioni
+// 29-57 del messaggio (secondo nominativo piu' il suo indicatore /R).
+//
+// Serve per usare come ipotesi a priori le stazioni sentite di recente, e non
+// soltanto i due nominativi del QSO in corso: sul traffico vero il mittente
+// era gia' noto nell'83% delle decodifiche (vedi Detector/FtxApStorico.hpp).
+//
+// Si ricava esattamente come fa ftx_prepare_ft8_ap_c, cioe' codificando un
+// messaggio intero e prendendone i bit: il primo nominativo e' un segnaposto e
+// non viene usato, contano solo le posizioni 29-57. Fare altrimenti
+// significherebbe riscrivere la codifica dei nominativi, che ha casi
+// particolari (non standard, /P, /R) che qui verrebbero sbagliati.
+//
+// Ritorna 1 se `bits` e' stato riempito con 29 valori +-1, 0 se il nominativo
+// non e' codificabile in forma standard -- e in quel caso l'ipotesi va
+// semplicemente saltata, non forzata.
+int ftx_ft8_ap_bits_mittente_c (char const* nominativo, int bits[29])
+{
+  if (!nominativo || !bits)
+    {
+      return 0;
+    }
+  QString const suo = QString::fromLatin1 (nominativo).trimmed ().toUpper ();
+  if (suo.size () < 3)
+    {
+      return 0;
+    }
+  // KA1ABC e' lo stesso segnaposto che ftx_prepare_ft8_ap_c usa quando non
+  // conosce il corrispondente: sta nei 28 bit standard e non ha casi
+  // particolari.
+  QString const msg = QStringLiteral ("KA1ABC %1 RRR").arg (suo);
+  decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeFt8 (msg);
+  if (!encoded.ok || encoded.i3 != 1 || encoded.msgbits.size () < 58)
+    {
+      return 0;
+    }
+  // Il messaggio ricodificato deve corrispondere: se la codifica ha dovuto
+  // ripiegare su una forma diversa (nominativo non standard, hash) i bit 29-57
+  // non descrivono piu' quel nominativo e l'ipotesi sarebbe sbagliata.
+  if (trim_or_pad_37 (msg, false) != encoded.msgsent)
+    {
+      return 0;
+    }
+  for (int i = 0; i < 29; ++i)
+    {
+      bits[i] = encoded.msgbits.at (29 + i) ? 1 : -1;
+    }
+  return 1;
 }
 
 void legacy_pack77_reset_context_c ()
