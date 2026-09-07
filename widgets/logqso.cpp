@@ -477,6 +477,12 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
   m_dialFreq=dialFreq;
   m_myCall=m_config->my_callsign();
   m_myGrid=m_config->my_grid();
+  if (auto const * app = QCoreApplication::instance ()) {
+    auto const labCallsign = app->property ("decodiumLabCallsign").toString ().trimmed ().toUpper ();
+    auto const labGrid = app->property ("decodiumLabGrid").toString ().trimmed ().toUpper ();
+    if (!labCallsign.isEmpty ()) m_myCall = labCallsign;
+    if (!labGrid.isEmpty ()) m_myGrid = labGrid;
+  }
   ui->band->setText (m_config->bands ()->find (dialFreq));
   ui->loggedOperator->setText (normalized_operator_call (m_config->opCall (), m_myCall));
   ui->exchSent->setText (xSent);

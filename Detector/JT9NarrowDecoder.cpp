@@ -7,6 +7,7 @@
 #include "wsjtx_config.h"
 
 #include <QByteArray>
+#include <QDebug>
 #include <QStringList>
 
 #include <algorithm>
@@ -31,6 +32,11 @@ Downsam9State::~Downsam9State () noexcept
     {
       decodium::fft_compat::destroy_plan (static_cast<fftwf_plan> (plan_r2c));
       plan_r2c = nullptr;
+    }
+  if (spectrumPlan)
+    {
+      decodium::fft_compat::destroy_plan (static_cast<fftwf_plan> (spectrumPlan));
+      spectrumPlan = nullptr;
     }
 }
 
@@ -273,8 +279,8 @@ void peakdt9_cpp (std::complex<float> const* c2, int nsps8, int nspsd,
       if (ss > smax)
         {
           smax  = ss;
-          lagpk = lag;
-        }
+        lagpk = lag;
+      }
     }
 
   xdt = static_cast<float> (lagpk - lag0) * dtlag;
@@ -428,8 +434,9 @@ void symspec2_cpp (std::complex<float>* c5, int nz3, int nsps8, int nspsd,
           if (i4 >  127) i4 =  127;
           scrambled[static_cast<std::size_t> (k2)] = static_cast<std::int8_t> (i4);
           ++k2;
-        }
+      }
     }
+
 }
 
 // ── interleave9_deinterleave ──────────────────────────────────────────────────
@@ -561,7 +568,10 @@ void softsym_cpp (short const* id2, int npts8, int nsps8,
   constexpr int NZ3   = 1360;
   constexpr int nspsd = 16;
 
-  int const ndown     = 8 * nsps8 / nspsd;  // = 432 for nsps8=864
+  // nsps8 is already expressed at the 1500 Hz JT9 processing rate.  The
+  // reference softsym path therefore decimates by nsps8/nspsd, not by an
+  // additional factor of eight.
+  int const ndown     = nsps8 / nspsd;  // = 54 for nsps8=864
   float const fsample = 1500.0f / static_cast<float> (ndown);
 
   std::vector<std::complex<float>> c2 (NZ2);
@@ -602,6 +612,87 @@ constexpr int   kLag2    = 18;                           // int(5.0/kTstep + 0.9
 constexpr int   kNsps8   = kNsps / 8;                   // 864
 constexpr int   kAudioSz = NTMAX * 12000;               // max audio buffer (60 s)
 constexpr int   kSsSz    = 184 * NSMAX;                 // ss spectrum array size
+constexpr int   kJt9SpectrumNfft = 16384;               // symspec.f90 nfft3
+constexpr int   kJt9HalfSymbols = 184;                  // 60-second JT9 window
+constexpr int   kJt9SamplesPerHalfSymbol = kNsps / 2;
+constexpr int   kJt9SpectrumBins = NSMAX;
+
+// Build the same half-symbol spectrum that WSJT-X symspec.f90 provides to
+// jt9_decode.  The bridge receives PCM only; without this step the old JT9
+// worker was dispatched with an empty ss matrix and could never find a sync
+// candidate, even though the audio device was delivering real samples.
+bool build_jt9_sync_spectrum (QVector<short> const& audio,
+                              decodium::jt9narrow::Downsam9State& state,
+                              std::vector<float>& ss)
+{
+  if (audio.isEmpty ())
+    {
+      return false;
+    }
+
+  int const spectrumBins = kJt9SpectrumNfft / 2 + 1;
+  if (!state.spectrumPlan)
+    {
+      state.spectrumInput.assign (kJt9SpectrumNfft, 0.0f);
+      state.spectrumOutput.assign (spectrumBins, {0.0f, 0.0f});
+      state.spectrumPlan = decodium::fft_compat::plan_dft_r2c_1d (
+          kJt9SpectrumNfft,
+          state.spectrumInput.data (),
+          reinterpret_cast<fftwf_complex*> (state.spectrumOutput.data ()),
+          FFTW_ESTIMATE);
+    }
+
+  if (!state.spectrumPlan
+      || static_cast<int> (state.spectrumInput.size ()) != kJt9SpectrumNfft
+      || static_cast<int> (state.spectrumOutput.size ()) != spectrumBins)
+    {
+      return false;
+    }
+
+  ss.assign (kSsSz, 0.0f);
+  float const df3 = 12000.0f / static_cast<float> (kJt9SpectrumNfft);
+  int const iz = std::min (kJt9SpectrumBins,
+                           static_cast<int> (std::lround (5000.0f / df3)));
+  float const powerScale = 1.0f /
+                           (static_cast<float> (kJt9SpectrumNfft)
+                            * static_cast<float> (kJt9SpectrumNfft));
+
+  for (int half = 0; half < kJt9HalfSymbols; ++half)
+    {
+      int const end = (half + 1) * kJt9SamplesPerHalfSymbol;
+      int const start = end - kJt9SpectrumNfft;
+      std::fill (state.spectrumInput.begin (), state.spectrumInput.end (), 0.0f);
+
+      int const first = std::max (0, start);
+      int const last = std::min (static_cast<int> (audio.size ()), end);
+      for (int source = first; source < last; ++source)
+        {
+          int const destination = source - start;
+          if (destination >= 0 && destination < kJt9SpectrumNfft)
+            {
+              state.spectrumInput[static_cast<std::size_t> (destination)] =
+                  0.1f * static_cast<float> (audio.at (source));
+            }
+        }
+
+      fftwf_execute_dft_r2c (
+          static_cast<fftwf_plan> (state.spectrumPlan),
+          state.spectrumInput.data (),
+          reinterpret_cast<fftwf_complex*> (state.spectrumOutput.data ()));
+
+      for (int bin = 1; bin <= iz; ++bin)
+        {
+          float const power =
+              std::norm (state.spectrumOutput[static_cast<std::size_t> (bin - 1)])
+              * powerScale;
+          // Fortran ss(ihsym,i) is column-major: half-symbol is the fast
+          // index and frequency bin is the outer index.
+          ss[static_cast<std::size_t> ((bin - 1) * kJt9HalfSymbols + half)] = power;
+        }
+    }
+
+  return true;
+}
 
 // Return the p-th percentile (p in 0..100) of a[0..n-1] without modifying a.
 // Mirrors pctile.f90: j = nint(0.01*p*n); xp = sorted_a[j-1].
@@ -787,6 +878,12 @@ QStringList decode_async_jt9_narrow (legacyjt::DecodeRequest const& request, Cor
   std::vector<float> ss (kSsSz, 0.0f);
   if (!request.ss.isEmpty ())
     std::copy_n (request.ss.constBegin (), std::min ((int)request.ss.size (), kSsSz), ss.begin ());
+  else if (request.newdat != 0)
+    {
+      // The live bridge supplies PCM, unlike the original shared-memory
+      // backend. Generate the missing symspec matrix locally before sync9.
+      build_jt9_sync_spectrum (request.audio, state->downsam9, ss);
+    }
 
   // Build audio buffer
   std::vector<short> id2 (kAudioSz, 0);
@@ -818,6 +915,40 @@ QStringList decode_async_jt9_narrow (legacyjt::DecodeRequest const& request, Cor
       sync9_cpp (ss.data (), nzhsym,
                  kLag1, kLag2, ia_global, ib_global,
                  state->ccfred.data (), state->red2.data (), &ipk);
+
+      if (qEnvironmentVariableIsSet ("DECODIUM_JT9_TRACE"))
+        {
+          int const qsoBin = std::clamp (static_cast<int> (std::lround (nfqso / kDf3)),
+                                         ia_global, ib_global);
+          float ccfMax = 0.0f;
+          float redMax = -99.0f;
+          int ccfMaxBin = ia_global;
+          int redMaxBin = ia_global;
+          for (int bin = ia_global; bin <= ib_global; ++bin)
+            {
+              if (state->ccfred[static_cast<std::size_t> (bin - 1)] > ccfMax)
+                {
+                  ccfMax = state->ccfred[static_cast<std::size_t> (bin - 1)];
+                  ccfMaxBin = bin;
+                }
+              if (state->red2[static_cast<std::size_t> (bin - 1)] > redMax)
+                {
+                  redMax = state->red2[static_cast<std::size_t> (bin - 1)];
+                  redMaxBin = bin;
+                }
+            }
+          qInfo () << "[LEGACY-JT9] sync metrics"
+                   << "ipk=" << ipk
+                   << "qsoBin=" << qsoBin
+                   << "qsoHz=" << (qsoBin - 1) * kDf3
+                   << "qsoCcf=" << state->ccfred[static_cast<std::size_t> (qsoBin - 1)]
+                   << "qsoRed2=" << state->red2[static_cast<std::size_t> (qsoBin - 1)]
+                   << "ccfMax=" << ccfMax
+                   << "ccfMaxHz=" << (ccfMaxBin - 1) * kDf3
+                   << "redMax=" << redMax
+                   << "redMaxHz=" << (redMaxBin - 1) * kDf3
+                   << "rangeBins=" << ia_global << "-" << ib_global;
+        }
     }
 
   // Step 2: two-pass candidate loop
@@ -839,7 +970,6 @@ QStringList decode_async_jt9_narrow (legacyjt::DecodeRequest const& request, Cor
       int   limit   = 5000;
       float ccflim  = 3.0f;
       float red2lim = 1.6f;
-      float schklim = 2.2f;
 
       if ((ndepth & 7) == 2)
         {
@@ -850,13 +980,11 @@ QStringList decode_async_jt9_narrow (legacyjt::DecodeRequest const& request, Cor
         {
           limit   = 30000;
           ccflim  = 2.5f;
-          schklim = 2.0f;
         }
       if (nagain)
         {
           limit   = 100000;
           ccflim  = 2.4f;
-          schklim = 1.8f;
         }
 
       // Build candidate mask for this pass
@@ -898,6 +1026,18 @@ QStringList decode_async_jt9_narrow (legacyjt::DecodeRequest const& request, Cor
           float const f   = (i - 1) * kDf3;
           float const ccf = state->ccfred[static_cast<std::size_t> (i - 1)];
 
+          bool const traceCandidate = qEnvironmentVariableIsSet ("DECODIUM_JT9_TRACE_CANDIDATES")
+                                      && ccf > 2.0f;
+          if (traceCandidate)
+            {
+              qInfo () << "[LEGACY-JT9] candidate"
+                       << "pass=" << nqd
+                       << "bin=" << i
+                       << "freq=" << f
+                       << "ccf=" << ccf
+                       << "red2=" << state->red2[static_cast<std::size_t> (i - 1)];
+            }
+
           // For the broad pass, require ccf >= ccflim and a minimum frequency gap
           // from the last decoded candidate (prevents decoding the same signal twice).
           if (nqd != 1 && !(ccf >= ccflim && std::fabs (f - fgood) > 10.0f * df8))
@@ -915,18 +1055,38 @@ QStringList decode_async_jt9_narrow (legacyjt::DecodeRequest const& request, Cor
                        freq, drift, a3, schk,
                        soft, state->downsam9);
 
+          if (traceCandidate)
+            {
+              qInfo () << "[LEGACY-JT9] softsym"
+                       << "fpk=" << fpk
+                       << "syncpk=" << syncpk
+                       << "sync=" << ((syncpk + 1.0f) / 4.0f)
+                       << "schk=" << schk
+                       << "snr=" << snrdb
+                       << "xdt=" << xdt
+                       << "freq=" << freq
+                       << "drift=" << drift;
+            }
+
           newdat_softsym = newdat_bool ? 1 : 0;
 
           // Sync quality gates (mirror jt9_decode.f90 threshold checks)
           float const sync = (syncpk + 1.0f) / 4.0f;
           if (nqd == 1 && (sync < 0.5f || schk < 1.0f))
             continue;
-          if (nqd != 1 && (sync < 1.0f || schk < schklim))
+          if (nqd != 1 && (sync < 1.0f || schk < 1.5f))
             continue;
 
           // Fano convolutional decode (C++ implementation, reentrant)
           int nlim = 0;
           QByteArray const msg = decodium::jt9fast::decode_soft_symbols (soft, limit, &nlim);
+
+          if (traceCandidate)
+            {
+              qInfo () << "[LEGACY-JT9] fano"
+                       << "nlim=" << nlim
+                       << "msg=" << msg;
+            }
 
           QByteArray const blank22 (22, ' ');
           if (msg != blank22)

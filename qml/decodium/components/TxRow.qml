@@ -45,14 +45,14 @@ Item {
         spacing: 4
 
         // TX message field
-        TextField {
+        DecoTextField {
             id: messageField
             Layout.fillWidth: true
             Layout.preferredHeight: 20
 
             text: message
             readOnly: !isEditable
-            font.family: "Monospace"
+            font.family: decodiumMonoFontFamily
             font.pixelSize: 11
             color: textColor
             selectByMouse: true

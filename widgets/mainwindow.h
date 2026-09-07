@@ -169,6 +169,7 @@ public:
   QString legacyCallsign() const;
   QString legacyGrid() const;
   QString legacyMode() const;
+  int legacyTrPeriodSeconds() const;
   QString legacyRigName() const;
   Frequency legacyDialFrequency() const;
   int legacyRxFrequency() const;
@@ -185,10 +186,13 @@ public:
   bool legacyTuning() const;
   bool legacyCatConnected() const;
   double legacySignalLevel() const;
+  void refreshLegacyUdpReporting();
   int legacyBandActivityRevision() const;
   QStringList legacyBandActivityLines() const;
+  QStringList legacyTakeBandActivityDelta(bool * reset);
   int legacyRxFrequencyRevision() const;
   QStringList legacyRxFrequencyLines() const;
+  QStringList legacyTakeRxFrequencyDelta(bool * reset);
   QString legacyTxMessage(int index) const;
   int legacyCurrentTx() const;
   QString legacyAdifLogPath() const;
@@ -197,6 +201,7 @@ public:
   int legacySpecialOperationActivity() const;
   bool legacySuperFoxEnabled() const;
   QStringList legacyFoxCallerQueueLines() const;
+  void legacySetFt2DecodeEnabled(bool enabled);
   void legacyClearBandActivity();
   void legacyClearRxFrequency();
   void legacySetMode(QString const& mode);
@@ -206,8 +211,10 @@ public:
   void legacySetTxEnabled(bool enabled);
   void legacySetHoldTxFreq(bool enabled);
   bool legacyHoldTxFreq() const;
+  void legacySetTxWatchdogMinutes(int minutes);
   void legacySetAutoCq(bool enabled);
   void legacySetDecodeDepthBits(int bits);
+  void legacySetFt8DeepThreadPenalty(bool enabled);
   void legacySetCqOnly(bool enabled);
   void legacySetRxFrequency(int frequencyHz);
   void legacySetTxFrequency(int frequencyHz);
@@ -219,6 +226,7 @@ public:
   void legacySetAudioOutputChannel(int channel);
   void legacySetRxInputLevel(int value);
   void legacySetTxOutputAttenuation(int value);
+  void legacySetStationIdentity(QString const& callsign, QString const& grid);
   void legacySetDxCall(QString const& call);
   void legacySetDxGrid(QString const& grid);
   void legacySetTxMessage(int index, QString const& message);
@@ -237,6 +245,9 @@ public:
                                     QString const& satellite,
                                     QString const& satMode,
                                     bool satelliteValid);
+  void legacySetNextLogPromptTimes(QDateTime const& timeOnUtc,
+                                   QDateTime const& timeOffUtc,
+                                   bool valid);
   void legacySetWaterfallPalette(QString const& palette);
   void legacyOpenSettings(int tabIndex = -1);
   void legacyOpenTimeSyncPanel();
@@ -250,6 +261,7 @@ public:
   void legacySetRigControlEnabled(bool enabled);
   void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
   void legacySetEmbeddedMode(bool enabled);
+  void legacySetEmbeddedUiUpdatesEnabled(bool enabled);
   void legacyRearmMonitoring(QString const& reason);
   void legacyShutdownForEmbedding();
 
@@ -298,7 +310,7 @@ private:
   void closeEvent(QCloseEvent *) override;
   void childEvent(QChildEvent *) override;
   bool eventFilter(QObject *, QEvent *) override;
-  void restartConfiguredAudioStreams (bool resume_monitor);
+  void restartConfiguredAudioStreams (bool resume_monitor, bool force_input_reopen = false);
   void armAudioInputHealthChecks (qint64 baseline_ms);
   void refreshConfiguredAudioDevicesAfterHotplug (QString const& reason);
   void showQSYMessage(QString message);
@@ -316,7 +328,13 @@ private:
   void requestInProcessFt8Decode ();
   void queueInProcessFt8Decode ();
   decodium::ft8::DecodeRequest buildFt8DecodeRequest () const;
-  void dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request);
+  decodium::ft8::DecodeRequest buildEmbeddedFt8FastLiveRequest (decodium::ft8::DecodeRequest request) const;
+  decodium::ft8::DecodeRequest buildEmbeddedFt8DeepFollowupRequest (decodium::ft8::DecodeRequest request) const;
+  bool shouldPrepareEmbeddedFt8DeepFollowup (decodium::ft8::DecodeRequest const& request) const;
+  void prepareEmbeddedFt8DeepFollowup (decodium::ft8::DecodeRequest const& request);
+  bool dispatchQueuedEmbeddedFt8DeepFollowup ();
+  int msUntilNextEmbeddedFt8FullDecodeTrigger () const;
+  void dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request, bool deepFollowup = false);
   void seedFt8A7HistoryFromAllTxt ();
   bool needsEmbeddedMonitorPhaseResync () const;
   void scheduleEmbeddedMonitorPhaseResync (QString const& reason);
@@ -328,13 +346,26 @@ private:
   void requestInProcessWsprDecode ();
   bool takeNextDecodedTransportRow (QQueue<QByteArray>& splitDecodeQueue, QByteArray& line_read, QString& all_decodes);
   bool prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, DecodedRowSource source,
-                          PreparedDecodedRow& prepared, DecodedRowAction& action);
+                          PreparedDecodedRow& prepared, DecodedRowAction& action,
+                          decodium::ft8::DecodedEntry const* structuredFt8Entry = nullptr);
   void processFastDecodedRows (QStringList const& rows);
   void processFt2AsyncDecodedRows (QStringList const& rows);
   void processFt2DecodedRows (quint64 serial, QStringList const& rows);
   void processFt4DecodedRows (quint64 serial, QStringList const& rows);
   void processFst4DecodedRows (quint64 serial, QStringList const& rows);
-  void processFt8DecodedRows (quint64 serial, QStringList const& rows);
+  void processFt8DecodedEntries (quint64 serial,
+                                 QVector<decodium::ft8::DecodedEntry> const& entries);
+  void enqueueFt8DecodedEntries (QVector<decodium::ft8::DecodedEntry> const& entries);
+  void scheduleFt8UiDispatch ();
+  void drainFt8UiDispatch ();
+  void finishFt8UiDispatch ();
+  void queueFt8LogWork (QString const& txRx, QString const& message);
+  void queueFt8PostDecodeWork (DecodedText const& decodedText);
+  void queueFt8ReportingWork (DecodedText const& decodedText);
+  void scheduleFt8SecondaryDispatch (int delayMs = 0);
+  void drainFt8SecondaryDispatch ();
+  void clearFt8SecondaryWork ();
+  bool dispatchNextQueuedFt8Decode ();
   void processJt9FastDecodedRows (quint64 serial, QStringList const& rows);
   void processQ65DecodedRows (quint64 serial, QStringList const& rows);
   void processMsk144DecodedRows (quint64 serial, QStringList const& rows);
@@ -611,6 +642,7 @@ private slots:
   void on_actionTime_Sync_triggered();
   void alertQSYmessage();
   void on_actionShort_list_of_add_on_prefixes_and_suffixes_triggered();
+  void restoreMsk144PeriodForCurrentBand();
   void band_changed (Frequency);
   void monitor (bool);
   void end_tuning ();
@@ -705,6 +737,13 @@ private slots:
   void onRemoteSelectCallerDue(QString const& commandId, QString const& call, QString const& grid);
   void onRemoteSetModeRequested(QString const& commandId, QString const& mode);
   void onRemoteSetBandRequested(QString const& commandId, QString const& band);
+  void onRemoteSendCw(QString const& commandId, QString const& text, qint64 dialFrequencyHz, int wpm);
+  // Audio-CW transmit: key a sidetone in USB/DATA via the modulator. Works on
+  // rigs whose CAT keyer is unreliable (e.g. Yaesu FT-991A) where Hamlib
+  // rig_send_morse does nothing. See startCwAudioTx().
+  void startCwAudioTx(QString const& message, qint64 dialFrequencyHz, int wpm);
+  void transmitCwAudio();
+  void finishCwAudioTx();
   void onRemoteSetDialFrequencyRequested(QString const& commandId, qint64 dialFrequencyHz);
   void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
   void onRemoteSetTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
@@ -734,6 +773,9 @@ private:
       unsigned channels, unsigned msBuffered) const;
   Q_SIGNAL void stopAudioOutputStream () const;
   Q_SIGNAL void startAudioInputStream (QAudioDevice const&,
+      int framesPerBuffer, AudioDevice * sink,
+      unsigned downSampleFactor, AudioDevice::Channel) const;
+  Q_SIGNAL void restartAudioInputStream (QAudioDevice const&,
       int framesPerBuffer, AudioDevice * sink,
       unsigned downSampleFactor, AudioDevice::Channel) const;
   Q_SIGNAL void suspendAudioInputStream () const;
@@ -771,6 +813,7 @@ private:
   Q_SIGNAL void legacyPreferencesRequested () const;
   Q_SIGNAL void legacyQuitRequested () const;
   Q_SIGNAL void legacyPttRequested (bool enabled) const;
+  Q_SIGNAL void legacyAdifLogged (QByteArray const& adif) const;
 
 private:
   void requestRigPtt (bool enabled);
@@ -790,6 +833,7 @@ private:
   void readWidebandDecodes();
   void configActiveStations();
   void sfox_tx();
+  MessageClient * ensureSecondaryUdpMessageClient() const;
   MessageClient * ensureTertiaryUdpMessageClient() const;
   bool play_DXcall = false;
   bool inSettings = false;
@@ -821,6 +865,7 @@ private:
   MessageBox m_rigErrorMessageBox;
   bool m_embeddedShellMode {false};
   bool m_embeddedRigControlEnabled {true};
+  bool m_embeddedUiUpdatesEnabled {true};
   bool m_forceLegacySettingsDialog {false};
   bool m_embeddedFt2MonitorPrepared {false};
   bool m_embeddedBridgeMutesLegacyTxAudio {false};
@@ -845,6 +890,7 @@ private:
   QScopedPointer<IonosphericForecastWindow> m_ionosphericForecastWindow;
   QScopedPointer<DXClusterWindow> m_dxClusterWindow;
   QHash<QString, QString> m_worldMapGridByCall;
+  QHash<QString, qint64> m_worldMapGridSeenByCall;
   bool m_worldMapCall3Loaded {false};
   QScopedPointer<FoxLogWindow> m_foxLogWindow;
   QScopedPointer<CabrilloLogWindow> m_contestLogWindow;
@@ -856,6 +902,10 @@ private:
   unsigned m_rttyTciSymbolsLength {0};
   double m_rttyTciFramesPerSymbol {0.0};
   bool m_rttyManualTxActive {false};
+  // Audio-CW (keyed sidetone) TX state.
+  bool m_cwAudioTxActive {false};
+  QVector<float> m_cwAudioWave;
+  int m_cwAudioSidetoneHz {700};
   Transceiver::TransceiverState m_rigState;
   Frequency m_remoteDialFrequencyTarget {0};
   qint64 m_remoteDialFrequencyGuardUntilMs {0};
@@ -878,6 +928,7 @@ private:
   int m_tx_audio_buffer_frames;
   qint64 m_last_audio_frame_ms;
   quint64 m_audio_input_health_check_id {0};
+  int m_audio_input_health_reopen_attempts {0};
   qint64 m_last_tx_audio_rebind_ms;
   qint64 m_last_wake_audio_rebind_ms;
   Qt::ApplicationState m_last_application_state;
@@ -1165,6 +1216,9 @@ private:
   bool    m_nextLogClusterSpotAvailable {false};
   bool    m_nextLogClusterSpotChecked {false};
   bool    m_nextLogPromptAlreadyAccepted {false};
+  bool    m_nextLogPromptTimesValid {false};
+  QDateTime m_nextLogPromptOn;
+  QDateTime m_nextLogPromptOff;
   bool    m_bCheckedContest;
   bool    m_bWarnedSplit=false;
   bool    m_bTUmsg;
@@ -1250,10 +1304,26 @@ private:
   quint64 m_ft2DecodeSerial {0};
   bool m_ft2DecodePending {false};
   int m_ft2DecodePendingUtc {0};
+  bool m_ft2DecodeEnabled {true};
   QThread m_ft4DecodeThread;
   decodium::ft4::FT4DecodeWorker * m_ft4DecodeWorker {nullptr};
   quint64 m_ft4DecodeSerial {0};
   bool m_ft4DecodePending {false};
+  int m_ft4DecodePendingUtc {0};
+  int m_ft4DecodePendingDepth {0};
+  bool m_ft4DecodeFollowupPending {false};
+  QVector<short> m_ft4DecodeFollowupAudio;
+  int m_ft4DecodeFollowupUtc {0};
+  int m_ft4DecodeFollowupQsoProgress {0};
+  int m_ft4DecodeFollowupQsoFreq {0};
+  int m_ft4DecodeFollowupFa {0};
+  int m_ft4DecodeFollowupFb {0};
+  int m_ft4DecodeFollowupDepth {0};
+  int m_ft4DecodeFollowupThreads {1};
+  int m_ft4DecodeFollowupContest {0};
+  QByteArray m_ft4DecodeFollowupMycall;
+  QByteArray m_ft4DecodeFollowupHiscall;
+  QSet<QString> m_ft4DeliveredDecodeKeys;
   QThread m_fst4DecodeThread;
   decodium::fst4::FST4DecodeWorker * m_fst4DecodeWorker {nullptr};
   quint64 m_fst4DecodeSerial {0};
@@ -1262,11 +1332,44 @@ private:
   decodium::ft8::FT8DecodeWorker * m_ft8DecodeWorker {nullptr};
   quint64 m_ft8DecodeSerial {0};
   bool m_ft8DecodePending {false};
+  bool m_ft8DecodeDeepFollowupPending {false};
   int m_ft8DecodePendingUtc {0};
+  bool m_legacyFt8DeepThreadPenalty {false};
   bool m_ft8QueuedDecodePending {false};
   decodium::ft8::DecodeRequest m_ft8QueuedDecodeRequest;
+  bool m_ft8QueuedDeepFollowupPending {false};
+  decodium::ft8::DecodeRequest m_ft8QueuedDeepFollowupRequest;
+  bool m_ft8DeepFollowupQueued {false};
+  decodium::ft8::DecodeRequest m_ft8DeepFollowupRequest;
   QVector<short> m_ft8LiveAudioSnapshot;
   int m_ft8LiveAudioSnapshotSamples {0};
+  QQueue<decodium::ft8::DecodedEntry> m_ft8PriorityUiQueue;
+  QQueue<decodium::ft8::DecodedEntry> m_ft8BackgroundUiQueue;
+  QQueue<decodium::ft8::DecodedEntry> m_ft8StructuredTransportQueue;
+  struct Ft8LogWork
+  {
+    QString txRx;
+    QString message;
+  };
+  QQueue<Ft8LogWork> m_ft8LogQueue;
+  QQueue<DecodedText> m_ft8TransportQueue;
+  QQueue<DecodedText> m_ft8MapQueue;
+  QQueue<DecodedText> m_ft8DxccQueue;
+  QQueue<DecodedText> m_ft8ReportingQueue;
+  bool m_ft8UiDispatchScheduled {false};
+  bool m_ft8UiDispatchCompletionPending {false};
+  bool m_ft8UiDispatchCompletedDeepFollowup {false};
+  int m_ft8UiDispatchCompletedUtc {0};
+  int m_ft8UiDispatchBatchRows {0};
+  int m_ft8UiDispatchCycles {0};
+  qint64 m_ft8UiDispatchStartedMs {0};
+  qint64 m_ft8UiDispatchScheduledNs {0};
+  qint64 m_ft8UiDispatchCycleCpuNs {0};
+  qint64 m_ft8UiDispatchMaxCycleCpuNs {0};
+  qint64 m_ft8UiDispatchResumeLagNs {0};
+  qint64 m_ft8UiDispatchMaxResumeLagNs {0};
+  bool m_ft8SecondaryDispatchScheduled {false};
+  int m_ft8SecondaryNextQueue {0};
   QThread m_jt9FastDecodeThread;
   decodium::jt9fast::JT9FastDecodeWorker * m_jt9FastDecodeWorker {nullptr};
   quint64 m_jt9FastDecodeSerial {0};
@@ -1283,11 +1386,16 @@ private:
   decodium::legacyjt::LegacyJtDecodeWorker * m_legacyJtDecodeWorker {nullptr};
   quint64 m_legacyJtDecodeSerial {0};
   bool m_legacyJtDecodePending {false};
+  bool m_legacyJtDecodeStopTriggered {false};
   QThread m_wsprDecodeThread;
   decodium::wspr::WSPRDecodeWorker * m_wsprDecodeWorker {nullptr};
   quint64 m_wsprDecodeSerial {0};
   bool m_wsprDecodePending {false};
   QQueue<QByteArray> m_decodedTransportQueue;
+  QStringList m_legacyBandActivityDelta;
+  QStringList m_legacyRxFrequencyDelta;
+  bool m_legacyBandActivityDeltaReset {true};
+  bool m_legacyRxFrequencyDeltaReset {true};
   bool m_wasTransmitting {false};
   qint64 m_asyncTxStartMs {0};
   qint64 m_asyncRxStartMs {0};
@@ -1346,6 +1454,7 @@ private:
   QTimer stopWCTimer;               //Wait & Call
   QTimer ptt1Timer;                 //StartTx delay
   QTimer ptt0Timer;                 //StopTx delay
+  QTimer cwAudioGuardTimer;         //Audio-CW PTT safety watchdog
   QTimer logQSOTimer;
   bool m_logQsoTriggeredByTimer {false};
   QTimer killFileTimer;
@@ -1370,6 +1479,7 @@ private:
   QString m_pendingAutoLogXSent;
   QString m_pendingAutoLogXRcvd;
   QDateTime m_pendingAutoLogOn;
+  QDateTime m_pendingAutoLogOff;
   Radio::Frequency m_pendingAutoLogDialFreq {0};
   bool m_lateAutoLogValid {false};
   QString m_lateAutoLogCall;
@@ -1379,6 +1489,7 @@ private:
   QString m_lateAutoLogXSent;
   QString m_lateAutoLogXRcvd;
   QDateTime m_lateAutoLogOn;
+  QDateTime m_lateAutoLogOff;
   Radio::Frequency m_lateAutoLogDialFreq {0};
   QDateTime m_lateAutoLogExpires;
   QString m_appDir;
@@ -1415,6 +1526,12 @@ private:
   QString m_BestCQpriority;
   QString m_deCall;
   QString m_deGrid;
+  // Decodium's QML shell owns the active station profile.  Keep its identity
+  // separately from m_config so the embedded legacy engine cannot leak the
+  // callsign/grid from its own hidden configuration on a mode change.
+  QString m_embeddedStationCallsign;
+  QString m_embeddedStationGrid;
+  bool m_embeddedStationIdentityOverrideActive {false};
   QString m_freeTextMsg;
   QString m_freeTextMsg0;
   QString m_ready2call[50];
@@ -1520,11 +1637,14 @@ private:
   QProgressDialog m_optimizingProgress;
   QTimer m_heartbeat;
   MessageClient * m_messageClient;
+  mutable MessageClient * m_udpSecondaryMessageClient {nullptr};
+  mutable QString m_udpSecondaryRuntimeKey;
   mutable MessageClient * m_udpTertiaryMessageClient {nullptr};
   mutable QString m_udpTertiaryRuntimeKey;
   QPointer<RemoteCommandServer> m_remoteCommandServer;
   QCheckBox * m_autoSpotCheckBox {nullptr};
   bool m_remoteWaterfallStreamingEnabled {false};
+  QHash<QString, QPair<unsigned, qint64>> m_remoteCallerDecodeTimes; // call -> (timeInSeconds del decode, wallclock ms)
   QString m_mapLastClickCall;
   qint64 m_mapLastClickMs {0};
   QString m_pendingAsyncL2MessageLine;
@@ -1596,6 +1716,9 @@ private:
   void updateWorldMapFromDecode(DecodedText const& decoded_text);
   void replayDecodes ();
   void postDecode (bool is_new, DecodedText decoded_text);  //avt 12/5/20
+  void publishDecodeTransport (bool is_new, DecodedText const& decoded_text);
+  void postDecodeMap (DecodedText const& decoded_text);
+  void postDecodeDxcc (DecodedText const& decoded_text);
   void enqueueDecode (DecodedText decoded_text, bool modifier, bool autoGen, bool isDx, bool isNewCallOnBand, bool isNewCall, bool isNewCountryOnBand, bool isNewCountry, QString country, QString continent, int az, int dist);   //avt 5/7/24
   void postWSPRDecode (bool is_new, QStringList message_parts);
   void enable_DXCC_entity (bool on);

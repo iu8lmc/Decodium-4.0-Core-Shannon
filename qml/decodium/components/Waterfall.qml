@@ -16,17 +16,33 @@ Item {
 
     property bool showControls: true
     property bool controlsExpanded: true
-    property int  minFreq: 0
+    property int  minFreq: 200
     property int  maxFreq: 3200
     property int  spectrumHeight: 150
     property bool restoringSettings: false
+    property bool syncingPaletteChoice: false
     property bool showDecodeCallsigns: true
     property var spectrumDecodeLabels: []
+    property bool dxClusterRefreshPending: false
+    readonly property bool ft2LinkMode: bridge && String(bridge.mode || "").toUpperCase() === "FT2-LINK"
 
     // Altezza minima/massima del grafico spettro (regolabile tramite drag)
-    readonly property int spectrumMinHeight: 60
-    readonly property int spectrumMaxHeight: 500
-    readonly property int waterfallMinHeight: 72
+    // 1.0.288 — vincoli rilassati: spettro e cascata ridimensionabili quasi liberamente
+    // (decidere quale aprire di più). Spettro 40..(altezza-24), cascata ≥24.
+    readonly property bool controlsVisible: showControls && controlsExpanded
+    readonly property int spectrumMinHeight: 40
+    // IU8LMC FIX — era un 4000 FISSO: il drag poteva portare spectrumHeight molto oltre
+    // l'altezza reale del pannello (es. 2808 salvato con pannello alto 152). Il render
+    // (PanadapterItem.spectrumHeight, sotto) clampa a height-waterfallMinHeight, quindi il
+    // valore restava fuori scala e trascinare la barra non cambiava NULLA -> "barra bloccata".
+    // Ora il tetto del drag coincide col tetto del render: si auto-ripara al primo drag.
+    // Finche' il layout non e' pronto (height<=0) resta permissivo (4000) per non
+    // clampare a 40 durante il restore delle impostazioni (onSettingValueChanged).
+    readonly property int spectrumMaxHeight: waterfallDisplay.height > 0
+                                             ? Math.max(spectrumMinHeight,
+                                                        waterfallDisplay.height - waterfallMinHeight)
+                                             : 4000
+    readonly property int waterfallMinHeight: controlsVisible ? 24 : 12
 
     // Colors
     property color bgDeep:      bridge.themeManager.bgDeep
@@ -62,14 +78,87 @@ Item {
         }
     }
 
+    function coerceBool(value, fallback) {
+        if (value === true || value === false)
+            return value
+        if (typeof value === "number")
+            return value !== 0
+
+        var text = String(value).trim().toLowerCase()
+        if (text === "true" || text === "1" || text === "yes" || text === "on")
+            return true
+        if (text === "false" || text === "0" || text === "no" || text === "off" || text.length === 0)
+            return false
+        return !!fallback
+    }
+
+    function boolSetting(key, fallback) {
+        return coerceBool(bridge.getSetting(key, fallback), fallback)
+    }
+
+    function clampNumber(value, minValue, maxValue, fallback) {
+        var n = Number(value)
+        if (!isFinite(n))
+            n = fallback
+        return Math.max(minValue, Math.min(maxValue, n))
+    }
+
+    function clampIndex(value, count, fallback) {
+        return Math.round(clampNumber(value, 0, Math.max(0, count - 1), fallback))
+    }
+
+    function clampPaletteIndex(value) {
+        var count = 0
+        if (paletteCombo && paletteCombo.count !== undefined)
+            count = paletteCombo.count
+        if ((!count || count < 1) && waterfallDisplay && waterfallDisplay.paletteNames)
+            count = waterfallDisplay.paletteNames.length
+        return clampIndex(value, Math.max(1, count), 0)
+    }
+
+    function scheduleGraphSave() {
+        if (mainWindow && mainWindow.scheduleSave)
+            mainWindow.scheduleSave()
+    }
+
+    function persistGraphSetting(key, value) {
+        bridge.setSetting(key, value)
+        scheduleGraphSave()
+    }
+
+    function isValidClickableAudioFreq(freq) {
+        return freq >= 100 && freq <= 5000
+    }
+
+    function setPaletteIndex(index, persist) {
+        if (syncingPaletteChoice)
+            return
+        syncingPaletteChoice = true
+
+        var next = clampPaletteIndex(index)
+        if (paletteCombo.currentIndex !== next)
+            paletteCombo.currentIndex = next
+        if (!bridge.themeManager.isLightTheme && waterfallDisplay.paletteIndex !== next)
+            waterfallDisplay.paletteIndex = next
+        if (bridge.uiPaletteIndex !== next)
+            bridge.uiPaletteIndex = next
+
+        if (persist === undefined)
+            persist = !waterfallPanel.restoringSettings
+        if (persist)
+            persistGraphSetting("uiPaletteIndex", next)
+
+        syncingPaletteChoice = false
+    }
+
     function loadPanadapterSettings() {
         restoringSettings = true
-        waterfallPanel.controlsExpanded = bridge.getSetting("uiWaterfallControlsExpanded", true)
+        waterfallPanel.controlsExpanded = boolSetting("uiWaterfallControlsExpanded", true)
         if (bridge.uiSpectrumHeight > 0) waterfallPanel.spectrumHeight = bridge.uiSpectrumHeight
-        paletteCombo.currentIndex = Math.max(0, bridge.getSetting("uiPaletteIndex", bridge.uiPaletteIndex))
-        autoRangeCheck.checked = bridge.getSetting("uiWaterfallAutoRange", true)
-        txBracketsCheck.checked = bridge.getSetting("uiWaterfallShowTxBrackets", true)
-        peakHoldCheck.checked = bridge.getSetting("uiWaterfallPeakHold", true)
+        waterfallPanel.setPaletteIndex(bridge.getSetting("uiPaletteIndex", bridge.uiPaletteIndex), false)
+        autoRangeCheck.checked = boolSetting("uiWaterfallAutoRange", true)
+        txBracketsCheck.checked = boolSetting("uiWaterfallShowTxBrackets", true)
+        peakHoldCheck.checked = boolSetting("uiWaterfallPeakHold", true)
         blackSlider.value = bridge.getSetting("uiWaterfallBlackLevel", 15)
         gainSlider.value = bridge.getSetting("uiWaterfallColorGain", 50)
         contrastSlider.value = bridge.getSetting("uiWaterfallContrast", 80)
@@ -77,21 +166,30 @@ Item {
         zoomSlider.value = bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
         labelFontSlider.value = bridge.getSetting("uiLabelFontSize", 8)
         labelSpacingSlider.value = bridge.getSetting("uiLabelSpacing", 2)
-        labelBoldCheck.checked = bridge.getSetting("uiLabelBold", true)
+        labelBoldCheck.checked = boolSetting("uiLabelBold", true)
         labelColorCombo.currentIndex = Math.max(0, Math.min(labelColorPresets.length - 1,
                                            bridge.getSetting("uiLabelColorPreset", 0)))
-        waterfallPanel.showDecodeCallsigns = bridge.getSetting("uiWaterfallShowCallsigns", true)
-        dxClusterCheck.checked = bridge.getSetting("uiWaterfallShowDxCluster", false)
+        waterfallPanel.setShowDecodeCallsigns(boolSetting("uiWaterfallShowCallsigns", true), false)
+        dxClusterCheck.checked = boolSetting("uiWaterfallShowDxCluster", false)
         waterfallDisplay.showDxClusterSpots = dxClusterCheck.checked
+        // Spento per impostazione predefinita: costa vertici e su macchine
+        // modeste si deve poter accendere solo di proposito.
+        spectrum3dToggle.checked = boolSetting("uiSpectrum3d", false)
+        waterfallDisplay.spectrum3d = spectrum3dToggle.checked
+        traces3dSlider.value = bridge.getSetting("uiSpectrum3dTraces", 28)
+        floor3dSlider.value = bridge.getSetting("uiSpectrum3dFloorDepth", 6)
+        waterfallDisplay.spectrum3dTraces = traces3dSlider.value
+        waterfallDisplay.spectrum3dFloorDepth = floor3dSlider.value
+        noiseCutSlider.value = bridge.getSetting("uiNoiseFloorPercentile", 10)
+        waterfallDisplay.noiseFloorPercentile = noiseCutSlider.value
 
         // In light theme la palette è forzata a 11 (mockup pastello). Non sovrascrivere col valore Settings.
-        if (!bridge.themeManager.isLightTheme)
-            waterfallDisplay.paletteIndex = paletteCombo.currentIndex
         waterfallDisplay.autoRange = autoRangeCheck.checked
         waterfallDisplay.showTxBrackets = txBracketsCheck.checked
         waterfallDisplay.peakHold = peakHoldCheck.checked
         waterfallDisplay.blackLevel = blackSlider.value
         waterfallDisplay.colorGain = gainSlider.value
+        waterfallDisplay.contrastLevel = contrastSlider.value
         waterfallDisplay.zoomFactor = zoomSlider.value
         waterfallDisplay.labelFontSize = labelFontSlider.value
         waterfallDisplay.labelSpacing = labelSpacingSlider.value
@@ -99,9 +197,7 @@ Item {
         var preset = labelColorPresets[labelColorCombo.currentIndex]
         waterfallDisplay.labelUseCustomColor = preset.custom
         waterfallDisplay.labelColor = preset.color
-        applyManualContrast()
-        if (!waterfallPanel.showDecodeCallsigns)
-            clearDecodeLabels()
+        waterfallPanel.applyManualContrast()
         restoringSettings = false
     }
 
@@ -109,16 +205,64 @@ Item {
         if (waterfallPanel.controlsExpanded === expanded)
             return
         waterfallPanel.controlsExpanded = expanded
-        bridge.setSetting("uiWaterfallControlsExpanded", expanded)
-        mainWindow.scheduleSave()
+        waterfallPanel.persistGraphSetting("uiWaterfallControlsExpanded", expanded)
     }
 
     function clearDecodeLabels() {
+        decodeLabelSourceRefreshTimer.stop()
         spectrumDecodeLabels = []
         waterfallDisplay.setDecodeLabels([])
     }
 
-    function refreshDecodeLabels() {
+    function setShowDecodeCallsigns(enabled, persist) {
+        var next = coerceBool(enabled, true)
+        var changed = waterfallPanel.showDecodeCallsigns !== next
+        waterfallPanel.showDecodeCallsigns = next
+        if (!next) {
+            clearDecodeLabels()
+        } else if (changed) {
+            refreshDecodeLabels()
+        }
+        if (persist === undefined)
+            persist = !waterfallPanel.restoringSettings
+        if (persist) {
+            waterfallPanel.persistGraphSetting("uiWaterfallShowCallsigns", next)
+        }
+    }
+
+    function txSignalBandwidthHz(modeName) {
+        var mode = String(modeName || bridge.mode || "").trim().toUpperCase()
+        if (mode === "FT2-LINK" || mode === "FT2LINK")
+            return 2300
+        if (mode === "FT4")
+            return 90
+        if (mode === "FT8" || mode === "FT2")
+            return 50
+        return 0
+    }
+
+    Timer {
+        id: decodeLabelSourceRefreshTimer
+        interval: 160
+        repeat: false
+        onTriggered: waterfallPanel.refreshDecodeLabelsNow()
+    }
+
+    function refreshDecodeLabels(delayMs) {
+        if (!waterfallPanel.visible)
+            return
+        if (!waterfallPanel.showDecodeCallsigns) {
+            clearDecodeLabels()
+            return
+        }
+        decodeLabelSourceRefreshTimer.interval = delayMs === undefined ? 160 : Math.max(0, delayMs)
+        if (!decodeLabelSourceRefreshTimer.running)
+            decodeLabelSourceRefreshTimer.start()
+        else if (decodeLabelSourceRefreshTimer.interval === 0)
+            decodeLabelSourceRefreshTimer.restart()
+    }
+
+    function refreshDecodeLabelsNow() {
         if (!waterfallPanel.visible)
             return
         if (!waterfallPanel.showDecodeCallsigns) {
@@ -128,16 +272,24 @@ Item {
 
         var labels = []
         var seen = {}
-        var list = bridge.decodeList
-        // Prendi solo gli ultimi decode (ultimo periodo) — max 30
-        var start = Math.max(0, list.length - 30)
-        for (var i = start; i < list.length; ++i) {
-            var d = list[i]
+        var nativeModel = (bridge && bridge.bandActivityModel)
+                ? bridge.bandActivityModel : null
+        var list = nativeModel ? null : bridge.decodeList
+        var listCount = nativeModel ? nativeModel.count() : list.length
+        // Prendi solo gli ultimi decode (ultimo periodo) — max 30.
+        // Scorri al contrario: se la stessa stazione compare piu' volte,
+        // il waterfall deve mostrare il valore SNR del decode piu' recente,
+        // cioe' quello che l'operatore vede in cima al Full Spectrum.
+        var start = Math.max(0, listCount - 30)
+        for (var i = listCount - 1; i >= start; --i) {
+            var d = nativeModel ? nativeModel.entry(i) : list[i]
+            if (!d || d.isSeparator === true)
+                continue
             if (d.isTx)
                 continue
             var call = d.fromCall || ""
             var freq = parseInt(d.freq || "0")
-            if (!call || freq <= 0)
+            if (!call || !waterfallPanel.isValidClickableAudioFreq(freq))
                 continue
             if (seen[call])
                 continue
@@ -156,7 +308,38 @@ Item {
             })
         }
         waterfallPanel.spectrumDecodeLabels = labels
-        waterfallDisplay.setDecodeLabels(labels)
+        waterfallDisplay.setDecodeLabels([])
+    }
+
+    Timer {
+        id: dxClusterRefreshTimer
+        interval: 250
+        repeat: false
+        onTriggered: {
+            if ((bridge.transmitting || bridge.tuning) && waterfallPanel.dxClusterRefreshPending) {
+                interval = 1000
+                restart()
+                return
+            }
+            waterfallPanel.dxClusterRefreshPending = false
+            waterfallPanel.refreshDxClusterSpots()
+        }
+    }
+
+    function scheduleDxClusterRefresh(delayMs) {
+        if (!dxClusterCheck.checked) {
+            waterfallPanel.dxClusterRefreshPending = false
+            dxClusterRefreshTimer.stop()
+            waterfallDisplay.setDxClusterSpots([])
+            return
+        }
+        waterfallPanel.dxClusterRefreshPending = true
+        var ms = (delayMs === undefined) ? 250 : delayMs
+        dxClusterRefreshTimer.interval = (bridge.transmitting || bridge.tuning) ? 1000 : Math.max(0, ms)
+        if (!dxClusterRefreshTimer.running)
+            dxClusterRefreshTimer.start()
+        else if (!(bridge.transmitting || bridge.tuning))
+            dxClusterRefreshTimer.restart()
     }
 
     // Filtra gli spot del DX cluster per la dial corrente e li passa al
@@ -171,7 +354,11 @@ Item {
             waterfallDisplay.setDxClusterSpots([])
             return
         }
-        var spots = (bridge.dxCluster && bridge.dxCluster.spots) ? bridge.dxCluster.spots : []
+        if (bridge.transmitting || bridge.tuning) {
+            scheduleDxClusterRefresh(1000)
+            return
+        }
+        var spots = bridge.dxClusterSpots || []
         var dialHz = Number(bridge.frequency) || 0
         var fmin = waterfallPanel.minFreq
         var fmax = waterfallPanel.maxFreq
@@ -232,13 +419,21 @@ Item {
     // Aggiorna gli spot cluster sul waterfall quando arrivano nuovi spot
     // o quando cambia la dial (cambia anche il filtro audio offset).
     Connections {
-        target: bridge.dxCluster
-        function onSpotsChanged() { Qt.callLater(refreshDxClusterSpots) }
+        target: bridge
+        function onDxClusterSpotsChanged() { waterfallPanel.scheduleDxClusterRefresh(250) }
     }
     Connections {
         target: bridge
         function onFrequencyChanged() {
-            if (dxClusterCheck.checked) Qt.callLater(refreshDxClusterSpots)
+            if (dxClusterCheck.checked) waterfallPanel.scheduleDxClusterRefresh(120)
+        }
+        function onTransmittingChanged() {
+            if (!bridge.transmitting && waterfallPanel.dxClusterRefreshPending)
+                waterfallPanel.scheduleDxClusterRefresh(0)
+        }
+        function onTuningChanged() {
+            if (!bridge.tuning && waterfallPanel.dxClusterRefreshPending)
+                waterfallPanel.scheduleDxClusterRefresh(0)
         }
     }
 
@@ -247,28 +442,73 @@ Item {
         spacing: 0
 
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 46
-            Layout.bottomMargin: 6
-            color: wfToolbarBg; visible: showControls && controlsExpanded
+            Layout.fillWidth: true
+            // L'altezza segue i comandi: quando vanno a capo la barra cresce,
+            // invece di restare alta 46 con le righe in piu' tagliate via.
+            Layout.preferredHeight: waterfallPanel.controlsVisible
+                                    ? Math.max(46, filaComandiWf.implicitHeight + 8) : 0
+            Layout.bottomMargin: waterfallPanel.controlsVisible ? 6 : 0
+            color: wfToolbarBg; visible: waterfallPanel.controlsVisible
             border.color: wfFrame; border.width: 1
             clip: true
-            RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
-                anchors.topMargin: 3; anchors.bottomMargin: 5
+
+            // I comandi vanno a capo quando non ci stanno. Dove il pannello e'
+            // largo — la finestra principale — restano su una riga sola come
+            // sempre: un Flow che ha spazio si comporta come una fila. Dove e'
+            // stretto, come nella finestra RTTY, si dispongono su quante righe
+            // servono invece di farsi tagliare a meta' dal bordo.
+            //
+            // Gli elementi qui dentro hanno larghezze e altezze proprie e non
+            // piu' quelle del layout a riga: in un Flow le proprieta' Layout.*
+            // non hanno effetto, e lasciarle avrebbe fatto collassare i comandi
+            // alle loro dimensioni naturali.
+            Flow {
+                id: filaComandiWf
+                x: 6
+                y: 3
+                width: parent.width - 12
                 spacing: 6
 
-                Text { text: "Calls:"; color: accentCyan; font.pixelSize: 10; font.bold: true }
+                Text {
+                    text: qsTr("Calls:")
+                    color: accentCyan
+                    font.pixelSize: 10
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
+                CheckBox {
+                    id: showCallsCheck
+                    width: 18
+                    height: 18
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    checked: waterfallPanel.showDecodeCallsigns
+                    onClicked: waterfallPanel.setShowDecodeCallsigns(checked)
+                    ToolTip.text: qsTr("Show decoded callsigns on the waterfall")
+                    ToolTip.visible: showCallsCheck.hovered
+                    ToolTip.delay: 400
+                    indicator: Rectangle {
+                        x: Math.round((showCallsCheck.width - width) / 2)
+                        y: Math.round((showCallsCheck.height - height) / 2)
+                        implicitWidth: 14; implicitHeight: 14; radius: 2
+                        color: showCallsCheck.checked ? accentCyan : wfToolbarBg
+                        border.color: accentCyan; border.width: 1
+                        Text { anchors.centerIn: parent; text: "C"; color: "black"; font.pixelSize: 9; font.bold: true; visible: showCallsCheck.checked }
+                    }
+                    contentItem: Item { implicitWidth: 0; implicitHeight: 0 }
+                }
 
-                Text { text: "Font"; color: wfText; font.pixelSize: 10 }
+                Text { text: qsTr("Font"); color: wfText; font.pixelSize: 10 }
                 Slider {
                     id: labelFontSlider
-                    Layout.preferredWidth: 70
-                    Layout.alignment: Qt.AlignVCenter
+                    width: 70
                     from: 6; to: 20; value: 8; stepSize: 1
                     onValueChanged: {
                         waterfallDisplay.labelFontSize = value
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelFontSize", value)
+                            waterfallPanel.persistGraphSetting("uiLabelFontSize", value)
                         }
                     }
                     background: Rectangle { x:labelFontSlider.leftPadding; y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-2; width:labelFontSlider.availableWidth; height:4; radius:2; color:wfTrack
@@ -280,16 +520,15 @@ Item {
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Gap"; color: wfText; font.pixelSize: 10 }
+                Text { text: qsTr("Gap"); color: wfText; font.pixelSize: 10 }
                 Slider {
                     id: labelSpacingSlider
-                    Layout.preferredWidth: 60
-                    Layout.alignment: Qt.AlignVCenter
+                    width: 60
                     from: 0; to: 20; value: 2; stepSize: 1
                     onValueChanged: {
                         waterfallDisplay.labelSpacing = value
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelSpacing", value)
+                            waterfallPanel.persistGraphSetting("uiLabelSpacing", value)
                         }
                     }
                     background: Rectangle { x:labelSpacingSlider.leftPadding; y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-2; width:labelSpacingSlider.availableWidth; height:4; radius:2; color:wfTrack
@@ -307,7 +546,7 @@ Item {
                     onCheckedChanged: {
                         waterfallDisplay.labelBold = checked
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelBold", checked)
+                            waterfallPanel.persistGraphSetting("uiLabelBold", checked)
                         }
                     }
                     indicator: Rectangle {
@@ -317,15 +556,14 @@ Item {
                         Text { anchors.centerIn: parent; text: "B"; color: "black"; font.pixelSize: 9; font.bold: true; visible: labelBoldCheck.checked }
                     }
                 }
-                Text { text: "Bold"; color: labelBoldCheck.checked ? "#FFFFFF" : textSec; font.pixelSize: 10 }
+                Text { text: qsTr("Bold"); color: labelBoldCheck.checked ? "#FFFFFF" : textSec; font.pixelSize: 10 }
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Color"; color: wfText; font.pixelSize: 10 }
-                ComboBox {
+                Text { text: qsTr("Color"); color: wfText; font.pixelSize: 10 }
+                DecoComboBox {
                     id: labelColorCombo
-                    Layout.preferredWidth: 86
-                    Layout.alignment: Qt.AlignVCenter
+                    width: 122
                     font.pixelSize: 10
                     model: waterfallPanel.labelColorPresets.map(function(p){ return p.name })
                     currentIndex: 0
@@ -334,23 +572,96 @@ Item {
                         waterfallDisplay.labelUseCustomColor = preset.custom
                         waterfallDisplay.labelColor = preset.color
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelColorPreset", currentIndex)
+                            waterfallPanel.persistGraphSetting("uiLabelColorPreset", currentIndex)
                         }
                     }
                     background: Rectangle { color: wfToolbarBg; border.color: borderColor; radius: 2 }
-                    contentItem: Row {
-                        spacing: 4
-                        leftPadding: 4
+                    contentItem: Item {
+                        implicitWidth: 88
+                        implicitHeight: 22
+
                         Rectangle {
+                            id: labelColorSwatch
+                            x: 6
                             anchors.verticalCenter: parent.verticalCenter
                             width: 10; height: 10; radius: 2
                             color: waterfallPanel.labelColorPresets[labelColorCombo.currentIndex].color
                             border.color: "#555"; border.width: 1
                         }
                         Text {
+                            anchors.left: labelColorSwatch.right
+                            anchors.leftMargin: 6
+                            anchors.right: parent.right
+                            anchors.rightMargin: 24
                             anchors.verticalCenter: parent.verticalCenter
                             text: labelColorCombo.displayText
                             font.pixelSize: 10; color: textPrimary
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    delegate: ItemDelegate {
+                        id: colorDelegate
+                        required property int index
+
+                        width: ListView.view ? ListView.view.width : 196
+                        height: 38
+                        leftPadding: 12
+                        rightPadding: 12
+                        highlighted: labelColorCombo.highlightedIndex === index
+
+                        contentItem: RowLayout {
+                            spacing: 8
+
+                            Rectangle {
+                                Layout.preferredWidth: 13
+                                Layout.preferredHeight: 13
+                                Layout.alignment: Qt.AlignVCenter
+                                radius: 3
+                                color: waterfallPanel.labelColorPresets[colorDelegate.index].color
+                                border.color: Qt.rgba(1, 1, 1, 0.55)
+                                border.width: 1
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                text: waterfallPanel.labelColorPresets[colorDelegate.index].name
+                                color: "#ffffff"
+                                font.pixelSize: 12
+                                font.bold: colorDelegate.highlighted || labelColorCombo.currentIndex === colorDelegate.index
+                                elide: Text.ElideNone
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        background: Rectangle {
+                            color: colorDelegate.highlighted || labelColorCombo.currentIndex === colorDelegate.index
+                                   ? Qt.rgba(accentCyan.r, accentCyan.g, accentCyan.b, 0.42)
+                                   : "transparent"
+                        }
+                    }
+                    popup: Popup {
+                        y: labelColorCombo.height + 2
+                        width: Math.max(labelColorCombo.width, 196)
+                        height: Math.min(contentItem.implicitHeight + 8, 310)
+                        padding: 4
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                        contentItem: ListView {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: labelColorCombo.popup.visible ? labelColorCombo.delegateModel : null
+                            currentIndex: labelColorCombo.highlightedIndex
+                            highlightMoveDuration: 0
+                            boundsBehavior: Flickable.StopAtBounds
+                            ScrollBar.vertical: ScrollBar { }
+                        }
+
+                        background: Rectangle {
+                            color: "#07111f"
+                            border.color: accentCyan
+                            border.width: 1
+                            radius: 4
                         }
                     }
                 }
@@ -359,21 +670,76 @@ Item {
 
                 // ── Palette / Auto / [] / Peak / Zoom / dBm ──
                 // Unita alla barra Calls per avere un'unica riga superiore (feedback IK8OLM)
-                Text { text: "Palette:"; color: wfText; font.pixelSize: 10 }
-                ComboBox {
+                Text { text: qsTr("Palette:"); color: wfText; font.pixelSize: 10 }
+                DecoComboBox {
                     id: paletteCombo
-                    Layout.preferredWidth: 106
+                    width: 142
                     model: waterfallDisplay.paletteNames
-                    currentIndex: Math.max(0, bridge.uiPaletteIndex)
+                    currentIndex: 0
                     font.pixelSize: 10
                     onActivated: {
-                        waterfallDisplay.paletteIndex = currentIndex
-                        bridge.uiPaletteIndex = currentIndex
-                        bridge.setSetting("uiPaletteIndex", currentIndex)
-                        mainWindow.scheduleSave()
+                        waterfallPanel.setPaletteIndex(currentIndex, true)
                     }
                     background: Rectangle { color: wfToolbarBg; border.color: borderColor; radius: 2 }
-                    contentItem: Text { text: paletteCombo.displayText; font.pixelSize: 10; color: textPrimary; verticalAlignment: Text.AlignVCenter; leftPadding: 4 }
+                    contentItem: Text {
+                        text: paletteCombo.displayText
+                        font.pixelSize: 10
+                        color: textPrimary
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 6
+                        rightPadding: 24
+                        elide: Text.ElideRight
+                    }
+                    delegate: ItemDelegate {
+                        id: paletteDelegate
+                        required property int index
+                        required property var model
+
+                        width: ListView.view ? ListView.view.width : 214
+                        height: 38
+                        leftPadding: 12
+                        rightPadding: 12
+                        highlighted: paletteCombo.highlightedIndex === index
+
+                        contentItem: Text {
+                            text: paletteCombo.optionText(paletteDelegate.model)
+                            color: "#ffffff"
+                            font.pixelSize: 12
+                            font.bold: paletteDelegate.highlighted || paletteCombo.currentIndex === paletteDelegate.index
+                            elide: Text.ElideNone
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: paletteDelegate.highlighted || paletteCombo.currentIndex === paletteDelegate.index
+                                   ? Qt.rgba(accentCyan.r, accentCyan.g, accentCyan.b, 0.42)
+                                   : "transparent"
+                        }
+                    }
+                    popup: Popup {
+                        y: paletteCombo.height + 2
+                        width: Math.max(paletteCombo.width, 214)
+                        height: Math.min(contentItem.implicitHeight + 8, 360)
+                        padding: 4
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                        contentItem: ListView {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: paletteCombo.popup.visible ? paletteCombo.delegateModel : null
+                            currentIndex: paletteCombo.highlightedIndex
+                            highlightMoveDuration: 0
+                            boundsBehavior: Flickable.StopAtBounds
+                            ScrollBar.vertical: ScrollBar { }
+                        }
+
+                        background: Rectangle {
+                            color: "#07111f"
+                            border.color: accentCyan
+                            border.width: 1
+                            radius: 4
+                        }
+                    }
                 }
 
                 // Auto Range
@@ -382,16 +748,14 @@ Item {
                     checked: true
                     onCheckedChanged: {
                         waterfallDisplay.autoRange = checked
-                        if (checked) {
-                            waterfallDisplay.maxDb = waterfallDisplay.measuredFloor + 20
-                        } else {
+                        if (!checked) {
                             waterfallPanel.applyManualContrast()
                         }
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallAutoRange", checked)
+                            waterfallPanel.persistGraphSetting("uiWaterfallAutoRange", checked)
                         }
                     }
-                    ToolTip.text: "Auto noise floor (IIR)"
+                    ToolTip.text: qsTr("Automatic noise threshold (IIR)")
                     ToolTip.visible: autoRangeCheck.hovered
                     ToolTip.delay: 400
                     indicator: Rectangle {
@@ -403,6 +767,136 @@ Item {
                 }
                 Text { text: "Auto"; color: autoRangeCheck.checked ? accentGreen : textSec; font.pixelSize: 10 }
 
+                // Quanto taglia la soglia automatica. Compare solo quando la
+                // soglia e' accesa: a filtro spento non regola nulla.
+                Text {
+                    text: qsTr("Cut:"); color: accentGreen; font.pixelSize: 10
+                    visible: autoRangeCheck.checked
+                }
+                Slider {
+                    id: noiseCutSlider
+                    visible: autoRangeCheck.checked
+                    from: 5; to: 40; stepSize: 1
+                    width: 70; height: 18
+                    value: 10
+                    onMoved: {
+                        waterfallDisplay.noiseFloorPercentile = value
+                        if (!waterfallPanel.restoringSettings) {
+                            waterfallPanel.persistGraphSetting("uiNoiseFloorPercentile", value)
+                        }
+                    }
+                    ToolTip.text: qsTr("How much of the spectrum the automatic threshold calls noise and cuts away. 10 is the historical setting: raise it to clean up an empty band, lower it if weak signals disappear.")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 400
+                    background: Rectangle { x:noiseCutSlider.leftPadding;y:noiseCutSlider.topPadding+noiseCutSlider.availableHeight/2-2;width:noiseCutSlider.availableWidth;height:4;radius:2;color:wfTrack }
+                    handle: Rectangle { x:noiseCutSlider.leftPadding+noiseCutSlider.visualPosition*(noiseCutSlider.availableWidth-width);y:noiseCutSlider.topPadding+noiseCutSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:accentGreen }
+                }
+                Text {
+                    text: noiseCutSlider.value.toFixed(0) + "%"
+                    color: accentGreen; font.pixelSize: 10; width: 26
+                    visible: autoRangeCheck.checked
+                }
+
+                // Spettro 3D a tracce impilate. La cascata sotto resta invariata:
+                // cambia solo come viene disegnato lo spettro sopra di essa.
+                //
+                // UN SOLO bersaglio, non casella + etichetta separate: l'etichetta
+                // non era cliccabile e il quadratino finiva a ridosso di quello di
+                // "Auto", quindi si mancava il bersaglio o si premeva l'altro.
+                // Qui tutto il rettangolo e' cliccabile e lo stato si legge a colpo
+                // d'occhio: pieno = acceso, vuoto = spento.
+                Rectangle {
+                    id: spectrum3dToggle
+                    property bool checked: false
+                    implicitWidth: 42
+                    implicitHeight: 18
+                    radius: 3
+                    color: checked ? accentCyan : (spectrum3dMA.containsMouse ? Qt.rgba(1,1,1,0.10) : wfToolbarBg)
+                    border.color: accentCyan
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "3D"
+                        color: spectrum3dToggle.checked ? "black" : accentCyan
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+
+                    ToolTip.text: spectrum3dToggle.checked
+                                  ? qsTr("Stacked-trace 3D spectrum: on. Click to go back to the 2D trace.")
+                                  : qsTr("Stacked-trace 3D spectrum: shows the history of the band receding into the distance. It costs more to draw, so leave it off on modest machines.")
+                    ToolTip.visible: spectrum3dMA.containsMouse
+                    ToolTip.delay: 400
+
+                    MouseArea {
+                        id: spectrum3dMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            spectrum3dToggle.checked = !spectrum3dToggle.checked
+                            waterfallDisplay.spectrum3d = spectrum3dToggle.checked
+                            if (!waterfallPanel.restoringSettings) {
+                                waterfallPanel.persistGraphSetting("uiSpectrum3d", spectrum3dToggle.checked)
+                            }
+                        }
+                    }
+                }
+
+                // Regolazioni del 3D: compaiono solo quando serve, per non
+                // affollare la barra a chi il 3D non lo usa.
+                Text {
+                    text: qsTr("Traces:"); color: accentCyan; font.pixelSize: 10
+                    visible: spectrum3dToggle.checked
+                }
+                Slider {
+                    id: traces3dSlider
+                    visible: spectrum3dToggle.checked
+                    width: 70
+                    from: 8; to: 96; value: 28; stepSize: 1
+                    onValueChanged: {
+                        waterfallDisplay.spectrum3dTraces = value
+                        if (!waterfallPanel.restoringSettings) {
+                            waterfallPanel.persistGraphSetting("uiSpectrum3dTraces", value)
+                        }
+                    }
+                    ToolTip.text: qsTr("How many history traces are drawn. Fewer traces separate the ridges; more of them show a longer history.")
+                    ToolTip.visible: traces3dSlider.hovered
+                    ToolTip.delay: 400
+                    background: Rectangle { x:traces3dSlider.leftPadding;y:traces3dSlider.topPadding+traces3dSlider.availableHeight/2-2;width:traces3dSlider.availableWidth;height:4;radius:2;color:wfTrack }
+                    handle: Rectangle { x:traces3dSlider.leftPadding+traces3dSlider.visualPosition*(traces3dSlider.availableWidth-width);y:traces3dSlider.topPadding+traces3dSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:accentCyan }
+                }
+                Text {
+                    text: traces3dSlider.value.toFixed(0); color: accentCyan; font.pixelSize: 10; width: 18
+                    visible: spectrum3dToggle.checked
+                }
+                Text {
+                    text: qsTr("Floor:"); color: accentCyan; font.pixelSize: 10
+                    visible: spectrum3dToggle.checked
+                }
+                Slider {
+                    id: floor3dSlider
+                    visible: spectrum3dToggle.checked
+                    width: 70
+                    from: 0; to: 30; value: 6; stepSize: 1
+                    onValueChanged: {
+                        waterfallDisplay.spectrum3dFloorDepth = value
+                        if (!waterfallPanel.restoringSettings) {
+                            waterfallPanel.persistGraphSetting("uiSpectrum3dFloorDepth", value)
+                        }
+                    }
+                    ToolTip.text: qsTr("How far above the minimum the ridges start. Raise it to flatten the noise and leave only the signals standing.")
+                    ToolTip.visible: floor3dSlider.hovered
+                    ToolTip.delay: 400
+                    background: Rectangle { x:floor3dSlider.leftPadding;y:floor3dSlider.topPadding+floor3dSlider.availableHeight/2-2;width:floor3dSlider.availableWidth;height:4;radius:2;color:wfTrack }
+                    handle: Rectangle { x:floor3dSlider.leftPadding+floor3dSlider.visualPosition*(floor3dSlider.availableWidth-width);y:floor3dSlider.topPadding+floor3dSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:accentCyan }
+                }
+                Text {
+                    text: floor3dSlider.value.toFixed(0) + " dB"; color: accentCyan; font.pixelSize: 10; width: 32
+                    visible: spectrum3dToggle.checked
+                }
+
                 // TX brackets toggle
                 Text { text: "[ ]"; color: txBracketsCheck.checked ? accentGreen : textSec; font.pixelSize: 10; font.bold: true }
                 CheckBox {
@@ -411,7 +905,7 @@ Item {
                     onCheckedChanged: {
                         waterfallDisplay.showTxBrackets = checked
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallShowTxBrackets", checked)
+                            waterfallPanel.persistGraphSetting("uiWaterfallShowTxBrackets", checked)
                         }
                     }
                     indicator: Rectangle {
@@ -429,13 +923,13 @@ Item {
                     onCheckedChanged: {
                         waterfallDisplay.showDxClusterSpots = checked
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallShowDxCluster", checked)
+                            waterfallPanel.persistGraphSetting("uiWaterfallShowDxCluster", checked)
                         }
                         if (checked) {
-                            waterfallPanel.refreshDxClusterSpots()
+                            waterfallPanel.scheduleDxClusterRefresh(0)
                         }
                     }
-                    ToolTip.text: "Show DX Cluster spots on the waterfall (click to call)"
+                    ToolTip.text: qsTr("Show DX Cluster spots on the waterfall (click to call)")
                     ToolTip.visible: dxClusterCheck.hovered
                     ToolTip.delay: 400
                     indicator: Rectangle {
@@ -445,15 +939,17 @@ Item {
                         Text { anchors.centerIn: parent; text: "DX"; color: "black"; font.pixelSize: 7; font.bold: true; visible: dxClusterCheck.checked }
                     }
                 }
-                Text { text: "Cluster"; color: dxClusterCheck.checked ? "#FFC800" : textSec; font.pixelSize: 10 }
+                Text { text: qsTr("Cluster"); color: dxClusterCheck.checked ? "#FFC800" : textSec; font.pixelSize: 10 }
 
-                Item { Layout.fillWidth: true }
+                // Lo spaziatore che spingeva a destra il pulsante di chiusura non
+                // serve piu': in una fila che va a capo l'ultimo elemento sta dove
+                // arriva, e uno spaziatore elastico lo spingerebbe da solo su una
+                // riga tutta sua.
 
                 Rectangle {
                     id: collapseControlsButton
-                    Layout.preferredWidth: 112
-                    Layout.preferredHeight: 28
-                    Layout.alignment: Qt.AlignVCenter
+                    width: 112
+                    height: 28
                     radius: 6
                     color: collapseControlsMA.containsMouse
                            ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.26)
@@ -471,7 +967,7 @@ Item {
                             font.bold: true
                         }
                         Text {
-                            text: "\u25B4"
+                            text: qsTr("\u25B4")
                             color: accentGreen
                             font.pixelSize: 13
                             font.bold: true
@@ -498,10 +994,10 @@ Item {
                     onCheckedChanged: {
                         waterfallDisplay.peakHold = checked
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallPeakHold", checked)
+                            waterfallPanel.persistGraphSetting("uiWaterfallPeakHold", checked)
                         }
                     }
-                    ToolTip.text: "Peak Hold"
+                    ToolTip.text: qsTr("Peak Hold: keeps spectrum peaks visible")
                     ToolTip.visible: peakHoldCheck.hovered
                     ToolTip.delay: 400
                     indicator: Rectangle {
@@ -511,20 +1007,19 @@ Item {
                         Text { anchors.centerIn: parent; text: "P"; color: "#262626"; font.pixelSize: 9; font.bold: true; visible: peakHoldCheck.checked }
                     }
                 }
-                Text { text: "Peak"; color: peakHoldCheck.checked ? wfYellow : textSec; font.pixelSize: 10 }
+                Text { text: qsTr("Peak"); color: peakHoldCheck.checked ? wfYellow : textSec; font.pixelSize: 10 }
 
                 // Zoom
-                Text { text: "Zoom"; color: wfText; font.pixelSize: 10 }
+                Text { text: qsTr("Zoom"); color: wfText; font.pixelSize: 10 }
                 Slider {
                     id: zoomSlider
-                    Layout.preferredWidth: 70
+                    width: 70
                     from: 1; to: 8; value: bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0; stepSize: 0.5
                     onValueChanged: {
                         waterfallDisplay.zoomFactor = value
                         if (!waterfallPanel.restoringSettings) {
                             bridge.uiZoomFactor = value
-                            bridge.setSetting("uiZoomFactor", value)
-                            mainWindow.scheduleSave()
+                            waterfallPanel.persistGraphSetting("uiZoomFactor", value)
                         }
                     }
                     background: Rectangle {
@@ -547,7 +1042,7 @@ Item {
                     text: waterfallDisplay.measuredFloor.toFixed(0) + "dBm"
                     color: accentGreen
                     font.pixelSize: 10
-                    ToolTip.text: "Noise floor misurato"
+                    ToolTip.text: qsTr("Measured noise threshold")
                     ToolTip.visible: nfLabel.containsMouse
                     ToolTip.delay: 400
                     MouseArea { id: nfLabel; anchors.fill: parent; hoverEnabled: true }
@@ -557,16 +1052,16 @@ Item {
 
         // ── Slider Black / Gain ─────────────────────────────────────────
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 22
-            color: wfToolbarBg; visible: showControls && controlsExpanded
+            Layout.fillWidth: true; Layout.preferredHeight: waterfallPanel.controlsVisible ? 22 : 0
+            color: wfToolbarBg; visible: waterfallPanel.controlsVisible
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
-                Text { text: "Black:"; color: wfSlate; font.pixelSize: 10 }
+                Text { text: qsTr("Black:"); color: wfSlate; font.pixelSize: 10 }
                 Slider { id: blackSlider; Layout.preferredWidth: 80; from: 0; to: 100; value: 15; stepSize: 1
                     onValueChanged: {
                         waterfallDisplay.blackLevel = value
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallBlackLevel", value)
+                            waterfallPanel.persistGraphSetting("uiWaterfallBlackLevel", value)
                         }
                     }
                     background: Rectangle { x:blackSlider.leftPadding;y:blackSlider.topPadding+blackSlider.availableHeight/2-2;width:blackSlider.availableWidth;height:4;radius:2;color:wfTrack }
@@ -574,12 +1069,12 @@ Item {
                 }
                 Text { text: blackSlider.value.toFixed(0); color: wfSlate; font.pixelSize: 10; width: 20 }
                 Rectangle { width:1;height:14;color:"#333" }
-                Text { text: "Gain:"; color: wfBlue; font.pixelSize: 10 }
+                Text { text: qsTr("Gain:"); color: wfBlue; font.pixelSize: 10 }
                 Slider { id: gainSlider; Layout.preferredWidth: 80; from: 0; to: 100; value: 50; stepSize: 1
                     onValueChanged: {
                         waterfallDisplay.colorGain = value
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallColorGain", value)
+                            waterfallPanel.persistGraphSetting("uiWaterfallColorGain", value)
                         }
                     }
                     background: Rectangle { x:gainSlider.leftPadding;y:gainSlider.topPadding+gainSlider.availableHeight/2-2;width:gainSlider.availableWidth;height:4;radius:2;color:wfTrack }
@@ -589,12 +1084,13 @@ Item {
 
                 Rectangle { width:1;height:14;color:"#333" }
 
-                Text { text: "Contrasto:"; color: wfPurple; font.pixelSize: 10 }
+                Text { text: qsTr("Contrasto:"); color: wfPurple; font.pixelSize: 10 }
                 Slider { id: contrastSlider; Layout.preferredWidth: 70; from: 10; to: 150; value: 80; stepSize: 1
                     onValueChanged: {
+                        waterfallDisplay.contrastLevel = value
                         waterfallPanel.applyManualContrast()
                         if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiWaterfallContrast", value)
+                            waterfallPanel.persistGraphSetting("uiWaterfallContrast", value)
                         }
                     }
                     background: Rectangle { x:contrastSlider.leftPadding;y:contrastSlider.topPadding+contrastSlider.availableHeight/2-2;width:contrastSlider.availableWidth;height:4;radius:2;color:wfTrack }
@@ -604,9 +1100,9 @@ Item {
 
                 Rectangle { width:1;height:14;color:"#333" }
 
-                Text { text: "Vel:"; color: "#DD8866"; font.pixelSize: 10 }
+                Text { text: qsTr("Vel:"); color: "#DD8866"; font.pixelSize: 10 }
                 Slider { id: speedSlider; Layout.preferredWidth: 60; from: 10; to: 500; value: 20; stepSize: 5
-                    onValueChanged: if (!waterfallPanel.restoringSettings) bridge.setSetting("spectrumInterval", value)
+                    onValueChanged: if (!waterfallPanel.restoringSettings) waterfallPanel.persistGraphSetting("spectrumInterval", value)
                     background: Rectangle { x:speedSlider.leftPadding;y:speedSlider.topPadding+speedSlider.availableHeight/2-2;width:speedSlider.availableWidth;height:4;radius:2;color:wfTrack }
                     handle: Rectangle { x:speedSlider.leftPadding+speedSlider.visualPosition*(speedSlider.availableWidth-width);y:speedSlider.topPadding+speedSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#DD8866" }
                 }
@@ -621,15 +1117,18 @@ Item {
         Rectangle {
             id: spectrumDivider
             Layout.fillWidth: true
-            Layout.preferredHeight: 6
+            Layout.preferredHeight: waterfallPanel.controlsVisible ? 12 : 0
+            visible: waterfallPanel.controlsVisible
             color: dividerMouse.containsMouse || dividerMouse.pressed
-                   ? accentCyan : Qt.rgba(1,1,1,0.08)
+                   ? Qt.rgba(accentCyan.r, accentCyan.g, accentCyan.b, 0.30) : Qt.rgba(1,1,1,0.06)
 
-            // Linea centrale visibile
+            // 1.0.288 — grip più evidente: trascina questa barra per regolare quanto
+            // spazio dare allo spettro (in alto) vs la cascata (in basso).
             Rectangle {
                 anchors.centerIn: parent
-                width: 40; height: 2; radius: 1
-                color: accentCyan; opacity: 0.6
+                width: 100; height: 4; radius: 2
+                color: accentCyan
+                opacity: dividerMouse.containsMouse || dividerMouse.pressed ? 1.0 : 0.75
             }
 
             MouseArea {
@@ -644,7 +1143,11 @@ Item {
                     dragStartY = mouse.y + spectrumDivider.mapToItem(waterfallPanel, 0, 0).y
                     dragStartH = waterfallPanel.spectrumHeight
                 }
-                onMouseYChanged: {
+                // 1.0.288 — BUG FIX: era onMouseYChanged con `mouse.y`, ma in quell'handler
+                // il parametro `mouse` non esiste (è property-change) → TypeError → il drag
+                // non aggiornava mai spectrumHeight (split mai funzionante). Uso onPositionChanged
+                // (che riceve `mouse`) e mouseY come fallback.
+                onPositionChanged: function(mouse) {
                     if (pressed) {
                         var dy = (mouse.y + spectrumDivider.mapToItem(waterfallPanel, 0, 0).y) - dragStartY
                         var newH = dragStartH + dy
@@ -654,6 +1157,9 @@ Item {
                         bridge.uiSpectrumHeight = newVal
                         mainWindow.scheduleSave()
                     }
+                }
+                onReleased: {
+                    waterfallPanel.persistGraphSetting("uiSpectrumHeight", waterfallPanel.spectrumHeight)
                 }
             }
 
@@ -666,20 +1172,36 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            startFreq:      waterfallPanel.minFreq
-            bandwidth:      waterfallPanel.maxFreq - waterfallPanel.minFreq
+            // Decoder audio uses the familiar 200..3200 Hz axis. When the
+            // RTL-SDR RF path is active the incoming bins are absolute RF,
+            // therefore the viewport must follow the tuner centre and its
+            // real sample-rate span instead of clipping them to the FT8 axis.
+            startFreq:      bridge.rtlSdrRfView
+                            ? Math.round(bridge.rtlSdrRfCenterFrequency
+                                         - bridge.rtlSdrRfSampleRate / 2)
+                            : waterfallPanel.minFreq
+            bandwidth:      bridge.rtlSdrRfView
+                            ? bridge.rtlSdrRfSampleRate
+                            : waterfallPanel.maxFreq - waterfallPanel.minFreq
             rxFreq:         bridge.rxFrequency
             txFreq:         bridge.txFrequency
             running:        bridge.monitoring
+            externalSpectrumActive: bridge.rtlSdrRfView
             showTxBrackets: true
-            spectrumHeight: Math.max(40, Math.min(waterfallPanel.spectrumHeight,
-                                                  Math.max(40, waterfallDisplay.height - waterfallPanel.waterfallMinHeight)))
-            // Low CPU mode riattiva un throttle leggero per contenere il render
-            // QML/RHI sui PC datati. A profilo normale resta fluido a pieno rate.
-            throttleActive: bridge.lowCpuModeEnabled
-            throttleIntervalMs: bridge.lowCpuModeEnabled ? 250 : 100
+            spectrumHeight: Math.max(waterfallPanel.spectrumMinHeight,
+                                     Math.min(waterfallPanel.spectrumHeight,
+                                              Math.max(waterfallPanel.spectrumMinHeight,
+                                                       waterfallDisplay.height - waterfallPanel.waterfallMinHeight)))
+            // In FT2-Link evitiamo il render loop pieno, ma 500 ms rende il
+            // panadapter visibilmente scattoso. Manteniamo un refresh fluido in
+            // profilo normale e lasciamo il taglio piu' forte solo a Low CPU.
+            throttleActive: bridge.lowCpuModeEnabled || waterfallPanel.ft2LinkMode
+            throttleIntervalMs: waterfallPanel.ft2LinkMode
+                                ? (bridge.lowCpuModeEnabled ? 200 : 80)
+                                : (bridge.lowCpuModeEnabled ? 250 : 100)
             // Carica valori da Settings al primo avvio.
-            paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
+            paletteIndex:   0
+            contrastLevel:  contrastSlider.value
 
             // In light theme forza la palette pastello chiara (indice 11) per coerenza visiva col mockup.
             // Binding esplicito: ha priorità sopra qualsiasi assegnazione procedurale finché when=true.
@@ -708,10 +1230,17 @@ Item {
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
 
             readonly property real rxFilterHz: 300
+            readonly property real txSignalBandwidthHz: waterfallPanel.txSignalBandwidthHz(bridge.mode)
             readonly property real viewRangeHz: Math.max(1, bandwidth) / Math.max(0.001, zoomFactor)
             readonly property real viewStartHz: startFreq + Math.max(1, bandwidth) * 0.5 + panHz - viewRangeHz * 0.5
             readonly property real rxFilterLeftX: Math.max(0, Math.min(width, freqToPixel(rxFreq - rxFilterHz * 0.5)))
             readonly property real rxFilterRightX: Math.max(0, Math.min(width, freqToPixel(rxFreq + rxFilterHz * 0.5)))
+            readonly property real txSignalLeftX: freqToPixel(txFreq - txSignalBandwidthHz * 0.5)
+            readonly property real txSignalRightX: freqToPixel(txFreq + txSignalBandwidthHz * 0.5)
+            readonly property bool txSignalGuideVisible: showTxBrackets
+                                                           && txSignalBandwidthHz > 0
+                                                           && txSignalRightX >= 0
+                                                           && txSignalLeftX <= width
 
             function freqToPixel(freq) {
                 return (Number(freq) - viewStartHz) * width / viewRangeHz
@@ -719,17 +1248,21 @@ Item {
 
             // Salva al bridge con debounce (2s dopo l'ultimo cambio)
             // Non persistere la palette light auto-attivata col tema (resta una scelta del tema, non utente).
-            onPaletteIndexChanged: if (!waterfallPanel.restoringSettings && paletteIndex !== 11) {
-                bridge.uiPaletteIndex = paletteIndex
-                bridge.setSetting("uiPaletteIndex", paletteIndex)
-                mainWindow.scheduleSave()
+            onPaletteIndexChanged: {
+                if (!waterfallPanel.restoringSettings
+                    && !waterfallPanel.syncingPaletteChoice
+                    && !bridge.themeManager.isLightTheme) {
+                    waterfallPanel.setPaletteIndex(paletteIndex, true)
+                }
             }
             onZoomFactorChanged: if (!waterfallPanel.restoringSettings) {
                 bridge.uiZoomFactor = zoomFactor
-                bridge.setSetting("uiZoomFactor", zoomFactor)
-                mainWindow.scheduleSave()
+                waterfallPanel.persistGraphSetting("uiZoomFactor", zoomFactor)
             }
             onMeasuredFloorChanged: waterfallPanel.applyManualContrast()
+            onGpuFftActivated: function(backend) {
+                bridge.setGpuPanadapterFftActive(true, backend)
+            }
             onGpuFftUnavailable: function(reason) {
                 bridge.setGpuPanadapterFftAvailable(false, reason)
             }
@@ -742,10 +1275,14 @@ Item {
             }
             onDxClusterSpotClicked: function(call, audioFreqHz) {
                 console.log("[Waterfall] DX cluster click → engage", call, "@", audioFreqHz, "Hz")
+                if (!waterfallPanel.isValidClickableAudioFreq(audioFreqHz))
+                    return
                 bridge.engageDxClusterSpot(call, audioFreqHz)
             }
             onDecodeLabelClicked: function(call, audioFreqHz) {
                 console.log("[Waterfall] decode label click → engage", call, "@", audioFreqHz, "Hz")
+                if (!waterfallPanel.isValidClickableAudioFreq(audioFreqHz))
+                    return
                 bridge.engageDxClusterSpot(call, audioFreqHz)
             }
 
@@ -758,9 +1295,10 @@ Item {
                 z: 10
                 clip: true
                 visible: waterfallDisplay.spectrumGpuOverlayAvailable && height > 0
+                readonly property bool cppOverlayEnabled: waterfallDisplay.spectrumGpuOverlayAvailable
+                readonly property bool nativeDecodeLabelsEnabled: true
 
-                readonly property string fixedFontFamily: Qt.platform.os === "osx" ? "Menlo"
-                                                       : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
+                readonly property string fixedFontFamily: decodiumMonoFontFamily
                 readonly property real viewStartHz: waterfallDisplay.viewStartHz
                 readonly property real viewRangeHz: waterfallDisplay.viewRangeHz
                 readonly property real dbRange: Math.max(1, waterfallDisplay.maxDb - waterfallDisplay.minDb)
@@ -823,11 +1361,42 @@ Item {
                 function decodeColor(label) {
                     if (waterfallDisplay.labelUseCustomColor)
                         return waterfallDisplay.labelColor
+                    // 1.0.366+ fix regressione (dal 1.0.332): rispetta il colore
+                    // highlight precalcolato (DXCC/new/worked-before, campo `color`
+                    // = highlightBg dal modello). Dal 1.0.332 il rendering era passato
+                    // al Repeater QML che ignorava questo campo -> i call uscivano solo
+                    // coi 3 colori fissi. Ora torna l'highlight WSJT-X-like.
+                    if (label.color && String(label.color).length > 0)
+                        return label.color
                     if (label.isMyCall)
                         return "#ff5050"
                     if (label.isCQ)
                         return "#00e664"
                     return "#00c8ff"
+                }
+
+                property var cachedFrequencyGridModel: []
+                property var cachedTickModel: []
+
+                Timer {
+                    id: staticOverlayRefreshTimer
+                    interval: 120
+                    repeat: false
+                    onTriggered: {
+                        if (spectrumGpuOverlay.cppOverlayEnabled)
+                            return
+                        spectrumGpuOverlay.cachedFrequencyGridModel =
+                            spectrumGpuOverlay.frequencyGridModel()
+                        spectrumGpuOverlay.cachedTickModel =
+                            spectrumGpuOverlay.tickModel()
+                    }
+                }
+
+                function scheduleStaticOverlayRefresh() {
+                    if (cppOverlayEnabled)
+                        return
+                    if (!staticOverlayRefreshTimer.running)
+                        staticOverlayRefreshTimer.start()
                 }
 
                 // 1.0.175 — Cache del label model con throttle 4 Hz.
@@ -843,6 +1412,8 @@ Item {
                     interval: 250
                     repeat: false
                     onTriggered: {
+                        if (spectrumGpuOverlay.cppOverlayEnabled && !spectrumGpuOverlay.nativeDecodeLabelsEnabled)
+                            return
                         spectrumGpuOverlay.cachedDecodeLabelModel =
                             spectrumGpuOverlay.decodeLabelModel()
                     }
@@ -851,20 +1422,58 @@ Item {
                 Connections {
                     target: waterfallPanel
                     function onSpectrumDecodeLabelsChanged() {
+                        if (spectrumGpuOverlay.cppOverlayEnabled && !spectrumGpuOverlay.nativeDecodeLabelsEnabled)
+                            return
+                        if (!waterfallPanel.showDecodeCallsigns) {
+                            decodeLabelRefreshTimer.stop()
+                            spectrumGpuOverlay.cachedDecodeLabelModel = []
+                            return
+                        }
                         if (!decodeLabelRefreshTimer.running)
                             decodeLabelRefreshTimer.start()
                     }
                     function onShowDecodeCallsignsChanged() {
+                        if (spectrumGpuOverlay.cppOverlayEnabled && !spectrumGpuOverlay.nativeDecodeLabelsEnabled)
+                            return
+                        if (!waterfallPanel.showDecodeCallsigns) {
+                            decodeLabelRefreshTimer.stop()
+                            spectrumGpuOverlay.cachedDecodeLabelModel = []
+                            return
+                        }
                         if (!decodeLabelRefreshTimer.running)
                             decodeLabelRefreshTimer.start()
                     }
                 }
 
-                onWidthChanged:  { if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start() }
-                onHeightChanged: { if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start() }
+                onWidthChanged:  {
+                    if (!cppOverlayEnabled || nativeDecodeLabelsEnabled) {
+                        if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start()
+                    }
+                    if (!cppOverlayEnabled) {
+                        scheduleStaticOverlayRefresh()
+                    }
+                }
+                onHeightChanged: {
+                    if (!cppOverlayEnabled || nativeDecodeLabelsEnabled) {
+                        if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start()
+                    }
+                    if (!cppOverlayEnabled) {
+                        scheduleStaticOverlayRefresh()
+                    }
+                }
+                onViewStartHzChanged: scheduleStaticOverlayRefresh()
+                onViewRangeHzChanged: scheduleStaticOverlayRefresh()
 
                 Component.onCompleted: {
-                    cachedDecodeLabelModel = decodeLabelModel()
+                    if (cppOverlayEnabled) {
+                        cachedFrequencyGridModel = []
+                        cachedTickModel = []
+                        cachedDecodeLabelModel = nativeDecodeLabelsEnabled ? decodeLabelModel() : []
+                    } else {
+                        cachedFrequencyGridModel = frequencyGridModel()
+                        cachedTickModel = tickModel()
+                        cachedDecodeLabelModel = decodeLabelModel()
+                    }
                 }
 
                 function decodeLabelModel() {
@@ -878,23 +1487,26 @@ Item {
                         var d = source[i]
                         var call = d.call || ""
                         var freq = Number(d.freq || 0)
-                        if (!call || freq <= 0)
+                        if (!call || !waterfallPanel.isValidClickableAudioFreq(freq))
                             continue
                         var x = xForFreq(freq)
                         if (x < 0 || x >= width)
                             continue
                         var text = call + " " + Number(d.snr || 0)
+                        var effectiveLabelFontSize = Math.max(10, waterfallDisplay.labelFontSize)
                         items.push({
                             x: Math.round(x),
                             text: text,
                             color: decodeColor(d),
-                            widthHint: Math.max(24, text.length * Math.max(5, waterfallDisplay.labelFontSize * 0.66))
+                            call: call,
+                            freq: freq,
+                            widthHint: Math.max(24, text.length * Math.max(6, effectiveLabelFontSize * 0.68))
                         })
                     }
 
                     items.sort(function(a, b) { return a.x - b.x })
 
-                    var rowHeight = Math.max(10, waterfallDisplay.labelFontSize + 5)
+                    var rowHeight = Math.max(12, Math.max(10, waterfallDisplay.labelFontSize) + 5)
                     var maxRows = Math.max(1, Math.floor(Math.max(1, height - 24) / rowHeight))
                     var rowRight = []
                     for (i = 0; i < maxRows; ++i)
@@ -918,7 +1530,11 @@ Item {
                             textX: textX,
                             y: 2 + row * rowHeight,
                             text: it.text,
-                            color: it.color
+                            color: it.color,
+                            call: it.call,
+                            freq: it.freq,
+                            widthHint: it.widthHint,
+                            rowHeight: rowHeight
                         })
                         rowRight[row] = textX + it.widthHint
                     }
@@ -930,12 +1546,12 @@ Item {
                     y: 0
                     width: Math.max(0, waterfallDisplay.rxFilterRightX - waterfallDisplay.rxFilterLeftX)
                     height: parent.height
-                    visible: width > 0
-                    color: Qt.rgba(0.74, 0.74, 0.74, 0.13)
+                    visible: !spectrumGpuOverlay.cppOverlayEnabled && width > 0
+                    color: Qt.rgba(0.31, 0.43, 0.47, 0.09)
                 }
 
                 Repeater {
-                    model: 6
+                    model: spectrumGpuOverlay.cppOverlayEnabled ? 0 : 6
                     Rectangle {
                         width: spectrumGpuOverlay.width
                         height: 1
@@ -946,7 +1562,7 @@ Item {
                 }
 
                 Repeater {
-                    model: 6
+                    model: spectrumGpuOverlay.cppOverlayEnabled ? 0 : 6
                     Text {
                         readonly property real norm: index / 5
                         x: 2
@@ -959,7 +1575,7 @@ Item {
                 }
 
                 Repeater {
-                    model: spectrumGpuOverlay.frequencyGridModel()
+                    model: spectrumGpuOverlay.cppOverlayEnabled ? [] : spectrumGpuOverlay.cachedFrequencyGridModel
                     Rectangle {
                         x: modelData.x
                         y: 0
@@ -970,7 +1586,7 @@ Item {
                 }
 
                 Repeater {
-                    model: spectrumGpuOverlay.frequencyGridModel()
+                    model: spectrumGpuOverlay.cppOverlayEnabled ? [] : spectrumGpuOverlay.cachedFrequencyGridModel
                     Text {
                         x: spectrumGpuOverlay.clamp(modelData.x - 18, 2, Math.max(2, spectrumGpuOverlay.width - width - 2))
                         y: Math.max(0, spectrumGpuOverlay.height - height - 1)
@@ -983,7 +1599,7 @@ Item {
                 }
 
                 Repeater {
-                    model: spectrumGpuOverlay.tickModel()
+                    model: spectrumGpuOverlay.cppOverlayEnabled ? [] : spectrumGpuOverlay.cachedTickModel
                     Rectangle {
                         x: modelData.x
                         y: Math.max(0, spectrumGpuOverlay.height - 18)
@@ -995,7 +1611,7 @@ Item {
                 }
 
                 Repeater {
-                    model: spectrumGpuOverlay.tickModel()
+                    model: spectrumGpuOverlay.cppOverlayEnabled ? [] : spectrumGpuOverlay.cachedTickModel
                     Text {
                         x: spectrumGpuOverlay.clamp(modelData.x - 20, 2, Math.max(2, spectrumGpuOverlay.width - width - 2))
                         y: Math.max(0, spectrumGpuOverlay.height - 36)
@@ -1008,7 +1624,9 @@ Item {
                 }
 
                 Repeater {
-                    model: spectrumGpuOverlay.cachedDecodeLabelModel
+                    model: spectrumGpuOverlay.nativeDecodeLabelsEnabled
+                           ? spectrumGpuOverlay.cachedDecodeLabelModel
+                           : (spectrumGpuOverlay.cppOverlayEnabled ? [] : spectrumGpuOverlay.cachedDecodeLabelModel)
                     Item {
                         width: spectrumGpuOverlay.width
                         height: spectrumGpuOverlay.height
@@ -1020,14 +1638,48 @@ Item {
                             color: modelData.color
                             opacity: 0.52
                         }
+                        Rectangle {
+                            x: Math.round(modelData.textX - 2)
+                            y: Math.round(modelData.y - 1)
+                            width: Math.round(modelData.widthHint + 4)
+                            height: Math.round(modelData.rowHeight)
+                            color: "#000000"
+                            opacity: 0.48
+                            radius: 0
+                        }
                         Text {
-                            x: modelData.textX
-                            y: modelData.y
+                            x: Math.round(modelData.textX)
+                            y: Math.round(modelData.y)
                             text: modelData.text
                             color: modelData.color
                             font.family: spectrumGpuOverlay.fixedFontFamily
-                            font.pixelSize: waterfallDisplay.labelFontSize
+                            font.pixelSize: Math.max(10, waterfallDisplay.labelFontSize)
                             font.bold: waterfallDisplay.labelBold
+                            font.hintingPreference: Font.PreferFullHinting
+                            renderType: Text.QtRendering
+                        }
+                        MouseArea {
+                            x: Math.round(modelData.textX - 3)
+                            y: Math.round(modelData.y - 2)
+                            width: Math.round(modelData.widthHint + 6)
+                            height: Math.round(modelData.rowHeight + 2)
+                            acceptedButtons: Qt.LeftButton
+                            propagateComposedEvents: true
+                            cursorShape: Qt.PointingHandCursor
+                            // Click sul NOMINATIVO = chiama quella stazione. Fino alla
+                            // 1.0.337 serviva Ctrl+click e il click semplice si limitava
+                            // a spostare la frequenza TX, cosa che non si indovina: chi
+                            // vede un call sul waterfall si aspetta di poterlo chiamare
+                            // cliccandolo. Per la sola frequenza restano il click sul
+                            // waterfall fuori dall'etichetta e Ctrl+click sull'etichetta,
+                            // che non viene accettato qui e passa all'item C++.
+                            onPressed: function(mouse) { mouse.accepted = !(mouse.modifiers & Qt.ControlModifier) }
+                            onClicked: function(mouse) {
+                                if (mouse.modifiers & Qt.ControlModifier)
+                                    return
+                                if (waterfallPanel.isValidClickableAudioFreq(modelData.freq))
+                                    bridge.engageDxClusterSpot(modelData.call, modelData.freq)
+                            }
                         }
                     }
                 }
@@ -1039,7 +1691,7 @@ Item {
                     y: 0
                     width: 1
                     height: parent.height
-                    visible: markerX >= 0 && markerX < spectrumGpuOverlay.width
+                    visible: !spectrumGpuOverlay.cppOverlayEnabled && markerX >= 0 && markerX < spectrumGpuOverlay.width
                     Rectangle { x: -3; width: 7; height: parent.height; color: "#00e5ff"; opacity: 0.27 }
                     Rectangle { x: -1; width: 3; height: parent.height; color: "#00e5ff"; opacity: 0.94 }
                     Rectangle { x: 0; width: 1; height: parent.height; color: "#b4ffff" }
@@ -1052,10 +1704,219 @@ Item {
                     y: 0
                     width: 1
                     height: parent.height
-                    visible: spectrumGpuOverlay.txVisible
+                    // 1.0.288 — marker TX magenta nascosto: l'UNICO indicatore TX è la
+                    // linea rossa animata (txCarrierActiveBar), visibile solo in trasmissione.
+                    visible: false
                     Rectangle { x: -3; width: 7; height: parent.height; color: "#ff00ff"; opacity: 0.27 }
                     Rectangle { x: -1; width: 3; height: parent.height; color: "#ff00ff"; opacity: 0.94 }
                     Rectangle { x: 0; width: 1; height: parent.height; color: "#ffc8ff" }
+                }
+
+                // I due riferimenti dell'RTTY: mark e space, alle frequenze in cui
+                // il decodificatore li aspetta. Sono fissi — non seguono il
+                // segnale, e' il segnale che va portato sopra di loro, girando
+                // la sintonia finche' le due portanti ci si appoggiano. E' il
+                // modo in cui si accorda l'RTTY in ogni programma che lo fa, e
+                // senza questi due riferimenti il waterfall mostra dove sono i
+                // toni ma non dove dovrebbero essere.
+                //
+                // Compaiono solo in RTTY: negli altri modi sarebbero due righe
+                // in mezzo allo spettro senza alcun significato.
+                Repeater {
+                    id: rttyToneMarkers
+                    model: {
+                        if (typeof rtty === 'undefined' || !rtty) return []
+                        if (!bridge || String(bridge.mode).toUpperCase() !== "RTTY") return []
+                        var mark = Number(rtty.markHz)
+                        var shift = Number(rtty.shiftHz)
+                        if (!(mark > 0) || !(shift > 0)) return []
+                        // Il piu' basso e' lo space: nella convenzione di questo
+                        // decodificatore il mark sta in alto e lo shift si conta
+                        // verso il basso. REV scambia il significato dei due
+                        // toni ma non le loro frequenze, quindi le righe non si
+                        // spostano — ed e' giusto cosi': si accorda sulle stesse
+                        // due righe in un senso e nell'altro.
+                        return [{ hz: mark - shift, nome: "S" },
+                                { hz: mark,         nome: "M" }]
+                    }
+
+                    delegate: Item {
+                        required property var modelData
+                        readonly property real markerX: spectrumGpuOverlay.xForFreq(modelData.hz)
+                        x: Math.round(markerX)
+                        y: 0
+                        width: 1
+                        height: parent.height
+                        visible: markerX >= 0 && markerX < spectrumGpuOverlay.width
+                        z: 40
+
+                        // Un alone largo e tenue piu' una riga sottile e netta:
+                        // la riga dice dove, l'alone la rende visibile anche
+                        // sopra il giallo acceso di una portante forte.
+                        Rectangle { x: -3; width: 7; height: parent.height; color: "#ffb000"; opacity: 0.22 }
+                        Rectangle { x: 0;  width: 1; height: parent.height; color: "#ffd166"; opacity: 0.9 }
+
+                        // La lettera in cima, piccola: M e S si riconoscono a
+                        // colpo d'occhio e non rubano spazio allo spettro.
+                        Text {
+                            x: 3
+                            y: 2
+                            text: parent.modelData.nome
+                            color: "#ffd166"
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+                    }
+                }
+
+                // 1.0.365+ (fork) - MAM multi-stream: marker per ogni slot QSO
+                // attivo (modello Fox/hunter). Una linea verticale arancione +
+                // etichetta col call alla freq audio dello slot, mappata con la
+                // stessa xForFreq() di RX/TX/decode. Gated da bridge.mamMultiStream:
+                // con il MAM OFF mamActiveSlots e' vuoto e nulla viene disegnato.
+                Repeater {
+                    id: mamSlotMarkers
+                    model: bridge && bridge.mamMultiStream ? bridge.mamActiveSlots : []
+                    delegate: Item {
+                        readonly property real slotFreq: Number(modelData.freq)
+                        readonly property string slotCall: String(modelData.call)
+                        readonly property bool slotTx: modelData.tx !== undefined && Number(modelData.tx) > 0
+                        readonly property real markerX: spectrumGpuOverlay.xForFreq(slotFreq)
+                        x: 0
+                        y: 0
+                        width: spectrumGpuOverlay.width
+                        height: spectrumGpuOverlay.height
+                        z: 40
+                        visible: bridge && bridge.mamMultiStream
+                                 && markerX >= 0 && markerX < spectrumGpuOverlay.width
+                        // Linea verticale arancione (distinta dal RX ciano e dal TX rosso).
+                        Rectangle {
+                            x: Math.round(markerX) - 1
+                            y: 0
+                            width: 2
+                            height: parent.height
+                            color: "#ffa000"
+                            opacity: 0.92
+                        }
+                        // Etichetta col call dello slot, ancorata in alto.
+                        Rectangle {
+                            id: mamSlotLabelBox
+                            readonly property real boxW: mamSlotLabelText.implicitWidth + 8
+                            x: spectrumGpuOverlay.markerBoxX(markerX, boxW)
+                            y: 2
+                            width: boxW
+                            height: mamSlotLabelText.implicitHeight + 4
+                            color: "#331a00"
+                            border.width: 1
+                            border.color: "#ffa000"
+                            opacity: 0.92
+                            radius: 2
+                            Text {
+                                id: mamSlotLabelText
+                                anchors.centerIn: parent
+                                text: slotCall + (slotTx ? " TX" : "")
+                                color: "#ffd27f"
+                                font.family: spectrumGpuOverlay.fixedFontFamily
+                                font.pixelSize: Math.max(9, waterfallDisplay.labelFontSize - 1)
+                                font.bold: true
+                                renderType: Text.QtRendering
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    id: txSignalWidthGuide
+                    z: -1
+                    anchors.fill: parent
+                    // 1.0.288 — guida banda TX magenta nascosta: l'unico indicatore TX è
+                    // la linea rossa animata (txCarrierActiveBar), visibile solo in TX.
+                    visible: false
+
+                    readonly property real leftX: waterfallDisplay.txSignalLeftX
+                    readonly property real rightX: waterfallDisplay.txSignalRightX
+                    readonly property real clampedLeftX: spectrumGpuOverlay.clamp(leftX, 0, spectrumGpuOverlay.width)
+                    readonly property real clampedRightX: spectrumGpuOverlay.clamp(rightX, 0, spectrumGpuOverlay.width)
+
+                    Rectangle {
+                        x: txSignalWidthGuide.clampedLeftX
+                        y: 0
+                        width: Math.max(1, txSignalWidthGuide.clampedRightX - txSignalWidthGuide.clampedLeftX)
+                        height: parent.height
+                        color: Qt.rgba(1.0, 0.0, 1.0, 0.055)
+                    }
+                    Rectangle {
+                        x: Math.round(txSignalWidthGuide.leftX) - 1
+                        y: 0
+                        width: 2
+                        height: parent.height
+                        visible: txSignalWidthGuide.leftX >= 0 && txSignalWidthGuide.leftX <= spectrumGpuOverlay.width
+                        color: Qt.rgba(1.0, 0.40, 1.0, 0.82)
+                    }
+                    Rectangle {
+                        x: Math.round(txSignalWidthGuide.rightX) - 1
+                        y: 0
+                        width: 2
+                        height: parent.height
+                        visible: txSignalWidthGuide.rightX >= 0 && txSignalWidthGuide.rightX <= spectrumGpuOverlay.width
+                        color: Qt.rgba(1.0, 0.40, 1.0, 0.82)
+                    }
+                }
+
+                // 1.0.269 (fork-only) — TX CARRIER ACTIVE: barra rossa larga ~50Hz
+                // (banda della portante FT8) che si accende SOLO quando bridge.transmitting=true
+                // o bridge.tuning=true. Indica visivamente che la portante e' on-air.
+                // 1.0.270: z=50 per disegnare SOPRA rxMarkerLabel/txMarkerLabel (z=0)
+                // che venivano dichiarati dopo e coprivano la banda rossa.
+                Item {
+                    id: txCarrierActiveBar
+                    z: 50
+                    readonly property real markerX: spectrumGpuOverlay.xForFreq(waterfallDisplay.txFreq)
+                    readonly property real carrierBwHz: Math.max(50, waterfallDisplay.txSignalBandwidthHz)
+                    readonly property real barWidthPx: Math.max(8, carrierBwHz * spectrumGpuOverlay.width / Math.max(1, spectrumGpuOverlay.viewRangeHz))
+                    x: Math.round(markerX - barWidthPx / 2)
+                    y: 0
+                    width: barWidthPx
+                    height: parent.height
+                    visible: bridge && (bridge.transmitting || bridge.tuning)
+                             && markerX >= 0 && markerX < spectrumGpuOverlay.width
+                    // 1.0.288 — pulsazione animata: "linea rossa animata" che indica la TX in corso.
+                    SequentialAnimation on opacity {
+                        running: txCarrierActiveBar.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 1.0; to: 0.45; duration: 400; easing.type: Easing.InOutSine }
+                        NumberAnimation { from: 0.45; to: 1.0; duration: 400; easing.type: Easing.InOutSine }
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        color: Qt.rgba(1.0, 0.12, 0.12, 0.32)
+                        border.color: Qt.rgba(1.0, 0.20, 0.20, 0.95)
+                        border.width: 2
+                    }
+                    Rectangle {
+                        x: parent.width / 2 - 1
+                        width: 2
+                        height: parent.height
+                        color: Qt.rgba(1.0, 0.25, 0.25, 0.98)
+                    }
+                    // Etichetta "TX ON-AIR" sopra
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        anchors.topMargin: 2
+                        width: txOnAirText.implicitWidth + 10
+                        height: txOnAirText.implicitHeight + 4
+                        radius: 3
+                        color: Qt.rgba(0.85, 0.05, 0.05, 0.95)
+                        Text {
+                            id: txOnAirText
+                            anchors.centerIn: parent
+                            text: bridge && bridge.tuning ? "TUNE" : "TX ON-AIR"
+                            color: "#ffffff"
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+                    }
                 }
 
                 Item {
@@ -1066,7 +1927,7 @@ Item {
                     height: rxMarkerText.implicitHeight + 6
                     x: spectrumGpuOverlay.markerBoxX(markerX, width)
                     y: spectrumGpuOverlay.markerBoxY(centerY, height)
-                    visible: markerX >= 0 && markerX < spectrumGpuOverlay.width
+                    visible: !spectrumGpuOverlay.cppOverlayEnabled && markerX >= 0 && markerX < spectrumGpuOverlay.width
                     Rectangle {
                         anchors.fill: parent
                         radius: 4
@@ -1092,7 +1953,8 @@ Item {
                     height: txMarkerText.implicitHeight + 6
                     x: spectrumGpuOverlay.markerBoxX(markerX, width)
                     y: spectrumGpuOverlay.markerBoxY(centerY, height)
-                    visible: spectrumGpuOverlay.txVisible
+                    // 1.0.288 — etichetta TX nascosta: unico indicatore TX = linea rossa animata in TX.
+                    visible: false
                     Rectangle {
                         anchors.fill: parent
                         radius: 4
@@ -1115,7 +1977,7 @@ Item {
                     anchors.bottom: parent.bottom
                     anchors.rightMargin: 4
                     anchors.bottomMargin: 2
-                    visible: waterfallDisplay.autoRange
+                    visible: !spectrumGpuOverlay.cppOverlayEnabled && waterfallDisplay.autoRange
                     text: "NF:" + Math.round(waterfallDisplay.measuredFloor) + "dB"
                     color: "#646464"
                     font.family: spectrumGpuOverlay.fixedFontFamily
@@ -1131,9 +1993,67 @@ Item {
                 width: Math.max(0, waterfallDisplay.rxFilterRightX - waterfallDisplay.rxFilterLeftX)
                 height: Math.max(0, waterfallDisplay.height - waterfallDisplay.spectrumHeight)
                 visible: (bridge.monitoring || bridge.transmitting || bridge.tuning) && width > 0 && height > 0
-                color: Qt.rgba(0.74, 0.74, 0.74, 0.16)
-                border.color: Qt.rgba(1, 1, 1, 0.20)
+                color: Qt.rgba(0.31, 0.43, 0.47, 0.10)
+                border.color: Qt.rgba(0.55, 0.80, 0.90, 0.16)
                 border.width: 1
+            }
+
+            // 1.0.288 — Linea TX ROSSA animata NELLA CASCATA (al centro della portante TX),
+            // visibile SOLO in trasmissione/tune. Sostituisce la vecchia guida magenta
+            // (nascosta come nello spettro). Solo visuale, niente mouse.
+            Item {
+                id: txSignalWaterfallGuide
+                x: 0
+                y: waterfallDisplay.spectrumHeight
+                z: 3
+                width: waterfallDisplay.width
+                height: Math.max(0, waterfallDisplay.height - waterfallDisplay.spectrumHeight)
+                readonly property real markerX: waterfallDisplay.freqToPixel(waterfallDisplay.txFreq)
+                visible: bridge && (bridge.transmitting || bridge.tuning)
+                         && height > 0 && markerX >= 0 && markerX < width
+
+                // 1.0.288 — onda rossa che si propaga lateralmente dal centro e svanisce
+                // (effetto evanescente "come se la riga si propagasse"), in loop durante il TX.
+                Rectangle {
+                    id: txCascadeWave
+                    y: 0
+                    height: parent.height
+                    radius: 3
+                    color: "#ff3030"
+                    x: txSignalWaterfallGuide.markerX - width / 2
+                    ParallelAnimation {
+                        running: txSignalWaterfallGuide.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { target: txCascadeWave; property: "width"; from: 3; to: 54; duration: 1200; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: txCascadeWave; property: "opacity"; from: 0.55; to: 0.0; duration: 1200; easing.type: Easing.OutQuad }
+                    }
+                }
+
+                // Linea centrale rossa (portante TX)
+                Rectangle { x: Math.round(txSignalWaterfallGuide.markerX) - 4; width: 9; height: parent.height; color: "#ff1414"; opacity: 0.22 }
+                Rectangle { x: Math.round(txSignalWaterfallGuide.markerX) - 1; width: 3; height: parent.height; color: "#ff2020"; opacity: 0.95 }
+                Rectangle { x: Math.round(txSignalWaterfallGuide.markerX);     width: 1; height: parent.height; color: "#ffd0d0" }
+
+                // Marca "TX" in cima alla linea
+                Rectangle {
+                    y: 2
+                    width: txCascadeBadge.implicitWidth + 10
+                    height: txCascadeBadge.implicitHeight + 4
+                    radius: 3
+                    x: Math.max(0, Math.min(parent.width - width,
+                               Math.round(txSignalWaterfallGuide.markerX) - width / 2))
+                    color: Qt.rgba(0.85, 0.05, 0.05, 0.95)
+                    border.color: "#ffffff"
+                    border.width: 1
+                    Text {
+                        id: txCascadeBadge
+                        anchors.centerIn: parent
+                        text: "TX"
+                        color: "#ffffff"
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+                }
             }
 
             // Overlay "Start monitoring"
@@ -1146,7 +2066,7 @@ Item {
                 Text {
                     id: startText
                     anchors.centerIn: parent
-                    text: "4096-bin panadapter · SmartSDR style\nClick MONITOR to start"
+                    text: qsTr("4096-bin panadapter · SmartSDR style\nClick MONITOR to start")
                     font.pixelSize: 12
                     color: "#B4B4B4"
                     horizontalAlignment: Text.AlignHCenter
@@ -1158,11 +2078,12 @@ Item {
     Rectangle {
         id: waterfallControlsToggle
         visible: waterfallPanel.showControls && !waterfallPanel.controlsExpanded
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.topMargin: 8
-        anchors.rightMargin: 72
-        width: Math.min(136, Math.max(112, parent.width - 88))
+        // Posizione libera (mobile): -1 = non impostato \u2192 default top-right come prima.
+        property real userX: -1
+        property real userY: -1
+        x: userX >= 0 ? Math.max(0, Math.min(userX, parent.width - width)) : (parent.width - width - 72)
+        y: userY >= 0 ? Math.max(0, Math.min(userY, parent.height - height)) : 8
+        width: Math.min(158, Math.max(134, parent.width - 88))
         height: 30
         z: 200
         radius: 7
@@ -1172,11 +2093,20 @@ Item {
         border.color: accentCyan
         border.width: toggleMouse.containsMouse ? 2 : 1
 
+        // Ripristina posizione salvata all'avvio (stesso helper bridge.getSetting delle altre graph-settings)
+        Component.onCompleted: {
+            var sx = bridge.getSetting("uiWfControlsToggleX", -1)
+            var sy = bridge.getSetting("uiWfControlsToggleY", -1)
+            if (sx >= 0) userX = waterfallPanel.clampNumber(sx, 0, Math.max(0, parent.width - width), -1)
+            if (sy >= 0) userY = waterfallPanel.clampNumber(sy, 0, Math.max(0, parent.height - height), -1)
+        }
+
         Row {
             anchors.centerIn: parent
+            anchors.horizontalCenterOffset: 9
             spacing: 7
             Text {
-                text: "\u2630"
+                text: qsTr("\u2630")
                 color: accentCyan
                 font.pixelSize: 14
                 font.bold: true
@@ -1192,9 +2122,54 @@ Item {
         MouseArea {
             id: toggleMouse
             anchors.fill: parent
+            anchors.leftMargin: 20
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: waterfallPanel.setControlsExpanded(!waterfallPanel.controlsExpanded)
+        }
+
+        // Maniglia di trascinamento (pattern World Clock / MamWindow): solo questa muove il pulsante.
+        Rectangle {
+            id: wfToggleHandle
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 3
+            width: 16
+            height: 24
+            radius: 4
+            color: wfToggleHandleMA.containsMouse
+                   ? Qt.rgba(accentCyan.r, accentCyan.g, accentCyan.b, 0.25)
+                   : "transparent"
+            Text {
+                anchors.centerIn: parent
+                text: qsTr("\u283f")
+                color: accentCyan
+                font.pixelSize: 12
+            }
+            MouseArea {
+                id: wfToggleHandleMA
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.SizeAllCursor
+                property point clickPos: Qt.point(0, 0)
+                onPressed: function(mouse) {
+                    clickPos = Qt.point(mouse.x, mouse.y)
+                    if (waterfallControlsToggle.userX < 0) waterfallControlsToggle.userX = waterfallControlsToggle.x
+                    if (waterfallControlsToggle.userY < 0) waterfallControlsToggle.userY = waterfallControlsToggle.y
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    var nx = waterfallControlsToggle.userX + (mouse.x - clickPos.x)
+                    var ny = waterfallControlsToggle.userY + (mouse.y - clickPos.y)
+                    var p = waterfallControlsToggle.parent
+                    waterfallControlsToggle.userX = Math.max(0, Math.min(nx, p.width - waterfallControlsToggle.width))
+                    waterfallControlsToggle.userY = Math.max(0, Math.min(ny, p.height - waterfallControlsToggle.height))
+                }
+                onReleased: {
+                    waterfallPanel.persistGraphSetting("uiWfControlsToggleX", Math.round(waterfallControlsToggle.userX))
+                    waterfallPanel.persistGraphSetting("uiWfControlsToggleY", Math.round(waterfallControlsToggle.userY))
+                }
+            }
         }
 
         ToolTip.visible: toggleMouse.containsMouse
@@ -1211,50 +2186,100 @@ Item {
             if (!waterfallPanel.visible) return
             waterfallDisplay.addSpectrumData(dbValues, minDb, maxDb, freqMinHz, freqMaxHz)
         }
-        function onPanadapterPcmFrameReady(samples, usableSamples, nfa, nfb, freqMinHz, freqMaxHz, serial) {
-            if (!waterfallPanel.visible) return
-            if (!waterfallDisplay.addPcmFrame(samples, usableSamples, nfa, nfb, freqMinHz, freqMaxHz, serial))
-                bridge.setGpuPanadapterFftAvailable(false, "PanadapterItem rejected GPU FFT frame")
-        }
         // Fallback: valori normalizzati 0-1 dal legacy timer
         function onSpectrumDataReady(data) {
             if (!waterfallPanel.visible) return
             if (!bridge.monitoring) return
             waterfallDisplay.addSpectrumDataNorm(data)
         }
-        function onRxFrequencyChanged() { waterfallDisplay.rxFreq = bridge.rxFrequency }
-        function onTxFrequencyChanged() { waterfallDisplay.txFreq = bridge.txFrequency }
+        function syncRtlSdrRfMarkers() {
+            waterfallDisplay.rxFreq = bridge.rtlSdrRfView
+                    ? bridge.rtlSdrRfSelectedFrequency : bridge.rxFrequency
+            waterfallDisplay.txFreq = bridge.rtlSdrRfView
+                    ? bridge.rtlSdrRfSelectedFrequency : bridge.txFrequency
+        }
+        function onRxFrequencyChanged() { syncRtlSdrRfMarkers() }
+        function onTxFrequencyChanged() { syncRtlSdrRfMarkers() }
+        function onRtlSdrRfViewChanged() { syncRtlSdrRfMarkers() }
+        function onRtlSdrRfCenterFrequencyChanged() { syncRtlSdrRfMarkers() }
+        function onRtlSdrRfSelectedFrequencyChanged() { syncRtlSdrRfMarkers() }
         function onSettingValueChanged(key, value) {
-            if (key !== "uiPaletteIndex"
-                && key !== "uiWaterfallBlackLevel"
-                && key !== "uiWaterfallColorGain"
-                && key !== "uiWaterfallContrast"
-                && key !== "uiWaterfallShowCallsigns")
-                return
-
             waterfallPanel.restoringSettings = true
             if (key === "uiPaletteIndex") {
-                paletteCombo.currentIndex = Math.max(0, Number(value))
-                if (!bridge.themeManager.isLightTheme)
-                    waterfallDisplay.paletteIndex = paletteCombo.currentIndex
+                waterfallPanel.setPaletteIndex(value, false)
+            } else if (key === "uiWaterfallControlsExpanded") {
+                waterfallPanel.controlsExpanded = waterfallPanel.coerceBool(value, true)
+            } else if (key === "uiSpectrumHeight") {
+                waterfallPanel.spectrumHeight = Math.round(waterfallPanel.clampNumber(value, waterfallPanel.spectrumMinHeight, waterfallPanel.spectrumMaxHeight, waterfallPanel.spectrumHeight))
+            } else if (key === "uiWaterfallAutoRange") {
+                autoRangeCheck.checked = waterfallPanel.coerceBool(value, true)
+                waterfallDisplay.autoRange = autoRangeCheck.checked
+            } else if (key === "uiWaterfallShowTxBrackets") {
+                txBracketsCheck.checked = waterfallPanel.coerceBool(value, true)
+                waterfallDisplay.showTxBrackets = txBracketsCheck.checked
+            } else if (key === "uiWaterfallShowDxCluster") {
+                dxClusterCheck.checked = waterfallPanel.coerceBool(value, false)
+                waterfallDisplay.showDxClusterSpots = dxClusterCheck.checked
+            } else if (key === "uiWaterfallPeakHold") {
+                peakHoldCheck.checked = waterfallPanel.coerceBool(value, true)
+                waterfallDisplay.peakHold = peakHoldCheck.checked
             } else if (key === "uiWaterfallBlackLevel") {
-                blackSlider.value = Number(value)
+                blackSlider.value = waterfallPanel.clampNumber(value, blackSlider.from, blackSlider.to, blackSlider.value)
                 waterfallDisplay.blackLevel = blackSlider.value
             } else if (key === "uiWaterfallColorGain") {
-                gainSlider.value = Number(value)
+                gainSlider.value = waterfallPanel.clampNumber(value, gainSlider.from, gainSlider.to, gainSlider.value)
                 waterfallDisplay.colorGain = gainSlider.value
             } else if (key === "uiWaterfallContrast") {
-                contrastSlider.value = Number(value)
+                contrastSlider.value = waterfallPanel.clampNumber(value, contrastSlider.from, contrastSlider.to, contrastSlider.value)
+                waterfallDisplay.contrastLevel = contrastSlider.value
                 waterfallPanel.applyManualContrast()
+            } else if (key === "spectrumInterval") {
+                speedSlider.value = waterfallPanel.clampNumber(value, speedSlider.from, speedSlider.to, speedSlider.value)
+            } else if (key === "uiZoomFactor") {
+                zoomSlider.value = waterfallPanel.clampNumber(value, zoomSlider.from, zoomSlider.to, zoomSlider.value)
+                waterfallDisplay.zoomFactor = zoomSlider.value
+            } else if (key === "uiLabelFontSize") {
+                labelFontSlider.value = waterfallPanel.clampNumber(value, labelFontSlider.from, labelFontSlider.to, labelFontSlider.value)
+                waterfallDisplay.labelFontSize = labelFontSlider.value
+            } else if (key === "uiLabelSpacing") {
+                labelSpacingSlider.value = waterfallPanel.clampNumber(value, labelSpacingSlider.from, labelSpacingSlider.to, labelSpacingSlider.value)
+                waterfallDisplay.labelSpacing = labelSpacingSlider.value
+            } else if (key === "uiLabelBold") {
+                labelBoldCheck.checked = waterfallPanel.coerceBool(value, true)
+                waterfallDisplay.labelBold = labelBoldCheck.checked
+            } else if (key === "uiLabelColorPreset") {
+                labelColorCombo.currentIndex = waterfallPanel.clampIndex(value, waterfallPanel.labelColorPresets.length, labelColorCombo.currentIndex)
+                var preset = waterfallPanel.labelColorPresets[labelColorCombo.currentIndex]
+                waterfallDisplay.labelUseCustomColor = preset.custom
+                waterfallDisplay.labelColor = preset.color
             } else if (key === "uiWaterfallShowCallsigns") {
-                waterfallPanel.showDecodeCallsigns = !!value
-                waterfallPanel.refreshDecodeLabels()
+                waterfallPanel.setShowDecodeCallsigns(waterfallPanel.coerceBool(value, true), false)
+            } else if (key === "uiWfControlsToggleX") {
+                var tx = Number(value)
+                if (isFinite(tx) && tx >= 0)
+                    waterfallControlsToggle.userX = waterfallPanel.clampNumber(tx, 0, Math.max(0, waterfallControlsToggle.parent.width - waterfallControlsToggle.width), waterfallControlsToggle.userX)
+            } else if (key === "uiWfControlsToggleY") {
+                var ty = Number(value)
+                if (isFinite(ty) && ty >= 0)
+                    waterfallControlsToggle.userY = waterfallPanel.clampNumber(ty, 0, Math.max(0, waterfallControlsToggle.parent.height - waterfallControlsToggle.height), waterfallControlsToggle.userY)
+            } else {
+                waterfallPanel.restoringSettings = false
+                return
             }
             waterfallPanel.restoringSettings = false
         }
 
         // Aggiorna i callsign decodificati sul grafico spettro
         function onDecodeListChanged() {
+            if (!bridge.bandActivityModel)
+                waterfallPanel.refreshDecodeLabels()
+        }
+    }
+
+    Connections {
+        target: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : null
+        ignoreUnknownSignals: true
+        function onSnapshotApplied() {
             waterfallPanel.refreshDecodeLabels()
         }
     }

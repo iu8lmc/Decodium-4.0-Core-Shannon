@@ -2,6 +2,14 @@ get_target_property (QtCore_location Qt6::Core LOCATION)
 get_filename_component (QtCore_location ${QtCore_location} PATH)
 list (APPEND fixup_library_dirs ${QtCore_location})
 
+# The optional RTL-SDR receiver is a direct runtime dependency of Decodium.
+# Give BundleUtilities its precise library directory so CPack places it in the
+# macOS/Windows bundle instead of retaining a developer-machine path.
+if (DECODIUM_HAS_RTLSDR AND RtlSdr_LIBRARY)
+  get_filename_component (rtlsdr_lib_dir ${RtlSdr_LIBRARY} PATH)
+  list (APPEND fixup_library_dirs ${rtlsdr_lib_dir})
+endif ()
+
 if (APPLE)
   # Homebrew Qt image plugins depend on webp/sharpyuv dylibs that are outside Qt's own lib dir.
   if (EXISTS "/opt/homebrew/opt/webp/lib")

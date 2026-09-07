@@ -84,10 +84,13 @@ Q_SIGNALS:
   void selectCallerDue(QString const& commandId, QString const& call, QString const& grid);
   void setModeRequested(QString const& commandId, QString const& mode);
   void setBandRequested(QString const& commandId, QString const& band);
+  void sendCwRequested(QString const& commandId, QString const& text, qint64 dialFrequencyHz, int wpm);
   void setDialFrequencyRequested(QString const& commandId, qint64 dialFrequencyHz);
   void setRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
   void setTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
   void setTxEnabledRequested(QString const& commandId, bool enabled);
+  void sendTxRequested(QString const& commandId, int slot);
+  void stopTxRequested(QString const& commandId);
   void setAutoCqRequested(QString const& commandId, bool enabled);
   void setAutoSpotRequested(QString const& commandId, bool enabled);
   void setMonitoringRequested(QString const& commandId, bool enabled);
@@ -158,7 +161,10 @@ private:
   bool authUserMatches(QString const& candidate) const;
   bool isHttpAuthorized(HttpConnectionState const& state) const;
   bool isAllowedWebSocketOrigin(QWebSocket const* client) const;
-  bool isAuthRequired() const { return !authToken_.isEmpty(); }
+  // Su loopback (127.0.0.1) l'accesso è già limitato al PC locale: nessuna
+  // autenticazione richiesta (così app locali come Decodius possono comandare).
+  // Su LAN (bind non-loopback) il token resta obbligatorio.
+  bool isAuthRequired() const { return !authToken_.isEmpty() && !bindAddress_.isLoopback(); }
   bool isClientAuthenticated(QWebSocket * client) const;
   void markClientAuthenticated(QWebSocket * client);
   void setWaterfallEnabled(bool enabled, QString const& commandId = QString {});

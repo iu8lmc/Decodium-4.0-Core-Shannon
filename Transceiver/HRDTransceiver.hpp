@@ -75,8 +75,11 @@ private:
   void map_modes (int dropdown, ModeMap *);
   int lookup_mode (MODE, ModeMap const&) const;
   MODE lookup_mode (int, ModeMap const&) const;
+  bool set_mode_dropdown (int dropdown, ModeMap const&, MODE);
+  MODE protect_pending_data_mode (MODE) const;
   void set_data_mode (MODE);
   MODE get_data_mode (MODE);
+  void prefer_data_mode_dropdown_selection (int);
 
   // An alternate TransceiverBase instance that can be used to drive
   // PTT if required.
@@ -195,6 +198,8 @@ private:
                                 // PTT - used to select rear audio.
 
   bool reversed_;               // True if VFOs are reversed.
+  MODE pending_data_mode_ {UNK};
+  qint64 pending_data_mode_until_ms_ {0};
   bool startup_diagnostics_active_ {false};
   quint64 hrd_command_sequence_ {0};
 };

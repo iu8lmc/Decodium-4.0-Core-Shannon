@@ -30,6 +30,12 @@ extern "C"
   void ftx_ft2_cpp_dsp_rollout_stage_override_c (int stage);
   void ftx_ft2_cpp_dsp_rollout_stage_reset_c ();
   void ftx_ft2_stage7_clravg_c ();
+  int ftx_ft2_ap_msg_tentativi_c ();
+  int ftx_ft2_ap_msg_successi_c ();
+  int ftx_ft2_ap_msg_memoria_c ();
+  int ftx_ft2_ap_msg_candidati_c ();
+  int ftx_ft2_ap_soft_tentativi_c ();
+  int ftx_ft2_ap_soft_successi_c ();
 }
 
 namespace
@@ -499,14 +505,17 @@ int main (int argc, char * argv[])
       parser.addOption (mycall_option);
       parser.addOption (hiscall_option);
       parser.addPositionalArgument (QStringLiteral ("wav-file"),
-                                    QStringLiteral ("Path to a 12000 Hz mono 16-bit FT2 WAV file."));
+                                    QStringLiteral ("Path to a 12000 Hz mono 16-bit FT2 WAV file. "
+                                                    "More than one: decoded in sequence in the same "
+                                                    "process, so state that survives between slots "
+                                                    "(the type-8 message memory) is preserved."));
 
       parser.process (app);
 
       QStringList const positional = parser.positionalArguments ();
-      if (positional.size () != 1)
+      if (positional.isEmpty ())
         {
-          fail (QStringLiteral ("expected exactly one WAV file path"));
+          fail (QStringLiteral ("expected at least one WAV file path"));
         }
 
       QList<int> const stages = parse_stages (parser.value (stages_option));
@@ -519,42 +528,57 @@ int main (int argc, char * argv[])
       QByteArray const mycall = parser.value (mycall_option).trimmed ().toLatin1 ();
       QByteArray const hiscall = parser.value (hiscall_option).trimmed ().toLatin1 ();
 
-      WavData const wav = read_wav_file (positional.constFirst ());
-
       QTextStream out {stdout};
-      out << "file: " << QFileInfo (positional.constFirst ()).absoluteFilePath () << '\n';
-      out << "samples: source=" << wav.source_samples
-          << " compare=" << wav.samples.size ()
-          << " sample_rate=" << wav.sample_rate
-          << " channels=" << wav.channels
-          << " bits=" << wav.bits_per_sample;
-      if (wav.padded) out << " padded";
-      if (wav.truncated) out << " truncated";
-      out << '\n';
-      out << "decoder params: nqsoprogress=" << nqsoprogress
-          << " nfqso=" << nfqso
-          << " nfa=" << nfa
-          << " nfb=" << nfb
-          << " ndepth=" << ndepth
-          << " ncontest=" << ncontest
-          << '\n' << '\n';
-
-      std::vector<DecodeResult> results;
-      results.reserve (static_cast<size_t> (stages.size ()));
-      for (int stage : stages)
+      for (QString const& path : positional)
         {
-          auto result = run_decode (wav.samples, stage, nqsoprogress, nfqso, nfa, nfb, ndepth,
-                                    ncontest, mycall, hiscall);
-          print_result (out, result);
+          WavData const wav = read_wav_file (path);
+
+          out << "file: " << QFileInfo (path).absoluteFilePath () << '\n';
+          out << "samples: source=" << wav.source_samples
+              << " compare=" << wav.samples.size ()
+              << " sample_rate=" << wav.sample_rate
+              << " channels=" << wav.channels
+              << " bits=" << wav.bits_per_sample;
+          if (wav.padded) out << " padded";
+          if (wav.truncated) out << " truncated";
           out << '\n';
-          results.push_back (std::move (result));
-        }
+          out << "decoder params: nqsoprogress=" << nqsoprogress
+              << " nfqso=" << nfqso
+              << " nfa=" << nfa
+              << " nfb=" << nfb
+              << " ndepth=" << ndepth
+              << " ncontest=" << ncontest
+              << '\n' << '\n';
 
-      for (size_t i = 0; i < results.size (); ++i)
-        {
-          for (size_t j = i + 1; j < results.size (); ++j)
+          std::vector<DecodeResult> results;
+          results.reserve (static_cast<size_t> (stages.size ()));
+          for (int stage : stages)
             {
-              print_comparison (out, results[i], results[j]);
+              auto result = run_decode (wav.samples, stage, nqsoprogress, nfqso, nfa, nfb, ndepth,
+                                        ncontest, mycall, hiscall);
+              print_result (out, result);
+              out << '\n';
+              results.push_back (std::move (result));
+            }
+
+          for (size_t i = 0; i < results.size (); ++i)
+            {
+              for (size_t j = i + 1; j < results.size (); ++j)
+                {
+                  print_comparison (out, results[i], results[j]);
+                }
+            }
+
+          // Diagnostica del tipo 8 (DECODIUM_FT2_AP_MSG): quante ipotesi sono
+          // state provate, quante hanno decodificato, quanti messaggi in memoria.
+          if (std::getenv ("DECODIUM_AP_STORICO_DIAG"))
+            {
+              out << "ap_msg: tentativi=" << ftx_ft2_ap_msg_tentativi_c ()
+                  << " successi=" << ftx_ft2_ap_msg_successi_c ()
+                  << " memoria=" << ftx_ft2_ap_msg_memoria_c ()
+                  << " candidati_forzati=" << ftx_ft2_ap_msg_candidati_c ()
+                  << " ap_soft_tentativi=" << ftx_ft2_ap_soft_tentativi_c ()
+                  << " ap_soft_successi=" << ftx_ft2_ap_soft_successi_c () << '\n' << '\n';
             }
         }
 

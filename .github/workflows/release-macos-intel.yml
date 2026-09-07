@@ -1,4 +1,4 @@
-name: Release macOS Intel
+name: Release macOS Intel Qt 6.11
 
 on:
   workflow_dispatch:
@@ -17,8 +17,19 @@ permissions:
   contents: write
 
 env:
+  QT_VERSION: "6.11.0"
+  QT_ARCH: "clang_64"
+  QT_CACHE_ROOT: ".ci/cache/qt-macos-6.11.0-clang_64"
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
+  RTLSDR_VERSION: "2.0.2"
+  DECODIUM_REQUIRE_RTLSDR: "ON"
+  BOOST_VERSION: "1.85.0"
+  BOOST_VERSION_UNDERSCORE: "1_85_0"
+  FFTW_VERSION: "3.3.10"
+  LIBUSB_VERSION: "1.0.27"
+  OPENJPEG_VERSION: "2.5.4"
+  SOURCE_DEPS_ROOT: ".ci/cache/macos-intel-source-deps"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,62 +39,249 @@ jobs:
   build:
     name: Build ${{ matrix.asset_suffix }} on ${{ matrix.runner }}
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.experimental }}
-    timeout-minutes: 180
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: macos-15-intel
+            compat_macos: "13.0"
+            asset_suffix: "macos-ventura-x86_64"
+            source_deps: true
+          - runner: macos-15-intel
+            compat_macos: "14.0"
+            asset_suffix: "macos-sonoma-x86_64"
+            source_deps: false
+          - runner: macos-15-intel
             compat_macos: "15.0"
             asset_suffix: "macos-sequoia-x86_64"
-            experimental: false
-          - runner: macos-15-intel
-            compat_macos: "12.0"
-            asset_suffix: "macos-monterey-x86_64"
-            experimental: true
+            source_deps: false
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Select version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
-          elif [[ -f fork_release_version.txt ]]; then
-            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
-          else
-            VERSION="0.0.0-ci-${GITHUB_SHA::7}"
-          fi
-          VERSION="${VERSION#v}"
-          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          set -euo pipefail
+          VERSION="$(scripts/ci/resolve-release-version.sh "${INPUT_VERSION}")"
+          scripts/ci/validate-repository-layout.sh
+          printf 'VERSION=%s\n' "${VERSION}" >> "$GITHUB_ENV"
           echo "Using version: ${VERSION}"
 
-      - name: Install dependencies
+      - name: Install build dependencies
+        env:
+          HOMEBREW_NO_INSTALL_UPGRADE: "1"
         run: |
+          set -euo pipefail
           brew update
-          brew install qt gcc fftw libusb boost pkg-config create-dmg dylibbundler
+          packages=(cmake pkg-config create-dmg dylibbundler)
+          if [[ "${{ matrix.source_deps }}" == "true" ]]; then
+            packages+=(autoconf automake libtool)
+          else
+            packages+=(fftw libusb boost openjpeg)
+          fi
+          brew install "${packages[@]}"
 
-          GCC_PREFIX="$(brew --prefix gcc)"
-          GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
-          if [[ -z "${GFORTRAN}" ]]; then
-            echo "gfortran not found under ${GCC_PREFIX}/bin"
+          # The Intel image already provides GCC. Do not upgrade it to an
+          # unbottled release: that can spend hours rebuilding the toolchain.
+          GFORTRAN="$(find /usr/local/bin -maxdepth 1 -name 'gfortran*' | sort | head -1)"
+          if [[ -z "${GFORTRAN}" || ! -x "${GFORTRAN}" ]]; then
+            brew install gcc@14
+            GCC_PREFIX="$(brew --prefix gcc@14)"
+            GFORTRAN="${GCC_PREFIX}/bin/gfortran-14"
+          fi
+          if [[ ! -x "${GFORTRAN}" ]]; then
+            echo "No executable gfortran found"
             exit 1
           fi
           echo "FC=${GFORTRAN}" >> "$GITHUB_ENV"
           "${GFORTRAN}" --version
+          if [[ "${{ matrix.source_deps }}" != "true" ]]; then
+            echo "OPENJPEG_PREFIX=$(brew --prefix openjpeg)" >> "$GITHUB_ENV"
+          fi
 
-          QT_PREFIX="$(brew --prefix qt)"
+      - name: Restore Ventura source dependency cache
+        id: source-deps-cache
+        if: matrix.source_deps == true
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.SOURCE_DEPS_ROOT }}-${{ matrix.compat_macos }}
+          key: macos-intel-source-deps-${{ matrix.compat_macos }}-boost-${{ env.BOOST_VERSION }}-fftw-${{ env.FFTW_VERSION }}-libusb-${{ env.LIBUSB_VERSION }}-openjpeg-${{ env.OPENJPEG_VERSION }}-v2
+
+      - name: Build Ventura source dependencies
+        if: matrix.source_deps == true && steps.source-deps-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          DEPS_PREFIX="${GITHUB_WORKSPACE}/${SOURCE_DEPS_ROOT}-${{ matrix.compat_macos }}"
+          MACOS_DEPLOYMENT_TARGET="${{ matrix.compat_macos }}"
+          JOBS="$(sysctl -n hw.ncpu)"
+
+          rm -rf "${DEPS_PREFIX}"
+          mkdir -p "${DEPS_PREFIX}" "${RUNNER_TEMP}/source-deps"
+
+          export MACOSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}"
+          export CC=clang
+          export CXX=clang++
+          export CFLAGS="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${CFLAGS:-}"
+          export CXXFLAGS="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${CXXFLAGS:-}"
+          export OBJCFLAGS="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${OBJCFLAGS:-}"
+          export LDFLAGS="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} -L${DEPS_PREFIX}/lib ${LDFLAGS:-}"
+          export CPPFLAGS="-I${DEPS_PREFIX}/include ${CPPFLAGS:-}"
+          export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+
+          cd "${RUNNER_TEMP}/source-deps"
+
+          curl -fsSL -o "libusb-${LIBUSB_VERSION}.tar.bz2" \
+            "https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2"
+          tar -xjf "libusb-${LIBUSB_VERSION}.tar.bz2"
+          cd "libusb-${LIBUSB_VERSION}"
+          ./configure --prefix="${DEPS_PREFIX}" --disable-static --enable-shared --disable-dependency-tracking
+          make -j"${JOBS}"
+          make install
+
+          cd "${RUNNER_TEMP}/source-deps"
+          curl -fsSL -o "openjpeg-${OPENJPEG_VERSION}.tar.gz" \
+            "https://github.com/uclouvain/openjpeg/archive/refs/tags/v${OPENJPEG_VERSION}.tar.gz"
+          tar -xzf "openjpeg-${OPENJPEG_VERSION}.tar.gz"
+          cmake -S "openjpeg-${OPENJPEG_VERSION}" \
+            -B "openjpeg-${OPENJPEG_VERSION}/build-decodium" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${DEPS_PREFIX}" \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}" \
+            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_CODEC=OFF \
+            -DBUILD_TESTING=OFF
+          cmake --build "openjpeg-${OPENJPEG_VERSION}/build-decodium" \
+            --parallel "${JOBS}"
+          cmake --install "openjpeg-${OPENJPEG_VERSION}/build-decodium"
+
+          cd "${RUNNER_TEMP}/source-deps"
+          curl -fsSL -o "fftw-${FFTW_VERSION}.tar.gz" \
+            "https://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz"
+          tar -xzf "fftw-${FFTW_VERSION}.tar.gz"
+          cd "fftw-${FFTW_VERSION}"
+          ./configure --prefix="${DEPS_PREFIX}" --enable-float --enable-threads --disable-static --enable-shared --disable-fortran
+          make -j"${JOBS}"
+          make install
+
+          cd "${RUNNER_TEMP}/source-deps"
+          curl -fsSL -o "boost_${BOOST_VERSION_UNDERSCORE}.tar.gz" \
+            "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.gz"
+          tar -xzf "boost_${BOOST_VERSION_UNDERSCORE}.tar.gz"
+          cd "boost_${BOOST_VERSION_UNDERSCORE}"
+          ./bootstrap.sh \
+            --prefix="${DEPS_PREFIX}" \
+            --with-libraries=atomic,chrono,container,date_time,filesystem,log,regex,serialization,system,thread \
+            --without-icu
+          ./b2 -j"${JOBS}" install \
+            toolset=clang \
+            variant=release \
+            link=shared \
+            threading=multi \
+            runtime-link=shared \
+            address-model=64 \
+            architecture=x86 \
+            cxxstd=17 \
+            cflags="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}" \
+            cxxflags="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}" \
+            linkflags="-arch x86_64 -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
+
+          find "${DEPS_PREFIX}/lib" -maxdepth 1 -name '*.dylib' -print | sort
+
+      - name: Save Ventura source dependency cache
+        if: matrix.source_deps == true && steps.source-deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SOURCE_DEPS_ROOT }}-${{ matrix.compat_macos }}
+          key: macos-intel-source-deps-${{ matrix.compat_macos }}-boost-${{ env.BOOST_VERSION }}-fftw-${{ env.FFTW_VERSION }}-libusb-${{ env.LIBUSB_VERSION }}-openjpeg-${{ env.OPENJPEG_VERSION }}-v2
+
+      - name: Restore Qt 6.11 cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: macos-intel-qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}-v1
+
+      - name: Install Qt 6.11
+        run: |
+          set -euo pipefail
+          QT_INSTALL_ROOT="${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}"
+
+          QMAKE_PATH="$(find "${QT_INSTALL_ROOT}" -path '*/bin/qmake6' -type f 2>/dev/null | head -n1 || true)"
+          if [[ -z "${QMAKE_PATH}" || ! -x "${QMAKE_PATH}" ]]; then
+            rm -rf "${QT_INSTALL_ROOT}"
+            python3 -m venv "${RUNNER_TEMP}/aqt-venv"
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m pip install --upgrade pip aqtinstall
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m aqt install-qt mac desktop "${QT_VERSION}" "${QT_ARCH}" \
+              -O "${QT_INSTALL_ROOT}" \
+              -m qt5compat qtimageformats qtmultimedia qtserialport qtshadertools qtwebsockets
+          fi
+
+          QMAKE_PATH="$(find "${QT_INSTALL_ROOT}" -path '*/bin/qmake6' -type f 2>/dev/null | head -n1 || true)"
+          if [[ -z "${QMAKE_PATH}" || ! -x "${QMAKE_PATH}" ]]; then
+            echo "Unable to locate Qt 6.11 qmake6 under ${QT_INSTALL_ROOT}"
+            exit 1
+          fi
+
+          QT_PREFIX="$(cd "$(dirname "${QMAKE_PATH}")/.." && pwd)"
+          QT_REPORTED_VERSION="$("${QMAKE_PATH}" -query QT_VERSION)"
+          case "${QT_REPORTED_VERSION}" in
+            6.11.*) ;;
+            *)
+              echo "Expected Qt 6.11.x, got ${QT_REPORTED_VERSION}"
+              exit 1
+              ;;
+          esac
+
           echo "${QT_PREFIX}/bin" >> "$GITHUB_PATH"
           echo "QT_PREFIX=${QT_PREFIX}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "$GITHUB_ENV"
-          qmake6 -v
+          echo "QMAKE=${QMAKE_PATH}" >> "$GITHUB_ENV"
+          if [[ -n "${OPENJPEG_PREFIX:-}" ]]; then
+            echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${OPENJPEG_PREFIX}" >> "$GITHUB_ENV"
+          else
+            echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "$GITHUB_ENV"
+          fi
+          "${QMAKE_PATH}" -v
+
+      - name: Use Ventura source dependency prefix
+        if: matrix.source_deps == true
+        run: |
+          set -euo pipefail
+          DEPS_PREFIX="${GITHUB_WORKSPACE}/${SOURCE_DEPS_ROOT}-${{ matrix.compat_macos }}"
+          test -d "${DEPS_PREFIX}/include"
+          test -d "${DEPS_PREFIX}/lib"
+
+          echo "SOURCE_DEPS_PREFIX=${DEPS_PREFIX}" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=${DEPS_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${DEPS_PREFIX}" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=${DEPS_PREFIX}" >> "$GITHUB_ENV"
+          echo "BOOST_INCLUDEDIR=${DEPS_PREFIX}/include" >> "$GITHUB_ENV"
+          echo "BOOST_LIBRARYDIR=${DEPS_PREFIX}/lib" >> "$GITHUB_ENV"
+          echo "Boost_NO_SYSTEM_PATHS=ON" >> "$GITHUB_ENV"
+          echo "FFTW3_ROOT_DIR=${DEPS_PREFIX}" >> "$GITHUB_ENV"
+          echo "DECODIUM_BUNDLE_LIBRARY_DIRS=${DEPS_PREFIX}/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${DEPS_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
       - name: Build and install Hamlib
         run: |
           set -euo pipefail
           HAMLIB_PREFIX="${RUNNER_TEMP}/hamlib-prefix"
+          MACOS_DEPLOYMENT_TARGET="${{ matrix.compat_macos }}"
+
+          export MACOSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}"
+          export CFLAGS="-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${CFLAGS:-}"
+          export CXXFLAGS="-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${CXXFLAGS:-}"
+          export OBJCFLAGS="-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${OBJCFLAGS:-}"
+          export LDFLAGS="-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET} ${LDFLAGS:-}"
+          if [[ -n "${SOURCE_DEPS_PREFIX:-}" ]]; then
+            export CPPFLAGS="-I${SOURCE_DEPS_PREFIX}/include ${CPPFLAGS:-}"
+            export LDFLAGS="-L${SOURCE_DEPS_PREFIX}/lib ${LDFLAGS}"
+            export PKG_CONFIG_PATH="${SOURCE_DEPS_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          fi
 
           echo "Using Hamlib ${HAMLIB_TAG}"
           cd "${RUNNER_TEMP}"
@@ -102,7 +300,12 @@ jobs:
 
           echo "${HAMLIB_PREFIX}/bin" >> "$GITHUB_PATH"
           echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+          if [[ -n "${SOURCE_DEPS_PREFIX:-}" ]]; then
+            echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${SOURCE_DEPS_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=${HAMLIB_PREFIX}/lib:${SOURCE_DEPS_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          else
+            echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${OPENJPEG_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+          fi
           echo "Hamlib_INCLUDE_DIR=${HAMLIB_PREFIX}/include" >> "$GITHUB_ENV"
           echo "Hamlib_LIBRARY=${HAMLIB_LIBRARY}" >> "$GITHUB_ENV"
           echo "RIGCTL_EXE=${HAMLIB_PREFIX}/bin/rigctl" >> "$GITHUB_ENV"
@@ -111,18 +314,44 @@ jobs:
 
           "${HAMLIB_PREFIX}/bin/rigctl" --version
 
-      - name: Build release assets
+      - name: Build pinned RTL-SDR Blog driver
         run: |
-          EXTRA_ARGS=()
-          if [[ "${{ matrix.experimental }}" == "true" ]]; then
-            echo "Experimental legacy build enabled for ${{ matrix.asset_suffix }}; skipping strict compatibility gate."
-            EXTRA_ARGS+=(--skip-compat-check)
+          set -euo pipefail
+          RTLSDR_PREFIX="${RUNNER_TEMP}/librtlsdr-${RTLSDR_VERSION}-macos-${{ matrix.compat_macos }}"
+          export MACOSX_DEPLOYMENT_TARGET="${{ matrix.compat_macos }}"
+          export CMAKE_OSX_ARCHITECTURES=x86_64
+          export CFLAGS="-arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET} ${CFLAGS:-}"
+          export CXXFLAGS="-arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET} ${CXXFLAGS:-}"
+          export LDFLAGS="-arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET} ${LDFLAGS:-}"
+          if [[ -n "${SOURCE_DEPS_PREFIX:-}" ]]; then
+            export CPPFLAGS="-I${SOURCE_DEPS_PREFIX}/include ${CPPFLAGS:-}"
+            export LDFLAGS="-L${SOURCE_DEPS_PREFIX}/lib ${LDFLAGS}"
+            export PKG_CONFIG_PATH="${SOURCE_DEPS_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
           fi
+          RTLSDR_VERSION="${RTLSDR_VERSION}" RTLSDR_PREFIX="${RTLSDR_PREFIX}" \
+            scripts/ci/build-librtlsdr.sh
+
+          RTLSDR_LIBRARY="$(find "${RTLSDR_PREFIX}/lib" -maxdepth 1 -type f -name 'librtlsdr*.dylib' | sort | head -n1)"
+          test -f "${RTLSDR_PREFIX}/include/rtl-sdr.h"
+          test -n "${RTLSDR_LIBRARY}"
+
+          echo "RTLSDR_PREFIX=${RTLSDR_PREFIX}" >> "$GITHUB_ENV"
+          echo "RtlSdr_INCLUDE_DIR=${RTLSDR_PREFIX}/include" >> "$GITHUB_ENV"
+          echo "RtlSdr_LIBRARY=${RTLSDR_LIBRARY}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${RTLSDR_PREFIX};${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${RTLSDR_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+      - name: Build release assets
+        env:
+          # Boost 1.85 triggers deprecated-copy diagnostics with the newer
+          # AppleClang installed on macos-15-intel. Keep project warnings as
+          # errors while treating this third-party-header warning normally.
+          CXXFLAGS: -Wno-error=deprecated-copy
+        run: |
           scripts/release-macos.sh "${VERSION}" \
             --compat-macos "${{ matrix.compat_macos }}" \
             --asset-suffix "${{ matrix.asset_suffix }}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            "${EXTRA_ARGS[@]}"
+            --repo "${GITHUB_REPOSITORY}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -131,7 +360,6 @@ jobs:
           if-no-files-found: error
           path: |
             build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.dmg
-            build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.zip
             build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}-sha256.txt
 
   publish:
@@ -146,13 +374,14 @@ jobs:
 
       - name: Select version
         id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [[ -z "${VERSION}" && -f fork_release_version.txt ]]; then
-            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
-          fi
-          VERSION="${VERSION#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          VERSION="$(scripts/ci/resolve-release-version.sh "${INPUT_VERSION}")"
+          RELEASE_REF="v${VERSION}"
+          printf 'version=%s\n' "${VERSION}" >> "$GITHUB_OUTPUT"
+          printf 'release_ref=%s\n' "${RELEASE_REF}" >> "$GITHUB_OUTPUT"
           echo "Using version: ${VERSION}"
 
       - name: Download build artifacts
@@ -166,22 +395,19 @@ jobs:
         run: |
           ls -lh release-assets
           VERSION="${{ steps.version.outputs.version }}"
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-ventura-x86_64.dmg"
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-ventura-x86_64-sha256.txt"
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sonoma-x86_64.dmg"
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sonoma-x86_64-sha256.txt"
           test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
-          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.zip"
           test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
-          if [[ -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
-                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
-                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
-            echo "Monterey Intel artifact detected and will be published."
-          else
-            echo "Monterey Intel artifact not produced in this run (experimental target)."
-          fi
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_REF="${{ steps.version.outputs.release_ref }}"
           REPO="${GITHUB_REPOSITORY}"
 
           NOTES_FILE="$(mktemp)"
@@ -195,25 +421,19 @@ jobs:
           fi
 
           ASSETS=(
+            "release-assets/decodium4-ft2-${VERSION}-macos-ventura-x86_64.dmg"
+            "release-assets/decodium4-ft2-${VERSION}-macos-ventura-x86_64-sha256.txt"
+            "release-assets/decodium4-ft2-${VERSION}-macos-sonoma-x86_64.dmg"
+            "release-assets/decodium4-ft2-${VERSION}-macos-sonoma-x86_64-sha256.txt"
             "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
-            "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.zip"
             "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
           )
-          if [[ -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
-                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
-                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
-            ASSETS+=(
-              "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.dmg"
-              "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.zip"
-              "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt"
-            )
-          fi
 
-          if gh release view "${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
-            gh release upload "${VERSION}" "${ASSETS[@]}" --repo "${REPO}" --clobber
-            gh release edit "${VERSION}" --repo "${REPO}" --notes-file "${NOTES_FILE}"
+          if gh release view "${RELEASE_REF}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_REF}" "${ASSETS[@]}" --repo "${REPO}" --clobber
+            gh release edit "${RELEASE_REF}" --repo "${REPO}" --notes-file "${NOTES_FILE}"
           else
-            gh release create "${VERSION}" "${ASSETS[@]}" \
+            gh release create "${RELEASE_REF}" "${ASSETS[@]}" \
               --repo "${REPO}" \
               --title "Decodium 4 FT2 ${VERSION} (macOS Intel)" \
               --notes-file "${NOTES_FILE}"

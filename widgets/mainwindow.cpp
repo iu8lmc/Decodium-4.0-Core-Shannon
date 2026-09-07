@@ -16,6 +16,7 @@
 #include "Detector/LegacyDspIoHelpers.hpp"
 #include "Modulator/RTTYModulator.hpp"
 #include "Decoder/BaudotDecoder.hpp"
+#include "Sequencer/MessageTokenRules.hpp"
 
 #include <QSoundEffect>
 #include <QCoreApplication>
@@ -29,8 +30,10 @@
 #include <fstream>
 #include <iterator>
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <fftw3.h>
 #include <thread> // TCI
 #include <QApplication>
@@ -113,6 +116,7 @@ extern "C" void ftx_ft8_a7_save_c (int jseq, float dt, float freq, char const* m
 #include "revision_utils.hpp"
 #include "qt_helpers.hpp"
 #include "Network/NetworkAccessManager.hpp"
+#include "Network/UdpClientId.hpp"
 #include "Audio/soundout.h"
 #include "Audio/soundin.h"
 #include "Modulator/Modulator.hpp"
@@ -125,9 +129,18 @@ extern "C" void ftx_ft8_a7_save_c (int jseq, float dt, float freq, char const* m
 #include "fastplot.h"
 #include "fastgraph.h"
 #include "LegacyUiHelpers.hpp"
+#include "LegacyDecodeWindow.hpp"
 
 namespace
 {
+  qint64 monotonic_now_ns ()
+  {
+    using Clock = std::chrono::steady_clock;
+    return std::chrono::duration_cast<std::chrono::nanoseconds> (
+               Clock::now ().time_since_epoch ())
+        .count ();
+  }
+
   void play_sound_effect (QObject * parent, QString const& path)
   {
     auto * effect = new QSoundEffect {parent};
@@ -308,11 +321,41 @@ namespace
     return legacy_runtime_setting (settings, key, fallback).toBool ();
   }
 
+  bool legacy_udp_traffic_enabled (QSettings const * settings,
+                                   QString const& destination_prefix,
+                                   QString const& category)
+  {
+    QString const key = destination_prefix + QStringLiteral ("Send") + category;
+    if (category == QStringLiteral ("Qso"))
+      {
+        bool const legacy_adif_default = legacy_runtime_bool (
+          settings, destination_prefix + QStringLiteral ("LoggedAdifEnabled"), true);
+        return legacy_runtime_bool (settings, key, legacy_adif_default);
+      }
+    return legacy_runtime_bool (settings, key, true);
+  }
+
+  bool legacy_udp_realtime_enabled (QSettings const * settings,
+                                    QString const& destination_prefix)
+  {
+    return legacy_udp_traffic_enabled (settings, destination_prefix, QStringLiteral ("Decode"))
+      || legacy_udp_traffic_enabled (settings, destination_prefix, QStringLiteral ("Status"))
+      || legacy_udp_traffic_enabled (settings, destination_prefix, QStringLiteral ("Wspr"));
+  }
+
   QString legacy_runtime_string (QSettings const * settings,
                                  QString const& key,
                                  QString const& fallback = QString {})
   {
     return legacy_runtime_setting (settings, key, fallback).toString ().trimmed ();
+  }
+
+  QString legacy_udp_client_id (QSettings const * settings,
+                                QString const& key = QStringLiteral ("UDPClientId"),
+                                QString const& fallback = QStringLiteral ("WSJTX"))
+  {
+    return decodium::network::normalizedUdpClientId (
+      legacy_runtime_string (settings, key, fallback), fallback);
   }
 
   quint16 legacy_runtime_udp_port (QSettings const * settings,
@@ -1047,13 +1090,6 @@ static void apply_async_ft2_tdelta (QString& line, qint64 asyncRxStartMs)
     .arg (payload);
 }
 
-static QString udp_client_id_from_application_name ()
-{
-  // Keep WSJT-X compatibility for third-party UDP clients that key off
-  // the traditional application identifier instead of just the schema.
-  return QStringLiteral ("WSJTX");
-}
-
 static QDateTime decode_line_timestamp_for_log (QDateTime fallbackUtc, QString const& message)
 {
   if (!fallbackUtc.isValid ()) {
@@ -1092,6 +1128,16 @@ static QDateTime decode_line_timestamp_for_log (QDateTime fallbackUtc, QString c
   }
 
   return candidate;
+}
+
+static int utc_hhmmss_token_from_datetime (QDateTime utcDateTime)
+{
+  if (!utcDateTime.isValid ()) {
+    utcDateTime = QDateTime::currentDateTimeUtc ();
+  }
+  utcDateTime = utcDateTime.toUTC ();
+  auto const time = utcDateTime.time ();
+  return time.hour () * 10000 + time.minute () * 100 + time.second ();
 }
 
 void MainWindow::pruneNearDuplicateDecodeCache (qint64 nowMs)
@@ -1265,7 +1311,7 @@ void MainWindow::updateAsyncL2ControlsVisibility ()
   }
 
   if (ui->txFirstCheckBox) {
-    if (isFt2 && ui->txFirstCheckBox->isChecked ()) {
+    if (m_specOp == SpecOp::HOUND && ui->txFirstCheckBox->isChecked ()) {
       ui->txFirstCheckBox->setChecked (false);
     }
     ui->txFirstCheckBox->setVisible (!isFt2);
@@ -1326,7 +1372,7 @@ struct {
   int kHzRequested;      //Integer kHz dial frequency requested from QMAP
   char result[50][72];   //Decodes as character*72 arrays
 } qmapcom;
-int* ipc_qmap;
+int* ipc_qmap {nullptr};
 
 namespace
 {
@@ -1337,6 +1383,16 @@ namespace
   QRegularExpression non_r_db_regexp {"\\A[-+]{1}[0-9]{1,2}\\z"};
   auto quint32_max = std::numeric_limits<quint32>::max ();
   constexpr int N_WIDGETS {38};
+
+  bool verbose_decode_post_log_enabled ()
+  {
+    static bool const enabled = [] {
+      auto const raw = qgetenv ("DECODIUM_VERBOSE_DECODE_POST_LOG").trimmed ().toLower ();
+      return raw == "1" || raw == "true" || raw == "yes" || raw == "on";
+    }();
+    return enabled;
+  }
+
 #if defined(Q_OS_LINUX)
   constexpr int default_rx_audio_buffer_frames {-1}; // keep ALSA/PipeWire default latency tuning
 #else
@@ -1352,9 +1408,157 @@ namespace
   // In AutoCQ, keep RR73/73 on air up to 10 cycles before forced close.
   constexpr int kAutoCqSignoffRetryCount {10};
   constexpr int kLateAutoLogGraceWindowSeconds {45};
+  constexpr int kMaxEmbeddedDecodeThreads {24};
   constexpr int kDecDataSampleCount {static_cast<int> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0]))};
   constexpr int kMaxCwSymbols {static_cast<int> (sizeof (icw) / sizeof (icw[0]))};
   constexpr int kFoxWaveSampleCount {FOXCOM_WAVE_SIZE};
+  constexpr int kQmapSharedMemoryBytes {4096};
+
+  bool qmap_shared_memory_ready ()
+  {
+    return ipc_qmap != nullptr && mem_qmap.isAttached ();
+  }
+
+  bool lock_qmap_shared_memory (char const* context)
+  {
+    if (!qmap_shared_memory_ready ())
+      {
+        return false;
+      }
+    if (!mem_qmap.lock ())
+      {
+        qWarning ().noquote ()
+            << QStringLiteral ("[QMAP] shared memory lock failed")
+            << QString::fromLatin1 (context ? context : "unknown")
+            << mem_qmap.errorString ();
+        return false;
+      }
+    return true;
+  }
+
+  void reset_qmap_shared_memory (char const* context)
+  {
+    if (!lock_qmap_shared_memory (context))
+      {
+        return;
+      }
+    std::memset (ipc_qmap, 0, kQmapSharedMemoryBytes);
+    mem_qmap.unlock ();
+  }
+
+  void initialize_qmap_shared_memory ()
+  {
+    bool attached = mem_qmap.isAttached ();
+    if (!attached)
+      {
+        attached = mem_qmap.attach ();
+      }
+    if (!attached)
+      {
+        attached = mem_qmap.create (kQmapSharedMemoryBytes);
+      }
+
+    if (!attached)
+      {
+        ipc_qmap = nullptr;
+        qWarning ().noquote ()
+            << QStringLiteral ("[QMAP] shared memory unavailable; continuing without QMAP")
+            << mem_qmap.errorString ();
+        return;
+      }
+
+    ipc_qmap = static_cast<int*> (mem_qmap.data ());
+    if (!ipc_qmap)
+      {
+        qWarning ().noquote ()
+            << QStringLiteral ("[QMAP] shared memory returned null data pointer; continuing without QMAP")
+            << mem_qmap.errorString ();
+        return;
+      }
+
+    reset_qmap_shared_memory ("startup");
+  }
+
+  int embedded_decode_thread_count ()
+  {
+    int const configured = int (dec_data.params.nmt);
+    int interactiveLimit = 0;
+    if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr)
+      {
+        Qt::ConnectionType const connectionType =
+          QThread::currentThread () == bridge->thread ()
+            ? Qt::DirectConnection
+            : Qt::BlockingQueuedConnection;
+        QMetaObject::invokeMethod (bridge, "effectiveFtThreadLimitForDecode",
+                                   connectionType,
+                                   Q_RETURN_ARG (int, interactiveLimit));
+      }
+
+    if (interactiveLimit > 0)
+      {
+        int const boundedLimit = qBound (1, interactiveLimit, kMaxEmbeddedDecodeThreads);
+        return configured > 0
+          ? qMin (qBound (1, configured, kMaxEmbeddedDecodeThreads), boundedLimit)
+          : boundedLimit;
+      }
+
+    if (configured <= 0) {
+      // Non-QML fallback: leave at least one logical core available to the UI.
+      int const cores = qMax (1, QThread::idealThreadCount ());
+      return qBound (1, cores > 1 ? cores - 1 : 1, kMaxEmbeddedDecodeThreads);
+    }
+    return qBound (1, configured, kMaxEmbeddedDecodeThreads);
+  }
+
+  int embedded_ft2_async_live_depth (int rawDepth)
+  {
+    int baseDepth = rawDepth & 7;
+    if (baseDepth <= 0) {
+      baseDepth = rawDepth;
+    }
+    baseDepth = qBound (1, baseDepth, 3);
+
+    // The FT2 async path is a live, repeating pass. Keep it timely and leave
+    // correlation/averaging/deep retries to the full slot decode path.
+    if (qEnvironmentVariableIntValue ("DECODIUM_FT2_ASYNC_DEEP") != 0) {
+      return baseDepth;
+    }
+    return qMin (baseDepth, 2);
+  }
+
+  QString ft4_progressive_decode_key (QString const& row)
+  {
+    QString const normalized = row.simplified ();
+    QStringList parts = normalized.split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    int markerIndex = -1;
+    for (int i = 0; i < parts.size (); ++i) {
+      if (parts.at (i) == QLatin1String ("+")
+          || parts.at (i) == QLatin1String ("*")
+          || parts.at (i) == QLatin1String ("#")) {
+        markerIndex = i;
+        break;
+      }
+    }
+    if (markerIndex >= 4 && markerIndex + 1 < parts.size ()) {
+      bool ok = false;
+      int const freq = parts.at (markerIndex - 1).toInt (&ok);
+      int const freqBucket = ok ? (freq / 5) * 5 : 0;
+      QStringList messageParts = parts.mid (markerIndex + 1);
+      if (!messageParts.isEmpty ()) {
+        QString const tail = messageParts.constLast ().trimmed ().toLower ();
+        if (tail.size () <= 3 && tail.startsWith (QLatin1Char ('a'))) {
+          messageParts.removeLast ();
+        }
+      }
+      return parts.at (0)
+          + QLatin1Char ('|')
+          + QString::number (freqBucket)
+          + QLatin1Char ('|')
+          + messageParts.join (QLatin1Char (' ')).toUpper ();
+    }
+    return normalized.toUpper ();
+  }
+
   struct AllTxtWriterState
   {
     QMutex mutex;
@@ -1769,6 +1973,42 @@ namespace
       QRegularExpression::CaseInsensitiveOption
     };
     return asyncMarkerRx.match (upper).hasMatch ();
+  }
+
+  bool ft2_word_click_token_is_callsign (QString const& token)
+  {
+    auto const normalized = normalize_call_token (token).trimmed ().toUpper ();
+    if (normalized.isEmpty ()) {
+      return false;
+    }
+
+    if (normalized.startsWith ('<') || normalized.endsWith ('>')) {
+      return false;
+    }
+
+    if (ghost_filter_known_token (normalized)
+        || grid_regexp.match (normalized).hasMatch ()) {
+      return false;
+    }
+
+    static QRegularExpression const callsignAlphabetRx {R"(^[A-Z0-9/]{3,11}$)"};
+    if (!callsignAlphabetRx.match (normalized).hasMatch ()) {
+      return false;
+    }
+
+    auto const base = Radio::base_callsign (normalized).trimmed ().toUpper ();
+    if (base.size () < 3 || base.size () > 11
+        || ghost_filter_known_token (base)
+        || grid_regexp.match (base).hasMatch ()) {
+      return false;
+    }
+
+    static QRegularExpression const plausibleBaseCallRx {R"(^[A-Z0-9]{1,4}[0-9][A-Z]{1,6}$)"};
+    if (!plausibleBaseCallRx.match (base).hasMatch ()) {
+      return false;
+    }
+
+    return Radio::is_callsign (base);
   }
 
   bool ghost_filter_valid_callsign_token (QString const& token, AD1CCty const * countries)
@@ -2302,7 +2542,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_gen_message_is_cq {false},
   m_send_RR73 {false},
   m_XIT {0},
-  m_ncandthin {100}, 	//ft8md
+  m_ncandthin {30}, 	//ft8md
   m_nFT8Cycles {3},     //ft8md
   m_nFT8RXfSens {3}   , //ft8md
   m_ft8threads {0},     //ft8md
@@ -2466,7 +2706,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_optimizingProgress {"Optimizing decoder FFTs for your CPU.\n"
       "Please be patient,\n"
       "this may take a few minutes", QString {}, 0, 1, this},
-  m_messageClient {new MessageClient {udp_client_id_from_application_name (),
+  m_messageClient {new MessageClient {legacy_udp_client_id (m_settings),
         version (), revision (),
 	m_config.udp_server_name (), m_config.udp_server_port (),
 	m_config.udp_listen_port (),
@@ -2494,6 +2734,36 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     }
 
   ui->setupUi(this);
+  auto appendLegacyDelta = [] (QStringList& pending, bool& reset, QString const& text) {
+    for (QString const& line : text.split (QRegularExpression {QStringLiteral ("[\\r\\n]+")},
+                                           Qt::SkipEmptyParts)) {
+      pending.append (line);
+    }
+    constexpr int kMaxPendingLegacyDeltaRows {1024};
+    if (pending.size () > kMaxPendingLegacyDeltaRows) {
+      reset = true;
+      pending.erase (pending.begin (),
+                     pending.begin () + (pending.size () - kMaxPendingLegacyDeltaRows));
+    }
+  };
+  connect (ui->decodedTextBrowser, &DisplayText::lineAppended, this,
+           [this, appendLegacyDelta] (QString const& text) {
+             appendLegacyDelta (m_legacyBandActivityDelta,
+                                m_legacyBandActivityDeltaReset, text);
+           });
+  connect (ui->decodedTextBrowser2, &DisplayText::lineAppended, this,
+           [this, appendLegacyDelta] (QString const& text) {
+             appendLegacyDelta (m_legacyRxFrequencyDelta,
+                                m_legacyRxFrequencyDeltaReset, text);
+           });
+  connect (ui->decodedTextBrowser, &DisplayText::erased, this, [this] {
+    m_legacyBandActivityDelta.clear ();
+    m_legacyBandActivityDeltaReset = true;
+  });
+  connect (ui->decodedTextBrowser2, &DisplayText::erased, this, [this] {
+    m_legacyRxFrequencyDelta.clear ();
+    m_legacyRxFrequencyDeltaReset = true;
+  });
   refreshWriteableDataDirCache ();
 #if defined(Q_OS_MAC)
   // Disable Qt text-heuristic menu-role guessing on macOS for every action
@@ -2668,6 +2938,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
       {"fr", "Français"},
       {"ja", "日本語"},
       {"zh", "中文"},
+      {"ro", "Română"},
       {"zh_TW", "繁體中文"},
       {"ru", "Русский"},
     };
@@ -2728,13 +2999,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_optimizingProgress.setAutoReset (false);
   m_optimizingProgress.setMinimumDuration (15000); // only show after 15s delay
 
-  //Attach or create a memory segment to be shared with QMAP.
-  int memSize=4096;
-  if(!mem_qmap.attach()) mem_qmap.create(memSize);
-  ipc_qmap = (int*)mem_qmap.data();
-  mem_qmap.lock();
-  memset(ipc_qmap,0,memSize);         //Zero all of QMAP shared memory
-  mem_qmap.unlock();
+  // Attach or create the optional memory segment shared with QMAP.
+  initialize_qmap_shared_memory ();
 
   // Closedown.
   connect (ui->actionExit, &QAction::triggered, this, [this] {
@@ -2793,6 +3059,13 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (this, &MainWindow::sendPrecomputedWave, m_modulator, &Modulator::setPrecomputedWave);
   connect (this, &MainWindow::sendMessage, m_modulator, &Modulator::start);
   connect (m_modulator, &Modulator::stateChanged, this, [this] (Modulator::ModulatorState state) {
+    // Audio-CW: la wave e' finita -> abbassa la PTT (tutte le piattaforme).
+    if (m_cwAudioTxActive && state == Modulator::Idle)
+      {
+        debugToFile (QStringLiteral ("cwaudio modDone"));
+        finishCwAudioTx ();
+        return;
+      }
 #if defined(Q_OS_LINUX)
     if (!m_tci_audio
         && (m_mode == "FT2" || m_mode == "FT4")
@@ -2812,12 +3085,17 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
   // hook up the audio input stream signals, slots and disposal
   connect (this, &MainWindow::startAudioInputStream, m_soundInput, &SoundInput::start);
+  connect (this, &MainWindow::restartAudioInputStream, m_soundInput, &SoundInput::restart);
   connect (this, &MainWindow::suspendAudioInputStream, m_soundInput, &SoundInput::suspend);
   connect (this, &MainWindow::resumeAudioInputStream, m_soundInput, &SoundInput::resume);
   connect (this, &MainWindow::reset_audio_input_stream, m_soundInput, &SoundInput::reset);
   connect (this, &MainWindow::finished, m_soundInput, &SoundInput::stop);
   connect(m_soundInput, &SoundInput::error, this, &MainWindow::showSoundInError);
   connect(m_soundInput, &SoundInput::error, &m_config, &Configuration::invalidate_audio_input_device);
+  // The widget UI has no audio watchdog, so retain its existing visible error
+  // handling for the recoverable Windows/WASAPI signal used by the QML bridge.
+  connect(m_soundInput, &SoundInput::recoverableError, this, &MainWindow::showSoundInError);
+  connect(m_soundInput, &SoundInput::recoverableError, &m_config, &Configuration::invalidate_audio_input_device);
   // connect(m_soundInput, &SoundInput::status, this, &MainWindow::showStatusMessage);
   connect (&m_audioThread, &QThread::finished, m_soundInput, &QObject::deleteLater);
 
@@ -2876,23 +3154,28 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   QStringList const tertiary_udp_interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPTertiaryInterface"));
   bool const tertiary_udp_adif_enabled =
     legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryLoggedAdifEnabled"), true);
-  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP primary server=%1:%2 listen=%3 interface=%4 ttl=%5 acceptRequests=%6")
+  QString const udp_client_id = legacy_udp_client_id (m_settings);
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP primary server=%1:%2 listen=%3 clientId=%4 interface=%5 ttl=%6 acceptRequests=%7")
 	                         .arg (m_config.udp_server_name (),
 	                               QString::number (m_config.udp_server_port ()),
 	                               QString::number (m_config.udp_listen_port ()),
+	                               udp_client_id,
 	                               legacy_reporting_interfaces (m_config.udp_interface_names ()),
 	                               QString::number (m_config.udp_TTL ()),
 	                               legacy_reporting_state (m_config.accept_udp_requests ()));
-  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP secondary %1 server=%2:%3 listen=ephemeral interface=%4 loggedADIF=%5")
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP secondary %1 server=%2:%3 listen=ephemeral clientId=%4 interface=%5 ttl=%6 loggedADIF=%7")
                          .arg (legacy_reporting_state (secondary_udp_enabled),
                                legacy_runtime_string (m_settings, QStringLiteral ("UDPSecondaryServer"), m_config.udp_server_name ()),
                                QString::number (legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPSecondaryServerPort"), 2239)),
+                               udp_client_id,
                                legacy_reporting_interfaces (secondary_udp_interfaces),
+                               QString::number (legacy_runtime_ttl (m_settings, QStringLiteral ("UDPSecondaryTTL"), m_config.udp_TTL ())),
                                legacy_reporting_state (secondary_udp_adif_enabled));
-  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP tertiary %1 server=%2:%3 listen=ephemeral interface=%4 ttl=%5 loggedADIF=%6")
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP tertiary %1 server=%2:%3 listen=ephemeral clientId=%4 interface=%5 ttl=%6 loggedADIF=%7")
                          .arg (legacy_reporting_state (tertiary_udp_enabled),
                                legacy_runtime_string (m_settings, QStringLiteral ("UDPTertiaryServer"), QStringLiteral ("127.0.0.1")),
                                QString::number (legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPTertiaryServerPort"), 2237)),
+                               udp_client_id,
                                legacy_reporting_interfaces (tertiary_udp_interfaces),
                                QString::number (legacy_runtime_ttl (m_settings, QStringLiteral ("UDPTertiaryTTL"), m_config.udp_TTL ())),
                                legacy_reporting_state (tertiary_udp_adif_enabled));
@@ -2901,6 +3184,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 	                               m_config.n1mm_server_name (),
 	                               QString::number (m_config.n1mm_server_port ()));
   m_messageClient->enable (m_config.accept_udp_requests ());
+  ensureSecondaryUdpMessageClient ();
   ensureTertiaryUdpMessageClient ();
   connect (m_messageClient, &MessageClient::clear_decodes, [this] (quint8 window) {
       ++window;
@@ -3343,6 +3627,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
                     this, &MainWindow::onRemoteSetModeRequested);
             connect(m_remoteCommandServer, &RemoteCommandServer::setBandRequested,
                     this, &MainWindow::onRemoteSetBandRequested);
+            connect(m_remoteCommandServer, &RemoteCommandServer::sendCwRequested,
+                    this, &MainWindow::onRemoteSendCw);
             connect(m_remoteCommandServer, &RemoteCommandServer::setDialFrequencyRequested,
                     this, &MainWindow::onRemoteSetDialFrequencyRequested);
             connect(m_remoteCommandServer, &RemoteCommandServer::setRxFrequencyRequested,
@@ -3580,6 +3866,11 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (&m_saveWAVWatcher, &QFutureWatcher<QString>::finished, [this] {
       // extract the promise from the future
       auto const& result = m_saveWAVWatcher.future ().result ();
+      if (qEnvironmentVariableIsSet ("DECODIUM_FORCE_SAVE_ALL")) {
+        debugToFile (result.isEmpty ()
+                     ? QStringLiteral ("ft8SaveWav done ok")
+                     : QStringLiteral ("ft8SaveWav error %1").arg (result));
+      }
       if (!result.isEmpty ())   // error
         {
           MessageBox::critical_message (this, tr("Error Writing WAV File"), result);
@@ -3667,6 +3958,15 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
   ptt1Timer.setSingleShot(true);
   connect(&ptt1Timer, &QTimer::timeout, this, &MainWindow::startTx2);
+
+  cwAudioGuardTimer.setSingleShot(true);
+  connect(&cwAudioGuardTimer, &QTimer::timeout, this, [this] {
+    if (m_cwAudioTxActive)
+      {
+        debugToFile(QStringLiteral("cwaudio guard timeout -> force PTT off"));
+        finishCwAudioTx();
+      }
+  });
 
   p1Timer.setSingleShot(true);
   connect(&p1Timer, &QTimer::timeout, this, &MainWindow::startWsprDecode);
@@ -3800,7 +4100,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 #else
   m_ft4DecodeThread.setStackSize (8 * 1024 * 1024);
 #endif
-  m_ft4DecodeThread.start ();
+  m_ft4DecodeThread.start (QThread::LowPriority);
 
   m_fst4DecodeWorker = new decodium::fst4::FST4DecodeWorker;
   m_fst4DecodeWorker->moveToThread (&m_fst4DecodeThread);
@@ -3817,8 +4117,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_ft8DecodeWorker = new decodium::ft8::FT8DecodeWorker;
   m_ft8DecodeWorker->moveToThread (&m_ft8DecodeThread);
   connect (&m_ft8DecodeThread, &QThread::finished, m_ft8DecodeWorker, &QObject::deleteLater);
-  connect (m_ft8DecodeWorker, &decodium::ft8::FT8DecodeWorker::decodeReady,
-           this, &MainWindow::processFt8DecodedRows, Qt::QueuedConnection);
+  connect (m_ft8DecodeWorker, &decodium::ft8::FT8DecodeWorker::decodedEntriesReady,
+           this, &MainWindow::processFt8DecodedEntries, Qt::QueuedConnection);
   if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
     connect (m_ft8DecodeWorker, SIGNAL (neuralSyncHit (double)),
              bridge, SLOT (notifyNeuralSyncHit (double)), Qt::QueuedConnection);
@@ -3830,7 +4130,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 #else
   m_ft8DecodeThread.setStackSize (8 * 1024 * 1024);
 #endif
-  m_ft8DecodeThread.start ();
+  m_ft8DecodeThread.start (QThread::LowPriority);
 
   m_jt9FastDecodeWorker = new decodium::jt9fast::JT9FastDecodeWorker;
   m_jt9FastDecodeWorker->moveToThread (&m_jt9FastDecodeThread);
@@ -3944,7 +4244,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   });
 
   connect(&m_asyncDecodeTimer, &QTimer::timeout, this, [this]() {
-    if (m_mode != "FT2" || !ui->cbAsyncDecode || !ui->cbAsyncDecode->isChecked()) return;
+    if (!m_ft2DecodeEnabled || m_mode != "FT2" || !ui->cbAsyncDecode || !ui->cbAsyncDecode->isChecked()) return;
     if (m_transmitting) return;
     if (m_bAsyncDecoding) return;  // previous decode still running
     if (m_decoderBusy) return;     // avoid overlap with main decoder path
@@ -3967,6 +4267,15 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     }
 
     // Set up decode parameters
+    int const ft2WindowMs = qMax (1, qRound (m_TRperiod * 1000.0));
+    QDateTime rxWindowUtc = now.addMSecs (-ft2WindowMs);
+    if (m_asyncRxStartMs > 0) {
+      QDateTime const rxStartUtc = QDateTime::fromMSecsSinceEpoch (m_asyncRxStartMs, Qt::UTC);
+      if (rxStartUtc.isValid () && rxWindowUtc < rxStartUtc) {
+        rxWindowUtc = rxStartUtc;
+      }
+    }
+    request.nutc = utc_hhmmss_token_from_datetime (rxWindowUtc);
     request.nqsoprogress = qBound (0, int(m_QSOProgress), 6);
     request.nfqso = qBound (0, m_wideGraph->rxFreq(), 5000);
     request.nfa = qBound (0, m_wideGraph->nStartFreq(), 5000);
@@ -3974,7 +4283,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     if (request.nfb <= request.nfa) {
       request.nfb = request.nfa + 50;
     }
-    request.ndepth = qMax (1, m_ndepth);
+    request.ndepth = embedded_ft2_async_live_depth (m_ndepth);
+    request.threadCount = embedded_decode_thread_count ();
     request.ncontest = qBound (0, int(m_specOp), 16);
     request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
     request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
@@ -4012,7 +4322,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
       }
 
       debugToFile (QStringLiteral ("audioStart   forcing startup audio reopen"));
-      restartConfiguredAudioStreams (false);
+      restartConfiguredAudioStreams (false, true);
       if (m_monitoring) {
         armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
       }
@@ -4372,12 +4682,77 @@ MainWindow::~MainWindow()
   m_audioThread.quit ();
   wait_for_thread_with_event_pump (m_audioThread, -1);
   remove_child_from_event_filter (this);
-  memset(ipc_qmap,0,4096);         //Zero all of QMAP shared memory
+  reset_qmap_shared_memory ("shutdown");
+}
+
+MessageClient * MainWindow::ensureSecondaryUdpMessageClient() const
+{
+  bool const enabled = legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryEnabled"), true)
+    && legacy_udp_realtime_enabled (m_settings, QStringLiteral ("UDPSecondary"));
+  if (!enabled)
+    {
+      if (m_udpSecondaryMessageClient)
+        {
+          qInfo ().noquote () << QStringLiteral ("Stopping legacy secondary UDP MessageClient; destination has no real-time traffic");
+          m_udpSecondaryMessageClient->disconnect (this);
+          m_udpSecondaryMessageClient->deleteLater ();
+          m_udpSecondaryMessageClient = nullptr;
+          m_udpSecondaryRuntimeKey.clear ();
+        }
+      return nullptr;
+    }
+
+  QString const client_id = legacy_udp_client_id (
+    m_settings, QStringLiteral ("UDPSecondaryClientId"), QStringLiteral ("Decodium"));
+  QString const server_name =
+    legacy_runtime_string (m_settings, QStringLiteral ("UDPSecondaryServer"), m_config.udp_server_name ());
+  quint16 const server_port =
+    legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPSecondaryServerPort"), 2239);
+  int const ttl = legacy_runtime_ttl (m_settings, QStringLiteral ("UDPSecondaryTTL"), m_config.udp_TTL ());
+  QStringList const interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPSecondaryInterface"));
+  QString const runtime_key = QStringLiteral ("%1|%2|%3|%4|%5")
+                                .arg (client_id,
+                                      server_name,
+                                      QString::number (server_port),
+                                      QString::number (ttl),
+                                      legacy_reporting_interfaces (interfaces));
+
+  if (m_udpSecondaryMessageClient && m_udpSecondaryRuntimeKey == runtime_key)
+    {
+      return m_udpSecondaryMessageClient;
+    }
+
+  if (m_udpSecondaryMessageClient)
+    {
+      qInfo ().noquote () << QStringLiteral ("Restarting legacy secondary UDP MessageClient");
+      m_udpSecondaryMessageClient->disconnect (this);
+      m_udpSecondaryMessageClient->deleteLater ();
+      m_udpSecondaryMessageClient = nullptr;
+      m_udpSecondaryRuntimeKey.clear ();
+    }
+
+  m_udpSecondaryMessageClient = new MessageClient {client_id,
+      version (), revision (), server_name, server_port, 0, interfaces, ttl,
+      const_cast<MainWindow *> (this), QStringLiteral ("legacy secondary")};
+  m_udpSecondaryMessageClient->enable (false);
+  connect (m_udpSecondaryMessageClient, &MessageClient::error,
+           const_cast<MainWindow *> (this), [] (QString const& msg) {
+    qWarning ().noquote () << QStringLiteral ("Legacy secondary UDP MessageClient error: %1").arg (msg);
+  });
+  m_udpSecondaryRuntimeKey = runtime_key;
+  qInfo ().noquote () << QStringLiteral ("Legacy secondary UDP MessageClient started: server=%1:%2 listen=0 clientId=%3 interface=%4 ttl=%5")
+                         .arg (server_name,
+                               QString::number (server_port),
+                               client_id,
+                               legacy_reporting_interfaces (interfaces),
+                               QString::number (ttl));
+  return m_udpSecondaryMessageClient;
 }
 
 MessageClient * MainWindow::ensureTertiaryUdpMessageClient() const
 {
-  bool const enabled = legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryEnabled"), false);
+  bool const enabled = legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryEnabled"), false)
+    && legacy_udp_realtime_enabled (m_settings, QStringLiteral ("UDPTertiary"));
   if (!enabled)
     {
       if (m_udpTertiaryMessageClient)
@@ -4391,14 +4766,17 @@ MessageClient * MainWindow::ensureTertiaryUdpMessageClient() const
       return nullptr;
     }
 
+  QString const client_id = legacy_udp_client_id (
+    m_settings, QStringLiteral ("UDPTertiaryClientId"), QStringLiteral ("Decodium"));
   QString const server_name =
     legacy_runtime_string (m_settings, QStringLiteral ("UDPTertiaryServer"), QStringLiteral ("127.0.0.1"));
   quint16 const server_port =
     legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPTertiaryServerPort"), 2237);
   int const ttl = legacy_runtime_ttl (m_settings, QStringLiteral ("UDPTertiaryTTL"), m_config.udp_TTL ());
   QStringList const interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPTertiaryInterface"));
-  QString const runtime_key = QStringLiteral ("%1|%2|%3|%4")
-                                .arg (server_name,
+  QString const runtime_key = QStringLiteral ("%1|%2|%3|%4|%5")
+                                .arg (client_id,
+                                      server_name,
                                       QString::number (server_port),
                                       QString::number (ttl),
                                       legacy_reporting_interfaces (interfaces));
@@ -4417,7 +4795,7 @@ MessageClient * MainWindow::ensureTertiaryUdpMessageClient() const
       m_udpTertiaryRuntimeKey.clear ();
     }
 
-  m_udpTertiaryMessageClient = new MessageClient {udp_client_id_from_application_name (),
+  m_udpTertiaryMessageClient = new MessageClient {client_id,
       version (), revision (), server_name, server_port, 0, interfaces, ttl,
       const_cast<MainWindow *> (this), QStringLiteral ("legacy tertiary")};
   m_udpTertiaryMessageClient->enable (false);
@@ -4425,27 +4803,88 @@ MessageClient * MainWindow::ensureTertiaryUdpMessageClient() const
     qWarning ().noquote () << QStringLiteral ("Legacy tertiary UDP MessageClient error: %1").arg (msg);
   });
   m_udpTertiaryRuntimeKey = runtime_key;
-  qInfo ().noquote () << QStringLiteral ("Legacy tertiary UDP MessageClient started: server=%1:%2 listen=0 interface=%3 ttl=%4")
+  qInfo ().noquote () << QStringLiteral ("Legacy tertiary UDP MessageClient started: server=%1:%2 listen=0 clientId=%3 interface=%4 ttl=%5")
                          .arg (server_name,
                                QString::number (server_port),
+                               client_id,
                                legacy_reporting_interfaces (interfaces),
                                QString::number (ttl));
   return m_udpTertiaryMessageClient;
 }
 
+void MainWindow::refreshLegacyUdpReporting()
+{
+  if (m_settings)
+    {
+      m_settings->sync ();
+    }
+  QString const client_id = legacy_udp_client_id (m_settings);
+  QString const server_name =
+    legacy_runtime_string (m_settings, QStringLiteral ("UDPServer"), m_config.udp_server_name ());
+  quint16 const server_port =
+    legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPServerPort"), m_config.udp_server_port ());
+  quint16 const listen_port =
+    legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPListenPort"), m_config.udp_listen_port ());
+  int const ttl = legacy_runtime_ttl (m_settings, QStringLiteral ("UDPTTL"), m_config.udp_TTL ());
+  QStringList const interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPInterface"));
+  bool const accept_requests =
+    legacy_runtime_bool (m_settings, QStringLiteral ("AcceptUDPRequests"), m_config.accept_udp_requests ());
+
+  m_messageClient->set_client_id (client_id);
+  m_messageClient->set_server_port (server_port);
+  m_messageClient->set_TTL (ttl);
+  m_messageClient->set_listen_port (listen_port);
+  m_messageClient->set_server (server_name, interfaces);
+  m_messageClient->enable (accept_requests);
+
+  ensureSecondaryUdpMessageClient ();
+  ensureTertiaryUdpMessageClient ();
+  qInfo ().noquote () << QStringLiteral ("Legacy UDP reporting refreshed: primary=%1:%2 listen=%3 clientId=%4 secondary=%5 tertiary=%6")
+                         .arg (server_name,
+                               QString::number (server_port),
+                               QString::number (listen_port),
+                               client_id,
+                               legacy_reporting_state (nullptr != m_udpSecondaryMessageClient),
+                               legacy_reporting_state (nullptr != m_udpTertiaryMessageClient));
+  statusUpdate ();
+}
+
 QString MainWindow::legacyCallsign() const
 {
+  if (auto const * app = QCoreApplication::instance ()) {
+    auto const labCallsign = app->property ("decodiumLabCallsign").toString ().trimmed ().toUpper ();
+    if (!labCallsign.isEmpty ()) {
+      return labCallsign;
+    }
+  }
+  if (m_embeddedStationIdentityOverrideActive) {
+    return m_embeddedStationCallsign;
+  }
   return m_config.my_callsign();
 }
 
 QString MainWindow::legacyGrid() const
 {
+  if (auto const * app = QCoreApplication::instance ()) {
+    auto const labGrid = app->property ("decodiumLabGrid").toString ().trimmed ().toUpper ();
+    if (!labGrid.isEmpty ()) {
+      return labGrid;
+    }
+  }
+  if (m_embeddedStationIdentityOverrideActive) {
+    return m_embeddedStationGrid;
+  }
   return m_config.my_grid();
 }
 
 QString MainWindow::legacyMode() const
 {
   return m_mode;
+}
+
+int MainWindow::legacyTrPeriodSeconds() const
+{
+  return qMax(1, qRound(m_TRperiod));
 }
 
 QString MainWindow::legacyRigName() const
@@ -4584,7 +5023,19 @@ QStringList MainWindow::legacyBandActivityLines() const
     return {};
   }
 
-  return recentDecodedTextLines(ui->decodedTextBrowser->document(), 1800);
+  return recentDecodedTextLines(ui->decodedTextBrowser->document(),
+                                decodium::legacy::kLiveDecodeSnapshotRows);
+}
+
+QStringList MainWindow::legacyTakeBandActivityDelta(bool * reset)
+{
+  if (reset) {
+    *reset = m_legacyBandActivityDeltaReset;
+  }
+  m_legacyBandActivityDeltaReset = false;
+  QStringList result;
+  result.swap (m_legacyBandActivityDelta);
+  return result;
 }
 
 int MainWindow::legacyRxFrequencyRevision() const
@@ -4600,7 +5051,19 @@ QStringList MainWindow::legacyRxFrequencyLines() const
     return {};
   }
 
-  return recentDecodedTextLines(ui->decodedTextBrowser2->document(), 1800);
+  return recentDecodedTextLines(ui->decodedTextBrowser2->document(),
+                                decodium::legacy::kLiveDecodeSnapshotRows);
+}
+
+QStringList MainWindow::legacyTakeRxFrequencyDelta(bool * reset)
+{
+  if (reset) {
+    *reset = m_legacyRxFrequencyDeltaReset;
+  }
+  m_legacyRxFrequencyDeltaReset = false;
+  QStringList result;
+  result.swap (m_legacyRxFrequencyDelta);
+  return result;
 }
 
 QString MainWindow::legacyTxMessage(int index) const
@@ -4799,16 +5262,98 @@ void MainWindow::legacyClearRxFrequency()
 
 void MainWindow::legacySetMode(QString const& mode)
 {
+  auto const effectiveCallsign = legacyCallsign ();
+  if (!effectiveCallsign.isEmpty ()) {
+    m_baseCall = Radio::base_callsign (effectiveCallsign);
+  }
   if (mode != m_mode || mode != "FT2")
     {
       m_embeddedFt2MonitorPrepared = false;
     }
   onRemoteSetModeRequested(QString {}, mode);
+  if (m_ft2DecodeWorker) {
+    m_ft2DecodeWorker->setDecodeEnabled (m_ft2DecodeEnabled && m_mode == "FT2");
+  }
+}
+
+void MainWindow::legacySetStationIdentity(QString const& callsign, QString const& grid)
+{
+  QString const normalizedCallsign = callsign.trimmed().toUpper();
+  QString const normalizedGrid = grid.trimmed().toUpper();
+  bool const changed = !m_embeddedStationIdentityOverrideActive
+      || m_embeddedStationCallsign != normalizedCallsign
+      || m_embeddedStationGrid != normalizedGrid;
+
+  m_embeddedStationIdentityOverrideActive = true;
+  m_embeddedStationCallsign = normalizedCallsign;
+  m_embeddedStationGrid = normalizedGrid;
+  m_baseCall = Radio::base_callsign(normalizedCallsign);
+
+  if (changed) {
+    qInfo().noquote() << QStringLiteral("Embedded legacy station identity synced: call=%1 grid=%2")
+                            .arg(normalizedCallsign, normalizedGrid);
+  }
+}
+
+void MainWindow::legacySetFt2DecodeEnabled(bool enabled)
+{
+  if (m_ft2DecodeEnabled == enabled)
+    {
+      if (m_ft2DecodeWorker)
+        {
+          m_ft2DecodeWorker->setDecodeEnabled (enabled && m_mode == "FT2");
+        }
+      return;
+    }
+
+  m_ft2DecodeEnabled = enabled;
+  if (m_ft2DecodeWorker)
+    {
+      m_ft2DecodeWorker->setDecodeEnabled (enabled && m_mode == "FT2");
+      if (!enabled)
+        {
+          QCoreApplication::removePostedEvents (m_ft2DecodeWorker, QEvent::MetaCall);
+          m_ft2DecodeWorker->markLatestDecodeSerial (~quint64(0));
+          m_ft2DecodeWorker->cancelCurrentDecode ();
+        }
+    }
+
+  if (!enabled)
+    {
+      m_asyncDecodeTimer.stop ();
+      m_bAsyncDecoding = false;
+      if (m_ft2DecodePending)
+        {
+          m_ft2DecodePending = false;
+          m_ft2DecodePendingUtc = 0;
+          ++m_ft2DecodeSerial;
+          if (m_decoderBusy)
+            {
+              decodeBusy (false);
+            }
+        }
+      debugToFile (QStringLiteral ("legacy FT2 decode disabled by bridge application mode"));
+    }
+  else if (m_mode == "FT2")
+    {
+      if (ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked () && !m_asyncDecodeTimer.isActive ())
+        {
+          m_asyncDecodeTimer.start (100);
+        }
+      debugToFile (QStringLiteral ("legacy FT2 decode enabled by bridge application mode"));
+    }
 }
 
 void MainWindow::legacySetDialFrequency(Frequency frequency)
 {
-  if (!frequency || frequency == m_freqNominal) {
+  if (!frequency) {
+    return;
+  }
+  bool const embeddedNoCat = m_embeddedShellMode && !m_embeddedRigControlEnabled;
+  bool const nominalSynced = frequency == m_freqNominal;
+  bool const rigStateSynced = !m_embeddedShellMode || m_rigState.frequency () == frequency;
+  bool const periodSynced = !embeddedNoCat || m_freqNominalPeriod == frequency;
+  if (nominalSynced && rigStateSynced && periodSynced) {
     return;
   }
   if (m_embeddedShellMode)
@@ -4879,7 +5424,7 @@ void MainWindow::legacyRearmMonitoring(QString const& reason)
       return;
     }
 
-  restartConfiguredAudioStreams (true);
+  restartConfiguredAudioStreams (true, true);
   armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
 }
 
@@ -4921,6 +5466,13 @@ bool MainWindow::legacyHoldTxFreq() const
   return ui->cbHoldTxFreq->isChecked();
 }
 
+void MainWindow::legacySetTxWatchdogMinutes(int minutes)
+{
+  m_config.set_watchdog(qBound(0, minutes, 999));
+  tx_watchdog(false);
+  update_watchdog_label();
+}
+
 void MainWindow::legacySetAutoCq(bool enabled)
 {
   onRemoteSetAutoCqRequested(QString {}, enabled);
@@ -4952,6 +5504,16 @@ void MainWindow::legacySetDecodeDepthBits(int bits)
   syncAction(ui->actionInclude_correlation, (m_ndepth & 32) != 0);
   syncAction(ui->actionEnable_AP_DXcall, (m_ndepth & 64) != 0);
   syncAction(ui->actionAuto_Clear_Avg, (m_ndepth & 128) != 0);
+}
+
+void MainWindow::legacySetFt8DeepThreadPenalty(bool enabled)
+{
+  if (m_legacyFt8DeepThreadPenalty == enabled) {
+    return;
+  }
+  m_legacyFt8DeepThreadPenalty = enabled;
+  qInfo().noquote() << "[FT8ADAPT] legacy DEEP thread penalty"
+                    << (enabled ? "enabled" : "disabled");
 }
 
 void MainWindow::legacySetCqOnly(bool enabled)
@@ -5033,7 +5595,7 @@ void MainWindow::legacySetAudioInputDeviceName(QString const& name)
     {
       return;
     }
-  restartConfiguredAudioStreams (m_monitoring);
+  restartConfiguredAudioStreams (m_monitoring, true);
 }
 
 void MainWindow::legacySetAudioOutputDeviceName(QString const& name)
@@ -5053,7 +5615,7 @@ void MainWindow::legacySetAudioInputChannel(int channel)
     {
       return;
     }
-  restartConfiguredAudioStreams (m_monitoring);
+  restartConfiguredAudioStreams (m_monitoring, true);
 }
 
 void MainWindow::legacySetAudioOutputChannel(int channel)
@@ -5142,7 +5704,7 @@ void MainWindow::refreshConfiguredAudioDevicesAfterHotplug (QString const& reaso
 
   if (m_monitoring)
     {
-      restartConfiguredAudioStreams (true);
+      restartConfiguredAudioStreams (true, rebound_input);
       if (rebound_input)
         {
           armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
@@ -5393,6 +5955,18 @@ void MainWindow::legacySetNextLogPromptFields(QString const& comment,
   }
 }
 
+void MainWindow::legacySetNextLogPromptTimes(QDateTime const& timeOnUtc,
+                                             QDateTime const& timeOffUtc,
+                                             bool valid)
+{
+  m_nextLogPromptTimesValid = valid && timeOnUtc.isValid ();
+  m_nextLogPromptOn = m_nextLogPromptTimesValid ? timeOnUtc.toUTC () : QDateTime {};
+  m_nextLogPromptOff = m_nextLogPromptTimesValid && timeOffUtc.isValid () ? timeOffUtc.toUTC () : m_nextLogPromptOn;
+  if (m_nextLogPromptTimesValid && m_nextLogPromptOff < m_nextLogPromptOn) {
+    m_nextLogPromptOff = m_nextLogPromptOn;
+  }
+}
+
 void MainWindow::legacySetWaterfallPalette(QString const& palette)
 {
   if (palette.isEmpty ())
@@ -5466,16 +6040,14 @@ void MainWindow::legacySetTxFirst(bool enabled)
       return;
     }
 
-  if (m_mode == "FT2" || m_specOp == SpecOp::HOUND)
+  if (m_specOp == SpecOp::HOUND)
     {
       // Solo Hound deve forzare m_txFirst=false: in FT2 normale il sequencer
       // legge m_txFirst per la parity degli slot e azzerarlo qui rompe la
       // sincronia TX/RX (sintomi: chiamata duplicata, stazione DX non vista,
       // sequencer che salta a TX3/TX4). Il checkbox UI resta nascosto/unchecked
       // come in 1.0.70.
-      if (m_specOp == SpecOp::HOUND) {
-        m_txFirst = false;
-      }
+      m_txFirst = false;
       ui->txFirstCheckBox->setChecked(false);
       return;
     }
@@ -5551,6 +6123,14 @@ void MainWindow::legacyRaiseWarning(QString const& title,
 void MainWindow::legacySetEmbeddedMode(bool enabled)
 {
   m_embeddedShellMode = enabled;
+  if (enabled)
+    {
+      m_saveDecoded = false;
+      m_saveAll = false;
+      ui->actionNone->setChecked (true);
+      ui->actionSave_decoded->setChecked (false);
+      ui->actionSave_all->setChecked (false);
+    }
   if (m_wideGraph)
     {
       m_wideGraph->setAttribute (Qt::WA_DontShowOnScreen, enabled);
@@ -5561,6 +6141,26 @@ void MainWindow::legacySetEmbeddedMode(bool enabled)
       m_fastGraph->setAttribute (Qt::WA_DontShowOnScreen, enabled);
       if (enabled) m_fastGraph->hide ();
     }
+}
+
+void MainWindow::legacySetEmbeddedUiUpdatesEnabled(bool enabled)
+{
+  if (!m_embeddedShellMode)
+    {
+      return;
+    }
+
+  m_embeddedUiUpdatesEnabled = enabled;
+  if (enabled)
+    {
+      if (!m_guiTimer.isActive ())
+        {
+          m_guiTimer.start (100);
+        }
+      return;
+    }
+
+  m_guiTimer.stop ();
 }
 
 int MainWindow::effectiveDecodeFmax() const
@@ -5575,6 +6175,7 @@ int MainWindow::effectiveDecodeFmax() const
 
 void MainWindow::legacyShutdownForEmbedding()
 {
+  m_guiTimer.stop ();
   if (upLotw) {
     disconnect(upLotw, nullptr, this, nullptr);
     if (upLotw->state() != QProcess::NotRunning) {
@@ -5824,9 +6425,9 @@ void MainWindow::writeSettings()
 
   m_settings->beginGroup("Common");
   m_settings->setValue("Mode",m_mode);
-  m_settings->setValue("SaveNone",ui->actionNone->isChecked());
-  m_settings->setValue("SaveDecoded",ui->actionSave_decoded->isChecked());
-  m_settings->setValue("SaveAll",ui->actionSave_all->isChecked());
+  m_settings->setValue("SaveNone",m_embeddedShellMode || ui->actionNone->isChecked());
+  m_settings->setValue("SaveDecoded",!m_embeddedShellMode && ui->actionSave_decoded->isChecked());
+  m_settings->setValue("SaveAll",!m_embeddedShellMode && ui->actionSave_all->isChecked());
   m_settings->setValue("RemoveAudioFiles",ui->actionRemove_after_30days->isChecked());
   m_settings->setValue("NDepth",m_ndepth);
 
@@ -6104,9 +6705,7 @@ void MainWindow::readSettings()
   }
   if (m_mode=="MSK144") {
     ui->sbFtol->setValue (m_settings->value("Ftol_MSK144",50).toInt());
-    if (!(m_currentBand=="6m" or m_currentBand=="4m" or m_currentBand=="2m")) ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144", 30).toInt());
-    if (m_currentBand=="6m" or m_currentBand=="4m") ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144_6m", 15).toInt());
-    if (m_currentBand=="2m") ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144_2m", 30).toInt());
+    restoreMsk144PeriodForCurrentBand();
   }
   if (m_mode=="MSK144") m_bShMsgs=m_settings->value("ShMsgs_MSK144",false).toBool();
   if (m_mode=="Q65") m_bShMsgs=m_settings->value("ShMsgs_Q65",false).toBool();
@@ -6190,9 +6789,12 @@ void MainWindow::readSettings()
   ui->actionHideOC->setChecked(m_settings->value("HideOC", false).toBool());
   ui->actionHideAN->setChecked(m_settings->value("HideAN", false).toBool());
 //  m_mode=m_settings->value("Mode","FT8").toString();
-  ui->actionNone->setChecked(m_settings->value("SaveNone",true).toBool());
-  ui->actionSave_decoded->setChecked(m_settings->value("SaveDecoded",false).toBool());
-  ui->actionSave_all->setChecked(m_settings->value("SaveAll",false).toBool());
+  ui->actionNone->setChecked(m_embeddedShellMode
+                             || m_settings->value("SaveNone",true).toBool());
+  ui->actionSave_decoded->setChecked(!m_embeddedShellMode
+                                     && m_settings->value("SaveDecoded",false).toBool());
+  ui->actionSave_all->setChecked(!m_embeddedShellMode
+                                 && m_settings->value("SaveAll",false).toBool());
   ui->actionRemove_after_30days->setChecked(m_settings->value("RemoveAudioFiles",false).toBool());
   ui->RxFreqSpinBox->setValue(0); // ensure a change is signaled
   ui->RxFreqSpinBox->setValue(m_settings->value("RxFreq",1500).toInt());
@@ -6560,6 +7162,11 @@ void MainWindow::fixStop()
       m_hsymStop=50;
       m_earlyDecode2=47;
     }
+    if (!m_diskData) {
+      // Keep the final live pass at the slot edge. Delaying one more chunk can
+      // cross the FT8 boundary and timestamp the old audio as the next slot.
+      m_hsymStop = qMax (m_hsymStop, 52);
+    }
   } else if (m_mode=="FT2") {
     m_hsymStop=12;
   } else if (m_mode=="FT4") {
@@ -6598,10 +7205,13 @@ void MainWindow::dataSink(qint64 frames)
   if (k > 0)
     {
       m_last_audio_frame_ms = QDateTime::currentMSecsSinceEpoch ();
+      // A real callback proves that the current capture path is healthy.
+      // Allow a future, independent outage to use its one recovery attempt.
+      m_audio_input_health_reopen_attempts = 0;
     }
 
   bool const snapshotFt8LiveAudio =
-      m_mode == "FT8" && !m_diskData && m_embeddedShellMode && !m_multithreadFT8;
+      m_mode == "FT8" && !m_diskData && m_embeddedShellMode;
   if (snapshotFt8LiveAudio) {
     int constexpr kFt8SlotSamples {15 * RX_SAMPLE_RATE};
     if (m_ft8LiveAudioSnapshot.size () != kFt8SlotSamples) {
@@ -6779,19 +7389,85 @@ void MainWindow::dataSink(qint64 frames)
   }
   // end of ft8md
   
+  bool const embeddedFt8LiveDecode =
+      m_mode == "FT8" && m_embeddedShellMode && !m_diskData;
+  bool const embeddedFt8SingleThreadDecode =
+      embeddedFt8LiveDecode && !m_multithreadFT8;
+
+  if(embeddedFt8LiveDecode) {
+    m_earlyDecode2 = 47;
+  } else if(m_multithreadFT8 && m_ft8DecoderStart==1) {
+    m_earlyDecode2 = 46; // ft8md
+  }
+
+  bool const ft8EmbeddedEarlyDecode =
+      embeddedFt8LiveDecode;
+  bool const ft8LegacyFirstEarlyDecode =
+      !embeddedFt8SingleThreadDecode
+      && (embeddedFt8LiveDecode || !(m_multithreadFT8 && m_ft8DecoderStart > 1));
+  bool const ft8LegacySecondEarlyDecode =
+      !embeddedFt8SingleThreadDecode
+      && !(m_multithreadFT8 && m_ft8DecoderStart != 1);
+  bool const ft8FirstEarlyDecodeTrigger =
+      m_mode == "FT8" && !m_diskData && m_ihsym == m_earlyDecode
+      && (ft8EmbeddedEarlyDecode || ft8LegacyFirstEarlyDecode);
+  bool const ft8SecondEarlyDecodeTrigger =
+      m_mode == "FT8" && !m_diskData && m_ihsym == m_earlyDecode2
+      && (ft8EmbeddedEarlyDecode || ft8LegacySecondEarlyDecode);
+
   bool bCallDecoder=false;
 
-  if(m_multithreadFT8 && m_ft8DecoderStart==1) m_earlyDecode2 = 46; // ft8md
+  bool const legacyJtMode = m_mode == "JT4" || m_mode == "JT65" || m_mode == "JT9";
+  if (legacyJtMode) {
+    // Audio callbacks are block-sized.  The callback can advance ihsym from
+    // 171 to 175, so an equality check can miss the entire JT decode point.
+    // Trigger once after the stop boundary has been reached, then wait for
+    // the next slot (ihsym <= 2) before arming it again.
+    if (m_ihsym <= 2) {
+      m_legacyJtDecodeStopTriggered = false;
+    }
+    if (m_ihsym >= m_hsymStop && !m_legacyJtDecodeStopTriggered) {
+      bCallDecoder = true;
+      m_legacyJtDecodeStopTriggered = true;
+    }
+  } else if (m_ihsym == m_hsymStop) {
+    bCallDecoder=true;
+  }
 
-  if(m_ihsym==m_hsymStop) bCallDecoder=true;
-
-  if(m_mode=="FT8" && !m_diskData
-     && !(m_multithreadFT8 && m_ft8DecoderStart>1)) {  //ft8md Try to call MTD two times when "Very early" has been selected
-    if(m_ihsym==m_earlyDecode) bCallDecoder=true;
-    if(m_ihsym==m_earlyDecode2 && !(m_multithreadFT8 && m_ft8DecoderStart!=1)) bCallDecoder=true;
+  if(m_mode=="FT8" && !m_diskData) {  //ft8md Try to call MTD two times when "Very early" has been selected
+    if(ft8FirstEarlyDecodeTrigger) bCallDecoder=true;
+    if(ft8SecondEarlyDecodeTrigger) bCallDecoder=true;
   }
 
   if(bCallDecoder) {
+    if (m_mode == "JT9" && qEnvironmentVariableIsSet ("DECODIUM_JT9_TRACE")) {
+      float ssMin = std::numeric_limits<float>::max ();
+      float ssMax = std::numeric_limits<float>::lowest ();
+      int ssFinite = 0;
+      int ssNonZero = 0;
+      int const ssCount = 184 * NSMAX;
+      for (int i = 0; i < ssCount; ++i) {
+        float const value = dec_data.ss[i];
+        if (!std::isfinite (value)) continue;
+        ssMin = std::min (ssMin, value);
+        ssMax = std::max (ssMax, value);
+        ++ssFinite;
+        if (value > 0.0f) ++ssNonZero;
+      }
+      qInfo () << "[LEGACY-JT9] decode trigger"
+               << "ihsym=" << m_ihsym
+               << "hsymStop=" << m_hsymStop
+               << "k=" << k
+               << "npts8=" << dec_data.params.npts8
+               << "nzhsym=" << dec_data.params.nzhsym
+               << "audioSamples=" << (sizeof dec_data.d2 / sizeof dec_data.d2[0])
+               << "ssFinite=" << ssFinite
+               << "ssNonZero=" << ssNonZero
+               << "ssMin=" << ssMin
+               << "ssMax=" << ssMax
+               << "monitoring=" << m_monitoring;
+    }
+
     if(m_mode=="Echo") {
       float dBerr=0.0;
       int nfrit=0;
@@ -6892,20 +7568,33 @@ void MainWindow::dataSink(qint64 frames)
     dec_data.params.nagain=0;
     dec_data.params.nagainfil=0;	
     dec_data.params.nzhsym=m_hsymStop;
-    if(m_mode=="FT8" and m_ihsym==m_earlyDecode and !m_diskData && !(m_multithreadFT8 && m_ft8DecoderStart>1)) dec_data.params.nzhsym=m_earlyDecode;
-    if(m_mode=="FT8" and m_ihsym==m_earlyDecode2 and !m_diskData && !(m_multithreadFT8 && m_ft8DecoderStart!=1)) dec_data.params.nzhsym=m_earlyDecode2;
+    if(ft8FirstEarlyDecodeTrigger) dec_data.params.nzhsym=m_earlyDecode;
+    if(ft8SecondEarlyDecodeTrigger) dec_data.params.nzhsym=m_earlyDecode2;
     QDateTime now {QDateTime::currentDateTimeUtc ()};
     m_dateTime = now.toString ("yyyy-MMM-dd hh:mm");
     if(m_mode!="WSPR") {
       if (m_mode=="FT8" && m_multithreadFT8 && m_ihsym>47) last=now;  // ft8md
       if (!m_diskData) {
-        m_dateTimeSeqStart = qt_truncate_date_time_to (now, m_TRperiod * 1.e3);
+        int const periodMs = qMax (1000, qRound (m_TRperiod * 1000.0));
+        QDateTime sequenceStart = qt_truncate_date_time_to (now, periodMs);
+        bool const embeddedFt8FullSlot =
+            m_mode == "FT8"
+            && m_embeddedShellMode
+            && dec_data.params.nzhsym >= m_hsymStop
+            && m_ihsym == m_hsymStop;
+        int const msInPeriod = now.time ().msecsSinceStartOfDay () % periodMs;
+        if (embeddedFt8FullSlot && msInPeriod < 1500) {
+          sequenceStart = sequenceStart.addMSecs (-periodMs);
+        }
+        m_dateTimeSeqStart = sequenceStart;
       }
       decode(); //Start decoder
     }
 
-    if(m_mode=="FT8" and !(m_diskData or (m_multithreadFT8 && m_ft8DecoderStart<2))
-       && (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2)) return;
+    if((ft8FirstEarlyDecodeTrigger || ft8SecondEarlyDecodeTrigger)
+       || (m_mode=="FT8" and !embeddedFt8SingleThreadDecode
+           and (embeddedFt8LiveDecode || !(m_diskData or (m_multithreadFT8 && m_ft8DecoderStart<2)))
+           && (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2))) return;
     if (!m_diskData)
       {
         bool const liveEmbeddedFt8 =
@@ -6913,7 +7602,12 @@ void MainWindow::dataSink(qint64 frames)
         if (!(m_mode=="FT8" && (m_multithreadFT8 || liveEmbeddedFt8)))
           Q_EMIT reset_audio_input_stream (true); // reports dropped samples
       }
-    if(!m_diskData and (m_saveAll or m_saveDecoded or m_mode=="WSPR")) {
+    bool const diagnosticSaveAll =
+        !m_embeddedShellMode
+        && m_mode == "FT8"
+        && !m_diskData
+        && qEnvironmentVariableIsSet ("DECODIUM_FORCE_SAVE_ALL");
+    if(!m_diskData and (m_saveAll or diagnosticSaveAll or m_saveDecoded or m_mode=="WSPR")) {
       //Always save unless "Save None"; may delete later
       if(m_TRperiod < 60) {
         int n=fmod(double(now.time().second()),m_TRperiod);
@@ -6930,6 +7624,11 @@ void MainWindow::dataSink(qint64 frames)
       if(m_mode=="FT4") samples=21*3456;
       // the following is potential a threading hazard - not a good
       // idea to pass pointer to be processed in another thread
+      if (diagnosticSaveAll) {
+        debugToFile (QString {"ft8SaveWav start path:%1 samples:%2"}
+                       .arg (m_fnameWE + ".wav")
+                       .arg (samples));
+      }
       m_saveWAVWatcher.setFuture (QtConcurrent::run (std::bind (&MainWindow::save_wave_file,
             this, m_fnameWE, &dec_data.d2[0], samples, m_config.my_callsign(),
             m_config.my_grid(), m_mode, m_nSubMode, m_freqNominalPeriod, m_hisCall, m_hisGrid)));
@@ -7126,6 +7825,9 @@ void MainWindow::fastSink(qint64 frames)
 
   if(bmsk144 and (line[0]!=0)) {
     QString message {QString::fromLatin1 (line)};
+    if (isDuplicateDecode (message)) {
+      return;
+    }
     DecodedText decodedtext {message.replace (QChar::LineFeed, "")};
 
     QString text = decodedtext.string().replace("<","").replace(">","");   // for Wait features
@@ -7487,14 +8189,16 @@ void MainWindow::fastSink(qint64 frames)
     }
 
     // Stop Wait & Call timeout when in QSO with this station for MSK144
-    if (ui->DX_Call_Button->isChecked() && m_hisCall!="" && text.contains(" " + m_config.my_callsign() + " " + m_hisCall)) {
+    auto const effectiveMyCallsign = legacyCallsign ();
+    auto const effectiveMyGrid = legacyGrid ();
+    if (ui->DX_Call_Button->isChecked() && m_hisCall!="" && text.contains(" " + effectiveMyCallsign + " " + m_hisCall)) {
         stopWCTimer.stop();                                                   // stop any Wait & Call timeout
         if (ui->DX_Call_Button->isChecked()) ui->DX_Call_Button->click ();    // disable Wait & Call
         no_wait_and_call = false;                                             // reset Wait & Call
     }
 
     // Wait & Reply for MSK144
-    if (text.contains(" " + m_config.my_callsign() + " " + m_hisCall) && m_hisCall!="" &&
+    if (text.contains(" " + effectiveMyCallsign + " " + m_hisCall) && m_hisCall!="" &&
         !text.contains("73 ") && m_mode=="MSK144" && m_config.Wait_features_enabled()
         && !ui->autoButton->isChecked()
         && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
@@ -7520,7 +8224,7 @@ void MainWindow::fastSink(qint64 frames)
 
     // CQ: First for MSK144
     if(((pounce && text.contains(" CQ ") && m_config.Wait_features_enabled())
-        or (m_auto && m_bCallingCQ && text.contains(" " + m_config.my_callsign() + " "))) && !ignored
+        or (m_auto && m_bCallingCQ && text.contains(" " + effectiveMyCallsign + " "))) && !ignored
         && !filtered && !selected && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: First"
         && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
                   m_bDoubleClicked=true;
@@ -7541,9 +8245,9 @@ void MainWindow::fastSink(qint64 frames)
         decodedtext.deCallAndGrid(/*out*/deCall,deGrid);
         if (!filtered && !ignored && (deGrid.contains(grid_regexp) or m_bCallingCQ) && (
              (pounce && text.contains(" CQ ") && !txLog.contains(deCall) && m_config.Wait_features_enabled()) or
-             (m_bCallingCQ && text.contains(" " + m_config.my_callsign() + " ") && !text.contains("73 "))
+             (m_bCallingCQ && text.contains(" " + effectiveMyCallsign + " ") && !text.contains("73 "))
                                                                     )) {
-            GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), deGrid, 0.0);
+            GeoDistanceInfo const geo = geo_distance (effectiveMyGrid, deGrid, 0.0);
             Dpoints=geo.km;
             if (!deGrid.contains(grid_regexp)) Dpoints=1;
             if(Dpoints>maxDPoints) {
@@ -7574,7 +8278,7 @@ void MainWindow::fastSink(qint64 frames)
         decodedtext.deCallAndGrid(/*out*/deCall,deGrid);
         if (!filtered && !ignored && (
              (pounce && text.contains(" CQ ") && !txLog.contains(deCall) && m_config.Wait_features_enabled()) or
-             (m_bCallingCQ && text.contains(" " + m_config.my_callsign() + " ") && !text.contains("73 "))
+             (m_bCallingCQ && text.contains(" " + effectiveMyCallsign + " ") && !text.contains("73 "))
                           )) {
             dBpoints=decodedtext.string().mid(7,3).toInt();
             if(dBpoints>maxdBPoints) {
@@ -7605,7 +8309,7 @@ void MainWindow::fastSink(qint64 frames)
         decodedtext.deCallAndGrid(/*out*/deCall,deGrid);
         if (!filtered && !ignored && (
              (pounce && text.contains(" CQ ") && !txLog.contains(deCall) && m_config.Wait_features_enabled()) or
-             (m_bCallingCQ && text.contains(" " + m_config.my_callsign() + " ") && !text.contains("73 "))
+             (m_bCallingCQ && text.contains(" " + effectiveMyCallsign + " ") && !text.contains("73 "))
                           )) {
             dBpoints2=decodedtext.string().mid(7,3).toInt();
             if(dBpoints2<mindBPoints) {
@@ -7634,8 +8338,8 @@ void MainWindow::fastSink(qint64 frames)
         QString deGrid;
         decodedtext.deCallAndGrid(deCall,deGrid);
         if ((m_config.showDistance() || m_config.showAzimuth()) && deGrid.contains(grid_regexp)) {
-            QString my_Grid = m_config.my_grid();
-            if (my_Grid.length() < 5) my_Grid = m_config.my_grid().left(4)+"mm";
+            QString my_Grid = effectiveMyGrid;
+            if (my_Grid.length() < 5) my_Grid = effectiveMyGrid.left(4)+"mm";
             QString de_Grid= deGrid.left(4)+"mm";
             GeoDistanceInfo const geo = geo_distance (my_Grid, de_Grid, 0.0);
             if (m_config.showDistance()) {
@@ -7697,14 +8401,14 @@ void MainWindow::fastSink(qint64 frames)
         bool bDisplayPoints {false};
         m_points = 0;
 
-        ui->decodedTextBrowser->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
+        ui->decodedTextBrowser->displayDecodedText (decodedtext, effectiveMyCallsign, m_mode, m_config.DXCC (),
           m_logBook, m_currentBandPeriod, m_config.ppfx (),
           ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
           haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted);
 
 
     auto const& message_words = decodedtext.messageWords ();//avt 12/11/21
-    if (m_auto && decodedtext.isStandardMessage () && message_words.at(1) == m_config.my_callsign () //avt 12/11/21
+    if (m_auto && decodedtext.isStandardMessage () && message_words.at(1) == effectiveMyCallsign //avt 12/11/21
           && m_bCallingCQ && !m_bAutoReply && legacyRespondSelectionEnabled () && ui->respondComboBox->currentIndex() > 0) {  //avt to-do
       m_bAutoReply = true;  //avt 12/11/21
       //debugToFile(QString{"fastSink:    m_bAutoReply:%1 m_bCallingCQ:%2"}.arg(m_bAutoReply).arg(m_bCallingCQ));   //avt 1/4/24
@@ -7716,7 +8420,7 @@ void MainWindow::fastSink(qint64 frames)
         // display "73" messages for us also in the right pane
         if (ui->decodedTextBrowser2 && ui->decodedTextBrowser2->isVisible()
             && m_mode=="MSK144" && text.mid(22).contains(m_baseCall + " " + m_hisCall + " 73")) {
-            ui->decodedTextBrowser2->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
+            ui->decodedTextBrowser2->displayDecodedText (decodedtext, effectiveMyCallsign, m_mode, m_config.DXCC (),
               m_logBook, m_currentBand, m_config.ppfx (), false, false, 0.0, false, -99, "", m_muted);
         }
     }
@@ -7941,7 +8645,7 @@ void MainWindow::showStatusMessage(const QString& statusMsg)
   }
 }
 
-void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
+void MainWindow::restartConfiguredAudioStreams (bool resume_monitor, bool force_input_reopen)
 {
   if (m_tci_audio || m_transmitting)
     {
@@ -7953,9 +8657,10 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
 
   auto const& input_device = m_config.audio_input_device ();
   auto const& output_device = m_config.audio_output_device ();
-  debugToFile (QString {"audioRest   resume:%1 mon:%2 in:%3 out:%4"}
+  debugToFile (QString {"audioRest   resume:%1 mon:%2 force:%3 in:%4 out:%5"}
                  .arg (resume_monitor)
                  .arg (m_monitoring)
+                 .arg (force_input_reopen)
                  .arg (input_device.isNull ()
                          ? QString {"<null>"}
                          : input_device.description ())
@@ -7971,18 +8676,42 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
                                           , m_downSampleFactor
                                           , m_config.audio_input_channel ());
       };
-      if (m_soundInput
-          && m_soundInput->thread () != QThread::currentThread ()
-          && m_audioThread.isRunning ())
-        {
-          QMetaObject::invokeMethod (m_soundInput, check_input_active, Qt::BlockingQueuedConnection);
-        }
-      else
+      if (!m_soundInput
+          || m_soundInput->thread () == QThread::currentThread ()
+          || !m_audioThread.isRunning ())
         {
           check_input_active ();
         }
+      else
+        {
+          // Do not block the UI while the audio thread may already be inside
+          // CoreAudio/QAudioSource startup. SoundInput::start handles duplicate
+          // starts in its own thread, so a queued start is safer than a freeze.
+          debugToFile (QStringLiteral ("audioRest   active check skipped cross-thread"));
+        }
 
-      if (input_already_active)
+      bool const embedded_no_cat_audio_owner =
+          m_embeddedShellMode && !m_embeddedRigControlEnabled;
+      bool const force_input_reopen_allowed =
+          force_input_reopen
+          && !embedded_no_cat_audio_owner
+          && !(m_embeddedShellMode && !m_embeddedUiUpdatesEnabled);
+      if (force_input_reopen && !force_input_reopen_allowed)
+        {
+          debugToFile (embedded_no_cat_audio_owner
+                       ? QStringLiteral ("audioRest   forced input restart suppressed in embedded no-CAT mode")
+                       : QStringLiteral ("audioRest   forced input restart suppressed in embedded passive mode"));
+        }
+
+      if (force_input_reopen_allowed)
+        {
+          debugToFile (QStringLiteral ("audioRest   forced input restart"));
+          Q_EMIT restartAudioInputStream (input_device
+                                          , m_rx_audio_buffer_frames
+                                          , m_detector, m_downSampleFactor
+                                          , m_config.audio_input_channel ());
+        }
+      else if (input_already_active)
         {
           debugToFile (QStringLiteral ("audioRest   input already active, resume only"));
           if (resume_monitor)
@@ -8036,7 +8765,11 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
                  .arg (baseline_ms)
                  .arg (m_monitoring));
 
-  static int const delays_ms[] = {3500, 7000, 11000};
+  int const delays_ms[] = {
+    m_embeddedShellMode ? 5500 : 3500,
+    m_embeddedShellMode ? 9000 : 7000,
+    m_embeddedShellMode ? 13000 : 11000
+  };
   for (auto const delay_ms : delays_ms)
     {
       bool const first_probe = delay_ms == delays_ms[0];
@@ -8076,13 +8809,22 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
           debugToFile (QString {"audioCheck  no RX frames after %1 ms, reopening"}
                          .arg (delay_ms));
 
+          if (m_audio_input_health_reopen_attempts >= 1)
+            {
+              LOG_WARN ("audio health-check: recovery already attempted; suppressing repeated audio reopen");
+              debugToFile (QString {"audioCheck  recovery already attempted after %1 ms, keeping stream/UI responsive"}
+                             .arg (delay_ms));
+              return;
+            }
+          ++m_audio_input_health_reopen_attempts;
+
           bool const was_monitoring = m_monitoring;
           if (was_monitoring)
             {
               on_monitorButton_clicked (false);
             }
 
-          restartConfiguredAudioStreams (false);
+          restartConfiguredAudioStreams (false, true);
 
           quint64 const reopen_check_id = ++m_audio_input_health_check_id;
           QTimer::singleShot (260, this, [this, baseline_ms, delay_ms, was_monitoring, reopen_check_id] {
@@ -8118,7 +8860,6 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
               debugToFile (QString {"audioCheck  reopen applied after %1 ms monitor:%2"}
                              .arg (delay_ms)
                              .arg (m_monitoring));
-              armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
             });
         });
     }
@@ -8342,7 +9083,7 @@ void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
               return;
             }
 
-          restartConfiguredAudioStreams (true);
+          restartConfiguredAudioStreams (true, true);
           armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
           showStatusMessage (tr ("Audio input resumed after system wake."));
         });
@@ -8721,6 +9462,10 @@ void MainWindow::monitor (bool state)
 
   if (activating || deactivating)
     {
+      if (activating)
+        {
+          m_audio_input_health_reopen_attempts = 0;
+        }
       // MON off/on can happen while an in-process decode worker is still active.
       // If we keep the old busy/pending state, the next RX period may never arm
       // a new decode and the UI looks frozen until restart.
@@ -8754,7 +9499,7 @@ void MainWindow::monitor (bool state)
         auto const restart_or_resume = [this, activating] {
           if (activating) {
             debugToFile (QStringLiteral ("monitor     activating via settings-style audio reopen"));
-            restartConfiguredAudioStreams (true);
+            restartConfiguredAudioStreams (true, true);
           } else {
             debugToFile (QStringLiteral ("monitor     resuming existing audio input stream"));
             Q_EMIT resumeAudioInputStream ();
@@ -11413,6 +12158,11 @@ void MainWindow::on_actionNone_triggered()                    //Save None
 
 void MainWindow::on_actionSave_decoded_triggered()
 {
+  if (m_embeddedShellMode)
+    {
+      on_actionNone_triggered();
+      return;
+    }
   m_saveDecoded=true;
   m_saveAll=false;
   ui->actionSave_decoded->setChecked(true);
@@ -11420,6 +12170,11 @@ void MainWindow::on_actionSave_decoded_triggered()
 
 void MainWindow::on_actionSave_all_triggered()                //Save All
 {
+  if (m_embeddedShellMode)
+    {
+      on_actionNone_triggered();
+      return;
+    }
   m_saveDecoded=false;
   m_saveAll=true;
   ui->actionSave_all->setChecked(true);
@@ -11669,7 +12424,6 @@ void MainWindow::decode()                                       //decode()
     bool const ft8MayPreempt =
         (m_mode == "FT8"
          && m_embeddedShellMode
-         && !m_multithreadFT8
          && m_ft8DecodePending
          && m_ft8DecodeWorker
          && m_ft8DecodeThread.isRunning ()
@@ -11677,10 +12431,11 @@ void MainWindow::decode()                                       //decode()
          && m_ihsym == m_hsymStop
          && m_dateTimeSeqStart.isValid ());
 
-    // Live FT8 must not publish one slot late. The worker has its own live
-    // time budget, so if it still overruns a boundary this decode is stale and
-    // the current slot takes priority.
-    queueEmbeddedFt8FullSlot = false;
+    // In the embedded D4 UI the FT8 worker shares CPU with QML, waterfall and
+    // map rendering. Dense slots can occasionally finish after the next
+    // boundary; keep one full-slot request queued for a normal live pass. A
+    // deep follow-up is optional, so the next real slot is allowed to preempt it.
+    queueEmbeddedFt8FullSlot = ft8MayPreempt && !m_ft8DecodeDeepFollowupPending;
 
     if (!ft2MayPreempt && !ft8MayPreempt && !queueEmbeddedFt8FullSlot) {
       return;                          //Don't start decoder if it's already busy.
@@ -11710,10 +12465,20 @@ void MainWindow::decode()                                       //decode()
         }
       if (pendingUtc == m_ft8DecodePendingUtc)
         {
-          return;
+          if (!queueEmbeddedFt8FullSlot)
+            {
+              return;
+            }
         }
 
-      if (!queueEmbeddedFt8FullSlot)
+      if (m_ft8DecodeDeepFollowupPending)
+        {
+          debugToFile (QString {"ft8Decode   cancel deep follow-up for next slot pendingUtc:%1 nextUtc:%2"}
+                         .arg (m_ft8DecodePendingUtc)
+                         .arg (pendingUtc));
+          cancelPendingInProcessDecode ();
+        }
+      else if (!queueEmbeddedFt8FullSlot)
         {
           cancelPendingInProcessDecode ();
         }
@@ -11745,6 +12510,9 @@ void MainWindow::decode()                                       //decode()
   }
   if (preferUniformCqDecode) {
     dec_data.params.lapcqonly = true;
+  }
+  if (m_mode == "FT8" && !m_diskData && !preferUniformCqDecode) {
+    dec_data.params.lapcqonly = false;
   }
   if(!m_dataAvailable or m_TRperiod==0.0) return;
   ui->DecodeButton->setChecked (true);
@@ -11916,10 +12684,13 @@ void MainWindow::decode()                                       //decode()
     dec_data.params.ndelay=m_delay;
     dec_data.params.nfqso=m_wideGraph->rxFreq();
     dec_data.params.ndepth=m_ndepth;
-    qDebug() << "[DEPTHDBG] FT8-MT set: m_ndepth=" << m_ndepth
-             << " ndepth=" << dec_data.params.ndepth
-             << " ihsym=" << m_ihsym
-             << " early=" << m_earlyDecode << " early2=" << m_earlyDecode2;
+    static bool const depthDebugEnabled = qEnvironmentVariableIsSet("DECODIUM_DEPTHDBG");
+    if (depthDebugEnabled) {
+      qDebug() << "[DEPTHDBG] FT8-MT set: m_ndepth=" << m_ndepth
+               << " ndepth=" << dec_data.params.ndepth
+               << " ihsym=" << m_ihsym
+               << " early=" << m_earlyDecode << " early2=" << m_earlyDecode2;
+    }
     dec_data.params.nranera=m_config.ntrials();
     dec_data.params.lmultift8=m_multithreadFT8; //ft8md
     dec_data.params.ntrials10=0; //ft8md was =m_config.ntrials10();
@@ -11933,7 +12704,8 @@ void MainWindow::decode()                                       //decode()
     if (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2 or (m_specOp==SpecOp::HOUND && m_config.superFox())) {
       dec_data.params.lmultift8 = false; // use the standard FT8 decoder for early decoding step
       if (m_ihsym==m_earlyDecode2) dec_data.params.ndepth=2;
-      qDebug() << "[DEPTHDBG] FT8-MT EARLY override: lmultift8=false ndepth=" << dec_data.params.ndepth;
+      if (depthDebugEnabled)
+        qDebug() << "[DEPTHDBG] FT8-MT EARLY override: lmultift8=false ndepth=" << dec_data.params.ndepth;
     }
     dec_data.params.ndiskdat=0;
     if(m_diskData) dec_data.params.ndiskdat=1;
@@ -11945,9 +12717,11 @@ void MainWindow::decode()                                       //decode()
     dec_data.params.lwidedxcsearch=m_FT8WideDxCallSearch ? 1 : 0;
   }
   ::memcpy(dec_data.params.datetime, m_dateTime.toLatin1()+"    ", sizeof dec_data.params.datetime);
-  ::memcpy(dec_data.params.mycall, (m_config.my_callsign()+"            ").toLatin1(),12);
+  auto const effectiveCallsign = legacyCallsign ();
+  auto const effectiveGrid = legacyGrid ();
+  ::memcpy(dec_data.params.mycall, (effectiveCallsign+"            ").toLatin1(),12);
   
-  ::memcpy(dec_data.params.mybcall, (Radio::base_callsign(m_config.my_callsign())+"            ").toLatin1(),12);
+  ::memcpy(dec_data.params.mybcall, (Radio::base_callsign(effectiveCallsign)+"            ").toLatin1(),12);
   ::memcpy(dec_data.params.hiscall,(hisCall+"            ").toLatin1(),12);
   if(hisCall.length()<3) { 
     hisCall.clear();
@@ -11956,7 +12730,7 @@ void MainWindow::decode()                                       //decode()
     ::memcpy(dec_data.params.hisbcall,(Radio::base_callsign(hisCall)+"            ").toLatin1(),12);
   }
   ::memcpy(dec_data.params.hisgrid,(hisGrid+"      ").toLatin1(),6);    
-  ::memcpy(dec_data.params.mygrid, (m_config.my_grid()+"      ").toLatin1(),6);
+  ::memcpy(dec_data.params.mygrid, (effectiveGrid+"      ").toLatin1(),6);
   
   if(!hisCall.isEmpty() && !m_auto && hisCall != m_lastloggedcall) dec_data.params.lenabledxcsearch=true;  //ft8md was && !m_enableTx
   else dec_data.params.lenabledxcsearch=false;
@@ -12098,6 +12872,9 @@ void MainWindow::processFastDecodedRows (QStringList const& rows)
         row, myCallUpper, myBaseUpper, activePartnerCall);
     if(message.length()>80) message=message.left (80);
     if(narg[13]/8==narg[12]) message=message.trimmed().replace("<...>",m_calls);
+    if (m_mode == "MSK144" && isDuplicateDecode (message)) {
+      continue;
+    }
 
 //Left (Band activity) window
     DecodedText decodedtext {message.replace (QChar::LineFeed, "")};
@@ -12813,6 +13590,11 @@ bool MainWindow::cancelPendingInProcessDecode ()
   if (m_ft4DecodePending) {
     ++m_ft4DecodeSerial;
     m_ft4DecodePending = false;
+    m_ft4DecodePendingUtc = 0;
+    m_ft4DecodePendingDepth = 0;
+    m_ft4DecodeFollowupPending = false;
+    m_ft4DecodeFollowupAudio.clear ();
+    m_ft4DeliveredDecodeKeys.clear ();
     cancelled = true;
   }
 
@@ -12828,12 +13610,20 @@ bool MainWindow::cancelPendingInProcessDecode ()
     }
     ++m_ft8DecodeSerial;
     m_ft8DecodePending = false;
+    m_ft8DecodeDeepFollowupPending = false;
     m_ft8DecodePendingUtc = 0;
     cancelled = true;
   }
   if (m_ft8QueuedDecodePending) {
     m_ft8QueuedDecodePending = false;
     m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
+    cancelled = true;
+  }
+  if (m_ft8QueuedDeepFollowupPending || m_ft8DeepFollowupQueued) {
+    m_ft8QueuedDeepFollowupPending = false;
+    m_ft8QueuedDeepFollowupRequest = decodium::ft8::DecodeRequest {};
+    m_ft8DeepFollowupQueued = false;
+    m_ft8DeepFollowupRequest = decodium::ft8::DecodeRequest {};
     cancelled = true;
   }
 
@@ -12869,6 +13659,10 @@ bool MainWindow::cancelPendingInProcessDecode ()
 
   if (cancelled) {
     m_decodedTransportQueue.clear ();
+    m_ft8PriorityUiQueue.clear ();
+    m_ft8BackgroundUiQueue.clear ();
+    m_ft8StructuredTransportQueue.clear ();
+    clearFt8SecondaryWork ();
   }
 
   return cancelled;
@@ -12876,7 +13670,7 @@ bool MainWindow::cancelPendingInProcessDecode ()
 
 void MainWindow::requestInProcessFt2Decode ()
 {
-  if (m_mode != "FT2") {
+  if (!m_ft2DecodeEnabled || m_mode != "FT2") {
     return;
   }
 
@@ -12895,6 +13689,7 @@ void MainWindow::requestInProcessFt2Decode ()
   request.nfa = qBound (0, int (dec_data.params.nfa), 5000);
   request.nfb = qMax (request.nfa + 50, qBound (0, int (dec_data.params.nfb), 5000));
   request.ndepth = qMax (1, int (dec_data.params.ndepth));
+  request.threadCount = embedded_decode_thread_count ();
   request.ncontest = qBound (0, int (dec_data.params.nexp_decode & 7), 16);
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
   request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
@@ -12937,20 +13732,59 @@ void MainWindow::requestInProcessFt4Decode ()
   request.nfqso = qBound (0, int (dec_data.params.nfqso), 5000);
   request.nfa = qBound (0, int (dec_data.params.nfa), 5000);
   request.nfb = qMax (request.nfa + 50, qBound (0, int (dec_data.params.nfb), 5000));
-  request.ndepth = qBound (1, int (dec_data.params.ndepth), 4);
+  request.threadCount = embedded_decode_thread_count ();
+  int const rawDepth = int (dec_data.params.ndepth);
+  int baseDepth = rawDepth & 0x7;
+  if (baseDepth <= 0) {
+    baseDepth = qBound (1, rawDepth, 3);
+  }
+  baseDepth = qBound (1, baseDepth, 3);
+  bool const deepRequested = baseDepth >= 3;
+  bool const apRequested = (rawDepth & 0x40) != 0
+      || (ui->actionEnable_AP_DXcall && ui->actionEnable_AP_DXcall->isChecked ())
+      || (ui->actionEnable_AP_FT8 && ui->actionEnable_AP_FT8->isChecked ());
+  bool const forceFt4LiveDepth4 = qEnvironmentVariableIntValue ("DECODIUM_FT4_FORCE_LIVE_DEPTH4") != 0;
+  int const requestedDepth = (deepRequested && apRequested) ? 4 : baseDepth;
+  request.ndepth = requestedDepth;
+  if (!m_diskData && request.ndepth > 3 && request.threadCount < 16 && !forceFt4LiveDepth4) {
+    request.ndepth = 3;
+  }
   request.ncontest = qBound (0, int (dec_data.params.nexp_decode & 7), 16);
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
   request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
 
+  m_ft4DecodeFollowupPending = false;
+  m_ft4DecodeFollowupAudio.clear ();
+  m_ft4DeliveredDecodeKeys.clear ();
+
+  decodium::ft4::DecodeRequest dispatchRequest = request;
+  if (!m_diskData && request.ndepth > 2) {
+    dispatchRequest.ndepth = 2;
+    m_ft4DecodeFollowupPending = true;
+    m_ft4DecodeFollowupAudio = request.audio;
+    m_ft4DecodeFollowupUtc = request.nutc;
+    m_ft4DecodeFollowupQsoProgress = request.nqsoprogress;
+    m_ft4DecodeFollowupQsoFreq = request.nfqso;
+    m_ft4DecodeFollowupFa = request.nfa;
+    m_ft4DecodeFollowupFb = request.nfb;
+    m_ft4DecodeFollowupDepth = request.ndepth;
+    m_ft4DecodeFollowupThreads = request.threadCount;
+    m_ft4DecodeFollowupContest = request.ncontest;
+    m_ft4DecodeFollowupMycall = request.mycall;
+    m_ft4DecodeFollowupHiscall = request.hiscall;
+  }
+
   m_ft4DecodePending = true;
+  m_ft4DecodePendingUtc = dispatchRequest.nutc;
+  m_ft4DecodePendingDepth = dispatchRequest.ndepth;
   m_decodedTransportQueue.clear ();
   m_decodeStartMs = QDateTime::currentMSecsSinceEpoch ();
   decodeBusy (true);
 
   auto * worker = m_ft4DecodeWorker;
   QMetaObject::invokeMethod (m_ft4DecodeWorker,
-                             [worker, request] () {
-                               worker->decode (request);
+                             [worker, dispatchRequest] () {
+                               worker->decode (dispatchRequest);
                              },
                              Qt::QueuedConnection);
 }
@@ -13015,7 +13849,9 @@ void MainWindow::requestInProcessFt8Decode ()
     return;
   }
 
-  dispatchFt8DecodeRequest (buildFt8DecodeRequest ());
+  auto const baseRequest = buildFt8DecodeRequest ();
+  prepareEmbeddedFt8DeepFollowup (baseRequest);
+  dispatchFt8DecodeRequest (buildEmbeddedFt8FastLiveRequest (baseRequest), false);
 }
 
 void MainWindow::queueInProcessFt8Decode ()
@@ -13034,13 +13870,53 @@ void MainWindow::queueInProcessFt8Decode ()
   // Preserve the just-finished 15 s slot instead of dropping it when the
   // previous embedded FT8 decode is still running. The queued request is
   // launched as soon as the current worker result is consumed.
-  m_ft8QueuedDecodeRequest = buildFt8DecodeRequest ();
+  auto const baseRequest = buildFt8DecodeRequest ();
+  m_ft8QueuedDecodeRequest = buildEmbeddedFt8FastLiveRequest (baseRequest);
+  m_ft8QueuedDeepFollowupPending = false;
+  m_ft8QueuedDeepFollowupRequest = decodium::ft8::DecodeRequest {};
   if (!m_ft8QueuedDecodeRequest.hasFreshAudio) {
     m_ft8QueuedDecodePending = false;
     m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
     return;
   }
+  if (shouldPrepareEmbeddedFt8DeepFollowup (baseRequest)) {
+    m_ft8QueuedDeepFollowupRequest = buildEmbeddedFt8DeepFollowupRequest (baseRequest);
+    m_ft8QueuedDeepFollowupPending = m_ft8QueuedDeepFollowupRequest.hasFreshAudio;
+  }
+  debugToFile (QString {"ft8Decode   queue utc:%1 nzhsym:%2 samples:%3"}
+                 .arg (m_ft8QueuedDecodeRequest.nutc)
+                 .arg (m_ft8QueuedDecodeRequest.nzhsym)
+                 .arg (m_ft8QueuedDecodeRequest.availableSamples));
   m_ft8QueuedDecodePending = true;
+}
+
+static int ft8BaseDepthFromLegacyMask (int rawDepth)
+{
+  // NDepth is a legacy bit mask: bits 0..2 hold the base decode depth, while
+  // upper bits enable averaging, correlation, AP DX call, etc. Averaging or
+  // correlation explicitly request the promoted depth-4 FT8 profile.
+  int depth = rawDepth & 7;
+  if (depth <= 0)
+    {
+      depth = rawDepth;
+    }
+  if ((rawDepth & 0xF0) != 0)
+    {
+      depth = 4;
+    }
+  return qBound (1, depth, 4);
+}
+
+static bool ft8HasApTarget (QByteArray const& hiscall)
+{
+  for (char const ch : hiscall)
+    {
+      if (ch != '\0' && ch != ' ')
+        {
+          return true;
+        }
+    }
+  return false;
 }
 
 decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
@@ -13056,7 +13932,8 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
   request.nfa = qBound (0, int (dec_data.params.nfa), 5000);
   request.nfb = qMax (request.nfa + 50, qBound (0, int (dec_data.params.nfb), 5000));
   request.nzhsym = qBound (41, int (dec_data.params.nzhsym), 50);
-  request.ndepth = qBound (1, int (dec_data.params.ndepth), 4);
+  request.ndepth = ft8BaseDepthFromLegacyMask (int (dec_data.params.ndepth));
+  request.threadCount = embedded_decode_thread_count ();
   request.emedelay = dec_data.params.emedelay;
   request.ncontest = qBound (0, int (dec_data.params.nexp_decode & 7), 16);
   request.nagain = dec_data.params.nagain ? 1 : 0;
@@ -13065,10 +13942,15 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
   request.lapcqonly = dec_data.params.lapcqonly ? 1 : 0;
   request.napwid = qBound (0, int (dec_data.params.napwid), 200);
   request.ldiskdat = dec_data.params.ndiskdat ? 1 : 0;
+  request.ncandthin = qBound (1, int (dec_data.params.ncandthin), 100);
+  request.nft8Cycles = qBound (1, int (dec_data.params.nft8cycles), 3);
+  request.nft8RxFreqSensitivity = qBound (1, int (dec_data.params.nft8rxfsens), 3);
+  request.lowThresholds = dec_data.params.lft8lowth;
+  request.subpass = dec_data.params.lft8subpass;
   int const snapshotSamples = qBound (0, m_ft8LiveAudioSnapshotSamples,
                                       qMin (kFt8SlotSamples, m_ft8LiveAudioSnapshot.size ()));
   bool const useLiveAudioSnapshot =
-      m_embeddedShellMode && !m_diskData && !m_multithreadFT8 && snapshotSamples > 0;
+      m_embeddedShellMode && !m_diskData && snapshotSamples > 0;
   request.availableSamples = useLiveAudioSnapshot
       ? snapshotSamples
       : qBound (0, int (dec_data.params.kin), kFt8SlotSamples);
@@ -13088,29 +13970,19 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
     int const minimumFreshSamples = qRound (expectedSamples * 0.88);
     request.hasFreshAudio = request.availableSamples >= minimumFreshSamples;
   }
-  if (m_embeddedShellMode && !m_diskData && !m_multithreadFT8) {
-    if (request.ndepth >= 4) {
+  request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
+  request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
+  request.hisgrid = QByteArray (dec_data.params.hisgrid, int (sizeof dec_data.params.hisgrid));
+  if (m_embeddedShellMode && !m_diskData) {
+    bool const hasApTarget = ft8HasApTarget (request.hiscall);
+    if (request.ndepth >= 4 && hasApTarget) {
       if (request.nzhsym == 47) {
         request.lft8apon = 1;
       } else if (request.nzhsym >= 50) {
         request.lft8apon = 1;
       }
     }
-    if (request.nzhsym >= 50) {
-      if (request.ndepth >= 4) {
-        request.maxDecodeMs = 6500;
-      } else if (request.ndepth >= 3) {
-        request.maxDecodeMs = 5500;
-      } else {
-        request.maxDecodeMs = 3500;
-      }
-    } else {
-      request.maxDecodeMs = request.ndepth >= 4 ? 3500 : 2200;
-    }
   }
-  request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
-  request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
-  request.hisgrid = QByteArray (dec_data.params.hisgrid, int (sizeof dec_data.params.hisgrid));
   if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
     bool neural = false, turbo = false, coherent = false;
     QMetaObject::invokeMethod (bridge, "effectiveNeuralSync", Qt::DirectConnection,
@@ -13126,38 +13998,205 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
   return request;
 }
 
-void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request)
+decodium::ft8::DecodeRequest MainWindow::buildEmbeddedFt8FastLiveRequest (decodium::ft8::DecodeRequest request) const
+{
+  if (!(m_embeddedShellMode && !m_diskData)) {
+    return request;
+  }
+
+  int const baseDepth = request.ndepth;
+  bool const hasApTarget = ft8HasApTarget (request.hiscall);
+  if (request.nzhsym >= 50) {
+    request.ndepth = qMin (request.ndepth, 3);
+    if (baseDepth >= 3) {
+      request.maxDecodeMs = 6500;
+    } else {
+      request.maxDecodeMs = 3600;
+    }
+    request.lowThresholds = false;
+    request.subpass = false;
+    request.nft8Cycles = 1;
+    request.nft8RxFreqSensitivity = 1;
+    request.lft8apon = (baseDepth >= 3 && (request.lft8apon || hasApTarget)) ? 1 : 0;
+  } else {
+    request.ndepth = qMin (request.ndepth, 2);
+    request.maxDecodeMs = baseDepth >= 4 ? 2400 : 1800;
+    request.lowThresholds = false;
+    request.subpass = false;
+    request.nft8Cycles = 1;
+    request.nft8RxFreqSensitivity = 1;
+    request.lft8apon = 0;
+  }
+
+  // Main live pass: keep the baseline decoder deterministic and timely.
+  // Optional weak-signal helpers run only in the cancellable follow-up, which
+  // may overrun the next FT8 boundary slightly without driving sequencing.
+  request.supplemental = false;
+  request.neuralSyncEnabled = false;
+  request.turboFeedbackEnabled = false;
+  request.coherentAvgEnabled = false;
+  return request;
+}
+
+decodium::ft8::DecodeRequest MainWindow::buildEmbeddedFt8DeepFollowupRequest (decodium::ft8::DecodeRequest request) const
+{
+  if (!(m_embeddedShellMode && !m_diskData)) {
+    return request;
+  }
+
+  int const requestedDepth = request.ndepth;
+  bool const hasApTarget = ft8HasApTarget (request.hiscall);
+  request.ndepth = requestedDepth >= 4 ? 4 : qMin (requestedDepth, 3);
+  request.supplemental = requestedDepth >= 4;
+  request.osdFollowup = request.ndepth >= 3;
+  request.lft8apon = hasApTarget ? request.lft8apon : 0;
+  request.turboFeedbackEnabled = false;
+  if (request.ndepth >= 3) {
+    request.maxDecodeMs = 5200;
+  } else {
+    request.maxDecodeMs = 0;
+  }
+  return request;
+}
+
+bool MainWindow::shouldPrepareEmbeddedFt8DeepFollowup (decodium::ft8::DecodeRequest const& request) const
+{
+  if (!(m_mode == "FT8" && m_embeddedShellMode && !m_diskData)) {
+    return false;
+  }
+  if (!request.hasFreshAudio || request.nzhsym < 50 || request.maxDecodeMs < 0) {
+    return false;
+  }
+  return request.ndepth >= 3
+      || request.supplemental
+      || request.neuralSyncEnabled
+      || request.turboFeedbackEnabled
+      || request.coherentAvgEnabled;
+}
+
+void MainWindow::prepareEmbeddedFt8DeepFollowup (decodium::ft8::DecodeRequest const& request)
+{
+  m_ft8DeepFollowupQueued = false;
+  m_ft8DeepFollowupRequest = decodium::ft8::DecodeRequest {};
+
+  if (!shouldPrepareEmbeddedFt8DeepFollowup (request)) {
+    return;
+  }
+
+  auto deepRequest = buildEmbeddedFt8DeepFollowupRequest (request);
+  if (!deepRequest.hasFreshAudio || deepRequest.maxDecodeMs <= 0) {
+    return;
+  }
+
+  m_ft8DeepFollowupRequest = std::move (deepRequest);
+  m_ft8DeepFollowupQueued = true;
+}
+
+int MainWindow::msUntilNextEmbeddedFt8FullDecodeTrigger () const
+{
+  int const periodMs = qMax (1000, qRound (m_TRperiod * 1000.0));
+  int const triggerMs = qBound (0, qRound (double (m_hsymStop) * 288.0), periodMs - 1);
+  int const msOfDay = QDateTime::currentDateTimeUtc ().time ().msecsSinceStartOfDay ();
+  int const msInPeriod = msOfDay % periodMs;
+  if (msInPeriod <= triggerMs) {
+    return triggerMs - msInPeriod;
+  }
+  return periodMs - msInPeriod + triggerMs;
+}
+
+bool MainWindow::dispatchQueuedEmbeddedFt8DeepFollowup ()
+{
+  if (!m_ft8DeepFollowupQueued) {
+    return false;
+  }
+
+  auto request = m_ft8DeepFollowupRequest;
+  m_ft8DeepFollowupQueued = false;
+  m_ft8DeepFollowupRequest = decodium::ft8::DecodeRequest {};
+
+  if (!(m_mode == "FT8" && m_embeddedShellMode && !m_diskData)
+      || !request.hasFreshAudio || request.maxDecodeMs <= 0) {
+    return false;
+  }
+
+  int const periodMs = qMax (1000, qRound (m_TRperiod * 1000.0));
+  int const msInPeriod = QDateTime::currentDateTimeUtc ().time ().msecsSinceStartOfDay () % periodMs;
+  int constexpr kFt8DeepLatestOverrunMs = 6000;
+  int constexpr kFt8DeepDispatchSafetyMs = 250;
+  int constexpr kFt8DeepMinUsefulBudgetMs = 2400;
+  int constexpr kFt8DeepMaxLiveBudgetMs = 5200;
+  int const lateBudgetMs = kFt8DeepLatestOverrunMs - msInPeriod - kFt8DeepDispatchSafetyMs;
+  int const nextTriggerBudgetMs = msUntilNextEmbeddedFt8FullDecodeTrigger () - kFt8DeepDispatchSafetyMs;
+  int const budgetMs = qBound (0,
+                               qMin (request.maxDecodeMs,
+                                     qMin (lateBudgetMs, nextTriggerBudgetMs)),
+                               kFt8DeepMaxLiveBudgetMs);
+  if (m_transmitting || budgetMs < kFt8DeepMinUsefulBudgetMs) {
+    debugToFile (QString {"ft8Decode   skip deep follow-up utc:%1 maxMs:%2 slackMs:%3 tx:%4"}
+                   .arg (request.nutc)
+                   .arg (request.maxDecodeMs)
+                   .arg (nextTriggerBudgetMs)
+                   .arg (m_transmitting ? 1 : 0));
+    return false;
+  }
+
+  request.maxDecodeMs = budgetMs;
+  debugToFile (QString {"ft8Decode   start deep follow-up utc:%1 maxMs:%2 slackMs:%3"}
+                 .arg (request.nutc)
+                 .arg (request.maxDecodeMs)
+                 .arg (nextTriggerBudgetMs));
+  dispatchFt8DecodeRequest (std::move (request), true);
+  return true;
+}
+
+void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request, bool deepFollowup)
 {
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    debugToFile (QString {"ft8Decode   worker unavailable source:dispatch running:%1 worker:%2 utc:%3 nzhsym:%4 samples:%5"}
+    debugToFile (QString {"ft8Decode   worker unavailable source:dispatch running:%1 worker:%2 utc:%3 nzhsym:%4 samples:%5 deep:%6"}
                    .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
                    .arg (m_ft8DecodeWorker ? 1 : 0)
                    .arg (request.nutc)
                    .arg (request.nzhsym)
-                   .arg (request.availableSamples));
+                   .arg (request.availableSamples)
+                   .arg (deepFollowup ? 1 : 0));
     return;
   }
 
   if (!request.hasFreshAudio) {
-    debugToFile (QString {"ft8Decode   skip stale/partial audio utc:%1 nzhsym:%2 samples:%3 kin:%4"}
+    debugToFile (QString {"ft8Decode   skip stale/partial audio utc:%1 nzhsym:%2 samples:%3 kin:%4 deep:%5"}
                    .arg (request.nutc)
                    .arg (request.nzhsym)
                    .arg (request.availableSamples)
-                   .arg (dec_data.params.kin));
+                   .arg (dec_data.params.kin)
+                   .arg (deepFollowup ? 1 : 0));
     return;
+  }
+
+  if (m_legacyFt8DeepThreadPenalty && request.ndepth >= 3) {
+    int const unguardedThreads = qMax(1, request.threadCount);
+    request.threadCount = qMax(1, unguardedThreads - 1);
+    qInfo().noquote() << "[FT8ADAPT] legacy DEEP dispatch"
+                      << "depth=" << request.ndepth
+                      << "threads=" << unguardedThreads << "->" << request.threadCount
+                      << "followup=" << (deepFollowup ? 1 : 0);
   }
 
   request.serial = ++m_ft8DecodeSerial;
   m_ft8DecodePending = true;
+  m_ft8DecodeDeepFollowupPending = deepFollowup;
   m_ft8DecodePendingUtc = request.nutc;
   m_decodedTransportQueue.clear ();
+  m_ft8StructuredTransportQueue.clear ();
   m_decodeStartMs = QDateTime::currentMSecsSinceEpoch ();
-  debugToFile (QString {"ft8Decode   start utc:%1 nzhsym:%2 depth:%3 maxMs:%4 samples:%5"}
+  debugToFile (QString {"ft8Decode   start utc:%1 nzhsym:%2 depth:%3 maxMs:%4 samples:%5 deep:%6 threads:%7 cores:%8"}
                  .arg (request.nutc)
                  .arg (request.nzhsym)
                  .arg (request.ndepth)
                  .arg (request.maxDecodeMs)
-                 .arg (request.availableSamples));
+                 .arg (request.availableSamples)
+                 .arg (deepFollowup ? 1 : 0)
+                 .arg (request.threadCount)
+                 .arg (qMax (1, QThread::idealThreadCount ())));
   decodeBusy (true);
 
   auto * worker = m_ft8DecodeWorker;
@@ -13266,6 +14305,7 @@ void MainWindow::requestInProcessQ65Decode ()
   request.lapcqonly = dec_data.params.lapcqonly ? 1 : 0;
   if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
     request.coherentAvgEnabled = bridge->property ("coherentAvgEnabled").toBool ();
+    request.zapEnabled = bridge->property ("zapEnabled").toBool ();
   }
 
   m_q65DecodePending = true;
@@ -13292,6 +14332,15 @@ void MainWindow::requestInProcessMsk144Decode ()
   request.audio.resize (360000);
   std::copy_n (dec_data.d2, request.audio.size (), request.audio.begin ());
   request.nutc = dec_data.params.nutc;
+  if (!m_diskData) {
+    QDateTime slotStart = m_dateTimeSeqStart;
+    if (!slotStart.isValid ()) {
+      int const periodMs = qMax (1000, qRound (m_TRperiod * 1000.0));
+      slotStart = qt_truncate_date_time_to (QDateTime::currentDateTimeUtc (), periodMs);
+    }
+    QTime const slotTime = slotStart.toUTC ().time ();
+    request.nutc = slotTime.hour () * 10000 + slotTime.minute () * 100 + slotTime.second ();
+  }
   request.kdone = qMin (int (12000.0 * m_TRperiod), int (m_kdone));
   request.nsubmode = m_nSubMode;
   request.newdat = dec_data.params.newdat ? 1 : 0;
@@ -13387,6 +14436,33 @@ void MainWindow::requestInProcessLegacyJtDecode ()
   request.hisgrid = QByteArray (dec_data.params.hisgrid, int (sizeof dec_data.params.hisgrid));
   request.tempDir = m_config.temp_dir ().absolutePath ().toLocal8Bit ();
 
+  if (m_mode == "JT9" && qEnvironmentVariableIsSet ("DECODIUM_JT9_TRACE")) {
+    float ssMin = std::numeric_limits<float>::max ();
+    float ssMax = std::numeric_limits<float>::lowest ();
+    int ssFinite = 0;
+    int ssNonZero = 0;
+    for (float const value : request.ss) {
+      if (!std::isfinite (value)) continue;
+      ssMin = std::min (ssMin, value);
+      ssMax = std::max (ssMax, value);
+      ++ssFinite;
+      if (value > 0.0f) ++ssNonZero;
+    }
+    qInfo () << "[LEGACY-JT9] request"
+             << "serial=" << request.serial
+             << "audio=" << request.audio.size ()
+             << "audioUsed=" << qMin (request.audio.size (), qMax (0, request.npts8 * 8))
+             << "npts8=" << request.npts8
+             << "nzhsym=" << request.nzhsym
+             << "newdat=" << request.newdat
+             << "ss=" << request.ss.size ()
+             << "ssFinite=" << ssFinite
+             << "ssNonZero=" << ssNonZero
+             << "ssMin=" << ssMin
+             << "ssMax=" << ssMax
+             << "threadRunning=" << m_legacyJtDecodeThread.isRunning ();
+  }
+
   m_legacyJtDecodePending = true;
   m_decodedTransportQueue.clear ();
   m_decodeStartMs = QDateTime::currentMSecsSinceEpoch ();
@@ -13473,12 +14549,19 @@ bool MainWindow::takeNextDecodedTransportRow (QQueue<QByteArray>& splitDecodeQue
 }
 
 bool MainWindow::prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, DecodedRowSource source,
-                                    PreparedDecodedRow& prepared, DecodedRowAction& action)
+                                    PreparedDecodedRow& prepared, DecodedRowAction& action,
+                                    decodium::ft8::DecodedEntry const* structuredFt8Entry)
 {
   Q_UNUSED (source);
   action = DecodedRowAction::Continue;
 
+  bool const deferFt8SecondaryWork = structuredFt8Entry && m_mode == "FT8";
+  bool structuredTextMatches = structuredFt8Entry && m_mode == "FT8";
+
   if (bDisplayPoints) {
+    if (line_read.contains ("a7")) {
+      structuredTextMatches = false;
+    }
     line_read = line_read.replace ("a7", "  ");
   }
 
@@ -13520,6 +14603,7 @@ bool MainWindow::prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, D
     auto const resolvedRawLine = resolve_active_qso_placeholder_decode_line (
         prepared.rawLine, myCallUpper, myBaseUpper, activePartnerCall);
     if (resolvedRawLine != prepared.rawLine) {
+      structuredTextMatches = false;
       debugToFile (QString {"placeholder  resolved active DX:%1 msg:%2"}
                        .arg (activePartnerCall, resolvedRawLine));
       prepared.rawLine = resolvedRawLine;
@@ -13530,8 +14614,14 @@ bool MainWindow::prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, D
     apply_async_ft2_tdelta (prepared.rawLine, m_asyncRxStartMs);
   }
   prepared.message0 = prepared.rawLine;
-  prepared.decodedtext0 = DecodedText {prepared.rawLine};
-  prepared.decodedtext = DecodedText {QString (prepared.rawLine).remove ("TU; ")};
+  if (structuredTextMatches && structuredFt8Entry->decodedText0
+      && structuredFt8Entry->decodedText) {
+    prepared.decodedtext0 = *structuredFt8Entry->decodedText0;
+    prepared.decodedtext = *structuredFt8Entry->decodedText;
+  } else {
+    prepared.decodedtext0 = DecodedText {prepared.rawLine};
+    prepared.decodedtext = DecodedText {QString (prepared.rawLine).remove ("TU; ")};
+  }
 
   QString ghostFilterDetails;
   auto const activeFt2PartnerBase =
@@ -13675,7 +14765,9 @@ bool MainWindow::prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, D
       if (shouldSuppressNearDuplicateDecode (prepared.decodedtext)) {
         return false;
       }
-      write_all ("Rx", prepared.line_read.trimmed ());
+      if (!deferFt8SecondaryWork) {
+        write_all ("Rx", prepared.line_read.trimmed ());
+      }
     }
   else {
     return false;
@@ -13706,14 +14798,37 @@ void MainWindow::readFromStdout()                             //readFromStdout
       (m_specOp==SpecOp::ARRL_DIGI or m_ActiveStationsWidget->isVisible());
   }
   QByteArray line_read;
-  while (takeNextDecodedTransportRow (m_decodedTransportQueue, line_read, all_decodes)) {
+  while ((m_mode == "FT8" && !m_ft8StructuredTransportQueue.isEmpty ())
+         || !m_decodedTransportQueue.isEmpty ()) {
+    std::optional<decodium::ft8::DecodedEntry> structuredFt8Entry;
+    if (m_mode == "FT8" && !m_ft8StructuredTransportQueue.isEmpty ()) {
+      structuredFt8Entry.emplace (m_ft8StructuredTransportQueue.dequeue ());
+      line_read = structuredFt8Entry->row.toUtf8 ();
+      QString const& the_line = structuredFt8Entry->row;
+      if (ui->actionEnable_QSY_Popups->isChecked () || m_qsymonitorWidget) {
+        showQSYMessage (the_line);
+      }
+      if (m_specOp == SpecOp::FOX && m_ActiveStationsWidget != NULL
+          && (!m_ActiveStationsWidget->wantedOnly ()
+              || the_line.contains (" " + m_config.my_callsign () + " ")
+              || the_line.contains (" <" + m_config.my_callsign () + "> "))) {
+        all_decodes.append (line_read);
+      }
+    } else if (!takeNextDecodedTransportRow (m_decodedTransportQueue, line_read, all_decodes)) {
+      break;
+    }
     PreparedDecodedRow prepared;
     DecodedRowAction action;
-    if (!prepareDecodedRow (line_read, bDisplayPoints, DecodedRowSource::InProcess, prepared, action)) {
+    if (!prepareDecodedRow (line_read, bDisplayPoints, DecodedRowSource::InProcess,
+                            prepared, action,
+                            structuredFt8Entry ? &*structuredFt8Entry : nullptr)) {
       if (DecodedRowAction::ReturnFromReader == action) {
         return;
       }
       continue;
+    }
+    if (structuredFt8Entry) {
+      queueFt8LogWork ("Rx", prepared.line_read.trimmed ());
     }
 
     line_read = prepared.line_read;
@@ -14966,8 +16081,13 @@ void MainWindow::readFromStdout()                             //readFromStdout
         m_QSOText = decodedtext.string ().trimmed ();
       }
 
-      if (!blockUDP)    // block udp spotting for false decodes (JTAlert)
-      postDecode (true, decodedtext);   //avt 9/30/25
+      if (!blockUDP) {   // block udp spotting for false decodes (JTAlert)
+        if (structuredFt8Entry) {
+          queueFt8PostDecodeWork (decodedtext);
+        } else {
+          postDecode (true, decodedtext);   //avt 9/30/25
+        }
+      }
 
       if((m_mode=="FT8" or m_mode=="FT2") and SpecOp::HOUND==m_specOp) {
         if(decodedtext.string().contains(";")) {
@@ -15051,7 +16171,13 @@ void MainWindow::readFromStdout()                             //readFromStdout
           DecodedText FST4W_post {QString::fromUtf8 (line_read.left (p).constData ())};
           pskPost(FST4W_post);
         } else {
-          if (stdMsg && okToPost) pskPost(decodedtext);
+          if (stdMsg && okToPost) {
+            if (structuredFt8Entry) {
+              queueFt8ReportingWork (decodedtext);
+            } else {
+              pskPost(decodedtext);
+            }
+          }
         }
         if((m_mode=="JT4" or m_mode=="JT65" or m_mode=="Q65") and
            m_msgAvgWidget!=NULL) {
@@ -15340,6 +16466,10 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
       m_pendingAutoLogXSent = m_lateAutoLogXSent;
       m_pendingAutoLogXRcvd = m_lateAutoLogXRcvd;
       m_pendingAutoLogOn = m_lateAutoLogOn;
+      m_pendingAutoLogOff = QDateTime::currentDateTimeUtc ();
+      if (m_pendingAutoLogOn.isValid () && m_pendingAutoLogOff < m_pendingAutoLogOn) {
+        m_pendingAutoLogOff = m_pendingAutoLogOn;
+      }
       m_pendingAutoLogDialFreq = m_lateAutoLogDialFreq;
       removeCallerFromQueue (latePartnerBase);
       debugAutoCq ("late-signoff-log",
@@ -15518,7 +16648,11 @@ void MainWindow::pskPost (DecodedText const& decodedtext)
 
 void MainWindow::killFile ()
 {
-  if (m_fnameWE.size () && !(m_saveAll || (m_saveDecoded && m_bDecoded))) {
+  bool const diagnosticSaveAll =
+      !m_embeddedShellMode
+      && m_mode == "FT8"
+      && qEnvironmentVariableIsSet ("DECODIUM_FORCE_SAVE_ALL");
+  if (m_fnameWE.size () && !(m_saveAll || diagnosticSaveAll || (m_saveDecoded && m_bDecoded))) {
     QFile f1 {m_fnameWE + ".wav"};
     if(f1.exists()) f1.remove();
     if(m_mode=="WSPR" or m_mode=="FST4W") {
@@ -15551,7 +16685,24 @@ void MainWindow::on_EraseButton_clicked ()
 
 void MainWindow::band_activity_cleared ()
 {
-  m_messageClient->decodes_cleared ();
+  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPPrimary"), QStringLiteral ("Decode")))
+    {
+      m_messageClient->decodes_cleared ();
+    }
+  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPSecondary"), QStringLiteral ("Decode")))
+    {
+      if (auto * client = ensureSecondaryUdpMessageClient ())
+        {
+          client->decodes_cleared ();
+        }
+    }
+  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPTertiary"), QStringLiteral ("Decode")))
+    {
+      if (auto * client = ensureTertiaryUdpMessageClient ())
+        {
+          client->decodes_cleared ();
+        }
+    }
   m_decodeDedupeCache.clear ();
   m_decodeDedupeLastPruneMs = 0;
   m_asyncDedupeSet.clear ();
@@ -16311,11 +17462,14 @@ void MainWindow::guiUpdate()
           float f0=ui->TxFreqSpinBox->value() - m_XIT + 1.5*dfreq;
           if(m_mode=="FST4W") f0=ui->WSPRfreqSpinBox->value() - m_XIT + 1.5*dfreq;
           auto const wave = decodium::txwave::generateFst4Wave (itone, nsym, nsps, fsample, hmod, f0);
-          std::fill_n (foxcom_.wave, FOXCOM_WAVE_SIZE, 0.0f);
-          foxcom_ensure_wave(&foxcom_);
-          std::copy_n (wave.constBegin (), qMin (wave.size (),
-                                                 static_cast<qsizetype>(FOXCOM_WAVE_SIZE)),
-                       foxcom_.wave);
+          // 1.0.376 (sec #6): alloca PRIMA di scrivere (era fill_n prima di ensure =
+          // NULL-write su processo fresco in FST4/FST4W).
+          if (foxcom_ensure_wave(&foxcom_)) {
+            std::fill_n (foxcom_.wave, FOXCOM_WAVE_SIZE, 0.0f);
+            std::copy_n (wave.constBegin (), qMin (wave.size (),
+                                                   static_cast<qsizetype>(FOXCOM_WAVE_SIZE)),
+                         foxcom_.wave);
+          }
 
           QString t = QString::fromStdString(message).trimmed();
         }
@@ -16357,6 +17511,11 @@ void MainWindow::guiUpdate()
     {
       auto temp = m_currentMessage;
       m_currentMessage = QString::fromLatin1(msgsent);
+      QString const transmittedReport =
+          decodium::seq::signalReportFromMessage(m_currentMessage);
+      if (!transmittedReport.isEmpty ()) {
+        m_rptSent = transmittedReport;
+      }
       if (m_currentMessage != temp) // check if tx message changed
       {
           statusUpdate ();
@@ -16373,12 +17532,24 @@ void MainWindow::guiUpdate()
     if(m_restart) {
       bool const restartChangesPayload =
           m_currentMessage.trimmed () != m_lastMessageSent.trimmed ();
+      bool suppressEmbeddedBridgeRestartLog = false;
+#if defined(Q_OS_MAC)
+      suppressEmbeddedBridgeRestartLog =
+          m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio && !m_tune
+          && SpecOp::FOX != m_specOp && SpecOp::HOUND != m_specOp
+          && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+#endif
       if (restartChangesPayload) {
-        write_all("Tx",m_currentMessage);
-        if (m_config.TX_messages () and m_mode!="Echo") {
-          secondaryDecodeView()->displayTransmittedText(m_currentMessage.trimmed(),m_mode,
-                ui->TxFreqSpinBox->value(),m_bFastMode,m_TRperiod,m_config.superFox());
+        if (suppressEmbeddedBridgeRestartLog) {
+          debugToFile (QString {"txRestart bridge-audio payload log suppressed mode:%1 msg:%2"}
+                         .arg (m_mode, m_currentMessage.trimmed ()));
+        } else {
+          write_all("Tx",m_currentMessage);
+          if (m_config.TX_messages () and m_mode!="Echo") {
+            secondaryDecodeView()->displayTransmittedText(m_currentMessage.trimmed(),m_mode,
+                  ui->TxFreqSpinBox->value(),m_bFastMode,m_TRperiod,m_config.superFox());
           }
+        }
       } else {
         debugToFile (QString {"txRestart duplicate payload suppressed mode:%1 msg:%2"}
                        .arg (m_mode, m_currentMessage.trimmed ()));
@@ -16705,8 +17876,7 @@ void MainWindow::guiUpdate()
   }
   if(m_mode=="Echo" and !m_monitoring and !m_auto and !m_diskData) m_echoRunning=false;
 
-  if(m_mode=="Q65") {
-    mem_qmap.lock();
+  if(m_mode=="Q65" && lock_qmap_shared_memory ("q65-poll")) {
     int n=0;
     if(m_decoderBusy) n=1;
     ipc_qmap[3]=n;
@@ -17023,7 +18193,8 @@ void MainWindow::startTx2()
   bool const force_embedded_macos_ftx =
 #if defined(Q_OS_MAC)
       !tci_active && m_embeddedShellMode && !m_embeddedRigControlEnabled
-      && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+      && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2"
+          || m_mode == "MSK144");
 #else
       false;
 #endif
@@ -17054,7 +18225,8 @@ void MainWindow::startTx2()
     bool const bridgeOwnsNormalFtxAudio =
         m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio && !m_tune
         && SpecOp::FOX != m_specOp && SpecOp::HOUND != m_specOp
-        && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+        && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2"
+            || m_mode == "MSK144");
     updateEmbeddedBridgeTxAudioMute (bridgeOwnsNormalFtxAudio, QStringLiteral ("startTx2"));
 #endif
     transmit (snr);
@@ -17494,6 +18666,16 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
       m_hisGrid = ui->dxGridEntry->text ();
       m_bDoubleClicked = previousDoubleClick;
 
+      // 1.0.376 (sec #14): onora il gate Digital Morse anche sul fast-path FT2 da Band
+      // Activity (come il path normale ~19152): prearma e attende btnTxNow invece di
+      // armare il TX da solo, cosi la conferma manuale scelta dall'operatore vale.
+      if (m_bDigitalMorse && m_mode == "FT2")
+        {
+          m_bTxPreloaded = true;
+          if (ui->btnTxNow) ui->btnTxNow->setVisible (true);
+          return;
+        }
+
       if (!startTxNow || m_mode == "WSPR" || m_mode == "FST4W")
         {
           return;
@@ -17528,7 +18710,7 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
       && !clickedWord.isEmpty ()
       && clickedWord != "CQ"
       && clickedWord != "QRZ"
-      && Radio::is_callsign (clickedWord);
+      && ft2_word_click_token_is_callsign (clickedWord);
   if (isFt2BandActivityWordCallDoubleClick)
     {
       // The map is station-centric; Band Activity is row-centric. When the user
@@ -17840,7 +19022,18 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
       && m_auto
       && m_QSOProgress > CALLING
       && !m_bDoubleClicked;
-  if (!lockTxPeriodInFt2AsyncQso) {
+  int const decodedSecond = static_cast<int> (message.timeInSeconds ());
+  qint64 nowMs = preciseCurrentMSecsSinceEpoch () % 86400000;
+  if (nowMs < 0) nowMs += 86400000;
+  int const nowSecond = static_cast<int> (nowMs / 1000);
+  int decodeAgeSeconds = nowSecond - decodedSecond;
+  if (decodeAgeSeconds < -43200) decodeAgeSeconds += 86400;
+  if (decodeAgeSeconds > 43200) decodeAgeSeconds -= 86400;
+  int const liveParityWindowSeconds = qMax (5, qCeil (2.0 * m_TRperiod) + 2);
+  bool const decodedSlotIsCurrent = m_diskData
+      || m_bDoubleClicked
+      || qAbs (decodeAgeSeconds) <= liveParityWindowSeconds;
+  if (!lockTxPeriodInFt2AsyncQso && decodedSlotIsCurrent) {
     int nmod;
     if(m_TRperiod < 5.0) {
       int period = (int)round(double(message.timeInSeconds()) / m_TRperiod);
@@ -17852,6 +19045,12 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     if(SpecOp::HOUND == m_specOp) m_txFirst=false;          //Hound must not transmit first
     if(SpecOp::FOX == m_specOp) m_txFirst=true;             //Fox must always transmit first
     ui->txFirstCheckBox->setChecked(m_txFirst);
+  } else if (!decodedSlotIsCurrent) {
+    debugToFile (QString {"processMess  preserve TX parity for stale/synthetic UTC:%1 age:%2s period:%3 msg:%4"}
+                     .arg (decodedSecond, 6, 10, QLatin1Char ('0'))
+                     .arg (decodeAgeSeconds)
+                     .arg (m_TRperiod, 0, 'f', 2)
+                     .arg (message.string ().trimmed ()));
   }
 
   auto const& message_words = message.messageWords ();
@@ -18003,8 +19202,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   if (payload_directed_to_me
       && !payload_partner_base.isEmpty ()
       && payload_partner_base != my_base_upper
-      && (ft2_directed_response_to_me
-          || qso_partner_base_call.isEmpty ()
+      && (qso_partner_base_call.isEmpty ()
           || qso_partner_base_call == my_base_upper
           || message_contains_call_base (m_currentMessage, payload_partner_base)
           || message_contains_call_base (m_lastMessageSent, payload_partner_base))) {
@@ -18273,8 +19471,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
         && (directedResponsePartnerBase == qso_partner_base_call
             || base_call == qso_partner_base_call
             || qso_partner_matched
-            || placeholder_partner_reply
-            || ft2_directed_response_to_me);
+            || placeholder_partner_reply);
     bool const directedRogerReportForActiveQso =
         ftDirectedResponseMode
         && directed_to_me
@@ -18309,7 +19506,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
       bool const profileNeedsOwn73BeforeLog =
           ((m_mode == "FT2"
             && m_ft2QsoMessageProfile == Ft2QsoMessageProfile::Full5)
-           || ((m_mode == "FT8" || m_mode == "FT4")
+           || ((m_mode == "FT8" || m_mode == "FT4" || m_mode == "MSK144")
                && m_specOp == SpecOp::NONE));
       m_txRetryCount = 0;
       m_lastNtx = -1;
@@ -18494,7 +19691,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
         bool const profileNeedsOwn73BeforeLog =
             ((m_mode == "FT2"
               && m_ft2QsoMessageProfile == Ft2QsoMessageProfile::Full5)
-             || ((m_mode == "FT8" || m_mode == "FT4")
+             || ((m_mode == "FT8" || m_mode == "FT4" || m_mode == "MSK144")
                  && m_specOp == SpecOp::NONE));
         bool const partnerSignoffNeedsOwn73 =
             partnerAnySignoff
@@ -18956,11 +20153,12 @@ void MainWindow::setTxMsg(int n)
 
 void MainWindow::genCQMsg ()
 {
-  auto const& my_callsign = m_config.my_callsign ();
-  auto is_compound = my_callsign != m_baseCall;
-  auto is_type_two = !is77BitMode () && is_compound && stdCall (m_baseCall) && !shortList (my_callsign);
-  if(my_callsign.size () && m_config.my_grid().size ()) {
-    auto const& grid = m_config.my_grid ();
+  auto const my_callsign = legacyCallsign ();
+  auto const my_base_call = Radio::base_callsign (my_callsign);
+  auto is_compound = my_callsign != my_base_call;
+  auto is_type_two = !is77BitMode () && is_compound && stdCall (my_base_call) && !shortList (my_callsign);
+  if(my_callsign.size () && legacyGrid ().size ()) {
+    auto const grid = legacyGrid ();
     if (ui->cbCQTx->isEnabled () && ui->cbCQTx->isVisible () && ui->cbCQTx->isChecked ()) {
       if(stdCall (my_callsign)
          || is_type_two) {
@@ -19068,10 +20266,11 @@ void MainWindow::genStdMsgs(QString rpt, bool unconditional)
     return;
   }
   m_hisCall0 = hisCall;
-  auto const& my_callsign = m_config.my_callsign ();
-  auto is_compound = my_callsign != m_baseCall;
+  auto const my_callsign = legacyCallsign ();
+  auto const my_base_call = Radio::base_callsign (my_callsign);
+  auto is_compound = my_callsign != my_base_call;
   auto is_type_one = !is77BitMode () && is_compound && shortList (my_callsign);
-  auto const& my_grid = m_config.my_grid ().left (4);
+  auto const my_grid = legacyGrid ().left (4);
   auto const& hisBase = Radio::base_callsign (hisCall);
   save_dxbase_(const_cast <char *> ((hisBase + "   ").left(6).toLatin1().constData()), (FCL)6);
   auto eme_short_codes = m_config.enable_VHF_features () && ui->cbShMsgs->isChecked ()
@@ -19080,7 +20279,7 @@ void MainWindow::genStdMsgs(QString rpt, bool unconditional)
   bool bMyCall=stdCall(my_callsign);
   bool bHisCall=stdCall(hisCall);
 
-  QString t0=hisBase + " " + m_baseCall + " ";
+  QString t0=hisBase + " " + my_base_call + " ";
   QString t0s=hisCall + " " + my_callsign + " ";
   QString t0a,t0b;
 
@@ -19094,7 +20293,7 @@ void MainWindow::genStdMsgs(QString rpt, bool unconditional)
   msgtype(t, ui->tx1);
   if (eme_short_codes) {
     t=t+" OOO";
-    if(!bHisCall) t=hisCall + " " + m_baseCall + " OOO";
+    if(!bHisCall) t=hisCall + " " + my_base_call + " OOO";
     if(!bMyCall) t=hisBase + " " + my_callsign + " OOO";
     msgtype(t, ui->tx2);
     msgtype("RO", ui->tx3);
@@ -19142,7 +20341,7 @@ void MainWindow::genStdMsgs(QString rpt, bool unconditional)
         QString a;
         t="<" + t0s.split(" ").at(0) + "> <" + t0s.split(" ").at(1) + "> ";
         a = a.asprintf("%4.4d ",ui->sbSerialNumber->value());
-        sent=rs + a + m_config.my_grid();
+        sent=rs + a + legacyGrid ();
       }
       msgtype(t + sent, ui->tx2);
       if(sent==rpt) {
@@ -19331,10 +20530,22 @@ void MainWindow::capturePendingAutoLogSnapshot ()
   m_pendingAutoLogCall = snapshotCall;
   m_pendingAutoLogGrid = m_hisGrid;
   m_pendingAutoLogRptSent = m_rptSent;
+  if (m_pendingAutoLogRptSent.trimmed ().isEmpty ()) {
+    m_pendingAutoLogRptSent =
+        decodium::seq::signalReportFromMessage(m_currentMessage);
+  }
+  if (m_pendingAutoLogRptSent.trimmed ().isEmpty ()) {
+    m_pendingAutoLogRptSent =
+        decodium::seq::signalReportFromMessage(m_lastMessageSent);
+  }
   m_pendingAutoLogRptRcvd = m_rptRcvd;
   m_pendingAutoLogXSent = m_xSent;
   m_pendingAutoLogXRcvd = m_xRcvd;
   m_pendingAutoLogOn = m_dateTimeQSOOn;
+  m_pendingAutoLogOff = QDateTime::currentDateTimeUtc ();
+  if (m_pendingAutoLogOn.isValid () && m_pendingAutoLogOff < m_pendingAutoLogOn) {
+    m_pendingAutoLogOff = m_pendingAutoLogOn;
+  }
   m_pendingAutoLogDialFreq = m_freqNominal + ui->TxFreqSpinBox->value();
 }
 
@@ -19348,6 +20559,7 @@ void MainWindow::clearPendingAutoLogSnapshot ()
   m_pendingAutoLogXSent.clear ();
   m_pendingAutoLogXRcvd.clear ();
   m_pendingAutoLogOn = QDateTime {};
+  m_pendingAutoLogOff = QDateTime {};
   m_pendingAutoLogDialFreq = 0;
 }
 
@@ -19373,6 +20585,10 @@ void MainWindow::armLateAutoLogSnapshot ()
   m_lateAutoLogXSent = m_xSent;
   m_lateAutoLogXRcvd = m_xRcvd;
   m_lateAutoLogOn = m_dateTimeQSOOn;
+  m_lateAutoLogOff = QDateTime::currentDateTimeUtc ();
+  if (m_lateAutoLogOn.isValid () && m_lateAutoLogOff < m_lateAutoLogOn) {
+    m_lateAutoLogOff = m_lateAutoLogOn;
+  }
   m_lateAutoLogDialFreq = m_freqNominal + ui->TxFreqSpinBox->value ();
   m_lateAutoLogExpires = QDateTime::currentDateTimeUtc ().addSecs (kLateAutoLogGraceWindowSeconds);
 
@@ -19393,6 +20609,7 @@ void MainWindow::clearLateAutoLogSnapshot ()
   m_lateAutoLogXSent.clear ();
   m_lateAutoLogXRcvd.clear ();
   m_lateAutoLogOn = QDateTime {};
+  m_lateAutoLogOff = QDateTime {};
   m_lateAutoLogDialFreq = 0;
   m_lateAutoLogExpires = QDateTime {};
 }
@@ -20961,6 +22178,7 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   QString logXSent = m_xSent;
   QString logXRcvd = m_xRcvd;
   QDateTime logDateTimeQSOOn = m_dateTimeQSOOn;
+  QDateTime logDateTimeQSOOff;
   Frequency logDialFreq = m_freqNominal + ui->TxFreqSpinBox->value();
 
   auto applyPendingAutoLogSnapshot = [&] {
@@ -20972,6 +22190,7 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     if (!m_pendingAutoLogXSent.isEmpty()) logXSent = m_pendingAutoLogXSent;
     if (!m_pendingAutoLogXRcvd.isEmpty()) logXRcvd = m_pendingAutoLogXRcvd;
     if (m_pendingAutoLogOn.isValid()) logDateTimeQSOOn = m_pendingAutoLogOn;
+    if (m_pendingAutoLogOff.isValid()) logDateTimeQSOOff = m_pendingAutoLogOff;
     if (m_pendingAutoLogDialFreq > 0) logDialFreq = m_pendingAutoLogDialFreq;
     return true;
   };
@@ -20989,6 +22208,7 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     if (!m_lateAutoLogXSent.isEmpty()) logXSent = m_lateAutoLogXSent;
     if (!m_lateAutoLogXRcvd.isEmpty()) logXRcvd = m_lateAutoLogXRcvd;
     if (m_lateAutoLogOn.isValid()) logDateTimeQSOOn = m_lateAutoLogOn;
+    if (m_lateAutoLogOff.isValid()) logDateTimeQSOOff = m_lateAutoLogOff;
     if (m_lateAutoLogDialFreq > 0) logDialFreq = m_lateAutoLogDialFreq;
     return true;
   };
@@ -21067,6 +22287,15 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     applyLateAutoLogSnapshot ();
   }
   recoverLogCallFromActiveContext ();
+  if (logRptSent.trimmed ().isEmpty ()) {
+    logRptSent = decodium::seq::signalReportFromMessage(m_currentMessage);
+  }
+  if (logRptSent.trimmed ().isEmpty ()) {
+    logRptSent = decodium::seq::signalReportFromMessage(m_lastMessageSent);
+  }
+  if (logRptSent.trimmed ().isEmpty ()) {
+    logRptSent = decodium::seq::signalReportFromMessage(selectedTxMessage ());
+  }
 
   if (logHisCall.trimmed ().isEmpty ()) {
     if (mayUseDeferredLogSnapshot) {
@@ -21102,8 +22331,18 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     logDateTimeQSOOn = now.addSecs (-(m_ntx - 2) * int(m_TRperiod) -
                                    int(fmod(double(now.time().second()),m_TRperiod)));
   }
-  auto dateTimeQSOOff = QDateTime::currentDateTimeUtc();
+  auto dateTimeQSOOff = logDateTimeQSOOff.isValid ()
+      ? logDateTimeQSOOff
+      : QDateTime::currentDateTimeUtc();
   if (dateTimeQSOOff < logDateTimeQSOOn) dateTimeQSOOff = logDateTimeQSOOn;
+  if (m_nextLogPromptTimesValid) {
+    logDateTimeQSOOn = m_nextLogPromptOn.isValid () ? m_nextLogPromptOn.toUTC () : logDateTimeQSOOn;
+    dateTimeQSOOff = m_nextLogPromptOff.isValid () ? m_nextLogPromptOff.toUTC () : logDateTimeQSOOn;
+    if (dateTimeQSOOff < logDateTimeQSOOn) dateTimeQSOOff = logDateTimeQSOOn;
+    m_nextLogPromptTimesValid = false;
+    m_nextLogPromptOn = QDateTime {};
+    m_nextLogPromptOff = QDateTime {};
+  }
   QString grid=logHisGrid;
   if(grid=="....") grid="";
 
@@ -21480,10 +22719,33 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
                                                      QByteArray * buffer,
                                                      QByteArray raw)
     {
+      static constexpr qsizetype kAutoSpotMaxBufferBytes = 65536;
+      static constexpr qsizetype kAutoSpotMaxPendingBytes = 1024;
       if (!socket || !buffer)
         {
-          return;
+          return false;
         }
+      auto appendPayload = [buffer] (char value) {
+          if (buffer->size() >= kAutoSpotMaxBufferBytes)
+            {
+              return false;
+            }
+          buffer->append(value);
+          return true;
+        };
+      auto storePending = [pending, &raw] (int start) {
+          if (!pending)
+            {
+              return true;
+            }
+          auto const remainder = raw.mid(start);
+          if (remainder.size() > kAutoSpotMaxPendingBytes)
+            {
+              return false;
+            }
+          *pending = remainder;
+          return true;
+        };
       if (pending && !pending->isEmpty())
         {
           raw.prepend(*pending);
@@ -21495,16 +22757,19 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
           auto const byte = static_cast<unsigned char>(raw.at(i));
           if (byte != 0xFF)
             {
-              buffer->append(raw.at(i));
+              if (!appendPayload(raw.at(i)))
+                {
+                  return false;
+                }
               ++i;
               continue;
             }
 
           if (i + 1 >= raw.size())
             {
-              if (pending)
+              if (!storePending(i))
                 {
-                  *pending = raw.mid(i);
+                  return false;
                 }
               break;
             }
@@ -21512,7 +22777,10 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
           auto const cmd = static_cast<unsigned char>(raw.at(i + 1));
           if (cmd == 0xFF)
             {
-              buffer->append(char(0xFF));
+              if (!appendPayload(char(0xFF)))
+                {
+                  return false;
+                }
               i += 2;
               continue;
             }
@@ -21531,9 +22799,9 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
                 }
               if (end < 0)
                 {
-                  if (pending)
+                  if (!storePending(i))
                     {
-                      *pending = raw.mid(i);
+                      return false;
                     }
                   break;
                 }
@@ -21545,9 +22813,9 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
             {
               if (i + 2 >= raw.size())
                 {
-                  if (pending)
+                  if (!storePending(i))
                     {
-                      *pending = raw.mid(i);
+                      return false;
                     }
                   break;
                 }
@@ -21582,6 +22850,7 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
 
           i += 2;
         }
+      return true;
     };
 
   auto * socket = new QTcpSocket {this};
@@ -21690,7 +22959,24 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
            appendAutoSpotTrace, consumeClusterPayload] {
       QByteArray buffer = socket->property("cluster_buffer").toByteArray();
       QByteArray pending = socket->property("cluster_telnet_pending").toByteArray();
-      consumeClusterPayload(socket, &pending, &buffer, socket->readAll());
+      while (socket->bytesAvailable() > 0)
+        {
+          qint64 const chunkSize = qMin(socket->bytesAvailable(), qint64 {4096});
+          QByteArray const raw = socket->read(chunkSize);
+          if (raw.isEmpty())
+            {
+              break;
+            }
+          if (!consumeClusterPayload(socket, &pending, &buffer, raw))
+            {
+              socket->setProperty("cluster_telnet_pending", QByteArray {});
+              socket->setProperty("cluster_buffer", QByteArray {});
+              finishAutoSpot(false,
+                             QObject::tr("cluster verification response exceeded the safety limit"),
+                             QStringLiteral("OVERFLOW"));
+              return;
+            }
+        }
       socket->setProperty("cluster_telnet_pending", pending);
       socket->setProperty("cluster_buffer", buffer);
 
@@ -21883,28 +23169,56 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
                                      tr ("Cannot open \"%1\"").arg (m_logBook.path ()));
       }
 
-	    auto send_qso_logged = [&] (MessageClient * client, bool send_adif) {
+	    auto send_qso_logged = [&] (MessageClient * client) {
 	      if (!client) return;
 	      client->qso_logged (QSO_date_off, call, grid, dial_freq, mode, rpt_sent, rpt_received
 	                          , tx_power, comments, name, QSO_date_on, operator_call, my_call, my_grid
 	                          , exchange_sent, exchange_rcvd, propmode, satellite, satmode, freqRx);
-	
-	      if (send_adif) {
-	        //avt 11/20/20 external controller needs UI feedback
-	        client->logged_ADIF (ADIF);
-	      }
+	      // The visible "QSO logged" selector controls both messages. Do not
+	      // let the obsolete hidden LoggedAdifEnabled profile key split the
+	      // pair: LogHX needs the LoggedADIF record to insert the QSO.
+	      client->logged_ADIF (ADIF);
 	    };
-	    send_qso_logged (m_messageClient, true);
-	    send_qso_logged (ensureTertiaryUdpMessageClient (),
-	                     legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryLoggedAdifEnabled"), true));
+	    bool primary_qso_logged_emitted = false;
+	    if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPPrimary"), QStringLiteral ("Qso")))
+	      {
+	        send_qso_logged (m_messageClient);
+	        primary_qso_logged_emitted = m_messageClient != nullptr;
+	        qInfo ().noquote () << QStringLiteral ("UDP logged QSO primary: call=%1 target=%2:%3 QSOLogged=%4 LoggedADIF=%5")
+	          .arg (call,
+	                m_config.udp_server_name (),
+	                QString::number (m_config.udp_server_port ()),
+	                primary_qso_logged_emitted ? QStringLiteral ("emitted") : QStringLiteral ("not-emitted"),
+	                primary_qso_logged_emitted ? QStringLiteral ("emitted") : QStringLiteral ("not-emitted"));
+	      }
+	    if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPTertiary"), QStringLiteral ("Qso"))
+	        && legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryEnabled"), false))
+	      {
+	        if (auto * tertiary_client = ensureTertiaryUdpMessageClient ())
+	          {
+	            send_qso_logged (tertiary_client);
+	          }
+	        else
+	          {
+	            // QSO-only destinations deliberately have no persistent client,
+	            // hence no heartbeat. Send the committed record directly.
+	            send_legacy_raw_adif_datagram (
+	              QStringLiteral ("UDP tertiary QSO-only raw ADIF"),
+	              legacy_runtime_string (m_settings, QStringLiteral ("UDPTertiaryServer"), QStringLiteral ("127.0.0.1")),
+	              legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPTertiaryServerPort"), 2237),
+	              call,
+	              ADIF);
+	          }
+	      }
 	
 	    logIncremental(call, QString::fromUtf8(ADIF));    //avt 10/2/25
+	    Q_EMIT legacyAdifLogged(ADIF);
 
 	    bool const secondary_udp_enabled =
 	      legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryEnabled"), true);
-	    bool const secondary_udp_adif_enabled =
-	      legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryLoggedAdifEnabled"), true);
-	    if (secondary_udp_enabled && secondary_udp_adif_enabled)
+	    bool const secondary_udp_qso_enabled =
+	      legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPSecondary"), QStringLiteral ("Qso"));
+	    if (secondary_udp_enabled && secondary_udp_qso_enabled)
 	      {
 	        send_legacy_raw_adif_datagram (
 	          QStringLiteral ("UDP secondary raw ADIF"),
@@ -22553,6 +23867,7 @@ bool MainWindow::prepareRttyTransmission(QString const& text)
       if (copySamples <= 0) {
         return false;
       }
+      if (!foxcom_ensure_wave(&foxcom_)) return false;  // 1.0.376 (sec #6): alloca prima di scrivere
       std::copy_n(wave.constBegin(), copySamples, foxcom_.wave);
       std::fill(foxcom_.wave + copySamples, foxcom_.wave + kFoxWaveSampleCount, 0.0f);
     }
@@ -22691,7 +24006,10 @@ void MainWindow::on_actionRTTY_triggered()
 
 void MainWindow::on_actionFT8_triggered()
 {
-  QTimer::singleShot (50, [=] {
+  // SuperFox changes also enter this path. Cancel the deferred UI update
+  // if the embedded window is destroyed, or a different mode is selected.
+  QTimer::singleShot (50, this, [this] {
+    if (m_mode != "FT8") return;
     if(m_specOp!=SpecOp::FOX) ui->TxFreqSpinBox->setValue(m_settings->value("TxFreq_old",1500).toInt());
     if(m_specOp==SpecOp::FOX && !m_config.superFox()) ui->TxFreqSpinBox->setValue(m_TxFreqFox);
     if(SpecOp::HOUND == m_specOp && m_config.superFox()) clearDX();
@@ -23163,6 +24481,34 @@ void MainWindow::on_actionQ65_triggered()
   statusChanged();
 }
 
+void MainWindow::restoreMsk144PeriodForCurrentBand()
+{
+  if (m_mode != "MSK144" || !ui || !ui->sbTR) return;
+
+  QString effectiveBand = m_currentBand;
+  if (m_freqNominal > 0) {
+    QString const nominalBand = m_config.bands()->find(m_freqNominal);
+    if (!nominalBand.isEmpty()) effectiveBand = nominalBand;
+  }
+
+  QString key {"TRPeriod_MSK144"};
+  int defaultPeriod {30};
+  if (effectiveBand == "6m" || effectiveBand == "4m") {
+    key = "TRPeriod_MSK144_6m";
+    defaultPeriod = 15;
+  } else if (effectiveBand == "2m") {
+    key = "TRPeriod_MSK144_2m";
+  }
+  int const period = m_settings->value (key, defaultPeriod).toInt ();
+  debugToFile (QString {"mskPeriod  restore currentBand:%1 nominalHz:%2 effectiveBand:%3 key:%4 value:%5"}
+                 .arg (m_currentBand)
+                 .arg (m_freqNominal)
+                 .arg (effectiveBand)
+                 .arg (key)
+                 .arg (period));
+  ui->sbTR->setValue (period);
+}
+
 void MainWindow::on_actionMSK144_triggered()
 {
   m_hsymStop=105;
@@ -23205,9 +24551,7 @@ void MainWindow::on_actionMSK144_triggered()
   m_bFast9=false;
   ui->sbTR->values ({5, 10, 15, 30});
   // restore last used parameters
-  if (!(m_currentBand=="6m" or m_currentBand=="4m" or m_currentBand=="2m")) ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144", 30).toInt());
-  if (m_currentBand=="6m" or m_currentBand=="4m") ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144_6m", 15).toInt());
-  if (m_currentBand=="2m") ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144_2m", 30).toInt());
+  restoreMsk144PeriodForCurrentBand();
   ui->txFirstCheckBox->setEnabled(true);
   QTimer::singleShot (50, [=] {on_sbTR_valueChanged (ui->sbTR->value());});
   ui->sbFtol->setValue (m_settings->value ("Ftol_MSK144", 50).toInt());   // restore last used parameter
@@ -23438,21 +24782,24 @@ void MainWindow::switch_mode (Mode mode)
     if (!(m_mode=="Echo" or ((m_mode=="Q65" or m_mode=="JT65") && m_config.decode_at_52s()))
         && ui->actionAstronomical_data->isChecked () && m_config.auto_astro()) ui->actionAstronomical_data->setChecked (false);
   });
-  switch (mode)
+  if (!(m_embeddedShellMode && !m_embeddedRigControlEnabled))
     {
-    case Modes::FT2:
-    case Modes::FT4:
-    case Modes::FT8:
-      m_config.set_transceiver_mode_override (Transceiver::DIG_U);
-      break;
+      switch (mode)
+        {
+        case Modes::FT2:
+        case Modes::FT4:
+        case Modes::FT8:
+          m_config.set_transceiver_mode_override (Transceiver::DIG_U);
+          break;
 
-    case Modes::RTTY:
-      m_config.set_transceiver_mode_override (Transceiver::FSK);
-      break;
+        case Modes::RTTY:
+          m_config.set_transceiver_mode_override (Transceiver::FSK);
+          break;
 
-    default:
-      m_config.set_transceiver_mode_override (Transceiver::UNK);
-      break;
+        default:
+          m_config.set_transceiver_mode_override (Transceiver::UNK);
+          break;
+        }
     }
   applySingleDecodeColumnFlowLayout();
   check_button_color();
@@ -23825,12 +25172,7 @@ void MainWindow::band_changed (Frequency f)
 {
   msk144qsy = false;  // MSK144 QSY
   QTimer::singleShot (900, [=] {
-      if (m_mode=="MSK144" && (!(m_currentBand=="6m" or m_currentBand=="4m" or m_currentBand=="2m")))
-          ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144", 30).toInt());
-      if (m_mode=="MSK144" && (m_currentBand=="6m" or m_currentBand=="4m"))
-          ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144_6m", 15).toInt());
-      if (m_mode=="MSK144" && m_currentBand=="2m")
-          ui->sbTR->setValue (m_settings->value ("TRPeriod_MSK144_2m", 30).toInt());
+      restoreMsk144PeriodForCurrentBand();
   });
   // Don't allow a7 decodes during the first period because they can be leftovers from the previous band
   no_a7_decodes = true;
@@ -24382,7 +25724,9 @@ void MainWindow::handle_transceiver_failure (QString const& reason)
 
   // During active QSO/log transitions, transient CAT poll errors can occur.
   // Retry a few times first without forcing TX stop to avoid unnecessary drops.
-  if (m_rigAutoRetryCount < 3)
+  // 1.0.376 (sec #17): fail-closed durante TX/tune — non ritardare lo stop con i retry
+  // se il trasmettitore e attivo.
+  if (m_rigAutoRetryCount < 3 && !m_transmitting && !m_tune)
     {
       rigFailure (reason, true);
       return;
@@ -24457,6 +25801,19 @@ void MainWindow::rigFailure (QString const& reason, bool allowAutoRetry)
 void MainWindow::transmit (double snr)
 {
   double toneSpacing=0.0;
+#if defined(Q_OS_MAC)
+  bool const suppressLegacyModulatorAudio =
+      m_embeddedShellMode
+      && m_embeddedBridgeMutesLegacyTxAudio
+      && !m_embeddedRigControlEnabled
+      && !m_tci_audio
+      && !m_tune
+      && SpecOp::FOX != m_specOp
+      && SpecOp::HOUND != m_specOp
+      && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+#else
+  bool constexpr suppressLegacyModulatorAudio = false;
+#endif
   if (m_mode == "JT65") {
     if(m_nSubMode==0) toneSpacing=11025.0/4096.0;
     if(m_nSubMode==1) toneSpacing=2*11025.0/4096.0;
@@ -24555,13 +25912,22 @@ void MainWindow::transmit (double snr)
 	                }
 	            }
 	          Q_EMIT sendPrecomputedWave (m_mode, wave);
-	          Q_EMIT sendMessage (m_mode, NUM_FT8_SYMBOLS,
-	              1920.0, ui->TxFreqSpinBox->value () - m_XIT,
-	              toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
-              true, false, snr, m_TRperiod);
-        }
-    }
-  }
+	          if (suppressLegacyModulatorAudio)
+	            {
+	              debugToFile (QString {"txEmbeddedAudioMute skip legacy modulator mode:%1 msg:%2"}
+	                             .arg (m_mode)
+	                             .arg (m_currentMessage.trimmed ()));
+	            }
+	          else
+	            {
+	              Q_EMIT sendMessage (m_mode, NUM_FT8_SYMBOLS,
+	                  1920.0, ui->TxFreqSpinBox->value () - m_XIT,
+	                  toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
+	                  true, false, snr, m_TRperiod);
+	            }
+	        }
+	    }
+	  }
 
   if (m_mode == "FT2") {
     m_dateTimeSentTx3=QDateTime::currentDateTimeUtc();
@@ -24606,12 +25972,21 @@ void MainWindow::transmit (double snr)
                        .arg (m_TRperiod, 0, 'f', 2)
                        .arg (m_ntx)
                        .arg (m_currentMessage.trimmed ()));
-      Q_EMIT sendMessage (m_mode, NUM_FT2_SYMBOLS,
-             288.0, ui->TxFreqSpinBox->value() - m_XIT,
-             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
-             true, false, snr, m_TRperiod);
-    }
-  }
+	      if (suppressLegacyModulatorAudio)
+	        {
+	          debugToFile (QString {"txEmbeddedAudioMute skip legacy modulator mode:%1 msg:%2"}
+	                         .arg (m_mode)
+	                         .arg (m_currentMessage.trimmed ()));
+	        }
+	      else
+	        {
+	          Q_EMIT sendMessage (m_mode, NUM_FT2_SYMBOLS,
+	                 288.0, ui->TxFreqSpinBox->value() - m_XIT,
+	                 toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
+	                 true, false, snr, m_TRperiod);
+	        }
+	    }
+	  }
 
   if (m_mode == "FT4") {
     m_dateTimeSentTx3=QDateTime::currentDateTimeUtc();
@@ -24654,12 +26029,21 @@ void MainWindow::transmit (double snr)
                        .arg (m_TRperiod, 0, 'f', 2)
                        .arg (m_ntx)
                        .arg (m_currentMessage.trimmed ()));
-      Q_EMIT sendMessage (m_mode, NUM_FT4_SYMBOLS,
-             576.0, ui->TxFreqSpinBox->value() - m_XIT,
-             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
-             true, false, snr, m_TRperiod);
-    }
-  }
+	      if (suppressLegacyModulatorAudio)
+	        {
+	          debugToFile (QString {"txEmbeddedAudioMute skip legacy modulator mode:%1 msg:%2"}
+	                         .arg (m_mode)
+	                         .arg (m_currentMessage.trimmed ()));
+	        }
+	      else
+	        {
+	          Q_EMIT sendMessage (m_mode, NUM_FT4_SYMBOLS,
+	                 576.0, ui->TxFreqSpinBox->value() - m_XIT,
+	                 toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
+	                 true, false, snr, m_TRperiod);
+	        }
+	    }
+	  }
 
   if (m_mode == "FST4" or m_mode == "FST4W") {
     m_dateTimeSentTx3=QDateTime::currentDateTimeUtc();
@@ -25178,6 +26562,13 @@ void::MainWindow::VHF_features_enabled(bool b)
 
 void MainWindow::on_sbTR_valueChanged(int value)
 {
+  if (m_mode == "MSK144") {
+    debugToFile (QString {"mskPeriod  changed old:%1 new:%2 currentBand:%3 nominalHz:%4"}
+                   .arg (m_TRperiod)
+                   .arg (value)
+                   .arg (m_currentBand)
+                   .arg (m_freqNominal));
+  }
   //  if(!m_bFastMode and n>m_nSubMode) m_MinW=m_nSubMode;
   if(m_bFastMode or m_mode=="FreqCal" or m_mode=="FST4" or m_mode=="FST4W" or m_mode=="Q65") {
     m_TRperiod = value;
@@ -25533,6 +26924,12 @@ void MainWindow::updateWorldMapFromDecode(DecodedText const& decoded_text)
       return;
     }
 
+  constexpr int kWorldMapGridCacheMaxEntries {8192};
+  constexpr qint64 kWorldMapGridCacheTtlSecs {12 * 60 * 60};
+  constexpr qint64 kWorldMapCall3MaxBytes {2 * 1024 * 1024};
+  constexpr int kWorldMapCall3MaxEntries {4096};
+  constexpr qsizetype kWorldMapCall3MaxLineLength {128};
+
   auto normalizeCall = [] (QString call)
     {
       call = call.trimmed().toUpper();
@@ -25570,6 +26967,7 @@ void MainWindow::updateWorldMapFromDecode(DecodedText const& decoded_text)
   auto myBaseCall = normalizeCall(Radio::base_callsign(m_config.my_callsign()));
   auto const myCallKey = callKey(myCall);
   auto const myBaseCallKey = callKey(myBaseCall);
+  qint64 const nowSecs = QDateTime::currentSecsSinceEpoch();
 
   auto isMine = [&callKey, &myCallKey, &myBaseCallKey] (QString const& call)
     {
@@ -25577,15 +26975,62 @@ void MainWindow::updateWorldMapFromDecode(DecodedText const& decoded_text)
       return !key.isEmpty() && (key == myCallKey || key == myBaseCallKey);
     };
 
+  auto pruneGridCache = [&] ()
+    {
+      for (auto it = m_worldMapGridSeenByCall.begin(); it != m_worldMapGridSeenByCall.end(); )
+        {
+          if (!m_worldMapGridByCall.contains(it.key()) || nowSecs - it.value() > kWorldMapGridCacheTtlSecs)
+            {
+              m_worldMapGridByCall.remove(it.key());
+              it = m_worldMapGridSeenByCall.erase(it);
+            }
+          else
+            {
+              ++it;
+            }
+        }
+
+      while (m_worldMapGridByCall.size() > kWorldMapGridCacheMaxEntries)
+        {
+          QString oldestKey;
+          qint64 oldestSeen = std::numeric_limits<qint64>::max();
+          for (auto it = m_worldMapGridSeenByCall.constBegin(); it != m_worldMapGridSeenByCall.constEnd(); ++it)
+            {
+              if (m_worldMapGridByCall.contains(it.key()) && it.value() < oldestSeen)
+                {
+                  oldestSeen = it.value();
+                  oldestKey = it.key();
+                }
+            }
+          if (oldestKey.isEmpty())
+            {
+              m_worldMapGridByCall.clear();
+              m_worldMapGridSeenByCall.clear();
+              break;
+            }
+          m_worldMapGridByCall.remove(oldestKey);
+          m_worldMapGridSeenByCall.remove(oldestKey);
+        }
+    };
+
   auto rememberGrid = [&] (QString const& call, QString const& grid)
     {
       auto key = callKey(call);
       auto locator = grid.trimmed().toUpper();
-      if (key.isEmpty() || !locator.contains(grid_regexp))
+      if (key.size() < 3 || key.size() > 11 || !locator.contains(grid_regexp))
+        {
+          return;
+        }
+      if (!m_worldMapGridByCall.contains(key) && m_worldMapGridByCall.size() >= kWorldMapGridCacheMaxEntries)
+        {
+          pruneGridCache();
+        }
+      if (!m_worldMapGridByCall.contains(key) && m_worldMapGridByCall.size() >= kWorldMapGridCacheMaxEntries)
         {
           return;
         }
       m_worldMapGridByCall.insert(key, locator.left(6));
+      m_worldMapGridSeenByCall.insert(key, nowSecs);
     };
 
   auto loadCall3GridCache = [&] ()
@@ -25607,11 +27052,21 @@ void MainWindow::updateWorldMapFromDecode(DecodedText const& decoded_text)
               return;
             }
         }
+      if (f->size() > kWorldMapCall3MaxBytes)
+        {
+          return;
+        }
 
       QTextStream in(f);
-      while (!in.atEnd())
+      int loadedEntries = 0;
+      while (!in.atEnd() && loadedEntries < kWorldMapCall3MaxEntries
+             && m_worldMapGridByCall.size() < kWorldMapGridCacheMaxEntries)
         {
           auto line = in.readLine().trimmed();
+          if (line.size() > kWorldMapCall3MaxLineLength)
+            {
+              continue;
+            }
           if (line.isEmpty() || line.startsWith('#') || line.startsWith(';'))
             {
               continue;
@@ -25636,9 +27091,11 @@ void MainWindow::updateWorldMapFromDecode(DecodedText const& decoded_text)
             }
 
           auto key = callKey(call);
-          if (!key.isEmpty() && !m_worldMapGridByCall.contains(key))
+          if (key.size() >= 3 && key.size() <= 11 && !m_worldMapGridByCall.contains(key))
             {
               m_worldMapGridByCall.insert(key, locator.left(6));
+              m_worldMapGridSeenByCall.insert(key, nowSecs);
+              ++loadedEntries;
             }
         }
     };
@@ -25651,10 +27108,18 @@ void MainWindow::updateWorldMapFromDecode(DecodedText const& decoded_text)
           return QString {};
         }
       auto locator = m_worldMapGridByCall.value(key);
+      if (!locator.isEmpty())
+        {
+          m_worldMapGridSeenByCall.insert(key, nowSecs);
+        }
       if (locator.isEmpty())
         {
           loadCall3GridCache();
           locator = m_worldMapGridByCall.value(key);
+          if (!locator.isEmpty())
+            {
+              m_worldMapGridSeenByCall.insert(key, nowSecs);
+            }
         }
       return locator;
     };
@@ -25830,6 +27295,16 @@ void MainWindow::replayDecodes ()
 
 void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 12/5/20
 {
+  publishDecodeTransport (is_new, decoded_text);
+  if (!is_new) {
+    return;
+  }
+  postDecodeMap (decoded_text);
+  postDecodeDxcc (decoded_text);
+}
+
+void MainWindow::publishDecodeTransport (bool is_new, DecodedText const& decoded_text)
+{
   QString message = decoded_text.string();      //avt 1/5/24
   auto const& decode = message.trimmed ();
   auto const message_text = udp_decode_message_text (decode);
@@ -25848,23 +27323,48 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
 	                        , QChar {'?'} == decode.mid (has_seconds ? 24 + 36 : 22 + 36, 1)
 	                        , m_diskData);
 	      };
-	      send_decode (m_messageClient);
-	      send_decode (ensureTertiaryUdpMessageClient ());
+	      if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPPrimary"), QStringLiteral ("Decode")))
+	        send_decode (m_messageClient);
+	      if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPSecondary"), QStringLiteral ("Decode")))
+	        send_decode (ensureSecondaryUdpMessageClient ());
+	      if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPTertiary"), QStringLiteral ("Decode")))
+	        send_decode (ensureTertiaryUdpMessageClient ());
 	    }
 
   if (is_new && m_remoteCommandServer)
     {
       m_remoteCommandServer->publishBandActivityLine(decode);
+      // Cache call -> tempo decode per derivare la parity dello slot quando
+      // arriva un select_caller remoto (vedi onRemoteSelectCallerDue).
+      QString deCall;
+      QString deGrid;
+      decoded_text.deCallAndGrid(deCall, deGrid);
+      if (!deCall.isEmpty())
+        {
+          if (m_remoteCallerDecodeTimes.size() >= 500)
+            {
+              // Trim grezzo: svuota e riparti, evita crescita illimitata in sessioni lunghe.
+              m_remoteCallerDecodeTimes.clear();
+            }
+          m_remoteCallerDecodeTimes.insert(deCall.toUpper(),
+                                           qMakePair(decoded_text.timeInSeconds(),
+                                                     QDateTime::currentMSecsSinceEpoch()));
+        }
     }
 
-  if (!is_new) return;    //avt 8/22/23
+}
 
+void MainWindow::postDecodeMap (DecodedText const& decoded_text)
+{
   if (m_worldMapWidget)
     {
       m_worldMapWidget->setHomeGrid(m_config.my_grid());
       updateWorldMapFromDecode(decoded_text);
     }
+}
 
+void MainWindow::postDecodeDxcc (DecodedText const& decoded_text)
+{
   //avt 1/2/21
   bool callB4;
   bool callB4onBand;
@@ -25889,13 +27389,17 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
 
   //avt 10/26/21
   if (((QDateTime::currentMSecsSinceEpoch() / 1000 - m_secBandChanged) > 4*int(m_TRperiod)/4)) {  //avt 7/7/22 band wasn't recently changed
-    debugToFile(QString {"enqueueDecod deCall:%1 m_mode:%2 grid:%3 m_currentBand:%4"}.arg(call).arg(m_mode).arg(grid).arg(m_currentBand));
+    bool const verboseDecodePostLog = verbose_decode_post_log_enabled ();
+    if (verboseDecodePostLog)
+      debugToFile(QString {"enqueueDecod deCall:%1 m_mode:%2 grid:%3 m_currentBand:%4"}.arg(call).arg(m_mode).arg(grid).arg(m_currentBand));
     auto const& looked_up = m_logBook.countries ()->lookup (call);
     m_logBook.match (call, m_mode, grid, looked_up, callB4, countryB4, gridB4, continentB4, CQZoneB4, ITUZoneB4);
-    debugToFile(QString {"             callB4:%1 countryB4:%2 continentB4:%3"}.arg(callB4).arg(countryB4).arg(continentB4));
+    if (verboseDecodePostLog)
+      debugToFile(QString {"             callB4:%1 countryB4:%2 continentB4:%3"}.arg(callB4).arg(countryB4).arg(continentB4));
     m_logBook.match (call, m_mode, grid, looked_up, callB4onBand, countryB4onBand, gridB4onBand,
                  continentB4onBand, CQZoneB4onBand, ITUZoneB4onBand, m_currentBand);
-    debugToFile(QString {"             callB4onBand:%1 countryB4onBand:%2 continentB4onBand:%3"}.arg(callB4onBand).arg(countryB4onBand).arg(continentB4onBand));
+    if (verboseDecodePostLog)
+      debugToFile(QString {"             callB4onBand:%1 countryB4onBand:%2 continentB4onBand:%3"}.arg(callB4onBand).arg(countryB4onBand).arg(continentB4onBand));
 
     int nAz = -1;
     int nDkm = -1;
@@ -25907,7 +27411,8 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
 
     //DX defined as not same continent
     bool isDx = looked_up.continent != m_logBook.countries()->lookup(m_config.my_callsign()).continent; //avt 10/14/21
-    debugToFile(QString {"             isDx:%1 entity_name:%2"}.arg(isDx).arg(looked_up.entity_name));
+    if (verboseDecodePostLog)
+      debugToFile(QString {"             isDx:%1 entity_name:%2"}.arg(isDx).arg(looked_up.entity_name));
     enqueueDecode (decoded_text, false, true, isDx, !callB4onBand, !callB4, !countryB4onBand, !countryB4, looked_up.entity_name, AD1CCty::continent(looked_up.continent), nAz, nDkm);   //avt 5/4/24
   }
   else
@@ -25943,8 +27448,12 @@ void MainWindow::enqueueDecode (DecodedText decoded_text, bool modifier, bool au
 	                                , az
 	                                , dist);
 	      };
-	      send_enqueue_decode (m_messageClient);
-	      send_enqueue_decode (ensureTertiaryUdpMessageClient ());
+	      if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPPrimary"), QStringLiteral ("Decode")))
+	        send_enqueue_decode (m_messageClient);
+	      if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPSecondary"), QStringLiteral ("Decode")))
+	        send_enqueue_decode (ensureSecondaryUdpMessageClient ());
+	      if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPTertiary"), QStringLiteral ("Decode")))
+	        send_enqueue_decode (ensureTertiaryUdpMessageClient ());
 	    }
 }
 
@@ -25961,8 +27470,12 @@ void MainWindow::postWSPRDecode (bool is_new, QStringList parts)
 	                         , parts[4].toInt (), parts[5], parts[6], parts[7].toInt ()
 	                         , m_diskData);
 	  };
-	  send_wspr_decode (m_messageClient);
-	  send_wspr_decode (ensureTertiaryUdpMessageClient ());
+	  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPPrimary"), QStringLiteral ("Wspr")))
+	    send_wspr_decode (m_messageClient);
+	  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPSecondary"), QStringLiteral ("Wspr")))
+	    send_wspr_decode (ensureSecondaryUdpMessageClient ());
+	  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPTertiary"), QStringLiteral ("Wspr")))
+	    send_wspr_decode (ensureTertiaryUdpMessageClient ());
 }
 
 void MainWindow::networkError (QString const& e)
@@ -26014,7 +27527,7 @@ void MainWindow::processWsprDecoderLine (QString const& inputLine)
   t += "                                                  ";
   t.remove(QRegularExpression("\\s+$"));
 
-  QStringList rxFields = t.split(QRegularExpression("\\s+"));
+  QStringList rxFields = t.simplified().split(QLatin1Char(' '));
   QString rxLine;
   QString grid;
   if ( rxFields.count() == 8 ) {
@@ -26526,8 +28039,12 @@ void MainWindow::statusUpdate () const
 	                           m_myContinent, //avt 5/6/24
 	                           m_config.miles());  //avt 5/7/24
 	  };
-	  send_status (m_messageClient);
-	  send_status (ensureTertiaryUdpMessageClient ());
+	  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPPrimary"), QStringLiteral ("Status")))
+	    send_status (m_messageClient);
+	  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPSecondary"), QStringLiteral ("Status")))
+	    send_status (ensureSecondaryUdpMessageClient ());
+	  if (legacy_udp_traffic_enabled (m_settings, QStringLiteral ("UDPTertiary"), QStringLiteral ("Status")))
+	    send_status (ensureTertiaryUdpMessageClient ());
 	}
 
 void MainWindow::childEvent (QChildEvent * e)
@@ -26783,7 +28300,7 @@ void MainWindow::readWidebandDecodes()
     m_ActiveStationsWidget->displayRecentStations(m_mode,t);
     m_ActiveStationsWidget->setClickOK(true);
   }
-  if(ipc_qmap[2]!=0) {
+  if(qmap_shared_memory_ready () && ipc_qmap[2]!=0) {
     m_fetched=0;
     ipc_qmap[0]=0;
     ipc_qmap[2]=0;
@@ -27791,6 +29308,384 @@ void MainWindow::foxTest()
     }
 }
 
+struct LegacyHashResolveCandidate
+{
+  QString timeToken;
+  int audioHz {-1};
+  QString message;
+  QString source;
+};
+
+static QString legacy_hash_clean_message (QString message)
+{
+  static QRegularExpression const apSuffix {R"(\s+a\d+\s*$)", QRegularExpression::CaseInsensitiveOption};
+  static QRegularExpression const trailingMark {R"(\s+[?*#^]\s*$)"};
+  message = message.trimmed ();
+  message.remove (apSuffix);
+  message.remove (trailingMark);
+  return message.simplified ();
+}
+
+static QString legacy_alltxt_clean_output_message (QString message)
+{
+  static QRegularExpression const internalSuffix {R"(\s+(?:\?\s*)?(?:a\d+|q\d{1,2})\s*$)",
+                                                  QRegularExpression::CaseInsensitiveOption};
+  static QRegularExpression const trailingMark {R"(\s+[?*#^]\s*$)"};
+  message.remove (internalSuffix);
+  message.remove (trailingMark);
+  return message;
+}
+
+static QStringList legacy_hash_read_tail_lines (QString const& path, qint64 tailBytes, int maxLines)
+{
+  if (path.trimmed ().isEmpty () || tailBytes <= 0 || maxLines <= 0) {
+    return {};
+  }
+
+  QFile file {path};
+  if (!file.exists () || !file.open (QIODevice::ReadOnly | QIODevice::Text)) {
+    return {};
+  }
+
+  qint64 const startOffset = qMax<qint64> (0, file.size () - tailBytes);
+  if (!file.seek (startOffset)) {
+    return {};
+  }
+  if (startOffset > 0) {
+    file.readLine ();
+  }
+
+  QStringList lines = QString::fromUtf8 (file.readAll ()).split (QRegularExpression {R"([\r\n]+)"},
+                                                                Qt::SkipEmptyParts);
+  if (lines.size () > maxLines) {
+    lines = lines.mid (lines.size () - maxLines);
+  }
+  return lines;
+}
+
+static bool legacy_hash_parse_alltxt_line (QString const& rawLine,
+                                           LegacyHashResolveCandidate& candidate)
+{
+  QString const line = rawLine.trimmed ();
+  if (line.isEmpty ()) {
+    return false;
+  }
+
+  static QRegularExpression const legacyPattern {
+    R"(^\d{6}_(\d{6})\s+\S+\s+(Rx|Tx|Ck)\s+([A-Z0-9_+\-]+)\s+(-?\d+)\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+(.+)$)",
+    QRegularExpression::CaseInsensitiveOption
+  };
+  auto match = legacyPattern.match (line);
+  if (match.hasMatch ()) {
+    if (match.captured (2).compare ("Rx", Qt::CaseInsensitive) != 0
+        || match.captured (3).trimmed ().toUpper () != "FT8") {
+      return false;
+    }
+    bool freqOk = false;
+    int const audioHz = match.captured (6).trimmed ().toInt (&freqOk);
+    QString const message = legacy_hash_clean_message (match.captured (7));
+    if (!freqOk || message.isEmpty ()) {
+      return false;
+    }
+    candidate.timeToken = match.captured (1).trimmed ();
+    candidate.audioHz = audioHz;
+    candidate.message = message;
+    return true;
+  }
+
+  static QRegularExpression const jtStylePattern {
+    R"(^\d{6,8}_(\d{6})\s+(-?\d+)\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+\S+\s+(.+)$)",
+    QRegularExpression::CaseInsensitiveOption
+  };
+  match = jtStylePattern.match (line);
+  if (!match.hasMatch ()) {
+    return false;
+  }
+
+  bool freqOk = false;
+  int const audioHz = match.captured (4).trimmed ().toInt (&freqOk);
+  QString const message = legacy_hash_clean_message (match.captured (5));
+  if (!freqOk || message.isEmpty ()) {
+    return false;
+  }
+  candidate.timeToken = match.captured (1).trimmed ();
+  candidate.audioHz = audioHz;
+  candidate.message = message;
+  return true;
+}
+
+static QStringList legacy_hash_candidate_paths ()
+{
+  QStringList paths;
+  QSet<QString> seen;
+  auto addPath = [&] (QString const& path) {
+    QString const cleaned = path.trimmed ();
+    if (cleaned.isEmpty ()) {
+      return;
+    }
+    QString const absolute = QFileInfo {cleaned}.absoluteFilePath ();
+    if (seen.contains (absolute)) {
+      return;
+    }
+    seen.insert (absolute);
+    paths.append (absolute);
+  };
+
+  QString const generic = QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation);
+  QString const homeSupport = QDir {QDir::homePath ()}.absoluteFilePath ("Library/Application Support");
+  QStringList monthFiles;
+  QDate const currentMonth = QDate::currentDate ();
+  for (int i = 0; i < 2; ++i) {
+    monthFiles.append (currentMonth.addMonths (-i).toString ("yyyyMM") + "_ALL.TXT");
+  }
+  auto addLogDirectory = [&] (QString const& path) {
+    QDir const dir {path};
+    if (!dir.exists ()) {
+      return;
+    }
+    static QStringList const filters {
+      "ALL.TXT",
+      "all.txt",
+      "*_ALL.TXT"
+    };
+    for (QString const& name : dir.entryList (filters, QDir::Files, QDir::Name)) {
+      addPath (dir.absoluteFilePath (name));
+    }
+    for (QString const& monthFile : std::as_const (monthFiles)) {
+      addPath (dir.absoluteFilePath (monthFile));
+    }
+  };
+  auto addExternalEntry = [&] (QString const& path) {
+    QString const cleaned = path.trimmed ();
+    if (cleaned.isEmpty ()) {
+      return;
+    }
+    QFileInfo const info {cleaned};
+    if (info.isDir ()) {
+      QDir const dir {info.absoluteFilePath ()};
+      addLogDirectory (dir.absolutePath ());
+      addLogDirectory (dir.absoluteFilePath ("JTDX"));
+      addLogDirectory (dir.absoluteFilePath ("WSJT-X"));
+      return;
+    }
+    addPath (info.absoluteFilePath ());
+  };
+
+  for (QString const& root : {generic, homeSupport}) {
+    if (root.isEmpty ()) {
+      continue;
+    }
+    QDir const dir {root};
+    for (QString const& monthFile : std::as_const (monthFiles)) {
+      addPath (dir.absoluteFilePath ("JTDX/" + monthFile));
+    }
+    addPath (dir.absoluteFilePath ("JTDX/ALL.TXT"));
+    addPath (dir.absoluteFilePath ("WSJT-X/ALL.TXT"));
+  }
+  for (char const* name : {"DECODIUM_HASH_SEED_PATHS", "DECODIUM_EXTERNAL_LOG_DIRS"}) {
+    QString const value = qEnvironmentVariable (name).trimmed ();
+    if (value.isEmpty ()) {
+      continue;
+    }
+    for (QString const& entry : value.split (QDir::listSeparator (), Qt::SkipEmptyParts)) {
+      addExternalEntry (entry);
+    }
+  }
+
+  return paths;
+}
+
+static int legacy_hash_seconds_from_token (QString const& token)
+{
+  QString const trimmed = token.trimmed ();
+  if (trimmed.size () != 6) {
+    return -1;
+  }
+  bool hhOk = false;
+  bool mmOk = false;
+  bool ssOk = false;
+  int const hh = trimmed.left (2).toInt (&hhOk);
+  int const mm = trimmed.mid (2, 2).toInt (&mmOk);
+  int const ss = trimmed.mid (4, 2).toInt (&ssOk);
+  if (!hhOk || !mmOk || !ssOk || hh < 0 || hh > 23 || mm < 0 || mm > 59 || ss < 0 || ss > 59) {
+    return -1;
+  }
+  return hh * 3600 + mm * 60 + ss;
+}
+
+static int legacy_hash_second_delta (int earlierSeconds, int laterSeconds)
+{
+  int delta = laterSeconds - earlierSeconds;
+  if (delta < -43200) {
+    delta += 86400;
+  } else if (delta > 43200) {
+    delta -= 86400;
+  }
+  return delta;
+}
+
+static bool legacy_hash_placeholder_token (QString const& token)
+{
+  QString const normalized = normalize_call_token (token).trimmed ().toUpper ();
+  return normalized == "..." || normalized == "<...>";
+}
+
+static bool legacy_hash_grid_token (QString const& token)
+{
+  static QRegularExpression const gridPattern {R"(\A(?!RR73)[A-R]{2}[0-9]{2}(?:[A-X]{2})?\z)",
+                                               QRegularExpression::CaseInsensitiveOption};
+  return gridPattern.match (token.trimmed ()).hasMatch ();
+}
+
+static bool legacy_hash_report_or_signoff_token (QString const& token)
+{
+  QString const upper = normalize_call_token (token).trimmed ().toUpper ();
+  static QRegularExpression const reportPattern {R"(\A(?:R)?[-+]\d{1,2}\z)"};
+  return upper == "CQ" || upper == "QRZ" || upper == "DE" || upper == "TU"
+      || upper == "73" || upper == "RR73" || upper == "RRR" || upper == "R"
+      || reportPattern.match (upper).hasMatch ();
+}
+
+static bool legacy_hash_plausible_call_token (QString const& token)
+{
+  QString const upper = normalize_call_token (token).trimmed ().toUpper ();
+  if (upper.size () < 3 || upper.size () > 15
+      || legacy_hash_placeholder_token (upper)
+      || legacy_hash_grid_token (upper)
+      || legacy_hash_report_or_signoff_token (upper)) {
+    return false;
+  }
+
+  bool hasLetter = false;
+  bool hasDigit = false;
+  for (QChar const& ch : upper) {
+    if (ch.isLetter ()) {
+      hasLetter = true;
+    } else if (ch.isDigit ()) {
+      hasDigit = true;
+    } else if (ch != '/' && ch != '-') {
+      return false;
+    }
+  }
+  return hasLetter && hasDigit;
+}
+
+static QStringList legacy_hash_message_tokens (QString const& message)
+{
+  return legacy_hash_clean_message (message).toUpper ().split (QRegularExpression {"\\s+"},
+                                                              Qt::SkipEmptyParts);
+}
+
+static bool legacy_hash_messages_compatible (QString const& hashedMessage,
+                                             QString const& resolvedMessage)
+{
+  if (!hashedMessage.contains ("<...>") || resolvedMessage.contains ("<...>")) {
+    return false;
+  }
+
+  QStringList const hashedTokens = legacy_hash_message_tokens (hashedMessage);
+  QStringList const resolvedTokens = legacy_hash_message_tokens (resolvedMessage);
+  if (hashedTokens.size () != resolvedTokens.size () || hashedTokens.isEmpty ()) {
+    return false;
+  }
+
+  int placeholders = 0;
+  for (int i = 0; i < hashedTokens.size (); ++i) {
+    QString const hashedToken = hashedTokens.at (i).trimmed ().toUpper ();
+    QString const resolvedToken = resolvedTokens.at (i).trimmed ().toUpper ();
+    if (legacy_hash_placeholder_token (hashedToken)) {
+      ++placeholders;
+      if (!legacy_hash_plausible_call_token (resolvedToken)) {
+        return false;
+      }
+      continue;
+    }
+    if (normalize_call_token (hashedToken).trimmed ().toUpper ()
+        != normalize_call_token (resolvedToken).trimmed ().toUpper ()) {
+      return false;
+    }
+  }
+  return placeholders > 0;
+}
+
+static QString legacy_hash_resolve_alltxt_line (QString const& rawLine)
+{
+  QString const line = rawLine.trimmed ();
+  if (!line.contains ("<...>")) {
+    return line;
+  }
+
+  static QRegularExpression const ownLinePattern {
+    R"(^\d{6}_(\d{6})\s+\S+\s+(Rx|Tx|Ck)\s+([A-Z0-9_+\-]+)\s+(-?\d+)\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+(.+)$)",
+    QRegularExpression::CaseInsensitiveOption
+  };
+  QRegularExpressionMatch const own = ownLinePattern.match (line);
+  if (!own.hasMatch ()
+      || own.captured (2).compare ("Rx", Qt::CaseInsensitive) != 0
+      || own.captured (3).trimmed ().toUpper () != "FT8") {
+    return line;
+  }
+
+  bool freqOk = false;
+  int const targetAudioHz = own.captured (6).trimmed ().toInt (&freqOk);
+  int const targetSeconds = legacy_hash_seconds_from_token (own.captured (1));
+  QString const hashedMessage = legacy_hash_clean_message (own.captured (7));
+  if (!freqOk || targetAudioHz <= 0 || targetSeconds < 0 || hashedMessage.isEmpty ()) {
+    return line;
+  }
+
+  static constexpr qint64 kTailBytes = 8 * 1024 * 1024;
+  static constexpr int kMaxLines = 50000;
+  QString resolvedMessage;
+  QString resolvedSource;
+  int candidateCount = 0;
+  for (QString const& path : legacy_hash_candidate_paths ()) {
+    QFileInfo const info {path};
+    if (!info.exists () || !info.isFile ()) {
+      continue;
+    }
+    for (QString const& candidateLine : legacy_hash_read_tail_lines (info.absoluteFilePath (),
+                                                                     kTailBytes,
+                                                                     kMaxLines)) {
+      LegacyHashResolveCandidate candidate;
+      if (!legacy_hash_parse_alltxt_line (candidateLine, candidate)
+          || candidate.message.contains ("<...>")) {
+        continue;
+      }
+      int const candidateSeconds = legacy_hash_seconds_from_token (candidate.timeToken);
+      if (candidateSeconds < 0
+          || qAbs (legacy_hash_second_delta (candidateSeconds, targetSeconds)) > 2
+          || qAbs (candidate.audioHz - targetAudioHz) > 5
+          || !legacy_hash_messages_compatible (hashedMessage, candidate.message)) {
+        continue;
+      }
+      ++candidateCount;
+      QString const cleanCandidate = legacy_hash_clean_message (candidate.message);
+      if (resolvedMessage.isEmpty ()) {
+        resolvedMessage = cleanCandidate;
+        resolvedSource = info.fileName ();
+      } else if (resolvedMessage.compare (cleanCandidate, Qt::CaseInsensitive) != 0) {
+        return line;
+      }
+    }
+  }
+
+  if (resolvedMessage.isEmpty ()) {
+    return line;
+  }
+
+  QString resolvedLine = line;
+  resolvedLine.replace (own.capturedStart (7), own.capturedLength (7), resolvedMessage);
+  qInfo ().noquote () << QString ("[FT8-HASH] legacy writer resolved time=%1 hz=%2 '%3' -> '%4' source=%5 candidates=%6")
+                            .arg (own.captured (1),
+                                  QString::number (targetAudioHz),
+                                  hashedMessage,
+                                  resolvedMessage,
+                                  resolvedSource.isEmpty () ? QString {"<unknown>"} : resolvedSource)
+                            .arg (candidateCount);
+  return resolvedLine;
+}
+
 void MainWindow::write_all(QString txRx, QString message)
 {
   if (!(ui->actionDisable_writing_of_ALL_TXT->isChecked())) {
@@ -27829,12 +29724,17 @@ void MainWindow::write_all(QString txRx, QString message)
     } else {
       msg = msg.mid(0, 15) + msg.mid(18, -1);
     }
+    if (txRx=="Rx" || txRx=="Ck") {
+      msg = legacy_alltxt_clean_output_message (msg);
+    }
 
     t = t.asprintf("%5d",ui->TxFreqSpinBox->value());
     if (txRx=="Tx") msg="   0  0.0" + t + " " + message;
     auto time = QDateTime::currentDateTimeUtc ();
-    if ((txRx=="Rx" || txRx=="Ck") && !m_bFastMode) {
-      time = decode_line_timestamp_for_log (m_dateTimeSeqStart.isValid () ? m_dateTimeSeqStart : time, message);
+    if (txRx=="Rx" || txRx=="Ck") {
+      QDateTime const fallbackTime =
+          (!m_bFastMode && m_dateTimeSeqStart.isValid ()) ? m_dateTimeSeqStart : time;
+      time = decode_line_timestamp_for_log (fallbackTime, message);
     }
 
   if (txRx=="Rx") {
@@ -27863,7 +29763,7 @@ void MainWindow::write_all(QString txRx, QString message)
   QFile f{m_config.writeable_data_dir().absoluteFilePath(file_name)};
   if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
     QTextStream out(&f);
-    out << line.trimmed()
+    out << legacy_hash_resolve_alltxt_line (line)
 #if QT_VERSION >= QT_VERSION_CHECK (5, 15, 0)
         << Qt::endl
 #else
@@ -28132,7 +30032,7 @@ void MainWindow::set_mode (QString const& mode)
               return;
             }
 
-          restartConfiguredAudioStreams (true);
+          restartConfiguredAudioStreams (true, true);
           armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
         });
     }
@@ -28297,6 +30197,15 @@ void MainWindow::on_cbDualCarrier_toggled (bool checked)
 
 void MainWindow::on_cbAsyncDecode_toggled (bool checked)
 {
+  if (!m_ft2DecodeEnabled) {
+    m_asyncDecodeTimer.stop ();
+    m_bAsyncDecoding = false;
+    if (ui->labelAsyncL2Active) {
+      ui->labelAsyncL2Active->setVisible (false);
+    }
+    return;
+  }
+
   if (m_mode == "FT2" && !checked) {
     // FT2 rule: Async L2 cannot be disabled.
     bool const oldBlocked = ui->cbAsyncDecode->blockSignals (true);
@@ -28406,7 +30315,18 @@ void MainWindow::processFt2AsyncDecodedRows (QStringList const& rows)
       return;
     }
     auto now = QDateTime::currentDateTimeUtc();
-    auto hhmmss = now.toString("hhmmss");
+    QDateTime fallbackDecodeUtc = now;
+    if (m_mode == "FT2") {
+      int const ft2WindowMs = qMax (1, qRound (m_TRperiod * 1000.0));
+      fallbackDecodeUtc = now.addMSecs (-ft2WindowMs);
+      if (m_asyncRxStartMs > 0) {
+        QDateTime const rxStartUtc = QDateTime::fromMSecsSinceEpoch (m_asyncRxStartMs, Qt::UTC);
+        if (rxStartUtc.isValid () && fallbackDecodeUtc < rxStartUtc) {
+          fallbackDecodeUtc = rxStartUtc;
+        }
+      }
+    }
+    auto hhmmss = fallbackDecodeUtc.toUTC().toString("hhmmss");
     struct DeferredDecode
     {
       DecodedText decodedText;
@@ -28589,7 +30509,14 @@ void MainWindow::processFt4DecodedRows (quint64 serial, QStringList const& rows)
     return;
   }
 
+  int const completedUtc = m_ft4DecodePendingUtc;
+  int const completedDepth = m_ft4DecodePendingDepth;
+  qint64 const decodeElapsedMs = m_decodeStartMs > 0
+      ? QDateTime::currentMSecsSinceEpoch () - m_decodeStartMs
+      : -1;
   m_ft4DecodePending = false;
+  m_ft4DecodePendingUtc = 0;
+  m_ft4DecodePendingDepth = 0;
 
   if (m_mode != "FT4") {
     if (m_decoderBusy) {
@@ -28598,14 +30525,81 @@ void MainWindow::processFt4DecodedRows (quint64 serial, QStringList const& rows)
     return;
   }
 
+  int newRows = 0;
   for (auto const& row : rows) {
     if (!row.trimmed ().isEmpty ()) {
-      m_decodedTransportQueue.enqueue (row.toUtf8 ());
+      QString const key = ft4_progressive_decode_key (row);
+      if (!m_ft4DeliveredDecodeKeys.contains (key)) {
+        m_ft4DeliveredDecodeKeys.insert (key);
+        m_decodedTransportQueue.enqueue (row.toUtf8 ());
+        ++newRows;
+      }
     }
   }
 
+  debugToFile (QString {"ft4Decode   done utc:%1 rows:%2 newRows:%3 elapsedMs:%4 depth:%5"}
+                 .arg (completedUtc)
+                 .arg (rows.size ())
+                 .arg (newRows)
+                 .arg (decodeElapsedMs)
+                 .arg (completedDepth));
+
   readFromStdout ();
 
+  qint64 const deliveredMs = m_decodeStartMs > 0
+      ? QDateTime::currentMSecsSinceEpoch () - m_decodeStartMs
+      : -1;
+  debugToFile (QString {"ft4Decode   delivered utc:%1 rows:%2 newRows:%3 elapsedMs:%4 depth:%5"}
+                 .arg (completedUtc)
+                 .arg (rows.size ())
+                 .arg (newRows)
+                 .arg (deliveredMs)
+                 .arg (completedDepth));
+
+  if (m_ft4DecodeFollowupPending) {
+    qint64 const elapsedMs = m_decodeStartMs > 0
+        ? QDateTime::currentMSecsSinceEpoch () - m_decodeStartMs
+        : 0;
+    if (elapsedMs <= 4500 && m_mode == "FT4" && m_ft4DecodeWorker) {
+      decodium::ft4::DecodeRequest followup;
+      followup.serial = ++m_ft4DecodeSerial;
+      followup.audio = m_ft4DecodeFollowupAudio;
+      followup.nutc = m_ft4DecodeFollowupUtc;
+      followup.nqsoprogress = m_ft4DecodeFollowupQsoProgress;
+      followup.nfqso = m_ft4DecodeFollowupQsoFreq;
+      followup.nfa = m_ft4DecodeFollowupFa;
+      followup.nfb = m_ft4DecodeFollowupFb;
+      followup.ndepth = m_ft4DecodeFollowupDepth;
+      followup.threadCount = m_ft4DecodeFollowupThreads;
+      followup.ncontest = m_ft4DecodeFollowupContest;
+      followup.mycall = m_ft4DecodeFollowupMycall;
+      followup.hiscall = m_ft4DecodeFollowupHiscall;
+      m_ft4DecodeFollowupPending = false;
+      m_ft4DecodeFollowupAudio.clear ();
+      m_ft4DecodePending = true;
+      m_ft4DecodePendingUtc = followup.nutc;
+      m_ft4DecodePendingDepth = followup.ndepth;
+      debugToFile (QString {"ft4Decode   followup queued utc:%1 depth:%2 elapsedMs:%3"}
+                     .arg (followup.nutc)
+                     .arg (followup.ndepth)
+                     .arg (elapsedMs));
+      auto * worker = m_ft4DecodeWorker;
+      QMetaObject::invokeMethod (m_ft4DecodeWorker,
+                                 [worker, followup] () {
+                                   worker->decode (followup);
+                                 },
+                                 Qt::QueuedConnection);
+      return;
+    }
+    debugToFile (QString {"ft4Decode   followup skipped utc:%1 depth:%2 elapsedMs:%3"}
+                   .arg (m_ft4DecodeFollowupUtc)
+                   .arg (m_ft4DecodeFollowupDepth)
+                   .arg (elapsedMs));
+    m_ft4DecodeFollowupPending = false;
+    m_ft4DecodeFollowupAudio.clear ();
+  }
+
+  m_ft4DeliveredDecodeKeys.clear ();
   decodeDone ();
 }
 
@@ -28635,71 +30629,386 @@ void MainWindow::processFst4DecodedRows (quint64 serial, QStringList const& rows
   decodeDone ();
 }
 
-void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
+void MainWindow::enqueueFt8DecodedEntries (
+    QVector<decodium::ft8::DecodedEntry> const& entries)
 {
-  if (serial != m_ft8DecodeSerial) {
+  for (auto const& entry : entries) {
+    if (entry.row.trimmed ().isEmpty ()) {
+      continue;
+    }
+    if (entry.isUiPriority ()) {
+      m_ft8PriorityUiQueue.enqueue (entry);
+    } else {
+      m_ft8BackgroundUiQueue.enqueue (entry);
+    }
+  }
+}
+
+void MainWindow::queueFt8LogWork (QString const& txRx, QString const& message)
+{
+  m_ft8LogQueue.enqueue ({txRx, message});
+  scheduleFt8SecondaryDispatch ();
+}
+
+void MainWindow::queueFt8PostDecodeWork (DecodedText const& decodedText)
+{
+  m_ft8TransportQueue.enqueue (decodedText);
+  m_ft8MapQueue.enqueue (decodedText);
+  m_ft8DxccQueue.enqueue (decodedText);
+  scheduleFt8SecondaryDispatch ();
+}
+
+void MainWindow::queueFt8ReportingWork (DecodedText const& decodedText)
+{
+  m_ft8ReportingQueue.enqueue (decodedText);
+  scheduleFt8SecondaryDispatch ();
+}
+
+void MainWindow::clearFt8SecondaryWork ()
+{
+  m_ft8LogQueue.clear ();
+  m_ft8TransportQueue.clear ();
+  m_ft8MapQueue.clear ();
+  m_ft8DxccQueue.clear ();
+  m_ft8ReportingQueue.clear ();
+  m_ft8SecondaryNextQueue = 0;
+}
+
+void MainWindow::scheduleFt8SecondaryDispatch (int delayMs)
+{
+  if (m_ft8SecondaryDispatchScheduled) {
+    return;
+  }
+  m_ft8SecondaryDispatchScheduled = true;
+  QTimer::singleShot (qMax (0, delayMs), this, [this] {
+    m_ft8SecondaryDispatchScheduled = false;
+    drainFt8SecondaryDispatch ();
+  });
+}
+
+void MainWindow::drainFt8SecondaryDispatch ()
+{
+  if (m_mode != "FT8" || !m_valid || !ui) {
+    clearFt8SecondaryWork ();
     return;
   }
 
-  // Aggiorna rolling history del bridge per auto-trigger features.
-  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
-    QMetaObject::invokeMethod (bridge, "recordFt8DecodeCount", Qt::QueuedConnection,
-                               Q_ARG (int, rows.size ()));
+  // Do not let persistence, maps or reporters delay a directed reply.
+  if (!m_ft8PriorityUiQueue.isEmpty ()) {
+    scheduleFt8SecondaryDispatch (1);
+    return;
   }
 
-  int const completedUtc = m_ft8DecodePendingUtc;
-  qint64 const elapsedMs = m_decodeStartMs > 0
-      ? QDateTime::currentMSecsSinceEpoch () - m_decodeStartMs
-      : -1;
-  m_ft8DecodePending = false;
-  m_ft8DecodePendingUtc = 0;
+  constexpr qint64 kSecondaryBudgetMs {4};
+  constexpr int kSecondaryTasksPerCycle {5};
+  constexpr int kQueueCount {5};
+  QElapsedTimer budget;
+  budget.start ();
+  int processed = 0;
 
-  if (m_mode != "FT8") {
-    m_ft8QueuedDecodePending = false;
+  auto queueHasWork = [this] (int queue) {
+    switch (queue) {
+    case 0: return !m_ft8LogQueue.isEmpty ();
+    case 1: return !m_ft8TransportQueue.isEmpty ();
+    case 2: return !m_ft8MapQueue.isEmpty ();
+    case 3: return !m_ft8DxccQueue.isEmpty ();
+    case 4: return !m_ft8ReportingQueue.isEmpty ();
+    default: return false;
+    }
+  };
+
+  while (processed < kSecondaryTasksPerCycle
+         && (processed == 0 || budget.elapsed () < kSecondaryBudgetMs)) {
+    int selectedQueue = -1;
+    for (int offset = 0; offset < kQueueCount; ++offset) {
+      int const candidate = (m_ft8SecondaryNextQueue + offset) % kQueueCount;
+      if (queueHasWork (candidate)) {
+        selectedQueue = candidate;
+        break;
+      }
+    }
+    if (selectedQueue < 0) {
+      break;
+    }
+
+    m_ft8SecondaryNextQueue = (selectedQueue + 1) % kQueueCount;
+    switch (selectedQueue) {
+    case 0: {
+      auto const work = m_ft8LogQueue.dequeue ();
+      write_all (work.txRx, work.message);
+      break;
+    }
+    case 1:
+      publishDecodeTransport (true, m_ft8TransportQueue.dequeue ());
+      break;
+    case 2:
+      postDecodeMap (m_ft8MapQueue.dequeue ());
+      break;
+    case 3:
+      postDecodeDxcc (m_ft8DxccQueue.dequeue ());
+      break;
+    case 4:
+      pskPost (m_ft8ReportingQueue.dequeue ());
+      break;
+    default:
+      break;
+    }
+    ++processed;
+  }
+
+  bool const hasMore = !m_ft8LogQueue.isEmpty ()
+      || !m_ft8TransportQueue.isEmpty ()
+      || !m_ft8MapQueue.isEmpty ()
+      || !m_ft8DxccQueue.isEmpty ()
+      || !m_ft8ReportingQueue.isEmpty ();
+  if (hasMore) {
+    scheduleFt8SecondaryDispatch ();
+  }
+}
+
+void MainWindow::scheduleFt8UiDispatch ()
+{
+  if (m_ft8UiDispatchScheduled) {
+    return;
+  }
+  m_ft8UiDispatchScheduled = true;
+  m_ft8UiDispatchScheduledNs = monotonic_now_ns ();
+  QTimer::singleShot (0, this, [this] {
+    qint64 const resumedNs = monotonic_now_ns ();
+    if (m_ft8UiDispatchScheduledNs > 0) {
+      qint64 const lagNs = qMax<qint64> (0, resumedNs - m_ft8UiDispatchScheduledNs);
+      m_ft8UiDispatchResumeLagNs += lagNs;
+      m_ft8UiDispatchMaxResumeLagNs = qMax (m_ft8UiDispatchMaxResumeLagNs, lagNs);
+    }
+    m_ft8UiDispatchScheduledNs = 0;
+    m_ft8UiDispatchScheduled = false;
+    drainFt8UiDispatch ();
+  });
+}
+
+bool MainWindow::dispatchNextQueuedFt8Decode ()
+{
+  if (!m_ft8QueuedDecodePending) {
+    return false;
+  }
+  auto request = m_ft8QueuedDecodeRequest;
+  auto deepRequest = m_ft8QueuedDeepFollowupRequest;
+  bool const hasDeepRequest = m_ft8QueuedDeepFollowupPending;
+  m_ft8QueuedDecodePending = false;
+  m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
+  m_ft8QueuedDeepFollowupPending = false;
+  m_ft8QueuedDeepFollowupRequest = decodium::ft8::DecodeRequest {};
+  m_ft8DeepFollowupQueued = false;
+  m_ft8DeepFollowupRequest = decodium::ft8::DecodeRequest {};
+  if (hasDeepRequest) {
+    m_ft8DeepFollowupRequest = std::move (deepRequest);
+    m_ft8DeepFollowupQueued = true;
+  }
+  dispatchFt8DecodeRequest (std::move (request));
+  return true;
+}
+
+void MainWindow::finishFt8UiDispatch ()
+{
+  if (!m_ft8UiDispatchCompletionPending) {
+    m_ft8UiDispatchCycles = 0;
+    m_ft8UiDispatchStartedMs = 0;
+    m_ft8UiDispatchScheduledNs = 0;
+    m_ft8UiDispatchCycleCpuNs = 0;
+    m_ft8UiDispatchMaxCycleCpuNs = 0;
+    m_ft8UiDispatchResumeLagNs = 0;
+    m_ft8UiDispatchMaxResumeLagNs = 0;
+    return;
+  }
+  bool const completedDeepFollowup = m_ft8UiDispatchCompletedDeepFollowup;
+  int const completedUtc = m_ft8UiDispatchCompletedUtc;
+  int const batchRows = m_ft8UiDispatchBatchRows;
+  int const cycles = m_ft8UiDispatchCycles;
+  qint64 const dispatchMs = m_ft8UiDispatchStartedMs > 0
+      ? QDateTime::currentMSecsSinceEpoch () - m_ft8UiDispatchStartedMs
+      : 0;
+  double const cycleCpuMs = static_cast<double> (m_ft8UiDispatchCycleCpuNs) / 1.e6;
+  double const maxCycleCpuMs = static_cast<double> (m_ft8UiDispatchMaxCycleCpuNs) / 1.e6;
+  double const resumeLagMs = static_cast<double> (m_ft8UiDispatchResumeLagNs) / 1.e6;
+  double const maxResumeLagMs = static_cast<double> (m_ft8UiDispatchMaxResumeLagNs) / 1.e6;
+  m_ft8UiDispatchCompletionPending = false;
+  m_ft8UiDispatchCompletedDeepFollowup = false;
+  m_ft8UiDispatchCompletedUtc = 0;
+  m_ft8UiDispatchBatchRows = 0;
+  m_ft8UiDispatchCycles = 0;
+  m_ft8UiDispatchStartedMs = 0;
+  m_ft8UiDispatchScheduledNs = 0;
+  m_ft8UiDispatchCycleCpuNs = 0;
+  m_ft8UiDispatchMaxCycleCpuNs = 0;
+  m_ft8UiDispatchResumeLagNs = 0;
+  m_ft8UiDispatchMaxResumeLagNs = 0;
+
+  QString const dispatchMetric =
+      QString {"[FT8UIDISPATCH] delivered utc=%1 rows=%2 cycles=%3 wall_ms=%4 cycle_cpu_ms=%5 max_cycle_cpu_ms=%6 resume_lag_ms=%7 max_resume_lag_ms=%8"}
+          .arg (completedUtc)
+          .arg (batchRows)
+          .arg (cycles)
+          .arg (dispatchMs)
+          .arg (cycleCpuMs, 0, 'f', 2)
+          .arg (maxCycleCpuMs, 0, 'f', 2)
+          .arg (resumeLagMs, 0, 'f', 2)
+          .arg (maxResumeLagMs, 0, 'f', 2);
+  // One line per completed FT8 batch is low-volume and must remain available
+  // even when the optional legacy debug.txt logger is disabled.
+  qInfo ().noquote () << dispatchMetric;
+  debugToFile (dispatchMetric);
+
+  if (dispatchNextQueuedFt8Decode ()) {
+    return;
+  }
+  if (!completedDeepFollowup && dispatchQueuedEmbeddedFt8DeepFollowup ()) {
+    return;
+  }
+  decodeDone ();
+}
+
+void MainWindow::drainFt8UiDispatch ()
+{
+  if (m_mode != "FT8" || !m_valid || !ui) {
+    m_ft8PriorityUiQueue.clear ();
+    m_ft8BackgroundUiQueue.clear ();
+    m_ft8StructuredTransportQueue.clear ();
+    m_ft8UiDispatchCompletionPending = false;
+    m_ft8UiDispatchCompletedDeepFollowup = false;
+    m_ft8UiDispatchCompletedUtc = 0;
+    m_ft8UiDispatchBatchRows = 0;
+    m_ft8UiDispatchCycles = 0;
+    m_ft8UiDispatchStartedMs = 0;
+    m_ft8UiDispatchScheduledNs = 0;
+    m_ft8UiDispatchCycleCpuNs = 0;
+    m_ft8UiDispatchMaxCycleCpuNs = 0;
+    m_ft8UiDispatchResumeLagNs = 0;
+    m_ft8UiDispatchMaxResumeLagNs = 0;
+    clearFt8SecondaryWork ();
     if (m_decoderBusy) {
       decodeBusy (false);
     }
     return;
   }
 
-  debugToFile (QString {"ft8Decode   done utc:%1 rows:%2 elapsedMs:%3 queued:%4"}
-                 .arg (completedUtc)
-                 .arg (rows.size ())
-                 .arg (elapsedMs)
-                 .arg (m_ft8QueuedDecodePending ? 1 : 0));
+  constexpr qint64 kUiBudgetMs {5};
+  constexpr int kMaxRowsPerCycle {6};
+  qint64 const cycleStartedNs = monotonic_now_ns ();
+  QElapsedTimer budget;
+  budget.start ();
+  int processed = 0;
+  ++m_ft8UiDispatchCycles;
 
-  auto dispatchQueuedFt8Decode = [this] () -> bool {
-    if (!m_ft8QueuedDecodePending) {
-      return false;
+  while (processed < kMaxRowsPerCycle
+         && (!m_ft8PriorityUiQueue.isEmpty () || !m_ft8BackgroundUiQueue.isEmpty ())) {
+    auto entry = !m_ft8PriorityUiQueue.isEmpty ()
+        ? m_ft8PriorityUiQueue.dequeue ()
+        : m_ft8BackgroundUiQueue.dequeue ();
+    m_ft8StructuredTransportQueue.enqueue (std::move (entry));
+    // The renderer sees at most one structured FT8 entry per call.
+    readFromStdout ();
+    ++processed;
+    if (budget.elapsed () >= kUiBudgetMs) {
+      break;
     }
-    auto request = m_ft8QueuedDecodeRequest;
+  }
+
+  qint64 const cycleCpuNs = qMax<qint64> (0, monotonic_now_ns () - cycleStartedNs);
+  m_ft8UiDispatchCycleCpuNs += cycleCpuNs;
+  m_ft8UiDispatchMaxCycleCpuNs = qMax (m_ft8UiDispatchMaxCycleCpuNs, cycleCpuNs);
+
+  if (!m_ft8PriorityUiQueue.isEmpty () || !m_ft8BackgroundUiQueue.isEmpty ()) {
+    scheduleFt8UiDispatch ();
+    return;
+  }
+  finishFt8UiDispatch ();
+}
+
+void MainWindow::processFt8DecodedEntries (
+    quint64 serial, QVector<decodium::ft8::DecodedEntry> const& entries)
+{
+  if (serial != m_ft8DecodeSerial) {
+    bool const timelyLateLiveFt8 =
+        m_TRperiod <= 0.0
+        || msUntilNextEmbeddedFt8FullDecodeTrigger () > 3500;
+    bool const acceptLateLiveFt8 =
+        m_mode == "FT8"
+        && !m_diskData
+        && !entries.isEmpty ()
+        && timelyLateLiveFt8
+        && serial < m_ft8DecodeSerial
+        && (m_ft8DecodeSerial - serial) <= 4;
+    if (acceptLateLiveFt8) {
+      debugToFile (QString {"ft8Decode   accept late serial:%1 current:%2 rows:%3"}
+                     .arg (serial)
+                     .arg (m_ft8DecodeSerial)
+                     .arg (entries.size ()));
+      enqueueFt8DecodedEntries (entries);
+      scheduleFt8UiDispatch ();
+    }
+    return;
+  }
+
+  // Aggiorna rolling history del bridge per auto-trigger features.
+  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
+    QMetaObject::invokeMethod (bridge, "recordFt8DecodeCount", Qt::QueuedConnection,
+                               Q_ARG (int, entries.size ()));
+  }
+
+  int const completedUtc = m_ft8DecodePendingUtc;
+  bool const completedDeepFollowup = m_ft8DecodeDeepFollowupPending;
+  qint64 const elapsedMs = m_decodeStartMs > 0
+      ? QDateTime::currentMSecsSinceEpoch () - m_decodeStartMs
+      : -1;
+  m_ft8DecodePending = false;
+  m_ft8DecodeDeepFollowupPending = false;
+  m_ft8DecodePendingUtc = 0;
+
+  if (m_mode != "FT8") {
     m_ft8QueuedDecodePending = false;
     m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
-    dispatchFt8DecodeRequest (std::move (request));
-    return true;
-  };
+    m_ft8QueuedDeepFollowupPending = false;
+    m_ft8QueuedDeepFollowupRequest = decodium::ft8::DecodeRequest {};
+    m_ft8DeepFollowupQueued = false;
+    m_ft8DeepFollowupRequest = decodium::ft8::DecodeRequest {};
+    if (m_decoderBusy) {
+      decodeBusy (false);
+    }
+    return;
+  }
 
-  if (!m_diskData && completedUtc > 0 && elapsedMs > 6500) {
+  debugToFile (QString {"ft8Decode   done utc:%1 rows:%2 elapsedMs:%3 queued:%4 deep:%5"}
+                 .arg (completedUtc)
+                 .arg (entries.size ())
+                 .arg (elapsedMs)
+                 .arg (m_ft8QueuedDecodePending ? 1 : 0)
+                 .arg (completedDeepFollowup ? 1 : 0));
+
+  if (!m_diskData && completedUtc > 0 && elapsedMs > 6500 && !completedDeepFollowup) {
     debugToFile (QString {"ft8Decode   slow utc:%1 rows:%2 elapsedMs:%3 queued:%4 processing"}
                    .arg (completedUtc)
-                   .arg (rows.size ())
+                   .arg (entries.size ())
                    .arg (elapsedMs)
                    .arg (m_ft8QueuedDecodePending ? 1 : 0));
   }
 
-  for (auto const& row : rows) {
-    if (!row.trimmed ().isEmpty ()) {
-      m_decodedTransportQueue.enqueue (row.toUtf8 ());
-    }
+  if (m_ft8UiDispatchCompletionPending) {
+    qWarning ().noquote ()
+        << "[FT8DISPATCH] completion overlap; preserving queued rows and newest completion";
   }
-
-  readFromStdout ();
-
-  if (dispatchQueuedFt8Decode ()) {
-    return;
+  m_ft8UiDispatchCompletionPending = true;
+  m_ft8UiDispatchCompletedDeepFollowup = completedDeepFollowup;
+  m_ft8UiDispatchCompletedUtc = completedUtc;
+  m_ft8UiDispatchBatchRows += entries.size ();
+  if (m_ft8UiDispatchStartedMs <= 0) {
+    m_ft8UiDispatchStartedMs = QDateTime::currentMSecsSinceEpoch ();
+    m_ft8UiDispatchCycleCpuNs = 0;
+    m_ft8UiDispatchMaxCycleCpuNs = 0;
+    m_ft8UiDispatchResumeLagNs = 0;
+    m_ft8UiDispatchMaxResumeLagNs = 0;
   }
-
-  decodeDone ();
+  enqueueFt8DecodedEntries (entries);
+  scheduleFt8UiDispatch ();
 }
 
 void MainWindow::processJt9FastDecodedRows (quint64 serial, QStringList const& rows)
@@ -28762,6 +31071,13 @@ void MainWindow::processLegacyJtDecodedRows (quint64 serial, QStringList const& 
 {
   if (serial != m_legacyJtDecodeSerial) {
     return;
+  }
+
+  if (m_mode == "JT9" && qEnvironmentVariableIsSet ("DECODIUM_JT9_TRACE")) {
+    qInfo () << "[LEGACY-JT9] rows received" << "serial=" << serial << "rows=" << rows.size ();
+    for (auto const& row : rows) {
+      qInfo () << "[LEGACY-JT9] row" << row;
+    }
   }
 
   m_legacyJtDecodePending = false;
@@ -29078,7 +31394,7 @@ void MainWindow::debugToFile(QString str)       //avt 11/25/19
 
   QString file = m_config.writeable_data_dir().absoluteFilePath("debug.txt");
   QFile outputFile(file);
-  if (!outputFile.open(QIODevice::ReadWrite | QIODevice::Append))
+  if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
   {
      MessageBox::warning_message (this, tr ("Unable to open log file"), file);
      return;
@@ -30564,14 +32880,21 @@ void MainWindow::on_actionErase_Ignore_List_triggered()
 
 void MainWindow::read_ALLCALL7()
 {
-  static QFile AllCall7File {"ALLCALL7.TXT"};
-  QTextStream AllCall7Stream(&AllCall7File);
-  if(AllCall7File.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    while (!AllCall7Stream.atEnd()) {
-      ALLCALL7 = AllCall7Stream.readAll();
-    }
-      AllCall7Stream.flush();
-      AllCall7File.close();
+  QStringList candidates {
+    QStringLiteral ("ALLCALL7.TXT"),
+    QDir (QCoreApplication::applicationDirPath ()).absoluteFilePath (QStringLiteral ("../Resources/ALLCALL7.TXT"))
+  };
+  for (auto const& path : candidates)
+    {
+      QFile allCall7File {path};
+      QTextStream allCall7Stream (&allCall7File);
+      if (allCall7File.open (QIODevice::ReadOnly | QIODevice::Text))
+        {
+          ALLCALL7 = allCall7Stream.readAll ();
+          allCall7Stream.flush ();
+          allCall7File.close ();
+          return;
+        }
   }
 }
 
@@ -31534,10 +33857,9 @@ void MainWindow::onRemoteSelectCallerDue(QString const& commandId, QString const
 {
   Q_UNUSED(commandId);
 
-  if (m_mode.compare("FT2", Qt::CaseInsensitive) != 0)
-    {
-      return;
-    }
+  // La risposta a un chiamante via comando remoto e' consentita in qualsiasi
+  // modo/banda (la logica sotto equivale al doppio clic su un decode). Restano
+  // esclusi solo i modi beacon WSPR/FST4W, gestiti piu' in basso.
 
   auto mapCall = call.trimmed().toUpper();
   mapCall.remove('<');
@@ -31561,7 +33883,51 @@ void MainWindow::onRemoteSelectCallerDue(QString const& commandId, QString const
   on_dxCallEntry_editingFinished();
   on_genStdMsgsPushButton_clicked();
 
-  if (m_mode != "WSPR" && m_mode != "FST4W")
+  // Il doppio clic locale imposta m_txFirst dalla parity dello slot del decode
+  // (vedi mainwindow.cpp doubleClickOnCall). Il comando remoto non porta il tempo
+  // del decode, quindi lo recuperiamo dalla cache popolata in postDecode: senza
+  // questo, in FT8/FT4 ~50% delle risposte remote trasmette NEL periodo del
+  // chiamante (doubling) e il QSO non parte mai.
+  if (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2")
+    {
+      auto const it = m_remoteCallerDecodeTimes.constFind(mapCall);
+      if (it != m_remoteCallerDecodeTimes.constEnd()
+          && (QDateTime::currentMSecsSinceEpoch() - it->second) <= 300000)
+        {
+          int clickedNmod;
+          if (m_TRperiod < 5.0)
+            {
+              int period = (int)round(double(it->first) / m_TRperiod);
+              clickedNmod = period % 2;
+            }
+          else
+            {
+              clickedNmod = fmod(double(it->first), 2.0 * m_TRperiod);
+            }
+          bool clickedTxFirst = (clickedNmod != 0);
+          if (SpecOp::HOUND == m_specOp) clickedTxFirst = false;
+          if (SpecOp::FOX == m_specOp) clickedTxFirst = true;
+          if (m_txFirst != clickedTxFirst)
+            {
+              debugToFile(QString {"remoteSelectCaller slot override old:%1 new:%2 call:%3"}
+                            .arg(m_txFirst ? 1 : 0)
+                            .arg(clickedTxFirst ? 1 : 0)
+                            .arg(mapCall));
+            }
+          m_txFirst = clickedTxFirst;
+          ui->txFirstCheckBox->setChecked(m_txFirst);
+        }
+      else
+        {
+          debugToFile(QString {"remoteSelectCaller no decode time cached for:%1 (parity unchanged)"}
+                        .arg(mapCall));
+        }
+    }
+
+  // Auto TX solo nei modi QSO: esclusi i beacon (WSPR/FST4W) e i modi di
+  // test/calibrazione (ECHO/FREQCAL), dove auto_tx_mode keyerebbe TX ciclico.
+  if (m_mode != "WSPR" && m_mode != "FST4W"
+      && m_mode != "Echo" && m_mode != "FreqCal")
     {
       if (!m_auto)
         {
@@ -31573,7 +33939,164 @@ void MainWindow::onRemoteSelectCallerDue(QString const& commandId, QString const
         }
     }
 
-  showStatusMessage(tr("Remote FT2 caller queued: %1").arg(mapCall));
+  showStatusMessage(tr("Remote caller queued: %1").arg(mapCall));
+}
+
+void MainWindow::onRemoteSendCw(QString const& commandId, QString const& text, qint64 dialFrequencyHz, int wpm)
+{
+  Q_UNUSED(commandId);
+  // CW via AUDIO: la radio resta in USB/DATA-U (come per FT8) e Decodium genera
+  // il tono Morse manipolato e lo trasmette dalla scheda audio. Non dipende dal
+  // keyer CAT (rig_send_morse), che su molte radio (es. Yaesu FT-991/991A) non
+  // funziona in modalità dati. La frequenza richiesta è quella su cui deve
+  // comparire il segnale CW: il dial viene posto a (freq - sidetone) così che
+  // dial + tono = freq esatta.
+  //
+  // Il path TX reale appartiene al DecodiumBridge (PTT + audio sink). Deleghiamo
+  // a lui; fallback al percorso mainwindow legacy se il bridge non c'è.
+  QObject* bridge = qApp ? qApp->property("decodiumBridge").value<QObject*>() : nullptr;
+  if (bridge)
+    {
+      QMetaObject::invokeMethod(bridge, "sendCwAudio", Qt::QueuedConnection,
+                                Q_ARG(QString, text),
+                                Q_ARG(qint64, dialFrequencyHz),
+                                Q_ARG(int, wpm));
+    }
+  else
+    {
+      startCwAudioTx(text, dialFrequencyHz, wpm);
+    }
+  showStatusMessage(tr("Remote CW (audio): %1 (%2 WPM)").arg(text).arg(wpm));
+}
+
+void MainWindow::startCwAudioTx(QString const& message, qint64 dialFrequencyHz, int wpm)
+{
+  QString const msg = message.trimmed();
+  if (msg.isEmpty())
+    {
+      showStatusMessage(tr("CW audio: messaggio vuoto"));
+      return;
+    }
+  if (wpm <= 0) wpm = 20;
+
+  // RTTY usa un percorso di TX manuale dedicato; il CW audio non convive con
+  // una sessione RTTY manuale in corso.
+  if (m_rttyManualTxActive)
+    {
+      showStatusMessage(tr("CW audio: TX RTTY in corso, riprova"));
+      return;
+    }
+
+  // Genera la forma d'onda CW (tono sidetone manipolato a WPM fisso).
+  int const sidetone = m_cwAudioSidetoneHz;
+  QVector<float> wave = decodium::txwave::generateCwWaveWpm(msg, sidetone, wpm);
+  if (wave.isEmpty())
+    {
+      showStatusMessage(tr("CW audio: impossibile generare \"%1\"").arg(msg));
+      debugToFile(QString {"cwaudio gen failed wpm:%1 msg:%2"}.arg(wpm).arg(msg));
+      return;
+    }
+  m_cwAudioWave = wave;
+
+  // Ferma qualunque sequenza automatica prima di prendere il TX.
+  if (m_auto || ui->autoButton->isChecked())
+    {
+      auto_tx_mode(false);
+    }
+
+  // Se siamo gia' in TX, non sovrapporre: ignora.
+  if (g_iptt == 1 || m_transmitting)
+    {
+      showStatusMessage(tr("CW audio: TX gia' attivo, comando ignorato"));
+      return;
+    }
+
+  // Porta il VFO sulla frequenza giusta (dial = freq - sidetone) cosi' il CW
+  // emesso cade esattamente sulla frequenza richiesta.
+  if (dialFrequencyHz > 0)
+    {
+      qint64 dial = dialFrequencyHz - sidetone;
+      if (dial < 1) dial = dialFrequencyHz;
+      m_config.transceiver_frequency(dial);
+    }
+
+  double const seconds = static_cast<double>(wave.size()) / 48000.0;
+  debugToFile(QString {"cwaudio start wpm:%1 samples:%2 secs:%3 dial:%4 tone:%5 msg:%6"}
+                  .arg(wpm)
+                  .arg(wave.size())
+                  .arg(seconds, 0, 'f', 2)
+                  .arg(dialFrequencyHz)
+                  .arg(sidetone)
+                  .arg(msg));
+
+  m_cwAudioTxActive = true;
+
+  // Alza la PTT, poi (dopo il ritardo di sequenziamento + assestamento QSY)
+  // avvia l'audio. Stesso schema del TX manuale RTTY.
+  g_iptt = 1;
+  requestRigPtt(true);
+
+  // Watchdog di sicurezza: se per qualunque motivo l'audio non termina, la PTT
+  // viene comunque riabbassata.
+  cwAudioGuardTimer.start(static_cast<int>(seconds * 1000.0) + 4000);
+
+  int const msDelay = qMax(150, int(1000.0 * m_config.txDelay()) + 150);
+  QTimer::singleShot(msDelay, this, [this] {
+    if (m_cwAudioTxActive && g_iptt == 1)
+      {
+        transmitCwAudio();
+      }
+  });
+}
+
+void MainWindow::transmitCwAudio()
+{
+  if (!m_cwAudioTxActive || m_cwAudioWave.isEmpty())
+    {
+      return;
+    }
+  if (m_tci_audio)
+    {
+      // Percorso TCI non supportato per il CW audio: abbandona in sicurezza.
+      showStatusMessage(tr("CW audio non disponibile con audio TCI"));
+      finishCwAudioTx();
+      return;
+    }
+
+  // Dimensiona la "lunghezza simboli" così che il modulatore copra l'intera
+  // wave (durata effettiva = min(symbolsLength*4*framesPerSymbol, wave.size())).
+  double const framesPerSymbol = 4096.0;
+  int symbolsLength = static_cast<int>(std::ceil(m_cwAudioWave.size() / (4.0 * framesPerSymbol))) + 2;
+  if (symbolsLength < 1) symbolsLength = 1;
+
+  // Riusa il percorso "precomputed wave" del modulatore (come Echo/FT2): mode
+  // "Echo", toneSpacing < 0, non sincronizzato. La wave e' passata come pending.
+  Q_EMIT sendPrecomputedWave(QStringLiteral("Echo"), m_cwAudioWave);
+  Q_EMIT sendMessage(QStringLiteral("Echo"), symbolsLength, framesPerSymbol,
+                     static_cast<double>(m_cwAudioSidetoneHz), -5.0, m_soundOutput,
+                     legacy_tx_output_channel(m_config.audio_output_channel()),
+                     false, false, 99.0, m_TRperiod);
+  debugToFile(QString {"cwaudio modStart nsym:%1 samples:%2"}
+                  .arg(symbolsLength)
+                  .arg(m_cwAudioWave.size()));
+}
+
+void MainWindow::finishCwAudioTx()
+{
+  if (!m_cwAudioTxActive)
+    {
+      return;
+    }
+  m_cwAudioTxActive = false;
+  cwAudioGuardTimer.stop();
+  m_cwAudioWave.clear();
+  // Ferma modulatore + abbassa PTT + riattiva monitor (ptt0Timer -> stopTx2).
+  Q_EMIT endTransmitMessage();
+  g_iptt = 0;
+  ptt0Timer.start(200);
+  monitor(true);
+  statusUpdate();
+  debugToFile(QStringLiteral("cwaudio done"));
 }
 
 void MainWindow::onRemoteSetModeRequested(QString const& commandId, QString const& mode)
@@ -31692,6 +34215,18 @@ void MainWindow::onRemoteSetDialFrequencyRequested(QString const& commandId, qin
       m_rigState.tx_frequency(frequency);
     }
   m_currentBand = m_config.bands()->find(frequency);
+  restoreMsk144PeriodForCurrentBand();
+  if (m_embeddedShellMode && !m_embeddedRigControlEnabled)
+    {
+      m_freqNominal = frequency;
+      m_freqTxNominal = frequency;
+      m_freqNominalPeriod = frequency;
+      m_currentBandPeriod = m_currentBand;
+      m_lastMonitoredFrequency = frequency;
+      m_displayBand = true;
+      no_decodes_to_UDP = false;
+      if (m_astroWidget) m_astroWidget->nominal_frequency (m_freqNominal, m_freqTxNominal);
+    }
   if (ui && ui->bandComboBox)
     {
       auto const row = m_config.frequencies()->best_working_frequency(frequency);

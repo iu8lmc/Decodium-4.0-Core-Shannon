@@ -1,4 +1,8 @@
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
+
+#include "Detector/FtxApStorico.hpp"
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -74,15 +78,176 @@ constexpr std::array<int, 19> k73Raw {{
 constexpr std::array<int, 19> kRr73Raw {{
   0,1,1,1,1,1,1,0,0,1,1,1,0,1,0,1,0,0,1
 }};
-constexpr std::array<int, 6> kApPassCounts {{2, 2, 2, 4, 4, 3}};
-constexpr std::array<std::array<int, 4>, 6> kApTypes {{
-  std::array<int, 4> {{1, 2, 0, 0}},
-  std::array<int, 4> {{2, 3, 0, 0}},
-  std::array<int, 4> {{2, 3, 0, 0}},
-  std::array<int, 4> {{3, 4, 5, 6}},
-  std::array<int, 4> {{3, 4, 5, 6}},
-  std::array<int, 4> {{3, 1, 2, 0}}
-}};
+extern "C" int ftx_ft8_ap_bits_mittente_c (char const* nominativo, int bits[29]);
+
+// L'a priori di tipo 1 e' l'ipotesi "questo e' un CQ": 29 bit del messaggio
+// dati per noti. Nella tabella storica compare solo ai livelli 0 e 5 di
+// avanzamento del QSO, cioe' quando NON si e' in collegamento. Durante un QSO
+// sparisce, e con lui le CQ deboli delle ALTRE stazioni -- e' lo scenario in
+// cui l'utente dice "mentre lavoravo qualcuno la banda si e' chiusa".
+//
+// Misurato su FT2, dove la tabella e' identica e la correzione e' gia' stata
+// applicata (FtxFt2Stage7.cpp): il divario si chiudeva del tutto, ~0,4 dB.
+// Su FT8, verita' di riferimento con ft8sim, 20 file per punto:
+//
+//     snr   fuori QSO   in QSO (livelli 2 e 4)
+//     -18       15/20       12/20
+//     -19        7/20        5/20
+//     -20        2/20        0/20
+//
+// Ai livelli 1 e 2 il terzo slot era libero. Ai livelli 3 e 4 le quattro
+// colonne erano occupate e ne serve una quinta: da qui l'array a 5 e il limite
+// di pass_index alzato a 4. Ogni tipo occupa DUE passate (pass_index =
+// ((ipass-4)/2)-1), quindi il costo e' due chiamate al decoder in piu' per
+// candidato. Il rischio e' misurato: a 29 bit noti un'ipotesi sbagliata viene
+// accettata 0-1 volte su 20000, contro le 8-13 dei tipi 4-6 che ne impongono
+// 77 (lab/cpp/apriori.cpp).
+//
+// DECODIUM_FT8_AP_CQ=0 torna alla tabella storica.
+// I parametri dell'a priori storico, tutti tarati sul traffico vero e non
+// scelti a occhio (60 000 decodifiche FT8, vedi Detector/FtxApStorico.hpp):
+//
+//   +-5 Hz      allargare a +-50 porta la resa da 85,8% a 86,8% ma le ipotesi
+//               per candidato da 2,9 a 9,5: le stazioni stanno ferme
+//   10 cicli    la memoria oltre cui una stazione non dice piu' niente
+//   3 ipotesi   K=1 copre il 42,5%, K=2 il 70,2%, K=3 il 77,3%, K=5 l'82,1%:
+//               oltre tre il guadagno per ipotesi crolla, e ogni ipotesi e'
+//               una chiamata al decoder in piu' PER CANDIDATO
+constexpr float kApStoricoHz = 5.0f;
+constexpr int kApStoricoMemoria = 10;
+constexpr int kApStoricoMax = 3;
+
+// L'a priori storico e' SPENTO finche' non e' misurato in aria: aggiunge tre
+// chiamate al decoder per candidato, e ogni chiamata e' esposizione alla
+// CRC-14 -- e' il conto che ha fatto ritirare due volte la ricerca larga.
+// DECODIUM_FT8_AP_STORICO=1 lo accende.
+inline bool ap_storico_attivo ()
+{
+  static bool const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT8_AP_STORICO");
+    return e && e[0] != '0';
+  }();
+  return v;
+}
+
+// L'a priori sul MESSAGGIO INTERO, 77 bit. E' l'ipotesi forte: in FT8 una
+// stazione che chiama ripete gli stessi 77 bit finche' non le risponde
+// qualcuno, quindi se e' stata sentita il decodificatore non deve indovinare,
+// deve VERIFICARE.
+//
+//   77 bit noti    5,92 dB     contro   29 bit    1,33 dB
+//   copertura      48,8%                          77%
+//   ipotesi/cand   1,02                           3
+//
+// Meno copertura ma quattro volte e mezzo il guadagno a un terzo del costo, e
+// il costo e' cio' che decide: l'ipotesi esiste solo dove una stazione e' stata
+// davvero sentita, quindi le chiamate al decoder in piu' sono ~45 per ciclo
+// invece di 354.
+//
+// Un'ipotesi sbagliata a 77 bit e' piu' pericolosa (8-13 accettate su 20000
+// contro 0-1 a 29 bit), ma sono venti volte meno numerose. E c'e' una
+// protezione che a 29 bit non c'era: con 77 bit imposti i 14 della CRC sono
+// determinati e resta UNA SOLA parola di codice compatibile -- o il segnale c'e'
+// o non c'e'.
+//
+// ACCESO di default dal 7 settembre 2026: sul banco WAV, soglia -18,6->-23dB
+// (+4,4dB), zero falsi con ipotesi sbagliata, correlata o su solo rumore;
+// confermato anche in una sessione overnight in aria insieme al tipo 8 FT2
+// (vedi project_ft2_predictive_decoding_type8 in memoria). DECODIUM_FT8_AP_MSG=0
+// lo spegne (torna bit-identico a prima); qualunque altro valore o l'assenza
+// della variabile lo lascia acceso.
+// La finestra temporale entro cui cercare il messaggio precedente. In aria
+// sono i due slot (25-35 s); al banco un file si decodifica un secondo dopo
+// l'innesco, quindi serve poterla allargare per misurare. Fuori misura non si
+// tocca.
+inline long long ap_msg_min_ms ()
+{
+  static long long const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT8_AP_MSG_MIN_MS");
+    return e ? std::atoll (e) : decodium::apstorico::kDueSlotMinMs;
+  }();
+  return v;
+}
+inline long long ap_msg_max_ms ()
+{
+  static long long const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT8_AP_MSG_MAX_MS");
+    return e ? std::atoll (e) : decodium::apstorico::kDueSlotMaxMs;
+  }();
+  return v;
+}
+
+inline bool ap_msg_attivo ()
+{
+  static bool const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT8_AP_MSG");
+    return !e || e[0] != '0';
+  }();
+  return v;
+}
+
+inline bool ap_cq_in_qso ()
+{
+  static bool const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT8_AP_CQ");
+    return !e || (e[0] != '0');
+  }();
+  return v;
+}
+
+// Quante colonne ha la tabella. Con l'a priori storico acceso servono i tre
+// slot in piu' per le ipotesi dalle stazioni sentite.
+constexpr int kApSlotMax = 7;
+
+inline std::array<int, 6> const& ap_pass_counts ()
+{
+  static std::array<int, 6> const con {{2, 3, 3, 5, 5, 3}};
+  static std::array<int, 6> const senza {{2, 2, 2, 4, 4, 3}};
+  static std::array<int, 6> const con_storico {{5, 6, 6, 8, 8, 6}};
+  static std::array<int, 6> const con_msg {{3, 4, 4, 6, 6, 4}};
+  if (ap_msg_attivo () && !ap_storico_attivo ()) return con_msg;
+  if (ap_storico_attivo ()) return con_storico;
+  return ap_cq_in_qso () ? con : senza;
+}
+
+inline std::array<std::array<int, 8>, 6> const& ap_types ()
+{
+  static std::array<std::array<int, 8>, 6> const con {{
+    std::array<int, 8> {{1, 2, 0, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 1, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 1, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 1, 0, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 1, 0, 0, 0}},
+    std::array<int, 8> {{3, 1, 2, 0, 0, 0, 0, 0}}
+  }};
+  static std::array<std::array<int, 8>, 6> const senza {{
+    std::array<int, 8> {{1, 2, 0, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 0, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 0, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 0, 0, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 0, 0, 0, 0}},
+    std::array<int, 8> {{3, 1, 2, 0, 0, 0, 0, 0}}
+  }};
+  static std::array<std::array<int, 8>, 6> const con_msg {{
+    std::array<int, 8> {{1, 2, 8, 0, 0, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 1, 8, 0, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 1, 8, 0, 0, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 1, 8, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 1, 8, 0, 0}},
+    std::array<int, 8> {{3, 1, 2, 8, 0, 0, 0, 0}}
+  }};
+  static std::array<std::array<int, 8>, 6> const con_storico {{
+    std::array<int, 8> {{1, 2, 7, 7, 7, 0, 0, 0}},
+    std::array<int, 8> {{2, 3, 1, 7, 7, 7, 0, 0}},
+    std::array<int, 8> {{2, 3, 1, 7, 7, 7, 0, 0}},
+    std::array<int, 8> {{3, 4, 5, 6, 1, 7, 7, 7}},
+    std::array<int, 8> {{3, 4, 5, 6, 1, 7, 7, 7}},
+    std::array<int, 8> {{3, 1, 2, 7, 7, 7, 0, 0}}
+  }};
+  if (ap_msg_attivo () && !ap_storico_attivo ()) return con_msg;
+  if (ap_storico_attivo ()) return con_storico;
+  return ap_cq_in_qso () ? con : senza;
+}
 
 struct Ft8A8SearchFft
 {
@@ -119,8 +284,12 @@ struct Ft8A8SearchFft
 
 Ft8A8SearchFft& ft8_a8_fft ()
 {
-  thread_local Ft8A8SearchFft instance;
-  return instance;
+  // Stessa ragione di ComplexFft32 in FtxBitmetrics.cpp: il distruttore
+  // girerebbe dentro LdrShutdownThread alla morte del thread, quando heap e
+  // loader sono gia' in smontaggio, e liberare un piano FFTW da li' corrompe
+  // lo heap o blocca il thread sul loader lock. Perdita voluta.
+  static thread_local auto* instance = new Ft8A8SearchFft;
+  return *instance;
 }
 
 inline void set_value_range (float* dst, int first, int last, float value)
@@ -326,8 +495,11 @@ Ft8AllCallDb load_ft8_allcall_db ()
 {
   Ft8AllCallDb db;
   std::array<int, 16> bucket_counts {};
-  std::array<char const*, 4> const candidates {{
+  std::array<char const*, 7> const candidates {{
       "ALLCALL7.TXT",
+      "resources/runtime/ALLCALL7.TXT",
+      "../resources/runtime/ALLCALL7.TXT",
+      "../Resources/ALLCALL7.TXT",
       "../ALLCALL7.TXT",
       "../../ALLCALL7.TXT",
       "../../../ALLCALL7.TXT"
@@ -2496,6 +2668,19 @@ extern "C" void ftx_ft8_prepare_pass_c (int ndepth, int ipass, int ndecodes,
     {
       local_syncmin *= 0.76f;
     }
+  // Deep Search (ndepth>=4, attivo solo col toggle): soglia di sync piu' bassa
+  // per agganciare i segnali deboli/sovrapposti che restano dopo la sottrazione
+  // dei forti, avvicinando il yield al "Deep" di JTDX. Le passate di sottrazione
+  // (>=4) ricevono la spinta maggiore perche' e' li' che emergono gli overlapping.
+  // I candidati extra sono protetti dal CRC-14 a valle (nessun falso decode).
+  if (ndepth >= 4)
+    {
+      local_syncmin *= 0.80f;
+      if (ipass >= 4)
+        {
+          local_syncmin *= 0.85f;
+        }
+    }
 
   if (ipass == 1)
     {
@@ -2508,7 +2693,15 @@ extern "C" void ftx_ft8_prepare_pass_c (int ndepth, int ipass, int ndecodes,
   else
     {
       local_imetric = 2;
-      if (ndecodes == 0 && (ndepth <= 2 || ipass >= 4))
+      if (ipass == 5 || ipass == 7)
+        {
+          local_imetric = 3;
+        }
+      if (ipass >= 8)
+        {
+          local_imetric = 4;
+        }
+      if (ndecodes == 0 && ndepth <= 2)
         {
           local_run_pass = 0;
         }
@@ -2571,6 +2764,30 @@ extern "C" int ftx_ft8_should_bail_by_tseq_c (int ldiskdat, double tseq, double 
   return ldiskdat == 0 && tseq >= limit;
 }
 
+// Quante passate in piu' servono per le ipotesi storiche, 0 se sono spente.
+// Serve a Stage4, che in certi rami fissa npasses a 8 e taglierebbe via
+// proprio gli slot in coda dove le ipotesi storiche vivono.
+// Quante volte il tipo 7 e' stato PREPARATO. Senza questo numero non si
+// distingue "non viene mai eseguito" da "viene eseguito e non aiuta", che sono
+// conclusioni opposte: la prima e' un collegamento rotto, la seconda un
+// risultato negativo vero.
+std::atomic<int> g_storico_tentativi {0};
+std::atomic<int> g_msg_tentativi {0};
+
+extern "C" int ftx_ft8_ap_storico_tentativi_c () { return g_storico_tentativi.load (); }
+extern "C" int ftx_ft8_ap_msg_tentativi_c () { return g_msg_tentativi.load (); }
+std::atomic<int> g_msg_successi {0};
+extern "C" void ftx_ft8_ap_msg_conta_successo_c () { g_msg_successi.fetch_add (1); }
+extern "C" int ftx_ft8_ap_msg_successi_c () { return g_msg_successi.load (); }
+extern "C" void ftx_ft8_ap_storico_azzera_tentativi_c () { g_storico_tentativi.store (0); }
+
+extern "C" int ftx_ft8_ap_storico_passate_c ()
+{
+  if (ap_storico_attivo ()) return 2 * kApStoricoMax;
+  if (ap_msg_attivo ()) return 2;      // il tipo 8 occupa un solo slot
+  return 0;
+}
+
 extern "C" int ftx_ft8_select_npasses_c (int lapon, int lapcqonly, int ncontest,
                                           int nzhsym, int nQSOProgress)
 {
@@ -2580,7 +2797,7 @@ extern "C" int ftx_ft8_select_npasses_c (int lapon, int lapcqonly, int ncontest,
     {
       if (lapcqonly == 0)
         {
-          npasses = 5 + 2 * kApPassCounts[static_cast<size_t> (progress)];
+          npasses = 5 + 2 * ap_pass_counts ()[static_cast<size_t> (progress)];
         }
       else
         {
@@ -2652,6 +2869,7 @@ int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int nconte
   std::fill_n (apmask, 174, 0);
 
   int iaptype = 1;
+  int pass_index_storico = -1;
   if (force_cq_sequence)
     {
       if (!llrb || ipass < 6 || ipass > 8)
@@ -2662,8 +2880,19 @@ int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int nconte
     }
   else if (lapcqonly == 0)
     {
-      int const pass_index = std::max (0, std::min (((ipass - 4) / 2) - 1, 3));
-      iaptype = kApTypes[static_cast<size_t> (progress)][static_cast<size_t> (pass_index)];
+      int const pass_index = std::max (0, std::min (((ipass - 4) / 2) - 1, kApSlotMax));
+      auto const& riga = ap_types ()[static_cast<size_t> (progress)];
+      iaptype = riga[static_cast<size_t> (pass_index)];
+      // Se questo slot e' un'ipotesi storica, quale delle K e'? Si contano i
+      // 7 che lo precedono nella riga.
+      if (iaptype == 7)
+        {
+          pass_index_storico = 0;
+          for (int k = 0; k < pass_index; ++k)
+            {
+              if (riga[static_cast<size_t> (k)] == 7) ++pass_index_storico;
+            }
+        }
     }
   if (iaptype <= 0)
     {
@@ -2681,7 +2910,17 @@ int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int nconte
   float const apmag = std::fabs (*std::max_element (llrz, llrz + 174,
     [] (float lhs, float rhs) { return std::fabs (lhs) < std::fabs (rhs); })) * 1.1f;
 
-  if (ncontest <= 5 && iaptype >= 3
+  // Il tipo 7 e' escluso da questo cancello: riguarda gli a priori legati al
+  // QSO in corso, che hanno senso solo vicino alla frequenza del corrispondente
+  // (napwid, 50 Hz). L'ipotesi "chi trasmette e' una stazione sentita qui" non
+  // ha niente a che vedere con quella frequenza -- vale su TUTTA la banda, ed e'
+  // anzi li' che serve.
+  //
+  // Trovato misurando in produzione: il contatore diceva ap_storico=0 con
+  // l'elenco pieno di 982 voci e il ciclo corretto. Il tipo 7 e' >= 3 e finiva
+  // dentro questo controllo, che lo scartava per ogni candidato lontano dal
+  // QSO, cioe' quasi tutti.
+  if (ncontest <= 5 && iaptype >= 3 && iaptype != 7 && iaptype != 8
       && (std::fabs (f1 - static_cast<float> (nfqso)) > static_cast<float> (napwid))
       && (std::fabs (f1 - static_cast<float> (nftx)) > static_cast<float> (napwid)))
     {
@@ -2695,6 +2934,75 @@ int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int nconte
     {
       return 0;
     }
+  // TIPO 7 -- il mittente e' una stazione sentita di recente su questa
+  // frequenza. Non dipende da mycall/hiscall, quindi salta i controlli sotto,
+  // che riguardano il QSO in corso.
+  //
+  // Sul traffico vero il mittente era gia' noto nell'83% delle decodifiche
+  // entro +-5 Hz nei dieci cicli precedenti (Detector/FtxApStorico.hpp). Sono
+  // 29 bit come i tipi 1 e 2, cioe' il livello in cui un'ipotesi SBAGLIATA
+  // viene accettata 0-1 volte su 20000: e' il piu' sicuro dei livelli di a
+  // priori, ed e' il motivo per cui si usa questo e non un'ipotesi di
+  // messaggio intero.
+  // TIPO 8 -- il messaggio INTERO sentito a questa frequenza due slot fa.
+  // Come il 7, non dipende da mycall/hiscall e salta i controlli sul QSO.
+  if (iaptype == 8)
+    {
+      if ((ipass % 2) != 0)
+        {
+          return 0;      // una sola passata per ipotesi, non due
+        }
+      signed char bits[77] {};
+      if (decodium::apstorico::trova_messaggio (
+              f1, kApStoricoHz, ap_msg_min_ms (), ap_msg_max_ms (), bits) != 1)
+        {
+          return 0;
+        }
+      set_mask_range (apmask, 1, 77);
+      for (int i = 0; i < 77; ++i)
+        {
+          llrz[i] = apmag * (bits[i] ? 1.0f : -1.0f);
+        }
+      *iaptype_out = 8;
+      g_msg_tentativi.fetch_add (1, std::memory_order_relaxed);
+      return 1;
+    }
+
+  if (iaptype == 7)
+    {
+      // Ogni tipo occupa DUE passate. Per le ipotesi storiche se ne fa una
+      // sola: la seconda userebbe una base di LLR diversa per la stessa
+      // ipotesi, e raddoppierebbe l'esposizione alla CRC senza aggiungere
+      // informazione.
+      if ((ipass % 2) != 0)
+        {
+          return 0;
+        }
+      int const slot = (pass_index_storico >= 0) ? pass_index_storico : -1;
+      if (slot < 0)
+        {
+          return 0;
+        }
+      char trovati[kApStoricoMax][decodium::apstorico::kLunghezzaCall] {};
+      int const n = decodium::apstorico::vicini (
+          decodium::apstorico::ciclo_corrente (), f1, kApStoricoHz,
+          kApStoricoMemoria, kApStoricoMax, trovati);
+      if (slot >= n)
+        {
+          return 0;
+        }
+      int bits[29] {};
+      if (ftx_ft8_ap_bits_mittente_c (trovati[slot], bits) != 1)
+        {
+          return 0;      // nominativo non codificabile: si salta, non si forza
+        }
+      set_mask_range (apmask, 30, 58);
+      copy_scaled (llrz, 30, bits, 29, apmag);
+      *iaptype_out = 7;
+      g_storico_tentativi.fetch_add (1, std::memory_order_relaxed);
+      return 1;
+    }
+
   if (iaptype >= 2 && apsym[0] > 1)
     {
       return 0;

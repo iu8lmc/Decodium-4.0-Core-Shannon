@@ -17,7 +17,7 @@ using fortran_charlen_t_local = int;
 
 extern "C"
 {
-  void jt65_init_tables_ ();
+  void setup65_ ();
   void decode65b_ (float s2[], int* nflip, int* nadd, int* mode65, int* ntrials,
                    int* naggressive, int* ndepth, char const* mycall, char const* hiscall,
                    char const* hisgrid, int* nQSOProgress, int* ljt65apon, int* nqd, int* nft,
@@ -90,9 +90,9 @@ void run_case (std::mt19937& rng, int trial)
                     "decode65b mismatch trial=%d wrapped(nft=%d qual=%g nhist=%d decoded='%.*s') "
                     "direct(nft=%d qual=%g nhist=%d decoded='%.*s')\n",
                     trial, nft_wrapped, static_cast<double> (qual_wrapped), nhist_wrapped,
-                    decoded_wrapped.size (), decoded_wrapped.constData (), direct.nft,
+                    static_cast<int> (decoded_wrapped.size ()), decoded_wrapped.constData (), direct.nft,
                     static_cast<double> (direct.qual), direct.nhist,
-                    direct.decoded.size (), direct.decoded.constData ());
+                    static_cast<int> (direct.decoded.size ()), direct.decoded.constData ());
       fail ("decode65b");
     }
 }
@@ -104,7 +104,8 @@ int main (int argc, char** argv)
   try
     {
       QCoreApplication app {argc, argv};
-      jt65_init_tables_ ();
+      setup65_ ();
+      decodium::legacy::jt65_initialize_tables ();
       std::mt19937 rng {0x65BEEF};
       for (int trial = 0; trial < 16; ++trial)
         {

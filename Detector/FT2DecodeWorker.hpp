@@ -26,6 +26,7 @@ struct AsyncDecodeRequest
   int ncontest {0};
   QByteArray mycall;
   QByteArray hiscall;
+  QVector<quint32> apHashCache;  // 1.0.294 — snapshot hash28 call viste in banda (AP cache Fase 1)
 };
 
 struct DecodeRequest
@@ -42,6 +43,7 @@ struct DecodeRequest
   int ncontest {0};
   QByteArray mycall;
   QByteArray hiscall;
+  QVector<quint32> apHashCache;  // Sprint3-A — AP cache anche sul pass sync (weak-recovery)
 };
 
 class FT2DecodeWorker final : public QObject
@@ -53,6 +55,7 @@ public:
 
   void decodeAsync (AsyncDecodeRequest const& request);
   void decode (DecodeRequest const& request);
+  void setDecodeEnabled (bool enabled);
   void markLatestDecodeSerial (quint64 serial);
   void cancelCurrentDecode ();
   void beginShutdown ();
@@ -63,6 +66,7 @@ Q_SIGNALS:
 
 private:
   std::atomic<quint64> m_latestDecodeSerial {0};
+  std::atomic<bool> m_decodeEnabled {true};
   std::atomic<bool> m_shuttingDown {false};
 };
 

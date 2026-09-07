@@ -45,6 +45,7 @@ public:
 
   Q_SIGNAL void selectCallsign (Qt::KeyboardModifiers);
   Q_SIGNAL void erased ();
+  Q_SIGNAL void lineAppended (QString const& text);
 
   Q_SLOT void insertText (QString const& text, QColor bg = QColor {}, QColor fg = QColor {}
                           , QString const& call1 = QString {}, QString const& call2 = QString {}

@@ -1,0 +1,585 @@
+name: Native SSTV CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/native-sstv-ci.yml'
+      - 'Audio/soundout.*'
+      - 'CMakeLists.txt'
+      - 'doc/THIRD_PARTY_LICENSES_OPENJPEG.md'
+      - 'docs/sstv/**'
+      - 'qml/decodium/Main.qml'
+      - 'qml/decodium/components/sstv/**'
+      - 'src/app/main_qml.cpp'
+      - 'src/bridge/DecodiumAudioSink.h'
+      - 'src/bridge/DecodiumBridge*'
+      - 'src/bridge/DecodiumLegacyBackend.*'
+      - 'src/net/DecoPortLink.*'
+      - 'src/radio/DecodiumTransceiverManager.*'
+      - 'src/rtl/RtlSdrInput.*'
+      - 'src/services/SatelliteTrackingService.*'
+      - 'src/sstv/**'
+      - 'tests/CMakeLists.txt'
+      - 'tests/sstv/**'
+      - 'translations/decodium_it.*'
+      - 'packaging/**'
+      - 'scripts/build/**'
+      - 'scripts/ci-build-linux-appimage-x64.sh'
+      - 'scripts/release-macos.sh'
+  push:
+    paths:
+      - '.github/workflows/native-sstv-ci.yml'
+      - 'Audio/soundout.*'
+      - 'CMakeLists.txt'
+      - 'doc/THIRD_PARTY_LICENSES_OPENJPEG.md'
+      - 'docs/sstv/**'
+      - 'qml/decodium/Main.qml'
+      - 'qml/decodium/components/sstv/**'
+      - 'src/app/main_qml.cpp'
+      - 'src/bridge/DecodiumAudioSink.h'
+      - 'src/bridge/DecodiumBridge*'
+      - 'src/bridge/DecodiumLegacyBackend.*'
+      - 'src/net/DecoPortLink.*'
+      - 'src/radio/DecodiumTransceiverManager.*'
+      - 'src/rtl/RtlSdrInput.*'
+      - 'src/services/SatelliteTrackingService.*'
+      - 'src/sstv/**'
+      - 'tests/CMakeLists.txt'
+      - 'tests/sstv/**'
+      - 'translations/decodium_it.*'
+      - 'packaging/**'
+      - 'scripts/build/**'
+      - 'scripts/ci-build-linux-appimage-x64.sh'
+      - 'scripts/release-macos.sh'
+
+permissions:
+  contents: read
+
+# Qt 6.11 come negli altri workflow. I pacchetti qt6-* di Ubuntu 24.04 sono
+# Qt 6.4, dove QTimeZone::UTC non esiste ancora: con quelli i job Linux non
+# possono compilare questo albero.
+env:
+  QT_VERSION: "6.11.0"
+  QT_CACHE_ROOT: ".ci/cache/qt-linux-6.11.0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate repository contract
+        run: scripts/ci/validate-repository-layout.sh
+
+  macos:
+    name: macOS SSTV (${{ matrix.architecture }})
+    needs: repository-contract
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          brew update
+          brew install qt gcc fftw libusb boost hamlib openjpeg pkg-config libomp
+          echo "$(brew --prefix qt)/bin" >> "${GITHUB_PATH}"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt);$(brew --prefix hamlib);$(brew --prefix openjpeg);$(brew --prefix libomp)" >> "${GITHUB_ENV}"
+
+      - name: Configure full native SSTV and HAMDRM
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-native-sstv -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" \
+            -DBUILD_TESTING=ON \
+            -DDECODIUM_ENABLE_SSTV=ON \
+            -DDECODIUM_ENABLE_HAMDRM=ON \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Decodium and all regression test binaries
+        run: |
+          set -euo pipefail
+          cmake --build build-native-sstv \
+            --target \
+              wsjtx \
+              decodium_qml \
+              decodium_sstv_test_binaries \
+              decodium_regression_test_binaries \
+              translations \
+            --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Run native SSTV suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv \
+            -L '^sstv$' \
+            --parallel 2 \
+            --timeout 300 \
+            --output-on-failure
+
+      - name: Run non-SSTV regression suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv \
+            -LE '^sstv$' \
+            --parallel 2 \
+            --timeout 300 \
+            --output-on-failure
+
+  linux:
+    name: Linux SSTV (${{ matrix.name }})
+    needs: repository-contract
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64-full-release
+            runner: ubuntu-24.04
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            build_type: Release
+            sstv: 'ON'
+            hamdrm: 'ON'
+            sanitizer: false
+          - name: x86_64-analog-release
+            runner: ubuntu-24.04
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            build_type: Release
+            sstv: 'ON'
+            hamdrm: 'OFF'
+            sanitizer: false
+          - name: x86_64-feature-off-release
+            runner: ubuntu-24.04
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            build_type: Release
+            sstv: 'OFF'
+            hamdrm: 'OFF'
+            sanitizer: false
+          - name: x86_64-full-debug-asan-ubsan
+            runner: ubuntu-24.04
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            build_type: Debug
+            sstv: 'ON'
+            hamdrm: 'ON'
+            sanitizer: true
+          - name: arm64-full-release
+            runner: ubuntu-24.04-arm
+            qt_host: linux_arm64
+            qt_arch: linux_gcc_arm64
+            build_type: Release
+            sstv: 'ON'
+            hamdrm: 'ON'
+            sanitizer: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            cmake \
+            gfortran \
+            libboost-filesystem-dev \
+            libboost-log-dev \
+            libboost-thread-dev \
+            libfftw3-dev \
+            libgl1-mesa-dev \
+            libhamlib-dev \
+            libomp-dev \
+            libopenjp2-7-dev \
+            libreadline-dev \
+            libusb-1.0-0-dev \
+            libxkbcommon-dev \
+            ninja-build \
+            pkg-config \
+            portaudio19-dev
+
+      - name: Restore Qt 6.11 cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: sstv-${{ matrix.qt_arch }}-qt-${{ env.QT_VERSION }}-v1
+
+      - name: Install Qt 6.11
+        env:
+          QT_HOST: ${{ matrix.qt_host }}
+          QT_ARCH: ${{ matrix.qt_arch }}
+        run: |
+          set -euo pipefail
+          QT_INSTALL_ROOT="${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}"
+          QT_PREFIX="${QT_INSTALL_ROOT}/${QT_VERSION}/${QT_ARCH#linux_}"
+
+          if [[ ! -x "${QT_PREFIX}/bin/qmake6" ]]; then
+            rm -rf "${QT_INSTALL_ROOT}"
+            python3 -m venv "${RUNNER_TEMP}/aqt-venv"
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m pip install --upgrade pip aqtinstall
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m aqt install-qt "${QT_HOST}" desktop "${QT_VERSION}" "${QT_ARCH}" \
+              -O "${QT_INSTALL_ROOT}" \
+              -m qt5compat qtimageformats qtmultimedia qtserialport qtshadertools qtwebsockets
+          fi
+
+          # aqt nomina la cartella come l'architettura senza il prefisso host,
+          # ma se un giorno cambiasse convenzione meglio trovare qmake6 che
+          # fallire su un percorso indovinato.
+          if [[ ! -x "${QT_PREFIX}/bin/qmake6" ]]; then
+            found_qmake="$(find "${QT_INSTALL_ROOT}" -type f -name qmake6 -perm -u+x | head -n1 || true)"
+            if [[ -n "${found_qmake}" ]]; then
+              QT_PREFIX="$(dirname "$(dirname "${found_qmake}")")"
+            fi
+          fi
+
+          test -x "${QT_PREFIX}/bin/qmake6"
+          echo "${QT_PREFIX}/bin" >> "${GITHUB_PATH}"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          # Se la versione non e' quella attesa il resto del job non ha senso:
+          # meglio fermarsi qui che scoprirlo fra mille righe di compilazione.
+          test "$("${QT_PREFIX}/bin/qmake6" -query QT_VERSION)" = "${QT_VERSION}"
+
+      - name: Configure native SSTV variant
+        env:
+          BUILD_TYPE: ${{ matrix.build_type }}
+          SSTV: ${{ matrix.sstv }}
+          HAMDRM: ${{ matrix.hamdrm }}
+          SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          set -euo pipefail
+          extra_args=()
+          if [[ "${SANITIZER}" == "true" ]]; then
+            sanitizer_flags='-fsanitize=address,undefined -fno-omit-frame-pointer'
+            extra_args+=(
+              "-DCMAKE_C_FLAGS=${sanitizer_flags}"
+              "-DCMAKE_CXX_FLAGS=${sanitizer_flags}"
+              "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+              "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined"
+            )
+          fi
+          cmake -S . -B build-native-sstv -G Ninja \
+            -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+            -DBUILD_TESTING=ON \
+            -DDECODIUM_ENABLE_SSTV="${SSTV}" \
+            -DDECODIUM_ENABLE_HAMDRM="${HAMDRM}" \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF \
+            "${extra_args[@]}"
+
+      - name: Build Decodium and all regression test binaries
+        env:
+          SSTV: ${{ matrix.sstv }}
+          SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          set -euo pipefail
+          jobs="$(nproc)"
+          if [[ "${SANITIZER}" == "true" && "${jobs}" -gt 4 ]]; then
+            jobs=4
+          fi
+          targets=(wsjtx decodium_qml decodium_regression_test_binaries translations)
+          if [[ "${SSTV}" == "ON" ]]; then
+            targets+=(decodium_sstv_test_binaries)
+          fi
+          cmake --build build-native-sstv \
+            --target "${targets[@]}" \
+            --parallel "${jobs}"
+
+      - name: Run native SSTV suite
+        if: matrix.sstv == 'ON'
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv \
+            -L '^sstv$' \
+            --parallel 2 \
+            --timeout 300 \
+            --output-on-failure
+
+      - name: Run non-SSTV regression suite
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv \
+            -LE '^sstv$' \
+            --parallel 2 \
+            --timeout 300 \
+            --output-on-failure
+
+  fuzz:
+    name: Linux SSTV parser fuzzing
+    needs: repository-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Clang, libFuzzer and build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            clang-18 \
+            cmake \
+            gfortran \
+            libboost-filesystem-dev \
+            libboost-log-dev \
+            libboost-thread-dev \
+            libclang-rt-18-dev \
+            libfftw3-dev \
+            libfuzzer-18-dev \
+            libgl1-mesa-dev \
+            libhamlib-dev \
+            libomp-dev \
+            libopenjp2-7-dev \
+            libreadline-dev \
+            libusb-1.0-0-dev \
+            libxkbcommon-dev \
+            ninja-build \
+            pkg-config \
+            portaudio19-dev
+
+      - name: Restore Qt 6.11 cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: sstv-linux_gcc_64-qt-${{ env.QT_VERSION }}-v1
+
+      - name: Install Qt 6.11
+        run: |
+          set -euo pipefail
+          QT_INSTALL_ROOT="${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}"
+          QT_PREFIX="${QT_INSTALL_ROOT}/${QT_VERSION}/gcc_64"
+
+          if [[ ! -x "${QT_PREFIX}/bin/qmake6" ]]; then
+            rm -rf "${QT_INSTALL_ROOT}"
+            python3 -m venv "${RUNNER_TEMP}/aqt-venv"
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m pip install --upgrade pip aqtinstall
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 \
+              -O "${QT_INSTALL_ROOT}" \
+              -m qt5compat qtimageformats qtmultimedia qtserialport qtshadertools qtwebsockets
+          fi
+
+          test -x "${QT_PREFIX}/bin/qmake6"
+          echo "${QT_PREFIX}/bin" >> "${GITHUB_PATH}"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          test "$("${QT_PREFIX}/bin/qmake6" -query QT_VERSION)" = "${QT_VERSION}"
+
+      - name: Configure the instrumented parser targets
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-native-sstv-fuzz -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DBUILD_TESTING=ON \
+            -DDECODIUM_ENABLE_SSTV=ON \
+            -DDECODIUM_ENABLE_HAMDRM=ON \
+            -DDECODIUM_ENABLE_SSTV_FUZZING=ON \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build all native SSTV fuzzers
+        run: |
+          set -euo pipefail
+          cmake --build build-native-sstv-fuzz \
+            --target \
+              fuzz_sstv_protocol_parsers \
+              fuzz_sstv_wav_pcm_reader \
+              fuzz_sstv_share_parsers \
+              fuzz_sstv_incoming_media \
+              fuzz_sstv_qso_log \
+              fuzz_hamdrm_parsers \
+            --parallel 4
+
+      - name: Run bounded coverage-guided fuzzing
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euo pipefail
+          fuzz_dir=build-native-sstv-fuzz/tests/sstv
+          "${fuzz_dir}/fuzz_sstv_protocol_parsers" \
+            tests/sstv/fuzz/corpus/protocol \
+            -max_total_time=30 -timeout=10 -max_len=4096 \
+            -rss_limit_mb=2048 -print_final_stats=1
+          "${fuzz_dir}/fuzz_sstv_wav_pcm_reader" \
+            tests/sstv/fuzz/corpus/wav \
+            -max_total_time=30 -timeout=10 -max_len=1048576 \
+            -rss_limit_mb=2048 -print_final_stats=1
+          "${fuzz_dir}/fuzz_sstv_share_parsers" \
+            tests/sstv/fuzz/corpus/share \
+            -max_total_time=30 -timeout=10 -max_len=1048576 \
+            -rss_limit_mb=2048 -print_final_stats=1
+          "${fuzz_dir}/fuzz_sstv_incoming_media" \
+            tests/sstv/fuzz/corpus/incoming-media \
+            -max_total_time=30 -timeout=10 -max_len=1048576 \
+            -rss_limit_mb=2048 -print_final_stats=1
+          "${fuzz_dir}/fuzz_sstv_qso_log" \
+            tests/sstv/fuzz/corpus/qso \
+            -max_total_time=30 -timeout=10 -max_len=262144 \
+            -rss_limit_mb=2048 -print_final_stats=1
+          "${fuzz_dir}/fuzz_hamdrm_parsers" \
+            tests/sstv/fuzz/corpus/hamdrm \
+            -max_total_time=30 -timeout=10 -max_len=1048576 \
+            -rss_limit_mb=2048 -print_final_stats=1
+
+  windows:
+    name: Windows x64 SSTV
+    needs: repository-contract
+    runs-on: windows-2022
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          cache: true
+          install: >-
+            curl
+            git
+            make
+            perl
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-openjpeg2
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-qt6-5compat
+            mingw-w64-x86_64-qt6-activeqt
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-imageformats
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-serialport
+            mingw-w64-x86_64-qt6-shadertools
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-translations
+            mingw-w64-x86_64-qt6-websockets
+            tar
+
+      - name: Build and install Hamlib
+        run: |
+          set -euo pipefail
+          curl -fsSL -o hamlib-4.7.0.tar.gz \
+            https://github.com/Hamlib/Hamlib/releases/download/4.7.0/hamlib-4.7.0.tar.gz
+          tar -xzf hamlib-4.7.0.tar.gz
+          cd hamlib-4.7.0
+          ./configure --prefix=/mingw64 --disable-static --enable-shared --without-readline
+          make -j"$(nproc)"
+          make install
+
+      - name: Configure full native SSTV and HAMDRM
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-native-sstv -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DBUILD_TESTING=ON \
+            -DDECODIUM_ENABLE_SSTV=ON \
+            -DDECODIUM_ENABLE_HAMDRM=ON \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Decodium and all regression test binaries
+        run: |
+          set -euo pipefail
+          cmake --build build-native-sstv \
+            --target \
+              wsjtx \
+              decodium_qml \
+              decodium_sstv_test_binaries \
+              decodium_regression_test_binaries \
+              translations \
+            --parallel "$(nproc)"
+
+      - name: Run native SSTV suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv \
+            -L '^sstv$' \
+            --parallel 2 \
+            --timeout 300 \
+            --output-on-failure
+
+      - name: Run non-SSTV regression suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv \
+            -LE '^sstv$' \
+            --parallel 2 \
+            --timeout 300 \
+            --output-on-failure
