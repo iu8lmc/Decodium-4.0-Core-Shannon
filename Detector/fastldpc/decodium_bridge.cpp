@@ -200,20 +200,32 @@ unsigned alpha_scelto () {
 }
 
 // Strato 2 (FASTLDPC-AI-SPEC-001 §2): gate appreso al posto della sola soglia
-// su nd. Spento di default: DECODIUM_LDPC_GATE=1 lo accende.
+// su nd. DECODIUM_LDPC_GATE, se impostata esplicitamente (0 o 1), vale per
+// entrambi i modi e vince su tutto il resto.
 //
-// ATTENZIONE: i pesi (gate_weights.hpp) vengono dal pacchetto di ricerca
-// originale e non sono stati riaddestrati ne' rimisurati su QUESTO decoder
-// (alpha, ntau, span2 sono cambiati da allora, vedi il commento in cima al
-// file dei pesi). Il meccanismo e' collaudato -- a flag spento resta
-// bit-identico -- ma accendere DECODIUM_LDPC_GATE=1 e' un banco di prova, non
-// una soglia pronta all'uso.
+// 6-7 settembre 2026: pesi riaddestrati su LLR reali del decoder attuale
+// (non piu' il pacchetto di ricerca originale su canale sintetico -- vedi
+// project_ft2_ldpc_gate_retrain_real_llr in memoria). Risultato offline sul
+// 20% mai visto in training:
+//   FT2: 92,60%->90,00% veri accettati, 57,89->0,65 falsi/1000 (89x meno
+//        falsi, ma costa 2,6 punti di sensibilita' -- un compromesso, non
+//        ancora confermato accettabile con traffico reale FT2).
+//   FT8: 88,23%->91,04% veri accettati, 7,57->0,46 falsi/1000 (~16x meno
+//        falsi E +2,8 punti di sensibilita' insieme, nessun compromesso).
+//        Confermato anche in aria: due finestre A/B da 6,7 minuti sulla
+//        stessa banda, nessuna perdita di sensibilita' osservata, 28106
+//        candidati fantasma scartati nella finestra con gate acceso.
+// Di conseguenza, senza una scelta esplicita, il default e' ACCESO su FT8
+// (evidenza solida, nessun compromesso) e SPENTO su FT2 (compromesso reale,
+// da confermare in aria prima di proporlo di default).
 bool gate_mode_scelto () {
-    static bool const v = [] {
+    static int const scelta_esplicita = [] {
         char const* e = std::getenv ("DECODIUM_LDPC_GATE");
-        return e && e[0] != '0' && e[0] != 0;
+        if (!e || e[0] == 0) return -1;
+        return (e[0] != '0') ? 1 : 0;
     }();
-    return v;
+    if (scelta_esplicita >= 0) return scelta_esplicita != 0;
+    return g_modo_ft8;
 }
 
 // DECODIUM_LDPC_GATE_RELAX: quanto l'OSD si allarga oltre nd_max quando il
