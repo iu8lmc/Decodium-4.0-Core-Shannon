@@ -150,7 +150,12 @@ inline bool ap_storico_attivo ()
 // determinati e resta UNA SOLA parola di codice compatibile -- o il segnale c'e'
 // o non c'e'.
 //
-// DECODIUM_FT8_AP_MSG=1 lo accende. Spento di default finche' non e' misurato.
+// ACCESO di default dal 7 settembre 2026: sul banco WAV, soglia -18,6->-23dB
+// (+4,4dB), zero falsi con ipotesi sbagliata, correlata o su solo rumore;
+// confermato anche in una sessione overnight in aria insieme al tipo 8 FT2
+// (vedi project_ft2_predictive_decoding_type8 in memoria). DECODIUM_FT8_AP_MSG=0
+// lo spegne (torna bit-identico a prima); qualunque altro valore o l'assenza
+// della variabile lo lascia acceso.
 // La finestra temporale entro cui cercare il messaggio precedente. In aria
 // sono i due slot (25-35 s); al banco un file si decodifica un secondo dopo
 // l'innesco, quindi serve poterla allargare per misurare. Fuori misura non si
@@ -176,7 +181,7 @@ inline bool ap_msg_attivo ()
 {
   static bool const v = [] {
     char const* e = std::getenv ("DECODIUM_FT8_AP_MSG");
-    return e && e[0] != '0';
+    return !e || e[0] != '0';
   }();
   return v;
 }

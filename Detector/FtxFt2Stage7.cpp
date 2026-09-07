@@ -1425,14 +1425,23 @@ bool any_message_bits (std::array<signed char, kFt2Message91> const& message91)
 // finestra e' di due slot da 3,75 s, e l'ipotesi entra come passata in piu'
 // nello stesso blocco batch, quindi non costa una chiamata al decoder.
 //
-// Spento di default: DECODIUM_FT2_AP_MSG=1 lo accende. Con il flag spento il
-// comportamento e' bit-identico. L'archivio e' quello di FtxApStorico,
-// globale con mutex, perche' lo stato di Stage7 e' thread_local.
+// ACCESO di default dal 7 settembre 2026: +3,0dB (soglia -16,6->-19,6dB nella
+// scala di ft2_make_test_wav), 0 falsi su 541 verifiche offline (rumore,
+// ipotesi sbagliata, ipotesi correlata), e confermato in aria in una sessione
+// overnight: 649 conferme su 87982 verifiche, zero falsi osservati (vedi
+// project_ft2_predictive_decoding_type8 in memoria). DECODIUM_FT2_AP_MSG=0
+// lo spegne (torna bit-identico a prima di questo meccanismo); qualunque
+// altro valore o l'assenza della variabile lo lascia acceso. Da non
+// confondere con l'AP MORBIDO (DECODIUM_FT2_AP_SOFT), un meccanismo diverso
+// e imparentato che e' stato ritirato per pericolo reale (decodifiche
+// fabbricate a -26dB in aria) e resta spento con avviso "NON SICURO".
+// L'archivio e' quello di FtxApStorico, globale con mutex, perche' lo stato
+// di Stage7 e' thread_local.
 bool ft2_ap_msg_attivo ()
 {
   static bool const attivo = [] {
     char const* e = std::getenv ("DECODIUM_FT2_AP_MSG");
-    return e && e[0] == '1';
+    return !e || e[0] != '0';
   }();
   return attivo;
 }
