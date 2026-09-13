@@ -38,6 +38,7 @@ struct DecodeRequest
   int nqsoprogress {0};
   int ncontest {0};
   int lapcqonly {0};
+  bool zapEnabled {false};
 };
 
 class Q65DecodeWorker final : public QObject

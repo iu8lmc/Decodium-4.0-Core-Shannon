@@ -41,6 +41,7 @@ DecodiumPskReporterLite::DecodiumPskReporterLite(QObject* parent)
     , m_observationId(QRandomGenerator::global()->generate())
 {
     m_flushTimer->setInterval(FLUSH_INTERVAL_MS);
+    m_flushTimer->setSingleShot(true);
     m_descriptorTimer->setInterval(DESCRIPTOR_INTERVAL_MS);
     m_sendTimer->setSingleShot(true);
 
@@ -83,7 +84,6 @@ void DecodiumPskReporterLite::setEnabled(bool v)
     m_consecutiveFailures = 0;
     markDescriptorsDirty();
     connectSocketIfNeeded();
-    m_flushTimer->start();
     m_descriptorTimer->start();
     emit connectedChanged();
     if (pskReporterDebugEnabled()) {
@@ -227,14 +227,19 @@ void DecodiumPskReporterLite::sendReport(bool last)
     if (!m_enabled || m_autoDisabled)
         return;
     if (m_myCall.isEmpty()) {
+        m_flushTimer->stop();
         emit errorOccurred(QStringLiteral("PSK Reporter: local callsign not set."));
         return;
     }
-    if (m_spots.isEmpty() && !last && !receiverInfoPending())
+    if (m_spots.isEmpty() && !last && !receiverInfoPending()) {
+        m_flushTimer->stop();
         return;
+    }
 
     connectSocketIfNeeded();
     if (!m_socket || m_socket->state() != QAbstractSocket::ConnectedState) {
+        if (!m_spots.isEmpty() && !m_flushTimer->isActive())
+            m_flushTimer->start();
         if (pskReporterDebugEnabled()) {
             qInfo().noquote() << "[PSKDBG] PSK Reporter send deferred protocol="
                               << (m_useTcpIp ? QStringLiteral("TCP") : QStringLiteral("UDP"))
@@ -283,7 +288,11 @@ void DecodiumPskReporterLite::sendReport(bool last)
         if (sentSpots.isEmpty())
             break;
     }
-
+    if (m_spots.isEmpty()) {
+        m_flushTimer->stop();
+    } else if (!m_flushTimer->isActive()) {
+        m_flushTimer->start();
+    }
 }
 
 void DecodiumPskReporterLite::connectSocketIfNeeded()
@@ -360,6 +369,12 @@ void DecodiumPskReporterLite::scheduleSend(int delayMs)
 {
     if (!m_enabled || m_autoDisabled)
         return;
+
+    // The five-minute flush is a deadline for queued observations, not a
+    // permanent heartbeat. Keeping it dormant while the queue is empty avoids
+    // periodic wakeups and descriptor-only network traffic during idle RX.
+    if (!m_spots.isEmpty() && !m_flushTimer->isActive())
+        m_flushTimer->start();
 
     int const clampedDelay = qMax(0, delayMs);
     if (m_sendTimer->isActive()) {

@@ -69,7 +69,9 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ## 7) CI release packaging
 
-`build-macos.yml` currently produces per-target `.zip`, `.tar.gz`, and `.sha256` artifacts for:
+The maintained `release-macos-apple-silicon.yml` and
+`release-macos-intel.yml` workflows produce versioned DMG and checksum
+artifacts for:
 
 - Apple Silicon Tahoe
 - Apple Silicon Sequoia
@@ -141,7 +143,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ## 7) Packaging CI release
 
-`build-macos.yml` produce attualmente per target: `.zip`, `.tar.gz` e `.sha256` per:
+I workflow mantenuti `release-macos-apple-silicon.yml` e
+`release-macos-intel.yml` producono DMG versionati e checksum per:
 
 - Apple Silicon Tahoe
 - Apple Silicon Sequoia

@@ -17,6 +17,7 @@ using fortran_charlen_t_local = int;
 
 extern "C"
 {
+  void setup65_ ();
   void extract_ (float s3[], int* nadd, int* mode65, int* ntrials, int* naggressive, int* ndepth,
                  int* nflip, char const* mycall_12, char const* hiscall_12, char const* hisgrid,
                  int* nQSOProgress, int* ljt65apon, int* ncount, int* nhist, char decoded[],
@@ -162,6 +163,8 @@ int main (int argc, char** argv)
   try
     {
       QCoreApplication app {argc, argv};
+      setup65_ ();
+      decodium::legacy::jt65_initialize_tables ();
       std::mt19937 rng {0x65E123u};
       for (int trial = 0; trial < 12; ++trial)
         {

@@ -1,0 +1,245 @@
+#include "src/services/CallsignIntelligenceService.h"
+#include "src/services/EqslInboxDownload.h"
+#include "src/services/LotwReportResponse.h"
+
+#include <QFile>
+#include <QFileInfo>
+#include <QSignalSpy>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QtTest>
+
+class CallsignIntelligenceTest final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void initTestCase()
+    {
+        // Keep the SQLite cache and profile settings outside the user's live
+        // Decodium configuration when the test suite runs.
+        QStandardPaths::setTestModeEnabled(true);
+    }
+
+    void importsProviderDataAndUsesCache()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("eqsl.csv"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write("Callsign,Grid Square,Name,QTH,State\nIU8LMC,JN70ES,Salvatore,Malta,MT\n");
+        file.close();
+
+        CallsignIntelligenceService service;
+        const bool originalAutoOpen = service.autoOpenOnQsoStart();
+        service.setAutoOpenOnQsoStart(false);
+        QVERIFY(!service.autoOpenOnQsoStart());
+        QVERIFY(service.importDatabase(QStringLiteral("eqsl"), path));
+        service.clearCache(QStringLiteral("IU8LMC"));
+
+        service.lookup(QStringLiteral("iu8lmc"));
+        QCOMPARE(service.result().value(QStringLiteral("call")).toString(), QStringLiteral("IU8LMC"));
+        QCOMPARE(service.result().value(QStringLiteral("grid")).toString(), QStringLiteral("JN70ES"));
+        QCOMPARE(service.result().value(QStringLiteral("name")).toString(), QStringLiteral("Salvatore"));
+        QVERIFY(service.result().value(QStringLiteral("eqsl")).toBool());
+        QVERIFY(!service.cacheHit());
+
+        service.lookup(QStringLiteral("IU8LMC"));
+        QVERIFY(service.cacheHit());
+        QVERIFY(service.databases().size() >= 5);
+        service.setAutoOpenOnQsoStart(originalAutoOpen);
+    }
+
+    void importsLotwHeaderlessActivity()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("lotw.csv"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write("K1ABC,2026-07-31,12:00:00\n");
+        file.close();
+
+        CallsignIntelligenceService service;
+        QVERIFY(service.importDatabase(QStringLiteral("lotw"), path));
+        service.clearCache(QStringLiteral("K1ABC"));
+        service.lookup(QStringLiteral("K1ABC"));
+        QVERIFY(service.result().value(QStringLiteral("lotw")).toBool());
+        QCOMPARE(service.result().value(QStringLiteral("lastUpload")).toString(), QStringLiteral("2026-07-31"));
+    }
+
+    void parsesEqslInboxDownloadPage()
+    {
+        const QUrl inboxUrl(QStringLiteral("https://www.eqsl.cc/qslcard/DownloadInbox.cfm"));
+        const QByteArray page = QByteArrayLiteral(
+            "<html><a href=\"../DownloadedFiles/Inbox-123.ADI\">.ADI file</a></html>");
+        const auto result = decodium::eqsl::parseInboxPage(page, inboxUrl);
+        QCOMPARE(result.kind, decodium::eqsl::InboxPageKind::DownloadReady);
+        QCOMPARE(result.adifUrl,
+                 QUrl(QStringLiteral("https://www.eqsl.cc/DownloadedFiles/Inbox-123.ADI")));
+    }
+
+    void classifiesEqslInboxNoRecordsAndLoginFailure()
+    {
+        const QUrl inboxUrl(QStringLiteral("https://www.eqsl.cc/qslcard/DownloadInbox.cfm"));
+        QCOMPARE(decodium::eqsl::parseInboxPage("<html>No records</html>", inboxUrl).kind,
+                 decodium::eqsl::InboxPageKind::NoRecords);
+        QCOMPARE(decodium::eqsl::parseInboxPage("<html>Error: No such Callsign found</html>", inboxUrl).kind,
+                 decodium::eqsl::InboxPageKind::AuthenticationError);
+        QCOMPARE(decodium::eqsl::parseInboxPage("Decodium\n<EOH>\n", inboxUrl).kind,
+                 decodium::eqsl::InboxPageKind::DirectAdif);
+    }
+
+    void classifiesLotwReportResponses()
+    {
+        QCOMPARE(decodium::lotw::parseReportResponse("Logbook of the World\n<EOH>\n").kind,
+                 decodium::lotw::ReportResponseKind::Adif);
+        QCOMPARE(decodium::lotw::parseReportResponse(
+                     "<html><i>Username/password incorrect</i></html>").kind,
+                 decodium::lotw::ReportResponseKind::AuthenticationError);
+        QCOMPARE(decodium::lotw::parseReportResponse(
+                     "<html>Service temporarily unavailable; try again later</html>").kind,
+                 decodium::lotw::ReportResponseKind::ServiceError);
+    }
+
+    void manuallyImportsLotwConfirmationAdiThroughLogbookPipeline()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("lotw-confirmed.adi"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write("Generated by LoTW\n<APP_LoTW_LASTQSL:19>2026-08-06 21:00:00\n<EOH>\n"
+                   "<CALL:5>K1ABC<QSO_DATE:8>20260806<TIME_ON:6>210000<BAND:3>20M<MODE:3>FT8<EOR>\n");
+        file.close();
+
+        CallsignIntelligenceService service;
+        QSignalSpy downloadedSpy(&service, &CallsignIntelligenceService::confirmedAdifDownloaded);
+        QVERIFY(service.importDatabase(QStringLiteral("lotw_confirmed"), path));
+        QTRY_COMPARE(downloadedSpy.count(), 1);
+        QCOMPARE(downloadedSpy.at(0).at(0).toString(), QStringLiteral("lotw_confirmed"));
+        QVERIFY(QFileInfo(downloadedSpy.at(0).at(1).toString()).exists());
+    }
+
+    void showsConfirmedSourceCountInsteadOfAStaleZero()
+    {
+        CallsignIntelligenceService service;
+        service.completeConfirmedAdifImport(QStringLiteral("lotw_confirmed"), true, 27, 14, 41);
+        const QVariantList providers = service.databases();
+        for (const QVariant& value : providers) {
+            const QVariantMap provider = value.toMap();
+            if (provider.value(QStringLiteral("id")).toString() == QStringLiteral("lotw_confirmed")) {
+                QCOMPARE(provider.value(QStringLiteral("rowCount")).toInt(), 41);
+                return;
+            }
+        }
+        QFAIL("LoTW confirmations provider is missing");
+    }
+
+    void qsoHooksHonorDefaultsAndSettings()
+    {
+        CallsignIntelligenceService service;
+        const bool originalAutoOpen = service.autoOpenOnQsoStart();
+        const bool originalAutoClose = service.autoCloseAfterLogging();
+        service.setAutoOpenOnQsoStart(false);
+        service.setAutoCloseAfterLogging(false);
+        QSignalSpy openSpy(&service, &CallsignIntelligenceService::lookupWindowRequested);
+        QSignalSpy closeSpy(&service, &CallsignIntelligenceService::lookupWindowCloseRequested);
+
+        service.notifyQsoStarted(QStringLiteral("K1ABC"));
+        QCOMPARE(openSpy.count(), 0);
+        service.setAutoOpenOnQsoStart(true);
+        service.setAutoCloseAfterLogging(true);
+        service.notifyQsoStarted(QStringLiteral("K1ABC"));
+        QCOMPARE(openSpy.count(), 1);
+        service.notifyQsoLogged(QStringLiteral("K1ABC"));
+        QCOMPARE(closeSpy.count(), 1);
+        service.setAutoOpenOnQsoStart(originalAutoOpen);
+        service.setAutoCloseAfterLogging(originalAutoClose);
+    }
+
+    void externalLookupsEmitCanonicalUrlsEvenInOfflineMode()
+    {
+        CallsignIntelligenceService service;
+        service.setOfflineMode(true);
+        QSignalSpy lookupSpy(
+            &service,
+            &CallsignIntelligenceService::externalLookupRequested);
+
+        const QList<QPair<QString, QString>> cases {
+            {QStringLiteral("qrz"),
+             QStringLiteral("https://www.qrz.com/db/IU3VGK")},
+            {QStringLiteral("fcc_uls"),
+             QStringLiteral("https://wireless2.fcc.gov/UlsApp/UlsSearch/searchLicense.jsp?callSign=IU3VGK")},
+            {QStringLiteral("eqsl"),
+             QStringLiteral("https://www.eqsl.cc/Member.cfm?IU3VGK")},
+            {QStringLiteral("clublog"),
+             QStringLiteral("https://clublog.org/logsearch/IU3VGK")}
+        };
+
+        for (const auto& testCase : cases) {
+            QVERIFY(service.openProviderLookup(testCase.first,
+                                               QStringLiteral("iu3vgk")));
+            QCOMPARE(lookupSpy.count(), 1);
+            QCOMPARE(lookupSpy.takeFirst().at(0).toString(), testCase.second);
+        }
+
+        QVERIFY(!service.openProviderLookup(QStringLiteral("qrz"),
+                                            QStringLiteral("invalid!")));
+        QCOMPARE(lookupSpy.count(), 0);
+    }
+
+    void importsClubLogOqrsAndEmitsEnrichment()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString oqrsPath = directory.filePath(QStringLiteral("oqrs.json"));
+        QFile oqrs(oqrsPath);
+        QVERIFY(oqrs.open(QIODevice::WriteOnly | QIODevice::Text));
+        oqrs.write("[[\"Z9TEST\",\"2026-08-01\",\"20m\",\"FT8\"]]");
+        oqrs.close();
+
+        CallsignIntelligenceService service;
+        service.clearCache(QStringLiteral("Z9TEST"));
+        QVERIFY(service.importDatabase(QStringLiteral("clublog_oqrs"), oqrsPath));
+        service.lookup(QStringLiteral("Z9TEST"));
+        QVERIFY(service.result().value(QStringLiteral("oqrs")).toBool());
+        QVERIFY(service.result().value(QStringLiteral("confirmed")).toBool());
+
+        const QString profilePath = directory.filePath(QStringLiteral("profile.csv"));
+        QFile profile(profilePath);
+        QVERIFY(profile.open(QIODevice::WriteOnly | QIODevice::Text));
+        QStringList fccFields(12);
+        fccFields[0] = QStringLiteral("EN");
+        fccFields[1] = QStringLiteral("Z9TEST");
+        fccFields[7] = QStringLiteral("Test Operator");
+        fccFields[10] = QStringLiteral("Malta");
+        fccFields[11] = QStringLiteral("MT");
+        profile.write((fccFields.join(QLatin1Char('|')) + QLatin1Char('\n')).toUtf8());
+        profile.close();
+        QVERIFY(service.importDatabase(QStringLiteral("fcc_uls"), profilePath));
+
+        const QString enrichmentPath = directory.filePath(QStringLiteral("enrichment.csv"));
+        QFile enrichment(enrichmentPath);
+        QVERIFY(enrichment.open(QIODevice::WriteOnly | QIODevice::Text));
+        enrichment.write("CALL,GRID\nZ9TEST,JN70ES\n");
+        enrichment.close();
+        QVERIFY(service.importDatabase(QStringLiteral("eqsl"), enrichmentPath));
+
+        QSignalSpy enrichmentSpy(&service, &CallsignIntelligenceService::enrichmentReady);
+        const bool originalEnrichment = service.enrichMissingFields();
+        service.setEnrichMissingFields(true);
+        service.lookup(QStringLiteral("Z9TEST"), true);
+        QCOMPARE(enrichmentSpy.count(), 1);
+        const QList<QVariant> arguments = enrichmentSpy.at(0);
+        QCOMPARE(arguments.at(0).toString(), QStringLiteral("Z9TEST"));
+        QCOMPARE(arguments.at(1).toMap().value(QStringLiteral("grid")).toString(), QStringLiteral("JN70ES"));
+        QCOMPARE(service.result().value(QStringLiteral("provider")).toString(), QStringLiteral("fcc_uls, eqsl, clublog_oqrs"));
+        service.setEnrichMissingFields(originalEnrichment);
+    }
+};
+
+QTEST_MAIN(CallsignIntelligenceTest)
+#include "test_callsign_intelligence.moc"

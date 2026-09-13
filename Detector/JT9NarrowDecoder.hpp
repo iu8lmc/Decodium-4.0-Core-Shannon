@@ -29,6 +29,12 @@ struct Downsam9State
   std::vector<std::complex<float>>  c1;            // kNc1 complex (FFT output, persisted)
   std::vector<float>                s;             // 5000 power-spectrum bins
 
+  // Persistent 16,384-point FFT used to build the 184 x NSMAX JT9 sync
+  // spectrum from a raw 60-second audio window.
+  void* spectrumPlan {nullptr};                    // fftwf_plan
+  std::vector<float>                spectrumInput;
+  std::vector<std::complex<float>>  spectrumOutput;
+
   ~Downsam9State () noexcept;
 };
 

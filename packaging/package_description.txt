@@ -1,0 +1,17 @@
+Decodium is a cross-platform weak-signal amateur-radio application
+maintained by 9H1SR and IU8LMC. It is based on the Decodium and WSJT-X
+lineage and is packaged for Windows x64, Apple Silicon and Intel macOS,
+Linux x86_64 AppImage, and Linux aarch64 AppImage users.
+.
+The project provides FT8, FT4, FT2, WSPR, Q65, MSK144, JT and FST
+operating modes, together with an experimental FT2-Link data mode.
+Decoder and modulator paths are progressively migrated to native C++
+while retaining compatible legacy DSP where required.
+.
+Decodium provides wideband spectral displays, CAT control for modern
+radios, audio routing, logging, Live Map, PSK Reporter and DX services.
+Release packaging is generated from one validated version source with
+Qt 6.11 workflows for Windows, macOS and Linux.
+.
+Be sure to read the release notes and documentation shipped with the
+application before deploying it in station use.

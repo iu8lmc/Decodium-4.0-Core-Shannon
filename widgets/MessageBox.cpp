@@ -3,7 +3,9 @@
 #include <QDialogButtonBox>
 #include <QCoreApplication>
 #include <QLabel>
+#include <QLayout>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QTextEdit>
 
 #include "revision_utils.hpp"
@@ -29,13 +31,15 @@ QLabel#qt_msgbox_label {
   color: #F4FAFF;
   font-size: 18px;
   font-weight: 700;
-  min-width: 360px;
+  min-width: 420px;
+  max-width: 820px;
 }
 
 QLabel#qt_msgbox_informativelabel {
   color: #A9C7DB;
   font-size: 14px;
-  min-width: 360px;
+  min-width: 420px;
+  max-width: 820px;
 }
 
 QTextEdit {
@@ -73,21 +77,41 @@ QPushButton:default {
 )");
 }
 
+void prepareMessageLabel(QLabel * label)
+{
+  if (!label)
+    return;
+
+  label->setWordWrap(true);
+  label->setTextFormat(Qt::PlainText);
+  label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+  label->setMinimumWidth(420);
+  label->setMaximumWidth(820);
+
+  auto policy = label->sizePolicy();
+  policy.setHorizontalPolicy(QSizePolicy::Expanding);
+  policy.setVerticalPolicy(QSizePolicy::MinimumExpanding);
+  policy.setHeightForWidth(true);
+  label->setSizePolicy(policy);
+
+  int const wrappedHeight = label->heightForWidth(820);
+  if (wrappedHeight > 0)
+    label->setMinimumHeight(wrappedHeight);
+}
+
 void polishMessageBox(MessageBox& box)
 {
   box.setWindowTitle(program_title());
   box.setStyleSheet(decodiumMessageBoxStyleSheet());
-  box.setMinimumWidth(520);
+  box.setMinimumWidth(560);
 
-  if (auto * label = box.findChild<QLabel *> (QStringLiteral("qt_msgbox_label")); label) {
-    label->setWordWrap(true);
-    label->setTextFormat(Qt::PlainText);
+  if (auto * layout = box.layout()) {
+    layout->setContentsMargins(28, 24, 28, 28);
+    layout->setSpacing(14);
   }
 
-  if (auto * label = box.findChild<QLabel *> (QStringLiteral("qt_msgbox_informativelabel")); label) {
-    label->setWordWrap(true);
-    label->setTextFormat(Qt::PlainText);
-  }
+  prepareMessageLabel(box.findChild<QLabel *> (QStringLiteral("qt_msgbox_label")));
+  prepareMessageLabel(box.findChild<QLabel *> (QStringLiteral("qt_msgbox_informativelabel")));
 
   if (auto * detail = box.findChild<QTextEdit *> (); detail) {
     detail->setMinimumWidth(460);
@@ -95,7 +119,17 @@ void polishMessageBox(MessageBox& box)
 
   if (auto * buttonBox = box.findChild<QDialogButtonBox *> (); buttonBox) {
     buttonBox->setCenterButtons(false);
+    buttonBox->setMinimumHeight(buttonBox->sizeHint().height() + 8);
+    buttonBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   }
+
+  box.ensurePolished();
+  if (auto * layout = box.layout())
+    layout->activate();
+  box.adjustSize();
+
+  QSize const hint = box.sizeHint();
+  box.setMinimumSize(qMax(560, hint.width()), qMax(260, hint.height() + 28));
 }
 }
 

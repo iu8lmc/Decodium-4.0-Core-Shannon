@@ -1,4 +1,12 @@
-Joe Taylor, K1JT <k1jt@arrl.net>
+Decodium maintainers
+====================
 
-See  also about.cpp  or "Help->About  WSJT-X" in  the application  for
-details of other contributions.
+- Salvatore Raccampo, 9H1SR
+- Martino, IU8LMC
+
+Decodium is derived from the WSJT-X family of weak-signal applications
+originally led by Joe Taylor, K1JT, with contributions from the WSJT-X,
+Decodium, Qt, Hamlib and amateur-radio communities.
+
+See the in-application Help > About and copyright information for the
+complete component and contributor notices.
