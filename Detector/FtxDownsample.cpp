@@ -267,28 +267,40 @@ struct Ft8VarDownsampleWorkspace
   }
 };
 
+// Gli spazi di lavoro per thread NON vengono distrutti alla morte del thread,
+// e la perdita e' voluta. Il distruttore chiamerebbe fftwf_destroy_plan e
+// fftwf_free da dentro LdrShutdownThread, quando le strutture per-thread di
+// Qt sono gia' smontate: con PageHeap attivo si vede il segfault dentro
+// Qt6Core su un contatore di riferimenti gia' liberato, e senza PageHeap la
+// stessa scrittura corrompe lo heap in silenzio, facendolo esplodere piu'
+// tardi nella prima free che capita (di solito quella di long_time, che era
+// la vittima e non la causa). E' lo stesso motivo per cui planner_mutex in
+// FftCompat.hpp e' dichiarato come perdita voluta.
+//
+// I thread di decodifica vengono dal pool e sono riciclati, quindi la perdita
+// e' limitata al numero di thread che il pool arriva a creare.
 Ft8DownsampleWorkspace& downsample_workspace ()
 {
-  thread_local Ft8DownsampleWorkspace workspace;
-  return workspace;
+  thread_local Ft8DownsampleWorkspace* workspace = new Ft8DownsampleWorkspace;
+  return *workspace;
 }
 
 Ft2DownsampleWorkspace& ft2_downsample_workspace ()
 {
-  thread_local Ft2DownsampleWorkspace workspace;
-  return workspace;
+  thread_local Ft2DownsampleWorkspace* workspace = new Ft2DownsampleWorkspace;
+  return *workspace;
 }
 
 Ft4DownsampleWorkspace& ft4_downsample_workspace ()
 {
-  thread_local Ft4DownsampleWorkspace workspace;
-  return workspace;
+  thread_local Ft4DownsampleWorkspace* workspace = new Ft4DownsampleWorkspace;
+  return *workspace;
 }
 
 Ft8VarDownsampleWorkspace& ft8var_downsample_workspace ()
 {
-  thread_local Ft8VarDownsampleWorkspace workspace;
-  return workspace;
+  thread_local Ft8VarDownsampleWorkspace* workspace = new Ft8VarDownsampleWorkspace;
+  return *workspace;
 }
 
 inline Complex load_complex (fftwf_complex const& value)
@@ -899,8 +911,13 @@ void ft8var_downsample_impl (float const* dd, bool* newdat, float f0, int nqso,
 
 void ft8_filter_impl (float f0, int nslots, float width, float* wave)
 {
-  thread_local std::vector<float> x (static_cast<size_t> (kFiltNfft), 0.0f);
-  thread_local std::vector<Complex> cx (static_cast<size_t> (kFiltNh + 1));
+  // Perdita voluta: il piano FFTW qui sotto punta dentro questi due vettori,
+  // e distruggerli alla morte del thread libera memoria da dentro
+  // LdrShutdownThread, con lo heap che si corrompe in silenzio.
+  thread_local std::vector<float>& x =
+      *new std::vector<float> (static_cast<size_t> (kFiltNfft), 0.0f);
+  thread_local std::vector<Complex>& cx =
+      *new std::vector<Complex> (static_cast<size_t> (kFiltNh + 1));
   thread_local fftwf_plan forward = decodium::fft_compat::plan_dft_r2c_1d (kFiltNfft,
                                                            x.data (),
                                                            reinterpret_cast<fftwf_complex*> (cx.data ()),

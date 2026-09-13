@@ -1,0 +1,1057 @@
+openapi: 3.1.0
+info:
+  title: Decodium SSTV Share REST profile
+  version: 1.0.0
+  summary: Provider-neutral HTTPS contract for Decodium SSTV image sharing
+  description: |
+    This file is the version 1 interoperability contract for a configurable
+    Decodium SSTV sharing service. It is not the address or description of a
+    deployed Decodium service: this repository contains no production server
+    URL and no production provider has been audited.
+
+    The native generic REST client implements capability discovery, recipient
+    lookup, inbox listing, range download, acknowledgement and rejection as
+    well as capability-gated incoming deletion/sender blocking and create,
+    sequential chunk upload, status/resume, completion and cancellation. The
+    persistent queue validates and normalizes remote image bytes before
+    explicit acceptance. This is a client interoperability profile, not
+    evidence that a production provider is deployed or audited.
+
+    Deterministic tests may inject a bounded process-local provider through the
+    same client interface. That adapter opens no socket and is deliberately not
+    represented by an endpoint in this OpenAPI document or the production UI.
+
+    All production transport is HTTPS with normal certificate and hostname
+    validation. Redirects are bounded and same-origin. The only plaintext
+    exception is a compile-time-gated loopback test build; it is not a runtime
+    production option. The exact canonical UTF-8 manifest is immutable and is
+    limited to 65,536 bytes, depth 8 and 4,096 JSON nodes.
+  license:
+    name: GPL-3.0-or-later
+x-decodium-protocol: decodium-sstv-share
+x-decodium-production-endpoints: []
+x-decodium-security-notes:
+  - Signed URLs and authorization values are bearer credentials and must not be logged or persisted in the sharing SQLite database.
+  - Authenticated providers use a fail-closed Decodium SecureSettings credential source; the native configured client currently supports Bearer and Basic authentication.
+  - A provider may explicitly require no HTTP authentication, but transport remains HTTPS and anonymous access is never inferred from a failed credential lookup.
+  - Accepting an inbox item is a local storage action and can never request CAT, PTT or TX audio.
+  - The compiled pre-signed PUT adapter is outside this REST profile and remains unavailable in the native UI without a trusted target broker; manually entered or persisted signed URLs are forbidden.
+  - Peer/relay is also unavailable without a separately authenticated backend; this profile does not define peer discovery, a relay service or an inbound listener.
+  - Native REST/WebDAV/pre-signed clients bound active session state and minimal terminal idempotency records; terminal and expired sessions reclaim state, and pre-signed target leases are released rather than persisted.
+x-decodium-local-integration-provider:
+  status: developer-test-only
+  network: none
+  productionSelectable: false
+  purpose: deterministic queue and controller contract exercise without a relay backend
+tags:
+  - name: Discovery
+    description: Optional provider discovery and stable recipient lookup.
+  - name: Outgoing
+    description: Resumable, idempotent outgoing transfer operations.
+  - name: Inbox
+    description: Metadata-only listing, bounded content retrieval and explicit decisions.
+paths:
+  /api/v1/capabilities:
+    get:
+      tags: [Discovery]
+      operationId: getCapabilities
+      summary: Return explicit provider capabilities and limits
+      description: |
+        The generic REST provider calls this endpoint before enabling any
+        inbound capability and fails closed on missing, unknown or unsafe
+        values. It uses the configured authentication policy; anonymous access
+        is allowed only when that provider was explicitly configured without
+        credentials. Client byte limits clamp advertised provider limits.
+      x-decodium-client-status: generic-rest-implemented
+      responses:
+        '200':
+          description: Bounded capability document.
+          headers:
+            Cache-Control:
+              description: A bounded cache lifetime; clients may clamp it further.
+              schema:
+                type: string
+                maxLength: 256
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capabilities'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/recipients/{recipientId}:
+    get:
+      tags: [Discovery]
+      operationId: lookupRecipient
+      summary: Resolve a stable provider recipient identifier
+      description: |
+        Callsigns and display names are metadata, not authentication. The
+        generic REST provider validates the stable identity and bounded
+        display, trust and optional key fields before returning the record.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/RecipientId'
+      responses:
+        '200':
+          description: Recipient identity and optional verified key metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipient'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/transfers:
+    post:
+      tags: [Outgoing]
+      operationId: createTransfer
+      summary: Create or recover an immutable outgoing upload
+      description: |
+        The body must be the exact canonical manifest bytes. Repeating the
+        request with the same idempotency key and same manifest returns the
+        same upload identity and committed offset. Reusing the key with changed
+        identity, recipient, payload or manifest returns 409.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/vnd.decodium.sstv-share+json:
+            schema:
+              $ref: '#/components/schemas/ManifestV1'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManifestV1'
+      responses:
+        '200':
+          description: Existing idempotent upload recovered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUploadResponse'
+        '201':
+          description: New upload created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUploadResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/transfers/{uploadId}:
+    parameters:
+      - $ref: '#/components/parameters/UploadId'
+    get:
+      tags: [Outgoing]
+      operationId: getTransferStatus
+      summary: Query the durable committed upload offset
+      description: |
+        The current generic REST provider accepts only a bounded JSON object
+        containing `committedBytes`, rejects offsets beyond the manifest byte
+        size and uses this operation for restart/resume reconciliation.
+      x-decodium-client-status: generic-rest-implemented
+      responses:
+        '200':
+          description: Current verified sequential offset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadOffsetResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Outgoing]
+      operationId: cancelTransfer
+      summary: Cancel or revoke the caller-owned remote upload
+      description: |
+        Cancellation is idempotent. The native client treats 404 as an
+        idempotent terminal result only for an already authenticated,
+        caller-owned upload handle; this does not prove deletion of copies
+        already downloaded elsewhere.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Cancellation confirmed; response body is ignored.
+        '202':
+          description: Cancellation accepted for asynchronous processing.
+        '204':
+          description: Cancellation confirmed with no body.
+        '404':
+          description: Upload no longer exists; treated idempotently by the configured client.
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/transfers/{uploadId}/chunks:
+    put:
+      tags: [Outgoing]
+      operationId: uploadTransferChunk
+      summary: Write the next verified sequential content chunk
+      description: |
+        The current client uploads sequentially. `Upload-Offset` must equal the
+        provider's committed offset. A repeated request with the same offset,
+        bytes and derived idempotency key is safe; changed bytes or hashes
+        conflict. The configured provider chunk bound is also clamped to the
+        client-wide 67,108,864-byte payload maximum.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+        - $ref: '#/components/parameters/UploadOffset'
+        - $ref: '#/components/parameters/ContentSha256'
+        - $ref: '#/components/parameters/Digest'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              minLength: 1
+              maxLength: 67108864
+      responses:
+        '200':
+          description: Chunk committed and verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadOffsetResponse'
+        '201':
+          description: Chunk committed and verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadOffsetResponse'
+        '204':
+          description: Chunk committed at exactly request offset plus body length.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/transfers/{uploadId}/complete:
+    post:
+      tags: [Outgoing]
+      operationId: completeTransfer
+      summary: Verify all bytes and publish the remote object
+      description: |
+        Completion is allowed only after the full declared byte count is
+        committed. With the native default `requireServerSha256=true`, a JSON
+        response containing the same byte size and SHA-256 is mandatory. A 204
+        response is usable only by an explicitly configured provider that
+        disables that integrity echo; it is not the secure default.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadRequest'
+      responses:
+        '200':
+          description: Existing idempotent completion or newly published object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteUploadResponse'
+        '201':
+          description: Newly published object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteUploadResponse'
+        '204':
+          description: Transport-level completion without a body; the durable native queue cannot project Completed or offer history removal because no remoteObjectId is supplied.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/inbox:
+    get:
+      tags: [Inbox]
+      operationId: listInbox
+      summary: List bounded incoming metadata without downloading content
+      description: |
+        Each item carries the exact canonical manifest text and its digest. The
+        native queue verifies the binding of provider, sender, byte size and
+        expiry before persistence. The provider interface currently accepts a
+        maximum item count but exposes no continuation cursor; implementations
+        must therefore return at most `limit` items deterministically.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Requested metadata item bound; the native queue clamps queries to 1,000 or less.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+      responses:
+        '200':
+          description: Metadata-only inbox page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/inbox/{incomingId}/content:
+    get:
+      tags: [Inbox]
+      operationId: downloadInboxContent
+      summary: Download a bounded range of one incoming object
+      description: |
+        The queue requests sequential ranges, writes to a private staging file,
+        checkpoints durable byte offsets, verifies the final byte count and
+        SHA-256, and waits for a separate local accept action before atomic
+        promotion. This endpoint cannot cause acceptance or RF transmission.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/IncomingId'
+        - name: Range
+          in: header
+          required: true
+          description: A single bounded byte range, for example `bytes=0-1048575`.
+          schema:
+            type: string
+            pattern: '^bytes=[0-9]+-[0-9]+$'
+            maxLength: 64
+      responses:
+        '200':
+          description: Entire object, only when it fits the requested/client bound.
+          headers:
+            Digest:
+              $ref: '#/components/headers/DigestHeader'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                minLength: 1
+                maxLength: 67108864
+        '206':
+          description: Requested bounded range.
+          headers:
+            Content-Range:
+              description: Exact returned range and total object length.
+              schema:
+                type: string
+                pattern: '^bytes [0-9]+-[0-9]+/[0-9]+$'
+                maxLength: 96
+            Digest:
+              $ref: '#/components/headers/DigestHeader'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                minLength: 1
+                maxLength: 67108864
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Incoming object expired or was revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/inbox/{incomingId}/acknowledge:
+    post:
+      tags: [Inbox]
+      operationId: acknowledgeInboxItem
+      summary: Acknowledge a locally accepted incoming item
+      description: |
+        The native queue permits this only after checksum-verified atomic local
+        acceptance. Repeating the same acknowledgement is idempotent. An HTTP
+        adapter derives the stable action key from provider ID, incoming ID and
+        `acknowledge`, because the provider-neutral method exposes only the
+        incoming ID.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/IncomingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Acknowledgement recorded.
+        '204':
+          description: Acknowledgement recorded with no body.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/inbox/{incomingId}/reject:
+    post:
+      tags: [Inbox]
+      operationId: rejectInboxItem
+      summary: Reject an incoming item without importing it
+      description: |
+        Rejection and remote deletion are distinct. Repeating the same
+        rejection is idempotent; attempting to reject a previously accepted
+        item returns conflict. An HTTP adapter derives the stable action key
+        from provider ID, incoming ID and `reject`.
+      x-decodium-client-status: generic-rest-implemented
+      parameters:
+        - $ref: '#/components/parameters/IncomingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rejection recorded.
+        '204':
+          description: Rejection recorded with no body.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/inbox/{incomingId}:
+    delete:
+      tags: [Inbox]
+      operationId: deleteInboxItem
+      summary: Request deletion of the provider's incoming copy
+      description: |
+        This endpoint is callable only after authenticated capability discovery
+        returns `incomingDelete: true` and the item was obtained from the
+        bounded inbox. It does not delete Decodium's validated private copy,
+        an independent Save As file or an imported Gallery record. The action
+        key is stable across retries. The native client accepts 404 as
+        idempotent only for an authenticated configured provider.
+      x-decodium-client-status: generic-rest-implemented-capability-gated
+      parameters:
+        - $ref: '#/components/parameters/IncomingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Provider copy deleted.
+        '202':
+          description: Deletion accepted for asynchronous processing.
+        '204':
+          description: Provider copy deleted with no response body.
+        '404':
+          description: Authenticated caller-owned incoming object already absent.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/senders/{senderId}/block:
+    post:
+      tags: [Inbox]
+      operationId: blockInboxSender
+      summary: Block one authenticated provider sender identity
+      description: |
+        This endpoint is callable only after authenticated capability discovery
+        returns `senderBlocking: true`, and only for an opaque sender ID from a
+        validated bounded inbox item. Callsigns are not substituted for sender
+        identity. A provider failure never silently becomes a local-only block;
+        local blocking is a separate Decodium action.
+      x-decodium-client-status: generic-rest-implemented-capability-gated
+      parameters:
+        - $ref: '#/components/parameters/SenderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sender block recorded.
+        '204':
+          description: Sender block recorded with no response body.
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: provider-defined opaque token
+      description: |
+        Tokens are obtained and refreshed outside this API profile. Decodium
+        supplies them through a short-lived credential lease backed by a
+        fail-closed platform SecureSettings integration. OAuth endpoints are
+        provider-specific and intentionally not invented here.
+    basicAuth:
+      type: http
+      scheme: basic
+      description: |
+        The configured username is non-secret policy; the password is supplied
+        through the same short-lived, fail-closed SecureSettings credential
+        lease. Basic authentication is permitted only over validated HTTPS.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Lower-case SHA-256 derived from the immutable transfer identity and operation binding.
+      schema:
+        $ref: '#/components/schemas/Sha256'
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      description: Provider identifier returned by create; never a URL or credential.
+      schema:
+        $ref: '#/components/schemas/SafeIdentifier'
+    IncomingId:
+      name: incomingId
+      in: path
+      required: true
+      description: Provider-opaque inbox identifier; never a URL or credential.
+      schema:
+        $ref: '#/components/schemas/SafeIdentifier'
+    RecipientId:
+      name: recipientId
+      in: path
+      required: true
+      description: Stable provider recipient identifier, not a display callsign.
+      schema:
+        $ref: '#/components/schemas/SafeIdentifier'
+    SenderId:
+      name: senderId
+      in: path
+      required: true
+      description: Opaque authenticated provider sender identity obtained from a validated inbox item; never inferred from callsign display metadata.
+      schema:
+        $ref: '#/components/schemas/SafeIdentifier'
+    UploadOffset:
+      name: Upload-Offset
+      in: header
+      required: true
+      description: Zero-based sequential byte offset expected by the provider.
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 67108864
+    ContentSha256:
+      name: X-Content-SHA256
+      in: header
+      required: true
+      description: Lower-case SHA-256 of this request body.
+      schema:
+        $ref: '#/components/schemas/Sha256'
+    Digest:
+      name: Digest
+      in: header
+      required: true
+      description: RFC-style `sha-256=<base64 digest>` of this request body.
+      schema:
+        type: string
+        pattern: '^sha-256=[A-Za-z0-9+/]{43}=$'
+        maxLength: 52
+  headers:
+    RetryAfter:
+      description: Provider retry delay. The client clamps the value to local policy before applying jitter.
+      schema:
+        oneOf:
+          - type: integer
+            minimum: 0
+            maximum: 86400
+          - type: string
+            maxLength: 64
+    DigestHeader:
+      description: SHA-256 digest of the response body or full object, as documented by the provider.
+      schema:
+        type: string
+        maxLength: 128
+  responses:
+    Error:
+      description: Bounded, structured failure with no credential or signed URL.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Idempotency, offset, integrity or decision conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The caller-visible object does not exist or is no longer available.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    SafeIdentifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9._:@+\-]+$'
+      not:
+        pattern: '\.\.'
+      description: Must also reject URL-like text.
+    Sha256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    CanonicalUuid:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      not:
+        const: 00000000-0000-0000-0000-000000000000
+    UtcTimestamp:
+      type: string
+      format: date-time
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$'
+    Capabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - protocolVersion
+        - recipientLookup
+        - chunkedUpload
+        - resumableUpload
+        - download
+        - acknowledgement
+        - rejection
+        - revocation
+        - remoteDelete
+        - incomingList
+        - endToEndEncryptionEnvelope
+        - strictTlsRequired
+        - maximumChunkBytes
+        - maximumResponseBytes
+      properties:
+        protocolVersion:
+          const: 1
+        recipientLookup:
+          type: boolean
+        chunkedUpload:
+          type: boolean
+        resumableUpload:
+          type: boolean
+        download:
+          type: boolean
+        acknowledgement:
+          type: boolean
+        rejection:
+          type: boolean
+        incomingDelete:
+          type: boolean
+          default: false
+          description: Optional additive v1 flag. Omission means false; a wrong type invalidates the document. Enables only DELETE of a previously listed incoming ID.
+        senderBlocking:
+          type: boolean
+          default: false
+          description: Optional additive v1 flag. Omission means false; a wrong type invalidates the document. Enables only blocking a sender ID obtained from the validated inbox.
+        revocation:
+          type: boolean
+        remoteDelete:
+          type: boolean
+          description: Provider-wide capability flag. The v1 generic REST profile defines no remote-object DELETE path, so the native generic client clamps this false; WebDAV advertises its separately defined object DELETE capability.
+        incomingList:
+          type: boolean
+        endToEndEncryptionEnvelope:
+          type: boolean
+        strictTlsRequired:
+          const: true
+        maximumChunkBytes:
+          type: integer
+          minimum: 0
+          maximum: 67108864
+        maximumResponseBytes:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+    Recipient:
+      type: object
+      additionalProperties: false
+      required:
+        - providerId
+        - stableRecipientId
+        - displayCallsign
+        - displayName
+        - publicEncryptionKey
+        - publicKeyFingerprint
+        - verification
+        - trust
+      properties:
+        providerId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        stableRecipientId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        displayCallsign:
+          type: string
+          maxLength: 32
+        displayName:
+          type: string
+          maxLength: 128
+        publicEncryptionKey:
+          type: string
+          maxLength: 8192
+        publicKeyFingerprint:
+          oneOf:
+            - $ref: '#/components/schemas/Sha256'
+            - type: string
+              const: ''
+        verification:
+          type: string
+          enum: [unknown, provider-verified, user-verified]
+        trust:
+          type: string
+          enum: [unknown, trusted, blocked]
+        lastUsedUtc:
+          $ref: '#/components/schemas/UtcTimestamp'
+    CreateUploadResponse:
+      type: object
+      additionalProperties: false
+      required: [uploadId]
+      properties:
+        uploadId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        committedBytes:
+          type: integer
+          minimum: 0
+          maximum: 67108864
+          default: 0
+    UploadOffsetResponse:
+      type: object
+      additionalProperties: false
+      required: [committedBytes]
+      properties:
+        committedBytes:
+          type: integer
+          minimum: 0
+          maximum: 67108864
+    CompleteUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [byteSize, sha256]
+      properties:
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+    CompleteUploadResponse:
+      type: object
+      additionalProperties: false
+      required: [remoteObjectId]
+      dependentRequired:
+        byteSize: [sha256]
+        sha256: [byteSize]
+      properties:
+        remoteObjectId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+      description: The native secure default requires both byteSize and sha256; an explicitly configured non-default provider may omit both.
+    InboxPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/IncomingItem'
+    IncomingItem:
+      type: object
+      additionalProperties: false
+      required:
+        - incomingId
+        - providerId
+        - senderId
+        - manifestSha256
+        - canonicalManifestJson
+        - byteSize
+        - receivedUtc
+        - expiresUtc
+      properties:
+        incomingId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        providerId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        senderId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        manifestSha256:
+          $ref: '#/components/schemas/Sha256'
+        canonicalManifestJson:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          description: Exact canonical UTF-8 manifest bytes represented as JSON text; re-encoding must be byte-identical before use.
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+        receivedUtc:
+          $ref: '#/components/schemas/UtcTimestamp'
+        expiresUtc:
+          $ref: '#/components/schemas/UtcTimestamp'
+    CallsignMetadata:
+      type: object
+      additionalProperties: false
+      required: [grid, remoteCallsign, senderCallsign]
+      properties:
+        grid:
+          type: string
+          maxLength: 8
+          pattern: '^(?:[A-R]{2}[0-9]{2}(?:[A-X]{2}(?:[0-9]{2})?)?)?$'
+        remoteCallsign:
+          type: string
+          maxLength: 24
+          pattern: '^(?:[A-Z0-9][A-Z0-9/\-]{1,22}[A-Z0-9])?$'
+        senderCallsign:
+          type: string
+          maxLength: 24
+          pattern: '^(?:[A-Z0-9][A-Z0-9/\-]{1,22}[A-Z0-9])?$'
+    Encryption:
+      type: object
+      additionalProperties: false
+      required:
+        - algorithm
+        - downgradeProtected
+        - keyId
+        - manifestBoundAsAuthenticatedData
+        - mode
+        - nonceBase64
+        - recipientKeyFingerprint
+      properties:
+        algorithm:
+          type: string
+          enum: [none, xchacha20-poly1305, aes-256-gcm]
+        downgradeProtected:
+          const: true
+        keyId:
+          oneOf:
+            - $ref: '#/components/schemas/SafeIdentifier'
+            - type: string
+              const: ''
+        manifestBoundAsAuthenticatedData:
+          type: boolean
+        mode:
+          type: string
+          enum: [transport-tls, end-to-end]
+        nonceBase64:
+          type: string
+          maxLength: 32
+        recipientKeyFingerprint:
+          oneOf:
+            - $ref: '#/components/schemas/Sha256'
+            - type: string
+              const: ''
+      description: End-to-end envelope fields are schema-defined but no audited E2EE implementation is shipped.
+    Privacy:
+      type: object
+      additionalProperties: false
+      required:
+        - automaticIncomingDownloadAllowed
+        - automaticUploadAllowed
+        - callsignIncluded
+        - exifRetained
+        - explicitExpiry
+        - gridIncluded
+        - locationIncluded
+        - meteredNetworkAllowed
+        - publicShare
+        - recipientConfirmed
+      properties:
+        automaticIncomingDownloadAllowed:
+          type: boolean
+          default: false
+        automaticUploadAllowed:
+          type: boolean
+          default: false
+        callsignIncluded:
+          type: boolean
+          default: false
+        exifRetained:
+          type: boolean
+          default: false
+        explicitExpiry:
+          const: true
+        gridIncluded:
+          type: boolean
+          default: false
+        locationIncluded:
+          type: boolean
+          default: false
+        meteredNetworkAllowed:
+          type: boolean
+          default: false
+        publicShare:
+          type: boolean
+          default: false
+        recipientConfirmed:
+          type: boolean
+    TransportSecurity:
+      type: object
+      additionalProperties: false
+      required:
+        - certificateValidationRequired
+        - providerCanReadContent
+        - sameOriginRedirectsOnly
+        - tlsRequired
+      properties:
+        certificateValidationRequired:
+          const: true
+        providerCanReadContent:
+          type: boolean
+        sameOriginRedirectsOnly:
+          const: true
+        tlsRequired:
+          const: true
+    ManifestV1:
+      type: object
+      additionalProperties: false
+      required:
+        - byteSize
+        - callsign
+        - chunkCount
+        - completion
+        - contentDisposition
+        - createdUtc
+        - encryption
+        - expiresUtc
+        - height
+        - mediaSource
+        - mediaUtc
+        - message
+        - mimeType
+        - originalFilename
+        - privacy
+        - protocolVersion
+        - providerId
+        - recipientId
+        - safeDisplayFilename
+        - senderId
+        - sha256
+        - sstvMode
+        - transferId
+        - transport
+        - width
+      properties:
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+        callsign:
+          $ref: '#/components/schemas/CallsignMetadata'
+        chunkCount:
+          type: integer
+          minimum: 1
+          maximum: 4096
+          description: Must not exceed byteSize.
+        completion:
+          type: string
+          enum: [complete, partial]
+        contentDisposition:
+          type: string
+          enum: [attachment, inline-preview]
+        createdUtc:
+          $ref: '#/components/schemas/UtcTimestamp'
+        encryption:
+          $ref: '#/components/schemas/Encryption'
+        expiresUtc:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Must be after createdUtc and no more than 30 days later.
+        height:
+          type: integer
+          minimum: 1
+          maximum: 8192
+        mediaSource:
+          type: string
+          enum:
+            - analog-reception
+            - analog-transmission
+            - digital-reception
+            - digital-transmission
+        mediaUtc:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Must not be more than five minutes after createdUtc.
+        message:
+          type: string
+          maxLength: 1000
+        mimeType:
+          type: string
+          enum: [image/png, image/jpeg]
+        originalFilename:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Sanitized display metadata only; never a filesystem path.
+        privacy:
+          $ref: '#/components/schemas/Privacy'
+        protocolVersion:
+          const: 1
+        providerId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        recipientId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        safeDisplayFilename:
+          type: string
+          minLength: 1
+          maxLength: 128
+        senderId:
+          $ref: '#/components/schemas/SafeIdentifier'
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        sstvMode:
+          type: string
+          minLength: 1
+          maxLength: 64
+        transferId:
+          $ref: '#/components/schemas/CanonicalUuid'
+        transport:
+          $ref: '#/components/schemas/TransportSecurity'
+        width:
+          type: integer
+          minimum: 1
+          maximum: 8192
+      description: |
+        Width times height must not exceed 16,777,216 pixels. For transmission,
+        expiry must still be in the future and privacy.recipientConfirmed must
+        be true. Transport-TLS requires algorithm `none`, empty key fields,
+        no authenticated-data binding and providerCanReadContent true.
+        End-to-end mode requires an allowed algorithm, verified key metadata,
+        exact nonce length, authenticated-data binding and providerCanReadContent
+        false; the shipped client does not yet implement that envelope.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [category, message]
+      properties:
+        category:
+          type: string
+          enum:
+            - transient-network
+            - provider-unavailable
+            - offline
+            - rate-limited
+            - authentication
+            - authorization
+            - validation
+            - rejected-recipient
+            - conflict
+            - not-found
+            - integrity
+            - tls-validation
+            - cancelled
+            - permanent-provider-failure
+        message:
+          type: string
+          maxLength: 512
+          description: Redacted diagnostic; never contains credentials, signed URLs or local paths.
+security:
+  - bearerAuth: []
+  - basicAuth: []
+  - {}

@@ -6,6 +6,7 @@
 
 #include <qendian.h>
 #include <QAudioFormat>
+#include <QByteArray>
 #include <QDateTime>
 #include <QDate>
 #include <QTime>
@@ -19,6 +20,11 @@
 
 namespace
 {
+  QTimeZone utcTimeZone ()
+  {
+    return QTimeZone (QByteArrayLiteral ("UTC"));
+  }
+
   // chunk descriptor
   struct Desc
   {
@@ -726,7 +732,7 @@ QDateTime BWFFile::bext_origination_date_time () const
 {
   if (!m_->bext ()) return {};
   return {QDate::fromString (m_->bext ()->origination_date_, "yyyy-MM-dd"),
-      QTime::fromString (m_->bext ()->origination_time_, "hh-mm-ss"), QTimeZone::utc ()};
+      QTime::fromString (m_->bext ()->origination_time_, "hh-mm-ss"), utcTimeZone ()};
 }
 
 void BWFFile::bext_origination_date_time (QDateTime const& dt)

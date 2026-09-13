@@ -1,4 +1,4 @@
-build/
+/build/
 build-local-macos/
 build-mac/
 build-codex-check/
@@ -20,7 +20,7 @@ jnq*
 __pycache__
 
 # Build directories
-build/
+/build/
 build32/
 cmake-build-debug/
 cmake-build-release/
@@ -29,6 +29,9 @@ CMakeFiles/
 # Distribution directories
 dist_32bit/
 dist_64bit/
+/dist-windows-x64/
+/installer-output/
+/packaging/windows/output/
 release-*/
 Decodium3_FT2_x64/
 Decodium_3.0_*/
@@ -72,7 +75,7 @@ build4/
 build5/
 build5r/
 build-bridge/
-bridge/
+/bridge/
 dist_clean/
 gcctest/
 hamlib_shim/
@@ -82,6 +85,7 @@ Decodium_4.0_CoreShannon_x64/
 
 # Log / debug output files
 *.log
+/build-logs/
 autogen_err.txt
 boost_install.txt
 both_cc1.txt
@@ -90,6 +94,13 @@ cc1*.txt
 cc1plus*.txt
 autogen_syspath_out.txt
 build2_out.txt
+
+# Local runtime and laboratory output
+/tmp/
+/avemsg.txt
+/decoded.txt
+/jt9_wisdom.dat
+/timer.out
 
 # Temp scripts and tools
 check_*.bat
@@ -113,7 +124,6 @@ appverifUI.dll
 # Runtime stubs (auto-generated)
 decodium_common_blocks.c
 decodium_fortran_stubs.cpp
-decodium_qml.rc
 libhamlib-4.def
 fst4w_calls.txt
 
@@ -133,3 +143,11 @@ tools/dxped_database.json
 tools/verified_dxpeds.json
 tools/*.dxcert
 *.dxcert
+
+dxped_handoff/
+build_3*.log
+
+# Laboratorio di fastldpc: banchi di prova, vettori generati e misure.
+# Ha un repo git suo; i sorgenti che servono al programma stanno in
+# Detector/fastldpc/ e sono versionati normalmente.
+Detector/fastldpc/lab/

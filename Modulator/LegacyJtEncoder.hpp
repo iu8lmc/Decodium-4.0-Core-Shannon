@@ -1593,11 +1593,10 @@ inline txmsg::EncodedMessage encodeJt65 (QString const& message, bool check_only
       return encoded;
     }
 
-  while (!msg22.isEmpty () && msg22.at (0) == ' ')
-    {
-      msg22.remove (0, 1);
-      msg22 = detail::fixed_ascii (msg22, 22);
-    }
+  // Remove padding once. Re-padding inside a loop makes an all-blank
+  // message stay 22 characters long forever (empty TX slots are valid
+  // during startup and are passed through the validator).
+  msg22 = detail::fixed_ascii (detail::trim_left_ascii (msg22), 22);
 
   detail::CheckMessageResult const checked = detail::chkmsg (msg22);
   if (checked.nspecial == 0)
@@ -1696,11 +1695,9 @@ inline txmsg::EncodedMessage encodeJt9 (QString const& message, bool check_only 
       return encoded;
     }
 
-  while (!msg22.isEmpty () && msg22.at (0) == ' ')
-    {
-      msg22.remove (0, 1);
-      msg22 = detail::fixed_ascii (msg22, 22);
-    }
+  // Strip leading padding once. Re-padding inside this loop keeps an
+  // all-blank startup slot at 22 characters forever.
+  msg22 = detail::fixed_ascii (detail::trim_left_ascii (msg22), 22);
 
   detail::PackedJtMessage const packed = detail::packmsg (msg22);
   QByteArray const msgsent22 = detail::unpackmsg (packed.dat);

@@ -62,17 +62,47 @@ project (wsjtx
   VERSION 4.0.0.0
   LANGUAGES C CXX
   )
-set (PROJECT_DESCRIPTION "Decodium 4.0 Core Shannon: Digital Modes for Weak Signal Communications in Amateur Radio")
+set (PROJECT_DESCRIPTION "Decodium 4.0 Core Gallager: Digital Modes for Weak Signal Communications in Amateur Radio")
 set (CMAKE_PROJECT_DESCRIPTION ${PROJECT_DESCRIPTION})
 set (CMAKE_AUTOUIC ON)
-set (WSJT_APP_BUNDLE_NAME "ft2")
-set (WSJT_APP_EXECUTABLE_NAME "ft2")
+if (APPLE)
+  set (WSJT_APP_BUNDLE_NAME "Decodium4")
+  set (WSJT_APP_EXECUTABLE_NAME "Decodium4")
+  set (WSJT_APP_DISPLAY_NAME "Decodium4")
+  set (WSJT_APP_GUI_IDENTIFIER "org.decodium.decodium4")
+else ()
+  set (WSJT_APP_BUNDLE_NAME "ft2")
+  set (WSJT_APP_EXECUTABLE_NAME "ft2")
+  set (WSJT_APP_DISPLAY_NAME "ft2")
+  set (WSJT_APP_GUI_IDENTIFIER "org.decodium.ft2")
+endif ()
 include (CTest)
 
 #
 # Local CMake modules and support files
 #
 set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/Modules ${CMAKE_MODULE_PATH})
+
+set (DECODIUM_RUNTIME_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/runtime")
+set (DECODIUM_CMAKE_TEMPLATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/CMake/templates")
+set (DECODIUM_PACKAGING_DIR "${CMAKE_CURRENT_SOURCE_DIR}/packaging")
+
+set (DECODIUM_REQUIRED_RUNTIME_FILES
+  ALLCALL7.TXT
+  CALL3.TXT
+  cty.dat
+  cty.dat_copyright.txt
+  eclipse.txt
+  grid.dat
+  sat.dat
+  )
+foreach (required_runtime_file IN LISTS DECODIUM_REQUIRED_RUNTIME_FILES)
+  if (NOT EXISTS "${DECODIUM_RUNTIME_DATA_DIR}/${required_runtime_file}")
+    message (FATAL_ERROR
+      "Required runtime data file is missing: "
+      "${DECODIUM_RUNTIME_DATA_DIR}/${required_runtime_file}")
+  endif ()
+endforeach ()
 
 set (PROJECT_ARCHITECTURE "${CMAKE_SYSTEM_PROCESSOR}")
 if (NOT PROJECT_ARCHITECTURE)
@@ -107,7 +137,7 @@ add_definitions (-DFORK_RELEASE_VERSION=\"${FORK_RELEASE_VERSION}\")
 #
 # project information
 #
-set (PROJECT_BUNDLE_NAME "Decodium 4.0 Core Shannon")
+set (PROJECT_BUNDLE_NAME "Decodium 4.0 Core Gallager")
 set (PROJECT_VENDOR "IU8LMC")
 set (PROJECT_CONTACT "IU8LMC <qrz.com/db/IU8LMC>")
 set (PROJECT_COPYRIGHT "See Help | Copyright info")
@@ -129,10 +159,21 @@ endif ()
 
 # Ottimizzazione dimensione: strip + gc-sections
 if (NOT is_debug_build)
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections -ffunction-sections")
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdata-sections -ffunction-sections")
-  if (NOT APPLE)
-    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,-s -Wl,--strip-all")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections -ffunction-sections")
+  endif ()
+  if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdata-sections -ffunction-sections")
+  endif ()
+  if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    # DECODIUM_KEEP_SYMBOLS=ON conserva la tabella dei simboli: serve a gdb e
+    # a Dr. Memory per risolvere gli stack. Spenta per default: i binari
+    # pubblicati restano strippati come prima.
+    if (DECODIUM_KEEP_SYMBOLS)
+      set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+    else ()
+      set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,-s -Wl,--strip-all")
+    endif ()
   endif ()
 endif ()
 
@@ -168,6 +209,62 @@ option (WSJT_RIG_NONE_CAN_SPLIT "Allow split operation with \"None\" as rig.")
 option (WSJT_TRACE_UDP "Debugging option that turns on UDP message protocol diagnostics.")
 option (WSJT_BUILD_UTILS "Build simulators and code demonstrators." OFF)
 option (WSJT_FOX_OTP "Enable Fox OTP Verification Messages." ON)
+option (DECODIUM_ENABLE_SSTV
+  "Build the native analog SSTV subsystem inside Decodium" ON)
+option (DECODIUM_ENABLE_HAMDRM
+  "Build the native HAMDRM digital SSTV subsystem inside Decodium" ON)
+if (DECODIUM_ENABLE_HAMDRM AND NOT DECODIUM_ENABLE_SSTV)
+  message (FATAL_ERROR
+    "DECODIUM_ENABLE_HAMDRM requires DECODIUM_ENABLE_SSTV=ON; "
+    "the analog target remains independent when HAMDRM is disabled")
+endif ()
+# DecoRTTY innestato: RTTY sulla radio di Decodium. Vedi
+# doc/PIANO_INTEGRAZIONE_DECORTTY.md.
+#
+# Il trasporto di rete del progetto originale — VITA-49 verso i FlexRadio, e il
+# gateway per una FT-991A su un altro PC — e' stato tolto: qui la radio e'
+# quella che il CAT dell'applicazione governa gia', e cercarla in rete non
+# poteva che non trovarla. Con quel trasporto se n'e' andata anche Opus, che
+# serviva solo a comprimere l'audio sul filo.
+option (DECODIUM_ENABLE_RTTY
+  "Build the DecoRTTY subsystem (RTTY on Decodium's own radio) inside Decodium" ON)
+set (DECORTTY_VERSION "0.7.2" CACHE STRING
+     "Versione DecoRTTY, scritta nell'intestazione degli ADIF esportati")
+option (DECODIUM_ENABLE_SSTV_FUZZING
+  "Build Clang/libFuzzer SSTV parser targets (developer-only)" OFF)
+if (DECODIUM_ENABLE_SSTV_FUZZING)
+  if (NOT DECODIUM_ENABLE_SSTV)
+    message (FATAL_ERROR
+      "DECODIUM_ENABLE_SSTV_FUZZING requires DECODIUM_ENABLE_SSTV=ON")
+  endif ()
+  if (NOT BUILD_TESTING)
+    message (FATAL_ERROR
+      "DECODIUM_ENABLE_SSTV_FUZZING requires BUILD_TESTING=ON")
+  endif ()
+  if (NOT CMAKE_CXX_COMPILER_ID MATCHES "^(Clang|AppleClang)$")
+    message (FATAL_ERROR
+      "DECODIUM_ENABLE_SSTV_FUZZING requires a Clang-family C++ compiler")
+  endif ()
+
+  include (CheckCXXSourceCompiles)
+  set (_decodium_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+  set (CMAKE_REQUIRED_FLAGS
+    "${CMAKE_REQUIRED_FLAGS} -fsanitize=fuzzer,address,undefined")
+  unset (DECODIUM_SSTV_LIBFUZZER_AVAILABLE CACHE)
+  check_cxx_source_compiles (
+    "#include <cstddef>
+     #include <cstdint>
+     extern \"C\" int LLVMFuzzerTestOneInput(const std::uint8_t*, std::size_t)
+     { return 0; }"
+    DECODIUM_SSTV_LIBFUZZER_AVAILABLE)
+  set (CMAKE_REQUIRED_FLAGS "${_decodium_saved_required_flags}")
+  unset (_decodium_saved_required_flags)
+  if (NOT DECODIUM_SSTV_LIBFUZZER_AVAILABLE)
+    message (FATAL_ERROR
+      "DECODIUM_ENABLE_SSTV_FUZZING needs Clang with the libFuzzer, "
+      "AddressSanitizer and UndefinedBehaviorSanitizer runtimes")
+  endif ()
+endif ()
 CMAKE_DEPENDENT_OPTION (WSJT_QDEBUG_IN_RELEASE "Leave Qt debugging statements in Release configuration." OFF
   "NOT is_debug_build" OFF)
 CMAKE_DEPENDENT_OPTION (WSJT_ENABLE_EXPERIMENTAL_FEATURES "Enable features not fully ready for public releases." ON
@@ -189,9 +286,13 @@ if (APPLE)
   set (CMAKE_INSTALL_DATAROOTDIR ${WSJT_APP_BUNDLE_NAME}.app/Contents/Resources)
   # Clean up stale bundle artifacts from older macOS target layouts.
   file (REMOVE_RECURSE
+    "${CMAKE_BINARY_DIR}/CMakeFiles/Decodium4.dir"
+    "${CMAKE_BINARY_DIR}/CMakeFiles/Decodium4_autogen.dir"
+    "${CMAKE_BINARY_DIR}/CMakeFiles/Decodium4_autogen_timestamp_deps.dir"
     "${CMAKE_BINARY_DIR}/CMakeFiles/ft2.dir"
     "${CMAKE_BINARY_DIR}/CMakeFiles/ft2_autogen.dir"
     "${CMAKE_BINARY_DIR}/CMakeFiles/ft2_autogen_timestamp_deps.dir"
+    "${CMAKE_BINARY_DIR}/ft2.app"
     "${CMAKE_BINARY_DIR}/${WSJT_APP_BUNDLE_NAME}.app/Contents/MacOS/sounds")
 endif ()
 
@@ -206,8 +307,13 @@ elseif (APPLE)
   set (QT_CONF_DESTINATION ${CMAKE_INSTALL_DATAROOTDIR})
 endif ()
 
-set (WSJT_PLUGIN_DESTINATION ${PLUGIN_DESTINATION} CACHE PATH "Path for plugins")
-set (WSJT_QT_CONF_DESTINATION ${QT_CONF_DESTINATION} CACHE PATH "Path for the qt.conf file")
+if (APPLE)
+  set (WSJT_PLUGIN_DESTINATION ${PLUGIN_DESTINATION} CACHE PATH "Path for plugins" FORCE)
+  set (WSJT_QT_CONF_DESTINATION ${QT_CONF_DESTINATION} CACHE PATH "Path for the qt.conf file" FORCE)
+else ()
+  set (WSJT_PLUGIN_DESTINATION ${PLUGIN_DESTINATION} CACHE PATH "Path for plugins")
+  set (WSJT_QT_CONF_DESTINATION ${QT_CONF_DESTINATION} CACHE PATH "Path for the qt.conf file")
+endif ()
 
 if (WSJT_FOX_OTP)
   set (wsjt_fox_CXXSRCS
@@ -218,23 +324,36 @@ endif ()
 #
 # Project sources
 #
+set (DECODIUM_SOURCE_DIRS
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/bridge
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/models
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/net
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/radio
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/security
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/services
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ui
+  )
+include_directories (${DECODIUM_SOURCE_DIRS})
+
 set (fort_qt_CXXSRCS
   lib/shmem.cpp
   )
 
 set (wsjt_qt_CXXSRCS
-  helper_functions.cpp
-  SecureSettings.cpp
-  qt_helpers.cpp
+  src/core/helper_functions.cpp
+  src/security/SecureSettings.cpp
+  src/core/qt_helpers.cpp
   widgets/MessageBox.cpp
-  MetaDataRegistry.cpp
+  src/app/MetaDataRegistry.cpp
   Network/NetworkServerLookup.cpp
-  revision_utils.cpp
-  L10nLoader.cpp
-  WFPalette.cpp
-  Radio.cpp
-  RadioMetaType.cpp
-  NonInheritingProcess.cpp
+  src/core/revision_utils.cpp
+  src/app/L10nLoader.cpp
+  src/ui/WFPalette.cpp
+  src/radio/Radio.cpp
+  src/radio/RadioMetaType.cpp
+  src/core/NonInheritingProcess.cpp
   models/IARURegions.cpp
   models/Bands.cpp
   models/Modes.cpp
@@ -246,7 +365,7 @@ set (wsjt_qt_CXXSRCS
   item_delegates/ForeignKeyDelegate.cpp
   item_delegates/MessageItemDelegate.cpp
   validators/LiveFrequencyValidator.cpp
-  GetUserId.cpp
+  src/app/GetUserId.cpp
   Audio/AudioDevice.cpp
   Transceiver/Transceiver.cpp
   Transceiver/TransceiverBase.cpp
@@ -264,17 +383,17 @@ set (wsjt_qt_CXXSRCS
   widgets/HintedSpinBox.cpp
   widgets/RestrictedSpinBox.cpp
   widgets/HelpTextWindow.cpp
-  SampleDownloader.cpp
+  src/services/SampleDownloader.cpp
   SampleDownloader/DirectoryDelegate.cpp
   SampleDownloader/Directory.cpp
   SampleDownloader/FileNode.cpp
   SampleDownloader/RemoteFile.cpp
-  DisplayManual.cpp
-  MultiSettings.cpp
+  src/ui/DisplayManual.cpp
+  src/app/MultiSettings.cpp
   validators/MaidenheadLocatorValidator.cpp
   validators/CallsignValidator.cpp
   widgets/SplashScreen.cpp
-  EqualizationToolsDialog.cpp
+  src/ui/EqualizationToolsDialog.cpp
   Detector/FtxFt8Stage4.cpp
   Detector/FST4DecodeWorker.cpp
   widgets/DoubleClickablePushButton.cpp
@@ -307,6 +426,7 @@ set (wsjt_qt_CXXSRCS
   widgets/CheckableItemComboBox.cpp
   widgets/BandComboBox.cpp
   Detector/FtxFt2Stage7.cpp
+  Detector/fastldpc/decodium_dispatch.cpp
   Detector/FtxQ65Core.cpp
   Detector/FtxQ65Decoder.cpp
   Detector/FtxQ65Frontend.cpp
@@ -330,10 +450,66 @@ set (wsjt_qt_CXXSRCS
   Detector/Conv232Compat.cpp
   Detector/IndexSortCompat.cpp
   Modulator/WsprLegacyCompat.cpp
-  otpgenerator.cpp
+  src/core/otpgenerator.cpp
   )
+
+# fastldpc: dispatcher e fallback restano sempre compilati per la CPU minima.
+# Il backend min-sum e' una translation unit separata: AVX2/FMA su x86 e NEON
+# su ARM64. Il dispatcher entra nel backend soltanto dopo il controllo runtime
+# delle capacita' richieste dall'architettura.
+set (DECODIUM_FASTLDPC_X86_TARGET OFF)
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$"
+    OR CMAKE_OSX_ARCHITECTURES MATCHES "(^|;)x86_64(;|$)")
+  set (DECODIUM_FASTLDPC_X86_TARGET ON)
+endif ()
+
+set (DECODIUM_FASTLDPC_ARM64_TARGET OFF)
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64|AARCH64)$"
+    OR CMAKE_OSX_ARCHITECTURES MATCHES "(^|;)(arm64|aarch64)(;|$)")
+  set (DECODIUM_FASTLDPC_ARM64_TARGET ON)
+endif ()
+
+# I runner di release producono slice architetturali distinte. Se viene
+# richiesto eccezionalmente un universal binary, privilegiamo il backend NEON:
+# la slice x86 resta comunque sicura e usa il fallback generico.
+if (DECODIUM_FASTLDPC_ARM64_TARGET)
+  list (APPEND wsjt_qt_CXXSRCS Detector/fastldpc/decodium_bridge.cpp)
+  set_source_files_properties (Detector/fastldpc/decodium_dispatch.cpp
+    PROPERTIES COMPILE_DEFINITIONS "DECODIUM_FASTLDPC_NEON_BUILT=1")
+  # FASTLDPC_HAVE_GATE_WEIGHTS: strato 2 (gate appreso, FASTLDPC-AI-SPEC-001
+  # §2). Senza questa macro gate.hpp compila comunque (gate_accept() sempre
+  # true) ma DECODIUM_LDPC_GATE=1 diventerebbe silenziosamente solo una soglia
+  # nd_max rilassata, senza classificatore a filtrarla: pericoloso. La macro
+  # carica i pesi; il flag a runtime resta comunque spento di default.
+  set_source_files_properties (Detector/fastldpc/decodium_bridge.cpp
+    PROPERTIES COMPILE_DEFINITIONS "FASTLDPC_HAVE_GATE_WEIGHTS=1")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties (Detector/fastldpc/decodium_bridge.cpp
+      PROPERTIES COMPILE_OPTIONS "-O3")
+  elseif (MSVC)
+    set_source_files_properties (Detector/fastldpc/decodium_bridge.cpp
+      PROPERTIES COMPILE_OPTIONS "/O2")
+  endif ()
+elseif (DECODIUM_FASTLDPC_X86_TARGET)
+  list (APPEND wsjt_qt_CXXSRCS Detector/fastldpc/decodium_bridge.cpp)
+  set_source_files_properties (Detector/fastldpc/decodium_dispatch.cpp
+    PROPERTIES COMPILE_DEFINITIONS "DECODIUM_FASTLDPC_AVX2_BUILT=1")
+  # FASTLDPC_HAVE_GATE_WEIGHTS: vedi il commento nel ramo ARM64 sopra.
+  set_source_files_properties (Detector/fastldpc/decodium_bridge.cpp
+    PROPERTIES COMPILE_DEFINITIONS "FASTLDPC_HAVE_GATE_WEIGHTS=1")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties (Detector/fastldpc/decodium_bridge.cpp
+      PROPERTIES COMPILE_OPTIONS "-O3;-mavx2;-mfma")
+  elseif (MSVC)
+    set_source_files_properties (Detector/fastldpc/decodium_bridge.cpp
+      PROPERTIES COMPILE_OPTIONS "/O2;/arch:AVX2")
+  endif ()
+endif ()
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set_source_files_properties (Detector/LegacyDspIoHelpers.cpp PROPERTIES COMPILE_FLAGS "-Wno-error=stringop-overflow -Wno-error=stringop-overread")
+  # GCC 15 misdiagnoses std::atomic increments in inlined Qt functor wrappers.
+  set_source_files_properties (src/services/MapIntelligenceService.cpp PROPERTIES COMPILE_FLAGS "-Wno-error=stringop-overflow")
 endif ()
 
 set (wsjt_qtmm_CXXSRCS
@@ -341,7 +517,7 @@ set (wsjt_qtmm_CXXSRCS
   )
 
 set (wsjtx_CXXSRCS
-  DecodiumLogging.cpp
+  src/bridge/DecodiumLogging.cpp
   logbook/logbook.cpp
   Network/PSKReporter.cpp
   Modulator/Modulator.cpp
@@ -362,9 +538,19 @@ set (wsjtx_CXXSRCS
   widgets/logqso.cpp
   widgets/displaytext.cpp
   Decoder/decodedtext.cpp
-  getfile.cpp
+  src/core/getfile.cpp
   Audio/soundout.cpp
   Audio/soundin.cpp
+  src/rtl/RtlSdrDsp.cpp
+  src/rtl/RtlSdrDsp.h
+  src/rtl/RtlSdrAudioOutput.cpp
+  src/rtl/RtlSdrAudioOutput.h
+  src/rtl/RtlSdrCapabilities.h
+  src/rtl/RtlSdrRfSpectrum.cpp
+  src/rtl/RtlSdrRfSpectrum.h
+  src/rtl/RtlSdrTuningPlan.h
+  src/rtl/RtlSdrInput.cpp
+  src/rtl/RtlSdrInput.h
   widgets/meterwidget.cpp
   widgets/signalmeter.cpp
   widgets/plotter.cpp
@@ -385,36 +571,89 @@ set (wsjtx_CXXSRCS
   Modulator/RTTYModulator.cpp
   Detector/RTTYDetector.cpp
   Decoder/BaudotDecoder.cpp
-  DecodiumCertificate.cpp
+  src/security/DecodiumCertificate.cpp
   WSPR/WsprTxScheduler.cpp
   widgets/mainwindow.cpp
-  Configuration.cpp
-  main.cpp
-  DecodiumBridge.cpp
-  DecodiumBridge.h
-  DecodeListModel.cpp
-  DecodeListModel.h
-  DecodiumDiagnostics.cpp
-  DecodiumDiagnostics.h
-  DecodiumLegacyBackend.cpp
-  DecodiumLegacyBackend.h
-  DecodiumPropagationManager.cpp
-  DecodiumPropagationManager.h
-  DecodiumAudioSink.h
+  src/app/Configuration.cpp
+  src/app/main.cpp
+  src/net/DecoPortPacket.cpp
+  src/net/DecoPortPacket.h
+  src/net/RadioLink.h
+  src/net/DecoPortLink.cpp
+  src/net/DecoPortLink.h
+  src/net/DecodiumDecoPortGateway.cpp
+  src/net/DecoPortRigDriver.cpp
+  src/net/DecodiumDecoPortGateway.h
+  src/bridge/DecodiumBridge.cpp
+  src/bridge/AdifExportSanitizer.cpp
+  src/bridge/AdifExportSanitizer.h
+  src/bridge/DecodiumBridgeSstv.cpp
+  src/bridge/DecodiumBridge.h
+  Sequencer/QsoSequencerRules.cpp
+  Sequencer/QsoSequencerRules.hpp
+  Sequencer/MessageTokenRules.cpp
+  Sequencer/MessageTokenRules.hpp
+  Sequencer/QsoSequencerState.hpp
+  Sequencer/ISequencerSink.hpp
+  Sequencer/QsoSequencer.hpp
+  src/app/DecodiumSelfCheck.cpp
+  src/app/DecodiumSelfCheck.hpp
+  src/services/UsStateDataManager.cpp
+  src/services/UsStateDataManager.h
+  lib/persistence/DecodeHistoryWorker.cpp
+  lib/persistence/DecodeHistoryWorker.h
+  src/models/DecodeListModel.cpp
+  src/models/DecodeListModel.h
+  controllers/FT2LinkQmlAdapter.cpp
+  controllers/FT2LinkQmlAdapter.hpp
+  src/bridge/DecodiumDiagnostics.cpp
+  src/bridge/DecodiumDiagnostics.h
+  src/bridge/DecodiumLegacyBackend.cpp
+  src/bridge/DecodiumLegacyBackend.h
+  src/services/DecodiumPropagationManager.cpp
+  src/services/DecodiumPropagationManager.h
+  src/services/RotatorService.cpp
+  src/services/RotatorService.h
+  src/services/SatelliteTrackingService.cpp
+  src/services/SatelliteTrackingService.h
+  src/services/satellite/sgp4/SGP4.cpp
+  src/services/satellite/sgp4/SGP4.h
+  src/services/MapIntelligenceService.cpp
+  src/services/MapIntelligenceService.h
+  src/services/MapBaseMapService.cpp
+  src/services/MapBaseMapService.h
+  src/services/MapPskFeedService.cpp
+  src/services/MapPskFeedService.h
+  src/services/MapOperationsService.cpp
+  src/services/MapOperationsService.h
+  src/services/MapExternalOverlayService.cpp
+  src/services/MapExternalOverlayService.h
+  src/services/MapLayerModel.cpp
+  src/services/MapLayerModel.h
+  src/bridge/DecodiumAudioSink.h
   controllers/ActiveStationsModel.cpp
   controllers/ActiveStationsModel.hpp
-  DecodiumThemeManager.cpp
-  DecodiumThemeManager.h
-  DecodiumSubManagers.cpp
-  DecodiumSubManagers.h
-  DecodiumCatManager.cpp
-  DecodiumCatManager.h
-  DecodiumOmniRigManager.cpp
-  DecodiumOmniRigManager.h
-  DecodiumTransceiverManager.cpp
-  DecodiumTransceiverManager.h
-  DecodiumAlertManager.cpp
-  DecodiumAlertManager.h
+  src/ui/DecodiumThemeManager.cpp
+  src/ui/DecodiumThemeManager.h
+  src/bridge/DecodiumSubManagers.cpp
+  src/bridge/DecodiumSubManagers.h
+  src/radio/DecodiumCatManager.cpp
+  src/radio/DecodiumCatManager.h
+  src/radio/DecodiumOmniRigManager.cpp
+  src/radio/DecodiumOmniRigManager.h
+  src/radio/DecodiumCat4OmManager.cpp
+  src/radio/DecodiumCat4OmManager.h
+  src/radio/DecodiumTransceiverManager.cpp
+  src/radio/DecodiumTransceiverManager.h
+  src/radio/DecodiumCatShare.cpp
+  src/radio/DecodiumCatShare.h
+  src/radio/DecodiumAmplifier.cpp
+  src/radio/StationTelemetryCodec.cpp
+  src/radio/DecodiumAmplifier.h
+  src/radio/DecodiumRigDetector.cpp
+  src/radio/DecodiumRigDetector.h
+  src/services/DecodiumAlertManager.cpp
+  src/services/DecodiumAlertManager.h
   Network/FoxVerifier.cpp
   Network/FoxVerifier.hpp
   Network/DecodiumWsprUploader.cpp
@@ -425,11 +664,15 @@ set (wsjtx_CXXSRCS
   Network/DecodiumCloudlogLite.h
   Network/DecodiumQrzLogbookLite.cpp
   Network/DecodiumQrzLogbookLite.h
-  DecodiumDxCluster.cpp
-  DecodiumDxCluster.h
-  DxccLookup.cpp
-  DxccLookup.h
-  DecodiumLegacyLinkCompat.cpp
+  src/services/DecodiumDxCluster.cpp
+  src/services/DecodiumDxCluster.h
+  src/services/DecodiumSpotShare.cpp
+  src/services/DecodiumSpotShare.h
+  src/services/DxccLookup.cpp
+  src/services/DxccLookup.h
+  src/services/CallsignIntelligenceService.cpp
+  src/services/CallsignIntelligenceService.h
+  src/bridge/DecodiumLegacyLinkCompat.cpp
   Network/wsprnet.cpp
   WSPR/WSPRBandHopping.cpp
   widgets/ExportCabrillo.cpp
@@ -449,7 +692,7 @@ if (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
 endif ()
 
 set (wsjt_CXXSRCS
-  Logger.cpp
+  src/core/Logger.cpp
   lib/crc10.cpp
   lib/crc13.cpp
   lib/crc14.cpp
@@ -459,6 +702,7 @@ set (wsjt_CXXSRCS
   Detector/FtxBaseline.cpp
   Detector/FtxCandidates.cpp
   Detector/FtxBitmetrics.cpp
+  Detector/FtxApStorico.cpp
   Detector/FtxSharedDsp.cpp
   Detector/FtxFst4Core.cpp
   Detector/FtxFst4Ldpc.cpp
@@ -476,6 +720,18 @@ set (wsjt_CXXSRCS
   Detector/FtxVarSyncTemplates.cpp
   ${wsjt_fox_CXXSRCS}
   )
+
+set (FT2LINK_CORE_CXXSRCS
+  lib/ft2link/FT2LinkAppModel.cpp
+  lib/ft2link/FT2LinkAudio.cpp
+  lib/ft2link/FT2LinkFrame.cpp
+  lib/ft2link/FT2LinkHandshake.cpp
+  lib/ft2link/FT2LinkOffline.cpp
+  lib/ft2link/FT2LinkPhysical.cpp
+  lib/ft2link/FT2LinkSession.cpp
+  lib/ft2link/FT2LinkWaveform.cpp
+  )
+
 # deal with a GCC v6 UB error message
 set_source_files_properties (
   lib/crc10.cpp
@@ -578,7 +834,7 @@ set (wsjt_CSRCS
   )
 
 set (wsjt_qt_UISRCS
-  wf_palette_design_dialog.ui
+  src/ui/wf_palette_design_dialog.ui
   widgets/FoxLogWindow.ui
   widgets/CabrilloLogWindow.ui
   )
@@ -615,7 +871,7 @@ set (wsjtx_UISRCS
   widgets/activeStations.ui
   widgets/widegraph.ui
   widgets/logqso.ui
-  Configuration.ui
+  src/app/Configuration.ui
   widgets/ExportCabrillo.ui
   widgets/QSYMessage.ui
   widgets/QSYMessageCreator.ui
@@ -624,14 +880,14 @@ set (wsjtx_UISRCS
   )
 
 set (UDP_library_CXXSRCS
-  Radio.cpp
-  RadioMetaType.cpp
+  src/radio/Radio.cpp
+  src/radio/RadioMetaType.cpp
   Network/NetworkMessage.cpp
   UDPExamples/MessageServer.cpp
   )
 
 set (UDP_library_HEADERS
-  Radio.hpp
+  src/radio/Radio.hpp
   UDPExamples/MessageServer.hpp
   ${PROJECT_BINARY_DIR}/udp_export.h
   )
@@ -670,7 +926,8 @@ set (all_C_and_CXXSRCS
   )
 
 set (TOP_LEVEL_RESOURCES
-  sat.dat
+  "${DECODIUM_RUNTIME_DATA_DIR}/sat.dat"
+  resources/map/decodium-awards-catalog.json
   artwork/ft2logo.png
   contrib/gpl-v3-logo.svg
   artwork/splash.png
@@ -767,6 +1024,11 @@ if (WIN32 AND ENABLE_OMNIRIG)
       string (REPLACE "\"" "" AXSERVER ${AXSERVER})
       file (TO_CMAKE_PATH ${AXSERVER} AXSERVERSRCS)
       add_compile_definitions (OMNIRIG_AVAILABLE=1)
+      list (APPEND wsjt_qt_CXXSRCS Transceiver/OmniRigTransceiver.cpp)
+      set_property (SOURCE Transceiver/OmniRigTransceiver.cpp APPEND_STRING
+        PROPERTY COMPILE_FLAGS " -include wsjtx_config.h")
+      set_property (SOURCE Transceiver/OmniRigTransceiver.cpp APPEND
+        PROPERTY OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/wsjtx_config.h)
     endif ()
   else ()
     message (WARNING "dumpcpp not found - OmniRig support disabled")
@@ -844,6 +1106,25 @@ find_package (Boost 1.62 REQUIRED COMPONENTS log_setup log)
 #
 # OpenMP
 #
+if (APPLE)
+  find_path (DECODIUM_LIBOMP_INCLUDE_DIR omp.h
+    HINTS
+      /opt/homebrew/opt/libomp/include
+      /usr/local/opt/libomp/include
+    )
+  find_library (DECODIUM_LIBOMP_LIBRARY omp
+    HINTS
+      /opt/homebrew/opt/libomp/lib
+      /usr/local/opt/libomp/lib
+    )
+  if (DECODIUM_LIBOMP_INCLUDE_DIR AND DECODIUM_LIBOMP_LIBRARY)
+    set (OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${DECODIUM_LIBOMP_INCLUDE_DIR}" CACHE STRING "" FORCE)
+    set (OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${DECODIUM_LIBOMP_INCLUDE_DIR}" CACHE STRING "" FORCE)
+    set (OpenMP_C_LIB_NAMES "omp" CACHE STRING "" FORCE)
+    set (OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+    set (OpenMP_omp_LIBRARY "${DECODIUM_LIBOMP_LIBRARY}" CACHE FILEPATH "" FORCE)
+  endif ()
+endif ()
 find_package (OpenMP)
 
 #
@@ -869,11 +1150,44 @@ if (RIGCTLCOM_EXE)
   get_filename_component (RIGCTLCOM_EXE "${RIGCTLCOM_EXE}" REALPATH)
 endif ()
 
+set (_decodium_saved_required_includes "${CMAKE_REQUIRED_INCLUDES}")
+set (_decodium_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+set (_decodium_saved_extra_include_files "${CMAKE_EXTRA_INCLUDE_FILES}")
+list (APPEND CMAKE_REQUIRED_INCLUDES "${Hamlib_INCLUDE_DIR}")
+list (APPEND CMAKE_REQUIRED_LIBRARIES Hamlib::Hamlib)
+list (APPEND CMAKE_EXTRA_INCLUDE_FILES "hamlib/rig.h")
 check_type_size (CACHE_ALL HAMLIB_OLD_CACHING)
 check_symbol_exists (rig_set_cache_timeout_ms "hamlib/rig.h" HAVE_HAMLIB_CACHING)
 check_symbol_exists (rig_get_conf2 "hamlib/rig.h" HAVE_HAMLIB_GET_CONF2)
+check_symbol_exists (rig_send_raw "hamlib/rig.h" HAVE_HAMLIB_SEND_RAW)
+set (CMAKE_REQUIRED_INCLUDES "${_decodium_saved_required_includes}")
+set (CMAKE_REQUIRED_LIBRARIES "${_decodium_saved_required_libraries}")
+set (CMAKE_EXTRA_INCLUDE_FILES "${_decodium_saved_extra_include_files}")
+unset (_decodium_saved_required_includes)
+unset (_decodium_saved_required_libraries)
+unset (_decodium_saved_extra_include_files)
 
 find_package (Usb REQUIRED)
+
+# RTL-SDR is optional for developer builds, but release workflows enable and
+# package it.  Keeping the feature switch explicit lets contributors build the
+# traditional audio-only application without a USB SDR development package.
+option (DECODIUM_ENABLE_RTLSDR "Enable RTL-SDR RX input support" ON)
+option (DECODIUM_REQUIRE_RTLSDR "Fail configuration if RTL-SDR input support is unavailable" OFF)
+set (DECODIUM_HAS_RTLSDR OFF)
+if (DECODIUM_ENABLE_RTLSDR)
+  find_package (RtlSdr QUIET)
+  if (RtlSdr_FOUND)
+    set (DECODIUM_HAS_RTLSDR ON)
+    message (STATUS "RTL-SDR support enabled: ${RtlSdr_LIBRARY}")
+  else ()
+    if (DECODIUM_REQUIRE_RTLSDR)
+      message (FATAL_ERROR "RTL-SDR support is required but librtlsdr was not found")
+    else ()
+      message (WARNING "RTL-SDR support requested but librtlsdr was not found; building without RTL-SDR input")
+    endif ()
+  endif ()
+endif ()
 
 if (WSJT_FOX_OTP)
   add_definitions (-DFOX_OTP)
@@ -884,10 +1198,13 @@ endif ()
 #
 
 # Widgets finds its own dependencies.
-find_package (Qt6 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql LinguistTools WebSockets Test Core5Compat REQUIRED)
+find_package (Qt6 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql LinguistTools WebSockets Test Core5Compat Concurrent REQUIRED)
 find_package (Qt6 COMPONENTS Qml Quick QuickControls2 REQUIRED)
 find_package (Qt6 COMPONENTS ShaderTools QUIET)
 find_package (Qt6 COMPONENTS GuiPrivate QUIET)
+if (APPLE)
+  find_package (Qt6 COMPONENTS DBus REQUIRED)
+endif ()
 
 if (WIN32)
   add_definitions (-DQT_NEEDS_QTMAIN)
@@ -907,23 +1224,38 @@ set (CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 #
 # C & C++ setup
 #
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+endif ()
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wall -Wextra -fexceptions -frtti")
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wall -Wextra -fexceptions -frtti")
+elseif (MSVC)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /permissive-")
+endif ()
 
-if (NOT APPLE)
+if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pragmas")
-  if (${OPENMP_FOUND})
-    if (OpenMP_C_FLAGS)
-      set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_C_FLAGS}")
-      set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    endif ()
-  endif ()
+endif ()
+if (NOT APPLE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fdata-sections -ffunction-sections")
   set (CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -fdata-sections -ffunction-sections")
+endif ()
+if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fdata-sections -ffunction-sections")
   set (CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -fdata-sections -ffunction-sections")
-endif (NOT APPLE)
+endif ()
+
+if (OPENMP_FOUND)
+  if (OpenMP_C_FLAGS)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  endif ()
+  if (OpenMP_CXX_FLAGS)
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  elseif (OpenMP_C_FLAGS)
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_C_FLAGS}")
+  endif ()
+endif ()
 
 if (WIN32)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
@@ -931,19 +1263,26 @@ endif (WIN32)
 
 if (APPLE AND ${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -stdlib=libc++")
-else ()
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++17 -pthread")
+else ()
+  set (CMAKE_CXX_STANDARD 17)
+  set (CMAKE_CXX_STANDARD_REQUIRED ON)
 endif ()
 
 
 #
 # Linker setup
 #
-if (NOT APPLE)
-  set (CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -Wl,-s")
+if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+  if (DECODIUM_KEEP_SYMBOLS)
+    set (CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -g")
+  else ()
+    set (CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -Wl,-s")
+  endif ()
   set (CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections")
-endif (NOT APPLE)
+endif ()
 
 
 #
@@ -1018,6 +1357,25 @@ endif ()
 if (WSJT_GENERATE_DOCS)
   add_subdirectory (doc)
 endif (WSJT_GENERATE_DOCS)
+
+add_library (ft2link_core STATIC ${FT2LINK_CORE_CXXSRCS})
+target_include_directories (ft2link_core PUBLIC ${CMAKE_SOURCE_DIR})
+set_target_properties (ft2link_core PROPERTIES
+  AUTOMOC OFF
+  AUTORCC OFF
+  AUTOUIC OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+
+if (DECODIUM_ENABLE_SSTV)
+  add_subdirectory (src/sstv)
+endif ()
+
+if (DECODIUM_ENABLE_RTTY)
+  add_subdirectory (src/rtty)
+endif ()
+
 if (BUILD_TESTING AND EXISTS ${CMAKE_SOURCE_DIR}/tests AND IS_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
   add_subdirectory (tests)
 endif ()
@@ -1025,7 +1383,7 @@ endif ()
 # build a library of package functionality (without and optionally with OpenMP support)
 add_library (wsjt_cxx STATIC ${wsjt_CSRCS} ${wsjt_CXXSRCS})
 target_include_directories (wsjt_cxx PRIVATE ${FFTW3_INCLUDE_DIRS})
-target_link_libraries (wsjt_cxx ${LIBM_LIBRARIES} Boost::log_setup ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+target_link_libraries (wsjt_cxx ft2link_core ${LIBM_LIBRARIES} Boost::log_setup ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
 
 # wsjt_fort is now a pure interface library: all maintained application-path
 # Fortran has already been migrated in Decodium 3 and is reused here.
@@ -1041,20 +1399,32 @@ function (link_wsjtx_cycle_group target)
   endif ()
 endfunction ()
 
-if(WSJT_BUILD_UTILS) 
+if(WSJT_BUILD_UTILS)
+
+# The application no longer links the historical Fortran runtime.  These
+# verification utilities compare the maintained C++ JT65 implementation with
+# an independently built official WSJT-X Fortran archive, when one is supplied.
+set (DECODIUM_JT65_REFERENCE_LIBRARY "" CACHE FILEPATH
+  "Path to an official WSJT-X libwsjt_fort.a used by JT65 comparison utilities")
 
 add_executable (q65sim utils/q65sim.cpp)
 link_wsjtx_cycle_group (q65sim wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (EchoCallSim
-  utils/EchoCallSim.cpp
-  utils/EchoToolSupport.cpp)
-link_wsjtx_cycle_group (EchoCallSim wsjt_qt wsjt_cxx wsjt_fort)
+if (EXISTS ${CMAKE_SOURCE_DIR}/utils/EchoCallSim.cpp
+    AND EXISTS ${CMAKE_SOURCE_DIR}/utils/EchoToolSupport.cpp)
+  add_executable (EchoCallSim
+    utils/EchoCallSim.cpp
+    utils/EchoToolSupport.cpp)
+  link_wsjtx_cycle_group (EchoCallSim wsjt_qt wsjt_cxx wsjt_fort)
+endif ()
 
-add_executable (testEchoCall
-  utils/testEchoCall.cpp
-  utils/EchoToolSupport.cpp)
-link_wsjtx_cycle_group (testEchoCall wsjt_qt wsjt_cxx wsjt_fort)
+if (EXISTS ${CMAKE_SOURCE_DIR}/utils/testEchoCall.cpp
+    AND EXISTS ${CMAKE_SOURCE_DIR}/utils/EchoToolSupport.cpp)
+  add_executable (testEchoCall
+    utils/testEchoCall.cpp
+    utils/EchoToolSupport.cpp)
+  link_wsjtx_cycle_group (testEchoCall wsjt_qt wsjt_cxx wsjt_fort)
+endif ()
 
 add_executable (q65code utils/q65code.cpp)
 link_wsjtx_cycle_group (q65code wsjt_qt wsjt_cxx wsjt_fort)
@@ -1071,37 +1441,95 @@ target_link_libraries (q65params wsjt_qt wsjt_cxx)
 add_executable (rtty_spec utils/rtty_spec.cpp)
 link_wsjtx_cycle_group (rtty_spec wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (jt65_compare utils/jt65_compare.cpp)
-link_wsjtx_cycle_group (jt65_compare wsjt_qt wsjt_cxx)
+if (DECODIUM_JT65_REFERENCE_LIBRARY)
+  find_program (DECODIUM_GFORTRAN_EXECUTABLE NAMES gfortran REQUIRED)
+  execute_process (
+    COMMAND ${DECODIUM_GFORTRAN_EXECUTABLE} -print-file-name=libgfortran${CMAKE_SHARED_LIBRARY_SUFFIX}
+    OUTPUT_VARIABLE DECODIUM_GFORTRAN_RUNTIME
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (NOT EXISTS ${DECODIUM_GFORTRAN_RUNTIME})
+    message (FATAL_ERROR "Cannot locate the gfortran runtime needed by JT65 reference comparison utilities")
+  endif ()
+  add_executable (jt65_compare
+    utils/jt65_compare.cpp
+    Modulator/FtxWaveformGenerator.cpp)
+  link_wsjtx_cycle_group (jt65_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
 
-add_executable (jt65_symspec_compare utils/jt65_symspec_compare.cpp)
-link_wsjtx_cycle_group (jt65_symspec_compare wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt65_symspec_compare utils/jt65_symspec_compare.cpp)
+  link_wsjtx_cycle_group (jt65_symspec_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
 
-add_executable (jt65_sync_compare
-  utils/jt65_sync_compare.cpp)
-link_wsjtx_cycle_group (jt65_sync_compare wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt65_sync_compare
+    utils/jt65_sync_compare.cpp)
+  link_wsjtx_cycle_group (jt65_sync_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
 
-add_executable (jt65_extract_primitives_compare
-  utils/jt65_extract_primitives_compare.cpp)
-link_wsjtx_cycle_group (jt65_extract_primitives_compare wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt65_extract_primitives_compare
+    utils/jt65_extract_primitives_compare.cpp)
+  link_wsjtx_cycle_group (jt65_extract_primitives_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
 
-add_executable (jt65_extract_compare
-  utils/jt65_extract_compare.cpp)
-link_wsjtx_cycle_group (jt65_extract_compare wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt65_extract_compare
+    utils/jt65_extract_compare.cpp)
+  link_wsjtx_cycle_group (jt65_extract_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
 
-add_executable (jt65_decode65b_compare
-  utils/jt65_decode65b_compare.cpp)
-link_wsjtx_cycle_group (jt65_decode65b_compare wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt65_decode65b_compare
+    utils/jt65_decode65b_compare.cpp)
+  link_wsjtx_cycle_group (jt65_decode65b_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
 
-add_executable (jt65_decode65a_compare
-  utils/jt65_decode65a_compare.cpp)
-link_wsjtx_cycle_group (jt65_decode65a_compare wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt65_decode65a_compare
+    utils/jt65_decode65a_compare.cpp)
+  link_wsjtx_cycle_group (jt65_decode65a_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
+else ()
+  message (STATUS "JT65 reference comparison utilities disabled: set DECODIUM_JT65_REFERENCE_LIBRARY to an official WSJT-X libwsjt_fort.a")
+endif ()
 
-add_executable (jt9_compare utils/jt9_compare.cpp)
-link_wsjtx_cycle_group (jt9_compare wsjt_qt wsjt_cxx wsjt_fort)
+if (DECODIUM_JT65_REFERENCE_LIBRARY)
+  add_executable (jt9_compare utils/jt9_compare.cpp)
+  link_wsjtx_cycle_group (jt9_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
+endif ()
 
-add_executable (jt4_compare utils/jt4_compare.cpp)
-link_wsjtx_cycle_group (jt4_compare wsjt_qt wsjt_cxx wsjt_fort)
+add_executable (jt9_narrow_compare
+  utils/jt9_narrow_compare.cpp
+  Detector/FftCompat.cpp
+  Detector/JT9FastDecoder.cpp
+  Detector/JT9FastHelpers.cpp
+  Detector/JT9NarrowDecoder.cpp
+  Detector/LegacyDspIoHelpers.cpp
+  lib/wsprd/fano.c
+)
+
+if (NOT MSVC)
+  set_source_files_properties(
+    src/services/satellite/sgp4/SGP4.cpp
+    PROPERTIES COMPILE_OPTIONS "-Wno-unused-function;-Wno-unused-result;-Wno-error=unused-result")
+endif()
+target_include_directories (jt9_narrow_compare PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${FFTW3_INCLUDE_DIRS}
+)
+target_link_libraries (jt9_narrow_compare
+  Qt6::Core
+  ${FFTW3_LIBRARIES}
+  ${LIBM_LIBRARIES}
+  wsjt_cxx
+  wsjt_qt
+)
+
+if (DECODIUM_JT65_REFERENCE_LIBRARY)
+  add_executable (jt4_compare utils/jt4_compare.cpp)
+  link_wsjtx_cycle_group (jt4_compare wsjt_qt wsjt_cxx wsjt_fort
+                          ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
+endif ()
+
+add_executable (jt4_wav_decode utils/jt4_wav_decode.cpp)
+target_link_libraries (jt4_wav_decode wsjt_qt wsjt_cxx Qt6::Core)
 
 add_executable (wspr_compare utils/wspr_compare.cpp)
 link_wsjtx_cycle_group (wspr_compare wsjt_qt wsjt_cxx)
@@ -1133,10 +1561,13 @@ link_wsjtx_cycle_group (ft8code wsjt_qt wsjt_cxx wsjt_fort)
 add_executable (ft4code utils/ft4code.cpp)
 link_wsjtx_cycle_group (ft4code wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (echosim
-  utils/echosim.cpp
-  utils/EchoToolSupport.cpp)
-link_wsjtx_cycle_group (echosim wsjt_qt wsjt_cxx wsjt_fort)
+if (EXISTS ${CMAKE_SOURCE_DIR}/utils/echosim.cpp
+    AND EXISTS ${CMAKE_SOURCE_DIR}/utils/EchoToolSupport.cpp)
+  add_executable (echosim
+    utils/echosim.cpp
+    utils/EchoToolSupport.cpp)
+  link_wsjtx_cycle_group (echosim wsjt_qt wsjt_cxx wsjt_fort)
+endif ()
 
 add_executable (ft8sim utils/ft8sim.cpp)
 link_wsjtx_cycle_group (ft8sim wsjt_qt wsjt_cxx wsjt_fort)
@@ -1161,7 +1592,7 @@ link_wsjtx_cycle_group (ft4sim_mult wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (fst4sim utils/fst4sim.cpp)
 link_wsjtx_cycle_group (fst4sim wsjt_qt wsjt_cxx wsjt_fort)
-if (WIN32)
+if (MINGW)
   set_target_properties (fst4sim PROPERTIES
     LINK_FLAGS -Wl,--stack,0x4000000,--heap,0x6000000
     )
@@ -1215,6 +1646,7 @@ set (CMAKE_INCLUDE_CURRENT_DIR ON)
 #
 set (sources
   ${CMAKE_SOURCE_DIR}/*
+  ${CMAKE_SOURCE_DIR}/src/*
   ${CMAKE_SOURCE_DIR}/logbook/*
   ${CMAKE_SOURCE_DIR}/lib/*
   )
@@ -1236,8 +1668,11 @@ set (LANGUAGES
   hu				# Hungarian
   it				# Italian
   ja				# Japanese
+  lv				# Latvian
+  nl				# Dutch (Nederlands)
   #no				# Norwegian
   #pt				# Portuguese
+  ro				# Romanian
   ru				# Russian
   #sv				# Swedish
   zh				# Chinese
@@ -1300,7 +1735,10 @@ add_resources (decodium_RESOURCES "" ${TOP_LEVEL_RESOURCES})
 add_resources (decodium_RESOURCES /Palettes ${PALETTE_FILES})
 add_resources (decodium_RESOURCES /Translations ${QM_FILES})
 
-configure_file (decodium.qrc.in decodium.qrc @ONLY)
+configure_file (
+  "${DECODIUM_CMAKE_TEMPLATE_DIR}/decodium.qrc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/decodium.qrc"
+  @ONLY)
 
 # UI generation
 qt_wrap_ui (wsjt_qt_GENUISRCS ${wsjt_qt_UISRCS})
@@ -1339,6 +1777,9 @@ target_compile_options (wsjt_qt PRIVATE -Wno-deprecated-declarations)
 # set wsjtx_udp exports to static variants
 target_compile_definitions (wsjt_qt PUBLIC UDP_STATIC_DEFINE)
 target_link_libraries (wsjt_qt Hamlib::Hamlib Boost::log qcp Qt6::Widgets Qt6::Network Qt6::Sql Qt6::WebSockets Qt6::Core5Compat)
+if (TARGET OpenMP::OpenMP_CXX)
+  target_link_libraries (wsjt_qt OpenMP::OpenMP_CXX)
+endif ()
 if (WIN32)
   target_link_libraries (wsjt_qt Qt6::ActiveQt crypt32)
 endif (WIN32)
@@ -1364,7 +1805,12 @@ if (WSJT_BUILD_UTILS)
     Detector/MSK144DecodeWorker.cpp
     Detector/Q65DecodeWorker.cpp
     )
-  link_wsjtx_cycle_group (jt9 wsjt_qt wsjt_cxx wsjt_fort)
+  if (DECODIUM_JT65_REFERENCE_LIBRARY)
+    link_wsjtx_cycle_group (jt9 wsjt_qt wsjt_cxx wsjt_fort
+                            ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
+  else ()
+    link_wsjtx_cycle_group (jt9 wsjt_qt wsjt_cxx wsjt_fort)
+  endif ()
 
   add_executable (jt9a utils/jt9.cpp)
   target_sources (jt9a PRIVATE
@@ -1375,7 +1821,12 @@ if (WSJT_BUILD_UTILS)
     Detector/MSK144DecodeWorker.cpp
     Detector/Q65DecodeWorker.cpp
     )
-  link_wsjtx_cycle_group (jt9a wsjt_qt wsjt_cxx wsjt_fort)
+  if (DECODIUM_JT65_REFERENCE_LIBRARY)
+    link_wsjtx_cycle_group (jt9a wsjt_qt wsjt_cxx wsjt_fort
+                            ${DECODIUM_JT65_REFERENCE_LIBRARY} ${DECODIUM_GFORTRAN_RUNTIME})
+  else ()
+    link_wsjtx_cycle_group (jt9a wsjt_qt wsjt_cxx wsjt_fort)
+  endif ()
 
   if (NOT APPLE)
     add_executable (record_time_signal Audio/tools/record_time_signal.cpp)
@@ -1420,31 +1871,66 @@ set_target_properties (wsjtx PROPERTIES
   MACOSX_BUNDLE_BUNDLE_VERSION "${FORK_RELEASE_VERSION}"
   MACOSX_BUNDLE_SHORT_VERSION_STRING "v${FORK_RELEASE_VERSION}"
   MACOSX_BUNDLE_LONG_VERSION_STRING "Version ${FORK_RELEASE_VERSION}${SCS_VERSION_STR}"
-  MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_BUNDLE_NAME}"
+  MACOSX_BUNDLE_BUNDLE_NAME "${WSJT_APP_DISPLAY_NAME}"
   MACOSX_BUNDLE_BUNDLE_EXECUTABLE_NAME "${WSJT_APP_EXECUTABLE_NAME}"
   MACOSX_BUNDLE_COPYRIGHT "${PROJECT_COPYRIGHT}"
-  MACOSX_BUNDLE_GUI_IDENTIFIER "org.decodium.ft2"
+  MACOSX_BUNDLE_GUI_IDENTIFIER "${WSJT_APP_GUI_IDENTIFIER}"
   )
 
 target_include_directories (wsjtx PRIVATE ${FFTW3_INCLUDE_DIRS})
-if (${OPENMP_FOUND} AND NOT APPLE)
-  if (OpenMP_C_FLAGS)
+if (OPENMP_FOUND)
+  if (OpenMP_CXX_FLAGS)
     set_target_properties (wsjtx PROPERTIES
-      COMPILE_FLAGS "${OpenMP_C_FLAGS}"
-      LINK_FLAGS "${OpenMP_C_FLAGS}"
+      COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
       )
   endif ()
-  if (WIN32)
+  if (TARGET OpenMP::OpenMP_CXX)
+    target_link_libraries (wsjtx OpenMP::OpenMP_CXX)
+  elseif (APPLE AND DECODIUM_LIBOMP_LIBRARY)
+    target_link_libraries (wsjtx ${DECODIUM_LIBOMP_LIBRARY})
+  elseif (OpenMP_CXX_FLAGS)
+    set_target_properties (wsjtx PROPERTIES
+      LINK_FLAGS "${OpenMP_CXX_FLAGS}"
+      )
+  endif ()
+  if (MINGW)
     set_target_properties (wsjtx PROPERTIES
       LINK_FLAGS -Wl,--stack,0x1000000,--heap,0x20000000
       )
     endif ()
 endif ()
-target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Network Qt6::WebSockets wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Network Qt6::Sql Qt6::WebSockets Qt6::Concurrent wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+if (TARGET Decodium::SstvIntegration)
+  target_link_libraries (wsjtx Decodium::SstvIntegration)
+  target_link_libraries (wsjtx Decodium::SstvGallery)
+  target_link_libraries (wsjtx Decodium::SstvSharingUi)
+  target_link_libraries (wsjtx Decodium::SstvDiagnostics)
+  if (TARGET Decodium::SstvStudio)
+    target_link_libraries (wsjtx Decodium::SstvStudio)
+  endif ()
+  target_compile_definitions (wsjtx PRIVATE DECODIUM_HAS_SSTV=1)
+else ()
+  target_compile_definitions (wsjtx PRIVATE DECODIUM_HAS_SSTV=0)
+endif ()
+if (TARGET Decodium::HamDrmRuntime)
+  target_link_libraries (wsjtx Decodium::HamDrmRuntime)
+  target_compile_definitions (wsjtx PRIVATE DECODIUM_HAS_HAMDRM=1)
+else ()
+  target_compile_definitions (wsjtx PRIVATE DECODIUM_HAS_HAMDRM=0)
+endif ()
+if (APPLE)
+  target_link_libraries (wsjtx Qt6::DBus "-framework AudioToolbox")
+endif ()
 if (WIN32)
   target_link_libraries (wsjtx Pdh Qt6::AxContainer)
 endif ()
 target_compile_options (wsjtx PRIVATE -Wno-deprecated-declarations)
+if (DECODIUM_HAS_RTLSDR)
+  target_compile_definitions (wsjtx PRIVATE DECODIUM_HAS_RTLSDR=1)
+  target_link_libraries (wsjtx RtlSdr::RtlSdr)
+else ()
+  target_compile_definitions (wsjtx PRIVATE DECODIUM_HAS_RTLSDR=0)
+endif ()
 link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx wsjt_fort)
 
 # -----------------------------------------------------------------------
@@ -1464,14 +1950,14 @@ else ()
   set (decodium_qml_VERSION_RESOURCES "")
 endif ()
 set (DECODIUM_QML_LEGACY_SRCS
-  DecodiumLogging.cpp
+  src/bridge/DecodiumLogging.cpp
   logbook/logbook.cpp
   Network/PSKReporter.cpp
   Detector/Detector.cpp
   widgets/logqso.cpp
   widgets/displaytext.cpp
   Decoder/decodedtext.cpp
-  getfile.cpp
+  src/core/getfile.cpp
   widgets/meterwidget.cpp
   widgets/signalmeter.cpp
   widgets/plotter.cpp
@@ -1492,10 +1978,10 @@ set (DECODIUM_QML_LEGACY_SRCS
   Modulator/RTTYModulator.cpp
   Detector/RTTYDetector.cpp
   Decoder/BaudotDecoder.cpp
-  DecodiumCertificate.cpp
+  src/security/DecodiumCertificate.cpp
   WSPR/WsprTxScheduler.cpp
   widgets/mainwindow.cpp
-  Configuration.cpp
+  src/app/Configuration.cpp
   WSPR/WSPRBandHopping.cpp
   widgets/ExportCabrillo.cpp
   widgets/QSYMessage.cpp
@@ -1506,43 +1992,113 @@ set (DECODIUM_QML_LEGACY_SRCS
   widgets/DXClusterWindow.cpp
   )
 add_executable (decodium_qml
-  main_qml.cpp
-  DecodiumBridge.cpp
-  DecodiumBridge.h
-  DecodeListModel.cpp
-  DecodeListModel.h
+  src/app/main_qml.cpp
+  src/app/DecodiumStorageMigration.cpp
+  src/app/DecodiumStorageMigration.hpp
+  src/app/DecodiumSelfCheck.cpp
+  src/app/DecodiumSelfCheck.hpp
+  src/app/DecodiumUpdater.cpp
+  src/app/DecodiumUpdater.hpp
+  src/app/DecodiumUpdateSupport.hpp
+  src/services/DecodiumCommunityReport.cpp
+  src/services/DecodiumCommunityReport.hpp
+  src/net/DecoPortPacket.cpp
+  src/net/DecoPortPacket.h
+  src/net/RadioLink.h
+  src/net/DecoPortLink.cpp
+  src/net/DecoPortLink.h
+  src/net/DecodiumDecoPortGateway.cpp
+  src/net/DecoPortRigDriver.cpp
+  src/net/DecodiumDecoPortGateway.h
+  src/bridge/DecodiumBridge.cpp
+  src/bridge/AdifExportSanitizer.cpp
+  src/bridge/AdifExportSanitizer.h
+  src/bridge/DecodiumBridgeSstv.cpp
+  src/bridge/DecodiumBridge.h
+  Sequencer/QsoSequencerRules.cpp
+  Sequencer/QsoSequencerRules.hpp
+  Sequencer/MessageTokenRules.cpp
+  Sequencer/MessageTokenRules.hpp
+  Sequencer/QsoSequencerState.hpp
+  Sequencer/ISequencerSink.hpp
+  Sequencer/QsoSequencer.hpp
+  src/services/UsStateDataManager.cpp
+  src/services/UsStateDataManager.h
+  src/models/DecodeListModel.cpp
+  src/models/DecodeListModel.h
+  lib/persistence/DecodeHistoryWorker.cpp
+  lib/persistence/DecodeHistoryWorker.h
   Web/DecodiumWebServer.cpp
   Web/DecodiumWebServer.hpp
-  DecodiumDiagnostics.cpp
-  DecodiumPropagationManager.cpp
-  DecodiumPropagationManager.h
-  DecodiumLegacyBackend.cpp
-  DecodiumLegacyBackend.h
-  helper_functions.cpp
-  helper_functions.h
+  src/bridge/DecodiumDiagnostics.cpp
+  src/services/DecodiumPropagationManager.cpp
+  src/services/DecodiumPropagationManager.h
+  src/services/RotatorService.cpp
+  src/services/RotatorService.h
+  src/services/SatelliteTrackingService.cpp
+  src/services/SatelliteTrackingService.h
+  src/services/satellite/sgp4/SGP4.cpp
+  src/services/satellite/sgp4/SGP4.h
+  src/services/MapIntelligenceService.cpp
+  src/services/MapIntelligenceService.h
+  src/services/MapBaseMapService.cpp
+  src/services/MapBaseMapService.h
+  src/services/MapPskFeedService.cpp
+  src/services/MapPskFeedService.h
+  src/services/MapOperationsService.cpp
+  src/services/MapOperationsService.h
+  src/services/MapExternalOverlayService.cpp
+  src/services/MapExternalOverlayService.h
+  src/services/MapLayerModel.cpp
+  src/services/MapLayerModel.h
+  src/bridge/DecodiumLegacyBackend.cpp
+  src/bridge/DecodiumLegacyBackend.h
+  src/core/helper_functions.cpp
+  src/core/helper_functions.h
   controllers/ActiveStationsModel.cpp
   controllers/ActiveStationsModel.hpp
-  DecodiumThemeManager.cpp
-  DecodiumThemeManager.h
-  DecodiumSubManagers.cpp
-  DecodiumSubManagers.h
-  DecodiumCatManager.cpp
-  DecodiumCatManager.h
-  DecodiumOmniRigManager.cpp
-  DecodiumOmniRigManager.h
-  DecodiumTransceiverManager.cpp
-  DecodiumTransceiverManager.h
-  DecodiumAlertManager.cpp
-  DecodiumAlertManager.h
-  WaterfallItem.cpp
-  WaterfallItem.hpp
-  PanadapterItem.cpp
-  PanadapterItem.hpp
-  WorldMapItem.cpp
-  WorldMapItem.hpp
-  WorldMapGpuItem.cpp
-  WorldMapGpuItem.hpp
-  DecodiumAudioSink.h
+  controllers/FT2LinkQmlAdapter.cpp
+  controllers/FT2LinkQmlAdapter.hpp
+  src/ui/DecodiumThemeManager.cpp
+  src/ui/DecodiumThemeManager.h
+  src/bridge/DecodiumSubManagers.cpp
+  src/bridge/DecodiumSubManagers.h
+  src/radio/DecodiumCatManager.cpp
+  src/radio/DecodiumCatManager.h
+  src/radio/DecodiumOmniRigManager.cpp
+  src/radio/DecodiumOmniRigManager.h
+  src/radio/DecodiumCat4OmManager.cpp
+  src/radio/DecodiumCat4OmManager.h
+  src/radio/DecodiumTransceiverManager.cpp
+  src/radio/DecodiumTransceiverManager.h
+  src/radio/DecodiumCatShare.cpp
+  src/radio/DecodiumCatShare.h
+  src/radio/DecodiumAmplifier.cpp
+  src/radio/StationTelemetryCodec.cpp
+  src/radio/DecodiumAmplifier.h
+  src/radio/DecodiumRigDetector.cpp
+  src/radio/DecodiumRigDetector.h
+  src/services/DecodiumAlertManager.cpp
+  src/services/DecodiumAlertManager.h
+  src/ui/WaterfallItem.cpp
+  src/ui/WaterfallItem.hpp
+  src/ui/PanadapterItem.cpp
+  src/ui/PanadapterItem.hpp
+  src/ui/WorldMapItem.cpp
+  src/ui/WorldMapItem.hpp
+  src/ui/WorldMapGpuItem.cpp
+  src/ui/WorldMapGpuItem.hpp
+  src/bridge/DecodiumAudioSink.h
+  src/rtl/RtlSdrDsp.h
+  src/rtl/RtlSdrDsp.cpp
+  src/rtl/RtlSdrAudioOutput.h
+  src/rtl/RtlSdrAudioOutput.cpp
+  src/rtl/RtlSdrCapabilities.h
+  src/rtl/RtlSdrRfSpectrum.h
+  src/rtl/RtlSdrRfSpectrum.cpp
+  src/rtl/RtlSdrTuningPlan.h
+  src/rtl/RtlSdrInput.h
+  src/rtl/RtlSdrInput.cpp
   Detector/FT8DecodeWorker.cpp
   Detector/FT2DecodeWorker.cpp
   Detector/FT4DecodeWorker.cpp
@@ -1572,7 +2128,7 @@ add_executable (decodium_qml
   Audio/soundin.cpp
   Audio/soundout.cpp
   Modulator/Modulator.cpp
-  DecodiumQmlLegacyCompat.cpp
+  src/bridge/DecodiumQmlLegacyCompat.cpp
   Network/FoxVerifier.cpp
   Network/FoxVerifier.hpp
   Network/wsprnet.cpp
@@ -1585,10 +2141,14 @@ add_executable (decodium_qml
   Network/DecodiumCloudlogLite.h
   Network/DecodiumQrzLogbookLite.cpp
   Network/DecodiumQrzLogbookLite.h
-  DecodiumDxCluster.cpp
-  DecodiumDxCluster.h
-  DxccLookup.cpp
-  DxccLookup.h
+  src/services/DecodiumDxCluster.cpp
+  src/services/DecodiumDxCluster.h
+  src/services/DecodiumSpotShare.cpp
+  src/services/DecodiumSpotShare.h
+  src/services/DxccLookup.cpp
+  src/services/DxccLookup.h
+  src/services/CallsignIntelligenceService.cpp
+  src/services/CallsignIntelligenceService.h
   ${DECODIUM_QML_LEGACY_SRCS}
   ${wsjtx_GENUISRCS}
   ${wsjtx_RESOURCES_RCC}
@@ -1598,13 +2158,27 @@ if (WSJT_CREATE_WINMAIN)
   set_target_properties (decodium_qml PROPERTIES WIN32_EXECUTABLE ON)
 endif ()
 set_target_properties (decodium_qml PROPERTIES OUTPUT_NAME decodium)
+set (DECODIUM_FT2LINK_ACCESS_SALT_B64 "$ENV{DECODIUM_FT2LINK_ACCESS_SALT_B64}" CACHE STRING "Base64 salt for sealed FT2-Link access gate")
+set (DECODIUM_FT2LINK_ACCESS_HASH_B64 "$ENV{DECODIUM_FT2LINK_ACCESS_HASH_B64}" CACHE STRING "Base64 PBKDF2-HMAC-SHA256 hash for sealed FT2-Link access gate")
+set (DECODIUM_FT2LINK_ACCESS_ITERATIONS "160000" CACHE STRING "PBKDF2 iterations for sealed FT2-Link access gate")
+mark_as_advanced (DECODIUM_FT2LINK_ACCESS_SALT_B64 DECODIUM_FT2LINK_ACCESS_HASH_B64 DECODIUM_FT2LINK_ACCESS_ITERATIONS)
 # Sopprime i warnings-as-error su LegacyDspIoHelpers (vector bounds in GCC15)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set_source_files_properties (Detector/LegacyDspIoHelpers.cpp PROPERTIES
     COMPILE_FLAGS "-Wno-error=stringop-overflow -Wno-error=stringop-overread -Wno-error=array-bounds")
 endif ()
 # C17 — FoxVerifier senza Boost.Log (usa qDebug come shim)
-target_compile_definitions (decodium_qml PRIVATE DECODIUM_NO_BOOST_LOG FFTW3_SINGLE_FOUND)
+target_compile_definitions (decodium_qml PRIVATE DECODIUM_NO_BOOST_LOG FFTW3_SINGLE_FOUND DECODIUM_QML_PANADAPTER_DIRECT=1)
+if (DECODIUM_HAS_RTLSDR)
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_RTLSDR=1)
+else ()
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_RTLSDR=0)
+endif ()
+target_compile_definitions (decodium_qml PRIVATE
+  DECODIUM_FT2LINK_ACCESS_SALT_B64="${DECODIUM_FT2LINK_ACCESS_SALT_B64}"
+  DECODIUM_FT2LINK_ACCESS_HASH_B64="${DECODIUM_FT2LINK_ACCESS_HASH_B64}"
+  DECODIUM_FT2LINK_ACCESS_ITERATIONS=${DECODIUM_FT2LINK_ACCESS_ITERATIONS}
+)
 target_compile_options (decodium_qml PRIVATE -Wno-deprecated-declarations)
 target_include_directories (decodium_qml PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1619,6 +2193,8 @@ target_link_libraries (decodium_qml
   Qt6::Multimedia
   Qt6::Network
   Qt6::SerialPort
+  Qt6::Sql           # 1.0.238 Phase 5.2: decode history worker thread
+  Qt6::Concurrent    # decode UI snapshot filter/sort off the GUI thread
   Qt6::WebSockets
   wsjt_qtmm
   wsjt_qt
@@ -1629,6 +2205,46 @@ target_link_libraries (decodium_qml
   ${FFTW3_LIBRARIES}
   ${LIBM_LIBRARIES}
 )
+if (TARGET Decodium::SstvIntegration)
+  target_link_libraries (decodium_qml Decodium::SstvIntegration)
+  target_link_libraries (decodium_qml Decodium::SstvGallery)
+  target_link_libraries (decodium_qml Decodium::SstvSharingUi)
+  target_link_libraries (decodium_qml Decodium::SstvDiagnostics)
+  if (TARGET Decodium::SstvStudio)
+    target_link_libraries (decodium_qml Decodium::SstvStudio)
+  endif ()
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_SSTV=1)
+else ()
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_SSTV=0)
+endif ()
+
+
+# DecoRTTY: la libreria di aggancio porta con se' tutte le altre.
+if (DECODIUM_ENABLE_RTTY)
+  target_link_libraries (decodium_qml decortty_host)
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_RTTY=1)
+else ()
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_RTTY=0)
+endif ()
+if (TARGET Decodium::HamDrmRuntime)
+  target_link_libraries (decodium_qml Decodium::HamDrmRuntime)
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_HAMDRM=1)
+else ()
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_HAS_HAMDRM=0)
+endif ()
+if (DECODIUM_HAS_RTLSDR)
+  target_link_libraries (decodium_qml RtlSdr::RtlSdr)
+endif ()
+if (OPENMP_FOUND)
+  if (TARGET OpenMP::OpenMP_CXX)
+    target_link_libraries (decodium_qml OpenMP::OpenMP_CXX)
+  elseif (APPLE AND DECODIUM_LIBOMP_LIBRARY)
+    target_link_libraries (decodium_qml ${DECODIUM_LIBOMP_LIBRARY})
+  endif ()
+endif ()
+if (APPLE)
+  target_link_libraries (decodium_qml Qt6::DBus "-framework AudioToolbox")
+endif ()
 if (TARGET Qt6::GuiPrivate)
   target_link_libraries (decodium_qml Qt6::GuiPrivate)
   target_compile_definitions (decodium_qml PRIVATE DECODIUM_QT_RHI_TEXTURE_UPLOAD=1)
@@ -1662,6 +2278,29 @@ if (Qt6ShaderTools_FOUND)
 	      "310 es,420,430,440"
     FILES
       shaders/panadapter_fft.comp
+      shaders/panadapter_fft_direct.comp
+  )
+	  qt_add_shaders(decodium_qml decodium_panadapter_spectrum_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
+    FILES
+      shaders/panadapter_spectrum.vert
+      shaders/panadapter_spectrum.frag
+  )
+	  qt_add_shaders(decodium_qml decodium_panadapter_spectrum3d_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
+    FILES
+      shaders/panadapter_spectrum3d.vert
+      shaders/panadapter_spectrum3d.frag
   )
 	  qt_add_shaders(decodium_qml decodium_livemap_greyline_shader
 	    PREFIX
@@ -1696,11 +2335,25 @@ if (Qt6ShaderTools_FOUND)
       shaders/livemap_path.vert
       shaders/livemap_path.frag
   )
+	  qt_add_shaders(decodium_qml decodium_livemap_arrow_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
+    FILES
+      shaders/livemap_arrow.vert
+      shaders/livemap_arrow.frag
+  )
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_WATERFALL_SHADER_QSB=1)
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_GPU_PANADAPTER_FFT_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_GPU_PANADAPTER_SPECTRUM_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_GPU_PANADAPTER_SPECTRUM_3D_QSB=1)
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_GREYLINE_QSB=1)
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_MARKER_QSB=1)
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_PATH_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_ARROW_QSB=1)
   file (WRITE "${CMAKE_BINARY_DIR}/decodium_qsb_shaders.enabled" "1\n")
 else ()
   file (WRITE "${CMAKE_BINARY_DIR}/decodium_qsb_shaders.enabled" "0\n")
@@ -1723,15 +2376,28 @@ else ()
   message (STATUS "tools/bench_ft8_features.cpp not found: skipping optional FT8 features benchmark")
 endif ()
 
-# Copy QML files next to the decodium_qml executable on every build.
-# The runtime loads QML from the build tree, so stale copied files cause
-# "fixed in source but still broken at startup" behavior.
-add_custom_target (sync_decodium_qml ALL
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/qml"
-    "${CMAKE_BINARY_DIR}/qml"
-  COMMENT "Syncing QML files to build output"
-)
+# Copy a clean QML tree next to the decodium_qml executable on every build.
+# In particular, remove stale qmlcachegen artifacts left by older builds:
+# Qt prefers adjacent .qmlc files over the updated source QML.
+# Quando si compila dentro la cartella dei sorgenti, origine e destinazione
+# sono la stessa cosa: questo passo cancellava i .qml e poi provava a
+# ricopiarli da se stessi, cioe' li perdeva. Chi compilava in-source si
+# ritrovava settantaquattro file spariti e nessun indizio sul perche'.
+if (NOT "${CMAKE_BINARY_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
+  add_custom_target (sync_decodium_qml ALL
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+      "${CMAKE_BINARY_DIR}/qml"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+      "${CMAKE_BINARY_DIR}/qml"
+    COMMENT "Syncing QML files to build output"
+  )
+else ()
+  # I file sono gia' al loro posto: non c'e' niente da copiare.
+  add_custom_target (sync_decodium_qml ALL
+    COMMENT "QML gia' in posizione (compilazione dentro i sorgenti)"
+  )
+endif ()
 
 add_custom_target (sync_decodium_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -1752,10 +2418,22 @@ add_dependencies (decodium_qml sync_decodium_qml sync_decodium_assets)
 add_custom_target (decodium_app
   DEPENDS decodium_qml sync_decodium_qml sync_decodium_assets
 )
+# Stessa trappola gia' disinnescata per sync_decodium_qml qui sopra: in una
+# compilazione dentro i sorgenti CMAKE_BINARY_DIR e la cartella dei sorgenti
+# coincidono, e questo passo cancellava qml/ per poi ricopiarla da se stessa,
+# cioe' cancellava gli 88 .qml del progetto a ogni build di decodium_qml.
+if (NOT "${CMAKE_BINARY_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
+  add_custom_command (TARGET decodium_qml POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+      "${CMAKE_BINARY_DIR}/qml"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+      "${CMAKE_BINARY_DIR}/qml"
+    COMMENT "Syncing QML files after decodium_qml build"
+  )
+endif ()
+
 add_custom_command (TARGET decodium_qml POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/qml"
-    "${CMAKE_BINARY_DIR}/qml"
   COMMAND ${CMAKE_COMMAND} -E make_directory
     "$<TARGET_FILE_DIR:decodium_qml>/artwork/maps"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1765,8 +2443,11 @@ add_custom_command (TARGET decodium_qml POST_BUILD
     "${CMAKE_CURRENT_SOURCE_DIR}/artwork/maps/world_overlay_2048x1024.png"
     "$<TARGET_FILE_DIR:decodium_qml>/artwork/maps/world_overlay_2048x1024.png"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_CURRENT_SOURCE_DIR}/sat.dat"
+    "${DECODIUM_RUNTIME_DATA_DIR}/sat.dat"
     "$<TARGET_FILE_DIR:decodium_qml>/sat.dat"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${DECODIUM_RUNTIME_DATA_DIR}/cty.dat"
+    "$<TARGET_FILE_DIR:decodium_qml>/cty.dat"
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/sounds"
     "$<TARGET_FILE_DIR:decodium_qml>/sounds"
@@ -1778,10 +2459,10 @@ if (APPLE)
     COMMAND ${CMAKE_COMMAND} -E remove_directory
       $<TARGET_FILE_DIR:wsjtx>/sounds
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${CMAKE_CURRENT_SOURCE_DIR}/cty.dat"
+      "${DECODIUM_RUNTIME_DATA_DIR}/cty.dat"
       "$<TARGET_FILE_DIR:wsjtx>/../Resources/cty.dat"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${CMAKE_CURRENT_SOURCE_DIR}/sat.dat"
+      "${DECODIUM_RUNTIME_DATA_DIR}/sat.dat"
       "$<TARGET_FILE_DIR:wsjtx>/../Resources/sat.dat"
     COMMENT "Refreshing macOS bundle data files"
     )
@@ -1910,10 +2591,18 @@ install (TARGETS wsprd
   )
 
 if(WSJT_BUILD_UTILS)
-install (TARGETS jt9 fmtave fcal fmeasure
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
-  BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
-  )
+  set(_wsjt_optional_install_targets)
+  foreach(_wsjt_optional_target IN ITEMS jt9 fmtave fcal fmeasure)
+    if(TARGET ${_wsjt_optional_target})
+      list(APPEND _wsjt_optional_install_targets ${_wsjt_optional_target})
+    endif()
+  endforeach()
+  if(_wsjt_optional_install_targets)
+    install (TARGETS ${_wsjt_optional_install_targets}
+      RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
+      BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
+      )
+  endif()
 endif(WSJT_BUILD_UTILS)
 
 install (PROGRAMS
@@ -1938,24 +2627,40 @@ install (PROGRAMS
   )
 
 install (FILES
-  README
+  README.md
   COPYING
   AUTHORS
-  THANKS
-  NEWS
-  BUGS
+  doc/project/THANKS
+  doc/RTL_SDR.md
+  doc/THIRD_PARTY_LICENSES_RTLSDR.md
+  doc/THIRD_PARTY_LICENSES_OPENJPEG.md
   DESTINATION ${CMAKE_INSTALL_DOCDIR}
   #COMPONENT runtime
   )
 
+if (DECODIUM_ENABLE_SSTV)
+  install (DIRECTORY "${PROJECT_SOURCE_DIR}/docs/sstv/"
+    DESTINATION "${CMAKE_INSTALL_DOCDIR}/sstv"
+    FILES_MATCHING
+      PATTERN "*.md"
+      PATTERN "*.yaml"
+    #COMPONENT runtime
+    )
+  install (FILES
+    "${PROJECT_SOURCE_DIR}/tests/sstv/fixtures/EXTERNAL_VECTORS.md"
+    DESTINATION "${CMAKE_INSTALL_DOCDIR}/sstv"
+    #COMPONENT runtime
+    )
+endif ()
+
 install (FILES
-  cty.dat
-  CALL3.TXT
-  cty.dat_copyright.txt
-  grid.dat
-  sat.dat
+  "${DECODIUM_RUNTIME_DATA_DIR}/cty.dat"
+  "${DECODIUM_RUNTIME_DATA_DIR}/CALL3.TXT"
+  "${DECODIUM_RUNTIME_DATA_DIR}/cty.dat_copyright.txt"
+  "${DECODIUM_RUNTIME_DATA_DIR}/grid.dat"
+  "${DECODIUM_RUNTIME_DATA_DIR}/sat.dat"
   contrib/Ephemeris/JPLEPH
-  eclipse.txt
+  "${DECODIUM_RUNTIME_DATA_DIR}/eclipse.txt"
   artwork/maps/earth_2048x1024.jpg
   artwork/maps/world_overlay_2048x1024.png
   DESTINATION ${CMAKE_INSTALL_DATADIR}/${CMAKE_PROJECT_NAME}
@@ -1972,11 +2677,19 @@ install (FILES
   #COMPONENT runtime
   )
 
-install (FILES
-  ALLCALL7.TXT
-  DESTINATION ${CMAKE_INSTALL_BINDIR}
-  #COMPONENT runtime
-  )
+if (APPLE)
+  install (FILES
+    "${DECODIUM_RUNTIME_DATA_DIR}/ALLCALL7.TXT"
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
+    #COMPONENT runtime
+    )
+else ()
+  install (FILES
+    "${DECODIUM_RUNTIME_DATA_DIR}/ALLCALL7.TXT"
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    #COMPONENT runtime
+    )
+endif ()
 
 install (DIRECTORY
   example_log_configurations
@@ -2053,7 +2766,7 @@ add_dependencies (wsjt_qt revisiontag)
 # versioning and configuration
 #
 configure_file (
-  "${CMAKE_CURRENT_SOURCE_DIR}/decodium_config.h.in"
+  "${DECODIUM_CMAKE_TEMPLATE_DIR}/decodium_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/wsjtx_config.h"
   )
 
@@ -2062,7 +2775,9 @@ if (NOT WIN32 AND NOT APPLE)
   # install a desktop file so wsjtx appears in the application start
   # menu with an icon
   install (
-    FILES wsjtx.desktop message_aggregator.desktop
+    FILES
+      "${DECODIUM_PACKAGING_DIR}/linux/wsjtx.desktop"
+      "${DECODIUM_PACKAGING_DIR}/linux/message_aggregator.desktop"
     DESTINATION share/applications
     #COMPONENT runtime
     )
@@ -2099,7 +2814,8 @@ endif ()
 #
 # packaging
 #
-set (CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_SOURCE_DIR}/package_description.txt")
+set (CPACK_PACKAGE_DESCRIPTION_FILE
+  "${DECODIUM_PACKAGING_DIR}/package_description.txt")
 set (CPACK_MONOLITHIC_INSTALL 1)
 set (CPACK_PACKAGE_NAME "decodium")
 set (CPACK_PACKAGE_VERSION_MAJOR ${FORK_RELEASE_VERSION_MAJOR})
@@ -2145,7 +2861,7 @@ set (CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
 set (CPACK_RPM_PACKAGE_REQUIRES "qt5-qtbase >= 5.9, qt5-qtserialport >= 5.9, qt5-qtmultimedia >= 5.9, qt5-qtwebsockets >= 5.9, qt5-qtsvg >= 5.9, libusbx >= 1.0.22, libgfortran >= 7, libgomp >= 7, fftw-libs-single >= 3.3, boost-log >= 1.62")
 set (CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION /usr/share/pixmaps /usr/share/applications /usr/share/man /usr/share/man1)
 
-configure_file ("${PROJECT_SOURCE_DIR}/CMakeCPackOptions.cmake.in"
+configure_file ("${DECODIUM_CMAKE_TEMPLATE_DIR}/CMakeCPackOptions.cmake.in"
   "${PROJECT_BINARY_DIR}/CMakeCPackOptions.cmake" @ONLY)
 set (CPACK_PROJECT_CONFIG_FILE "${PROJECT_BINARY_DIR}/CMakeCPackOptions.cmake")
 

@@ -51,6 +51,13 @@ constexpr int kQ65SpecMaxFft {20736};
 constexpr int kQ65SpecSyncCount {22};
 constexpr float kQ65TwoPi {6.28318530717958647692f};
 
+thread_local bool g_q65ZapEnabled {true};
+
+bool q65_zap_enabled ()
+{
+  return g_q65ZapEnabled;
+}
+
 q65_codec_ds& shared_q65_codec ()
 {
   static q65_codec_ds codec {};
@@ -384,6 +391,16 @@ extern "C" void ftx_q65_bzap_c (float s3[], int* ll)
   q65_bzap_impl (s3, *ll);
 }
 
+extern "C" int ftx_q65_zap_enabled_c ()
+{
+  return q65_zap_enabled () ? 1 : 0;
+}
+
+extern "C" void ftx_q65_set_zap_enabled_c (int* enabled)
+{
+  g_q65ZapEnabled = enabled && *enabled != 0;
+}
+
 extern "C" void ftx_q65_s1_to_s3_c (float const s1[], int* iz, int* jz, int* i0, int* j0,
                                     int* ipk, int* jpk, int* ll, int* mode_q65,
                                     float const sync[85], float s3[])
@@ -425,7 +442,10 @@ extern "C" void ftx_q65_s1_to_s3_c (float const s1[], int* iz, int* jz, int* i0,
         }
     }
 
-  q65_bzap_impl (s3, *ll);
+  if (q65_zap_enabled ())
+    {
+      q65_bzap_impl (s3, *ll);
+    }
 }
 
 extern "C" void ftx_q65_sync_curve_c (float ccf1[], int* count, float* rms1)
@@ -698,7 +718,10 @@ extern "C" void ftx_q65_loops_c (std::complex<float> const c00[], int* npts2, in
             {
               value = std::min (value / base, kQ65S3Limit);
             }
-          q65_bzap_impl (s3.data (), ll);
+          if (q65_zap_enabled ())
+            {
+              q65_bzap_impl (s3.data (), ll);
+            }
 
           for (int ibw = *ibwa; ibw <= *ibwb; ++ibw)
             {

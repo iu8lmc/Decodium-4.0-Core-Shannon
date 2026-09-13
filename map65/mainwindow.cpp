@@ -1738,7 +1738,10 @@ void MainWindow::guiUpdate()
     QString t="  Tx " + m_modeTx + "   ";
     t=t.left(11);
     QFile f("map65_tx.log");
-    f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
+    // Qt 6.11 marca QFile::open come nodiscard e qui si compila con -Werror.
+    // L'esito non era controllato; scrivere o leggere su un QFile non aperto
+    // e' gia' un no-op, quindi il comportamento resta quello di prima.
+    (void) f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
     QTextStream out(&f);
     out << QDateTime::currentDateTimeUtc().toString("yyyy-MMM-dd hh:mm")
         << t << QString::fromLatin1(msgsent)
@@ -2175,7 +2178,10 @@ void MainWindow::on_addButton_clicked()                       //Add button
     if (f0.exists ()) f0.remove ();
     f1.copy (old_path);         // copying as we want to preserve
                                 // symlinks
-    f1.open (QFile::WriteOnly | QFile::Text); // truncates
+    // Qt 6.11 marca QFile::open come nodiscard e qui si compila con -Werror.
+    // L'esito non era controllato; scrivere o leggere su un QFile non aperto
+    // e' gia' un no-op, quindi il comportamento resta quello di prima.
+    (void) f1.open (QFile::WriteOnly | QFile::Text); // truncates
     f2.seek (0);
     f1.write (f2.readAll ());   // copy contents
     f2.remove ();
@@ -2505,7 +2511,7 @@ void MainWindow::read_log()
   // Update "m_worked" by reading wsjtx.log
   m_worked.clear();                     //Start from scratch
   QFile f("wsjtx.log");
-  f.open(QIODevice::ReadOnly);
+  (void) f.open(QIODevice::ReadOnly);   // verificato da isOpen() qui sotto
   if(f.isOpen()) {
     QTextStream in(&f);
     QString line,callsign;
