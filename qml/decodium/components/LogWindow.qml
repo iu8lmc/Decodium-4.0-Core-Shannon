@@ -7,18 +7,19 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
-import QtQuick.Dialogs
 
 Popup {
     id: logWindow
-    width: 960
-    height: 720
+    property var nativeHostWindow: null
+    width: nativeHostWindow && parent ? Math.max(600, parent.width) : 960
+    height: nativeHostWindow && parent ? Math.max(400, parent.height) : 720
     modal: false
     closePolicy: Popup.CloseOnEscape
     padding: 0
     property bool positionInitialized: false
 
     function clampToParent() {
+        if (nativeHostWindow) return
         if (!parent) return
         x = Math.max(0, Math.min(x, parent.width - width))
         y = Math.max(0, Math.min(y, parent.height - height))
@@ -26,9 +27,39 @@ Popup {
 
     function ensureInitialPosition() {
         if (positionInitialized || !parent) return
+        if (nativeHostWindow) {
+            x = 0
+            y = 0
+            positionInitialized = true
+            return
+        }
         x = Math.max(0, Math.round((parent.width - width) / 2))
         y = Math.max(0, Math.round((parent.height - height) / 2))
         positionInitialized = true
+    }
+
+    function startNativeHostMove() {
+        if (!nativeHostWindow || typeof nativeHostWindow.startSystemMove !== "function")
+            return false
+        try {
+            return nativeHostWindow.startSystemMove()
+        } catch (error) {
+            console.log("Log startSystemMove failed: " + error)
+        }
+        return false
+    }
+
+    function finishNativeHostMove() {
+        if (nativeHostWindow && typeof nativeHostWindow.finishDesktopMove === "function")
+            nativeHostWindow.finishDesktopMove()
+    }
+
+    function requestWindowClose() {
+        if (nativeHostWindow && typeof nativeHostWindow.hideHostedWindow === "function") {
+            nativeHostWindow.hideHostedWindow()
+            return
+        }
+        logWindow.close()
     }
 
     // Dynamic theme colors from ThemeManager
@@ -52,11 +83,42 @@ Popup {
     property var stats: ({})
     property int selectedIndex: -1
     property var selectedQso: null
+    property var logbookProfiles: []
+    property var logbookNames: []
+    property bool updatingLogbookCombo: false
+    property bool adifImportNoticeVisible: false
+    property string adifImportNotice: ""
+    property bool displayDistanceInMiles: bridge ? coerceBool(bridge.getSetting("Miles", false), false) : false
+
+    function coerceBool(value, fallback) {
+        if (value === undefined || value === null)
+            return !!fallback
+        if (typeof value === "boolean")
+            return value
+        if (typeof value === "number")
+            return value !== 0
+
+        var text = String(value).trim().toLowerCase()
+        if (text === "true" || text === "1" || text === "yes" || text === "on")
+            return true
+        if (text === "false" || text === "0" || text === "no" || text === "off")
+            return false
+        return !!fallback
+    }
+
+    function formatDistanceText(distanceKm, withSpace) {
+        var km = Number(distanceKm)
+        if (!isFinite(km) || km <= 0)
+            return ""
+        var value = displayDistanceInMiles ? km * 0.621371192 : km
+        return Math.round(value) + (withSpace ? " " : "") + (displayDistanceInMiles ? "mi" : "km")
+    }
 
     onAboutToShow: {
         ensureInitialPosition()
         if (appEngine && appEngine.logManager && appEngine.logManager.warmLogCacheAsync)
             appEngine.logManager.warmLogCacheAsync()
+        refreshLogbookProfiles()
         delayedInitialRefresh.restart()
     }
 
@@ -67,12 +129,60 @@ Popup {
         onTriggered: if (logWindow.visible) refreshLog()
     }
 
+    Timer {
+        id: adifImportNoticeTimer
+        interval: 12000
+        repeat: false
+        onTriggered: logWindow.adifImportNoticeVisible = false
+    }
+
     Connections {
         target: appEngine && appEngine.logManager ? appEngine.logManager : null
         function onQsoLogCacheChanged() {
+            if (logWindow.visible) {
+                refreshLogbookProfiles()
+                refreshLog()
+            }
+        }
+        function onActiveLogbookChanged() {
+            refreshLogbookProfiles()
+            clearSelection()
             if (logWindow.visible)
                 refreshLog()
         }
+    }
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "Miles")
+                logWindow.displayDistanceInMiles = logWindow.coerceBool(value, false)
+        }
+        function onAdifImportFinished(success, imported, skipped, total, backupPath, message) {
+            logWindow.adifImportNotice = String(message || (success ? qsTr("ADIF import completed") : qsTr("ADIF import failed")))
+            logWindow.adifImportNoticeVisible = true
+            adifImportNoticeTimer.restart()
+        }
+    }
+
+    function refreshLogbookProfiles() {
+        if (!(appEngine && appEngine.logManager && appEngine.logManager.logbookProfiles))
+            return
+        var profiles = appEngine.logManager.logbookProfiles()
+        var names = []
+        var active = -1
+        for (var i = 0; i < profiles.length; ++i) {
+            var p = profiles[i] || ({})
+            names.push(String(p.name || "Logbook") + "  " + String(p.qsoCount || 0))
+            if (p.active)
+                active = i
+        }
+        updatingLogbookCombo = true
+        logbookProfiles = profiles
+        logbookNames = names
+        if (active >= 0 && logbookCombo)
+            logbookCombo.currentIndex = active
+        updatingLogbookCombo = false
     }
 
     function refreshLog() {
@@ -111,6 +221,63 @@ Popup {
         if (Qt.platform.os === "windows" && path.length > 2 && path.charAt(0) === "/" && path.charAt(2) === ":")
             path = path.substring(1)
         return path
+    }
+
+    function openImportAdifDialog() {
+        var path = bridge.openFileDialog(qsTr("Importa file ADIF"),
+                                         "",
+                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")])
+        if (path.length > 0 && appEngine && appEngine.logManager) {
+            if (appEngine.logManager.importFromAdifAsync)
+                appEngine.logManager.importFromAdifAsync(path)
+            else
+                appEngine.logManager.importFromAdif(path)
+            clearSelection()
+        }
+    }
+
+    function openAddLogbookDialog() {
+        var path = bridge.openFileDialog(qsTr("Carica logbook ADIF"),
+                                         "",
+                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")])
+        if (path.length > 0 && appEngine && appEngine.logManager) {
+            appEngine.logManager.addLogbook(path, "")
+            clearSelection()
+            refreshLogbookProfiles()
+            refreshLog()
+        }
+    }
+
+    function selectedLogbookProfile() {
+        if (!logbookProfiles || logbookProfiles.length === 0)
+            return ({})
+        var idx = logbookCombo ? logbookCombo.currentIndex : -1
+        if (idx < 0 || idx >= logbookProfiles.length) {
+            for (var i = 0; i < logbookProfiles.length; ++i) {
+                var candidate = logbookProfiles[i] || ({})
+                if (candidate.active)
+                    return candidate
+            }
+            return logbookProfiles[0] || ({})
+        }
+        return logbookProfiles[idx] || ({})
+    }
+
+    function openDeleteLogbookDialog() {
+        var profile = selectedLogbookProfile()
+        if (!profile.path)
+            return
+        deleteLogbookDialog.profile = profile
+        deleteLogbookFileCheck.checked = true
+        deleteLogbookDialog.open()
+    }
+
+    function openExportAdifDialog() {
+        var path = bridge.saveFileDialog(qsTr("Esporta file ADIF"),
+                                         "",
+                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")])
+        if (path.length > 0 && appEngine && appEngine.logManager)
+            appEngine.logManager.exportToAdif(path)
     }
 
     function statsFromRows(rows) {
@@ -184,31 +351,100 @@ Popup {
         }
     }
 
-    // Import ADIF FileDialog
-    FileDialog {
-        id: importFileDialog
-        title: "Importa file ADIF"
-        nameFilters: ["ADIF files (*.adi *.adif)", "All files (*)"]
+    Dialog {
+        id: createLogbookDialog
+        title: qsTr("Nuovo logbook")
+        anchors.centerIn: parent
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        ColumnLayout {
+            width: 300
+            spacing: 8
+            Label {
+                text: qsTr("Nome operatore / callsign")
+                color: textPrimary
+            }
+            DecoTextField {
+                id: newLogbookNameField
+                Layout.fillWidth: true
+                placeholderText: qsTr("e.g. 9H1SR or AMICO")
+                selectByMouse: true
+                color: textPrimary
+            }
+            CheckBox {
+                id: newLogbookBackupCheck
+                checked: true
+                text: qsTr("Backup log attuale")
+            }
+        }
+
+        onOpened: {
+            newLogbookNameField.text = appEngine ? String(appEngine.callsign || "") : ""
+            newLogbookNameField.forceActiveFocus()
+            newLogbookNameField.selectAll()
+        }
         onAccepted: {
             if (appEngine && appEngine.logManager) {
-                var path = fileUrlToLocalPath(selectedFile)
-                var count = appEngine.logManager.importFromAdif(path)
+                appEngine.logManager.createLogbook(newLogbookNameField.text, newLogbookBackupCheck.checked)
                 clearSelection()
+                refreshLogbookProfiles()
                 refreshLog()
             }
         }
     }
 
-    // Export ADIF FileDialog
-    FileDialog {
-        id: exportFileDialog
-        title: "Esporta file ADIF"
-        nameFilters: ["ADIF files (*.adi *.adif)", "All files (*)"]
-        fileMode: FileDialog.SaveFile
+    Dialog {
+        id: deleteLogbookDialog
+        title: qsTr("Delete logbook")
+        anchors.centerIn: parent
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        property var profile: ({})
+
+        ColumnLayout {
+            width: 430
+            spacing: 10
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("You are about to delete the selected logbook.")
+                color: accentOrange
+                font.pixelSize: 14
+                font.bold: true
+                wrapMode: Text.WordWrap
+            }
+            Label {
+                Layout.fillWidth: true
+                text: "Nome: " + String(deleteLogbookDialog.profile.name || "Logbook")
+                      + "\nPath: " + String(deleteLogbookDialog.profile.path || "")
+                      + "\nQSO: " + String(deleteLogbookDialog.profile.qsoCount || 0)
+                color: textPrimary
+                font.pixelSize: 12
+                wrapMode: Text.WrapAnywhere
+            }
+            CheckBox {
+                id: deleteLogbookFileCheck
+                checked: true
+                text: qsTr("Also delete the ADIF file from disk")
+            }
+            Label {
+                Layout.fillWidth: true
+                text: deleteLogbookFileCheck.checked
+                      ? qsTr("Destructive operation: the .adi file will be deleted. If this is the last logbook, Decodium will create a new empty logbook.")
+                      : qsTr("The .adi file will remain on disk; only the association with Decodium will be removed.")
+                color: textSecondary
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+        }
+
         onAccepted: {
-            if (appEngine && appEngine.logManager) {
-                var path = fileUrlToLocalPath(selectedFile)
-                appEngine.logManager.exportToAdif(path)
+            if (appEngine && appEngine.logManager && deleteLogbookDialog.profile.path) {
+                if (appEngine.logManager.deleteLogbook(deleteLogbookDialog.profile.path, deleteLogbookFileCheck.checked)) {
+                    clearSelection()
+                    refreshLogbookProfiles()
+                    refreshLog()
+                }
             }
         }
     }
@@ -216,7 +452,7 @@ Popup {
     // Delete confirmation dialog
     Dialog {
         id: deleteConfirmDialog
-        title: "Conferma eliminazione"
+        title: qsTr("Confirm deletion")
         anchors.centerIn: parent
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
@@ -225,7 +461,7 @@ Popup {
         property string deleteDateTime: ""
 
         Label {
-            text: "Eliminare il QSO con " + deleteConfirmDialog.deleteCall + "?"
+            text: qsTr("Delete the QSO with %1?").arg(deleteConfirmDialog.deleteCall)
             font.pixelSize: 13
         }
 
@@ -251,16 +487,43 @@ Popup {
             MouseArea {
                 anchors.fill: parent
                 property point clickPos: Qt.point(0, 0)
+                property point pressGlobalPos: Qt.point(0, 0)
+                property point pressWindowPos: Qt.point(0, 0)
+                property bool nativeMoveActive: false
                 cursorShape: Qt.SizeAllCursor
                 onPressed: function(mouse) {
                     clickPos = Qt.point(mouse.x, mouse.y)
                     logWindow.positionInitialized = true
+                    if (logWindow.nativeHostWindow) {
+                        pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                        pressWindowPos = Qt.point(logWindow.nativeHostWindow.x,
+                                                  logWindow.nativeHostWindow.y)
+                        nativeMoveActive = logWindow.startNativeHostMove()
+                    }
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed) return
+                    if (logWindow.nativeHostWindow) {
+                        if (nativeMoveActive)
+                            return
+                        var currentGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                        logWindow.nativeHostWindow.x = Math.round(
+                                    pressWindowPos.x + currentGlobalPos.x - pressGlobalPos.x)
+                        logWindow.nativeHostWindow.y = Math.round(
+                                    pressWindowPos.y + currentGlobalPos.y - pressGlobalPos.y)
+                        return
+                    }
                     logWindow.x += mouse.x - clickPos.x
                     logWindow.y += mouse.y - clickPos.y
                     logWindow.clampToParent()
+                }
+                onReleased: {
+                    nativeMoveActive = false
+                    logWindow.finishNativeHostMove()
+                }
+                onCanceled: {
+                    nativeMoveActive = false
+                    logWindow.finishNativeHostMove()
                 }
             }
 
@@ -290,7 +553,7 @@ Popup {
                 }
 
                 Text {
-                    text: "QSO Log"
+                    text: qsTr("QSO Log")
                     font.pixelSize: 15
                     font.bold: true
                     font.letterSpacing: 0.5
@@ -302,17 +565,17 @@ Popup {
                 // Inline stats
                 Text {
                     text: (stats.totalQsos || 0) + " QSOs"
-                    font.pixelSize: 12; font.bold: true; font.family: "Monospace"
+                    font.pixelSize: 12; font.bold: true; font.family: decodiumMonoFontFamily
                     color: accentGreen
                 }
                 Text {
                     text: (stats.uniqueCalls || 0) + " Calls"
-                    font.pixelSize: 11; font.family: "Monospace"
+                    font.pixelSize: 11; font.family: decodiumMonoFontFamily
                     color: textSecondary
                 }
                 Text {
                     text: (stats.uniqueGrids || 0) + " Grids"
-                    font.pixelSize: 11; font.family: "Monospace"
+                    font.pixelSize: 11; font.family: decodiumMonoFontFamily
                     color: textSecondary
                 }
 
@@ -326,17 +589,24 @@ Popup {
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     Text {
-                        anchors.centerIn: parent; text: "\u2212"
+                        anchors.centerIn: parent; text: qsTr("\u2212")
                         font.pixelSize: 16; font.bold: true
                         color: logMinMA.containsMouse ? "#ffc107" : textPrimary
                     }
                     MouseArea {
                         id: logMinMA; anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: { logWindowMinimized = true; logWindow.close() }
+                        onClicked: {
+                            logWindowMinimized = true
+                            if (logWindow.nativeHostWindow
+                                    && typeof logWindow.nativeHostWindow.minimizeHostedWindow === "function")
+                                logWindow.nativeHostWindow.minimizeHostedWindow()
+                            else
+                                logWindow.close()
+                        }
                     }
                     ToolTip.visible: logMinMA.containsMouse
-                    ToolTip.text: "Riduci a icona"; ToolTip.delay: 500
+                    ToolTip.text: qsTr("Minimize"); ToolTip.delay: 500
                 }
 
                 // Close
@@ -347,17 +617,60 @@ Popup {
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     Text {
-                        anchors.centerIn: parent; text: "\u2715"
+                        anchors.centerIn: parent; text: qsTr("\u2715")
                         font.pixelSize: 11; font.bold: true
                         color: logCloseMA.containsMouse ? "#f44336" : textPrimary
                     }
                     MouseArea {
                         id: logCloseMA; anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: logWindow.close()
+                        onClicked: logWindow.requestWindowClose()
                     }
                     ToolTip.visible: logCloseMA.containsMouse
-                    ToolTip.text: "Chiudi"; ToolTip.delay: 500
+                    ToolTip.text: qsTr("Close"); ToolTip.delay: 500
+                }
+            }
+        }
+
+        Rectangle {
+            id: adifImportBanner
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 38 : 0
+            Layout.leftMargin: outerMargin
+            Layout.rightMargin: outerMargin
+            visible: (bridge && bridge.adifImportInProgress) || logWindow.adifImportNoticeVisible
+            radius: 5
+            color: bridge && bridge.adifImportInProgress
+                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
+                   : Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
+            border.color: bridge && bridge.adifImportInProgress ? secondaryCyan : accentGreen
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    text: bridge && bridge.adifImportInProgress
+                          ? String(bridge.adifImportStatus || qsTr("Importing ADIF..."))
+                          : logWindow.adifImportNotice
+                    color: textPrimary
+                    font.pixelSize: 10
+                    elide: Text.ElideMiddle
+                }
+                ProgressBar {
+                    visible: bridge && bridge.adifImportInProgress
+                    Layout.preferredWidth: 110
+                    from: 0; to: 100
+                    value: bridge ? bridge.adifImportProgress : 0
+                }
+                Text {
+                    visible: bridge && bridge.adifImportInProgress
+                    text: (bridge ? bridge.adifImportProgress : 0) + "%"
+                    color: secondaryCyan
+                    font.pixelSize: 10
+                    font.bold: true
                 }
             }
         }
@@ -377,9 +690,73 @@ Popup {
                 anchors.leftMargin: 8; anchors.rightMargin: 8
                 spacing: 6
 
+                StyledComboBox {
+                    id: logbookCombo
+                    model: logbookNames
+                    Layout.preferredWidth: 150
+                    height: 28
+                    font.pixelSize: 10
+                    onActivated: function(index) {
+                        if (updatingLogbookCombo || !(appEngine && appEngine.logManager))
+                            return
+                        var profile = logbookProfiles[index] || ({})
+                        if (profile.path)
+                            appEngine.logManager.switchLogbook(profile.path)
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: appEngine && appEngine.logManager
+                                  ? "Active logbook: " + appEngine.logManager.activeLogbookPath
+                                  : "Logbook"
+                    ToolTip.delay: 500
+                }
+
+                Rectangle {
+                    width: 46; height: 28; radius: 4
+                    color: newLogbookMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.28) : Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.10)
+                    border.color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.55)
+                    Text { anchors.centerIn: parent; text: qsTr("New"); font.pixelSize: 10; font.bold: true; color: accentGreen }
+                    MouseArea { id: newLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: createLogbookDialog.open() }
+                    ToolTip.visible: newLogbookMA.containsMouse; ToolTip.text: qsTr("Create a separate logbook"); ToolTip.delay: 500
+                }
+
+                Rectangle {
+                    width: 48; height: 28; radius: 4
+                    color: loadLogbookMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.28) : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.10)
+                    border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.55)
+                    Text { anchors.centerIn: parent; text: qsTr("Load"); font.pixelSize: 10; font.bold: true; color: secondaryCyan }
+                    MouseArea { id: loadLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: logWindow.openAddLogbookDialog() }
+                    ToolTip.visible: loadLogbookMA.containsMouse; ToolTip.text: qsTr("Load/use an existing ADIF as a logbook"); ToolTip.delay: 500
+                }
+
+                Rectangle {
+                    width: 44; height: 28; radius: 4
+                    color: backupLogbookMA.containsMouse ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.25) : Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.08)
+                    border.color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.5)
+                    Text { anchors.centerIn: parent; text: qsTr("Bkp"); font.pixelSize: 10; font.bold: true; color: accentOrange }
+                    MouseArea { id: backupLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (appEngine && appEngine.logManager) appEngine.logManager.backupActiveLogbook() }
+                    ToolTip.visible: backupLogbookMA.containsMouse; ToolTip.text: qsTr("Back up the active logbook"); ToolTip.delay: 500
+                }
+
+                Rectangle {
+                    width: 42; height: 28; radius: 4
+                    color: deleteLogbookMA.containsMouse ? Qt.rgba(255, 70, 90, 0.28) : Qt.rgba(255, 70, 90, 0.08)
+                    border.color: Qt.rgba(255, 70, 90, 0.55)
+                    opacity: logbookProfiles.length > 0 ? 1.0 : 0.45
+                    Text { anchors.centerIn: parent; text: qsTr("Del"); font.pixelSize: 10; font.bold: true; color: "#ff465a" }
+                    MouseArea {
+                        id: deleteLogbookMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: logbookProfiles.length > 0
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: logWindow.openDeleteLogbookDialog()
+                    }
+                    ToolTip.visible: deleteLogbookMA.containsMouse; ToolTip.text: qsTr("Delete selected logbook"); ToolTip.delay: 500
+                }
+
                 // Search field
                 Rectangle {
-                    Layout.preferredWidth: 200; height: 28; radius: 4
+                    Layout.preferredWidth: 150; height: 28; radius: 4
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                     border.color: searchField.focus ? secondaryCyan : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                     border.width: searchField.focus ? 2 : 1
@@ -387,12 +764,12 @@ Popup {
 
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
-                        Text { text: "\uD83D\uDD0D"; font.pixelSize: 11; color: textSecondary }
-                        TextField {
+                        Text { text: qsTr("\uD83D\uDD0D"); font.pixelSize: 11; color: textSecondary }
+                        DecoTextField {
                             id: searchField
                             Layout.fillWidth: true
-                            placeholderText: "Search call, grid..."
-                            font.pixelSize: 11; font.family: "Monospace"
+                            placeholderText: qsTr("Search callsign, locator...")
+                            font.pixelSize: 11; font.family: decodiumMonoFontFamily
                             color: textPrimary
                             placeholderTextColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
                             onTextChanged: { clearSelection(); refreshLog() }
@@ -403,7 +780,7 @@ Popup {
 
                 StyledComboBox {
                     id: bandFilter
-                    model: ["All", "160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "2m", "70cm"]
+                    model: ["All", "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m", "2m", "1.25m", "70cm", "33cm", "23cm", "13cm", "9cm", "6cm", "3cm", "1.25cm"]
                     currentIndex: 0
                     Layout.preferredWidth: 85; height: 28
                     font.pixelSize: 10
@@ -412,7 +789,7 @@ Popup {
 
                 StyledComboBox {
                     id: modeFilter
-                    model: ["All", "FT8", "FT4", "SFox", "JT65", "JT9", "Q65", "MSK144", "MSK40", "FSK441"]
+                    model: ["All", "FT8", "FT4", "FT2", "SFox", "JT65", "JT9", "Q65", "MSK144", "MSK40", "FSK441"]
                     currentIndex: 0
                     Layout.preferredWidth: 85; height: 28
                     font.pixelSize: 10
@@ -434,7 +811,7 @@ Popup {
                     Text {
                         id: clearFiltersLabel
                         anchors.centerIn: parent
-                        text: "Clear"
+                        text: qsTr("Clear")
                         font.pixelSize: 10
                         font.bold: true
                         color: accentOrange
@@ -449,7 +826,7 @@ Popup {
                     }
 
                     ToolTip.visible: clearFiltersMA.containsMouse
-                    ToolTip.text: "Remove search, band and mode filters"
+                    ToolTip.text: qsTr("Remove search, band, and mode filters")
                     ToolTip.delay: 500
                 }
 
@@ -458,16 +835,19 @@ Popup {
                 // Import ADIF
                 Rectangle {
                     width: importLabel.width + 16; height: 28; radius: 4
-                    color: importMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.3) : Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
+                    color: !importMA.enabled ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.04)
+                           : importMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.3) : Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
                     border.color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.5)
                     Behavior on color { ColorAnimation { duration: 150 } }
 
-                    Text { id: importLabel; anchors.centerIn: parent; text: "Import ADIF"; font.pixelSize: 10; font.bold: true; color: accentGreen }
+                    Text { id: importLabel; anchors.centerIn: parent; text: qsTr("Import ADIF"); font.pixelSize: 10; font.bold: true; color: importMA.enabled ? accentGreen : textSecondary }
                     MouseArea {
-                        id: importMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: importFileDialog.open()
+                        id: importMA; anchors.fill: parent; hoverEnabled: true
+                        enabled: !(bridge && bridge.adifImportInProgress)
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: logWindow.openImportAdifDialog()
                     }
-                    ToolTip.visible: importMA.containsMouse; ToolTip.text: "Importa file ADIF"; ToolTip.delay: 500
+                    ToolTip.visible: importMA.containsMouse; ToolTip.text: qsTr("Import ADIF file"); ToolTip.delay: 500
                 }
 
                 // Export ADIF
@@ -477,12 +857,12 @@ Popup {
                     border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5)
                     Behavior on color { ColorAnimation { duration: 150 } }
 
-                    Text { id: adifLabel; anchors.centerIn: parent; text: "Export ADIF"; font.pixelSize: 10; font.bold: true; color: secondaryCyan }
+                    Text { id: adifLabel; anchors.centerIn: parent; text: qsTr("Esporta ADIF"); font.pixelSize: 10; font.bold: true; color: secondaryCyan }
                     MouseArea {
                         id: exportMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: exportFileDialog.open()
+                        onClicked: logWindow.openExportAdifDialog()
                     }
-                    ToolTip.visible: exportMA.containsMouse; ToolTip.text: "Esporta ADIF"; ToolTip.delay: 500
+                    ToolTip.visible: exportMA.containsMouse; ToolTip.text: qsTr("Export ADIF"); ToolTip.delay: 500
                 }
 
                 // Refresh
@@ -491,12 +871,12 @@ Popup {
                     color: refreshMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.25) : "transparent"
                     Behavior on color { ColorAnimation { duration: 150 } }
 
-                    Text { anchors.centerIn: parent; text: "\u21BB"; font.pixelSize: 14; font.bold: true; color: refreshMA.containsMouse ? accentGreen : textSecondary }
+                    Text { anchors.centerIn: parent; text: qsTr("\u21BB"); font.pixelSize: 14; font.bold: true; color: refreshMA.containsMouse ? accentGreen : textSecondary }
                     MouseArea {
                         id: refreshMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: refreshLog()
                     }
-                    ToolTip.visible: refreshMA.containsMouse; ToolTip.text: "Aggiorna"; ToolTip.delay: 500
+                    ToolTip.visible: refreshMA.containsMouse; ToolTip.text: qsTr("Refresh"); ToolTip.delay: 500
                 }
             }
         }
@@ -515,14 +895,14 @@ Popup {
                 anchors.leftMargin: 10; anchors.rightMargin: 10
                 spacing: 0
 
-                Text { text: "Date/Time"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 148 }
+                Text { text: qsTr("Date/Time"); font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 148 }
                 Text { text: "Call"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 100 }
                 Text { text: "Grid"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 60 }
                 Text { text: "Band"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 55 }
                 Text { text: "Mode"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 55 }
                 Text { text: "Sent"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
                 Text { text: "Rcvd"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                Text { text: "Dist"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
+                Text { text: qsTr("Dist"); font.pixelSize: 10; font.bold: true; color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
                 Text { text: "Comment"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.fillWidth: true }
             }
         }
@@ -591,6 +971,44 @@ Popup {
                         }
                     }
 
+                    // Keep the usual left-click selection intact while offering
+                    // a quick clipboard action for a logged station.
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        enabled: String(modelData.call || "").trim().length > 0
+                        onTapped: qsoCallContextMenu.popup()
+                    }
+
+                    Menu {
+                        id: qsoCallContextMenu
+                        MenuItem {
+                            text: qsTr("Copy Callsign")
+                            height: 32
+                            onTriggered: {
+                                if (bridge)
+                                    bridge.copyToClipboard(String(modelData.call || "").trim())
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: textPrimary
+                                font.pixelSize: 12
+                                leftPadding: 10
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted
+                                       ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
+                                       : "transparent"
+                            }
+                        }
+                        background: Rectangle {
+                            implicitWidth: 150
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+                            border.color: glassBorder
+                            radius: 6
+                        }
+                    }
+
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 10; anchors.rightMargin: 10
@@ -602,15 +1020,15 @@ Popup {
                             font.pixelSize: 8; color: primaryBlue
                             Layout.preferredWidth: 12
                         }
-                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 136 }
-                        Text { text: modelData.call || ""; font.family: "Monospace"; font.pixelSize: 11; font.bold: true; color: accentGreen; Layout.preferredWidth: 100 }
-                        Text { text: modelData.grid || ""; font.family: "Monospace"; font.pixelSize: 11; color: secondaryCyan; Layout.preferredWidth: 60 }
-                        Text { text: modelData.band || ""; font.family: "Monospace"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
-                        Text { text: modelData.mode || ""; font.family: "Monospace"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
-                        Text { text: modelData.reportSent || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                        Text { text: modelData.reportReceived || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                        Text { text: (modelData.distance || 0) > 0 ? modelData.distance + " km" : ""; font.family: "Monospace"; font.pixelSize: 11; color: accentOrange; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
-                        Text { text: modelData.comment || ""; font.family: "Monospace"; font.pixelSize: 11; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.45); Layout.fillWidth: true; elide: Text.ElideRight }
+                        Text { text: modelData.dateTime || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 136 }
+                        Text { text: modelData.call || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; font.bold: true; color: accentGreen; Layout.preferredWidth: 100 }
+                        Text { text: modelData.grid || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: secondaryCyan; Layout.preferredWidth: 60 }
+                        Text { text: modelData.band || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
+                        Text { text: modelData.mode || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
+                        Text { text: modelData.reportSent || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
+                        Text { text: modelData.reportReceived || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
+                        Text { text: logWindow.formatDistanceText(modelData.distance || 0, true); font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: accentOrange; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
+                        Text { text: modelData.comment || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.45); Layout.fillWidth: true; elide: Text.ElideRight }
                     }
                 }
 
@@ -618,7 +1036,7 @@ Popup {
                 Column {
                     anchors.centerIn: parent; spacing: 6
                     visible: qsoList.length === 0
-                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "No QSOs found"; font.pixelSize: 13; font.bold: true; color: textSecondary }
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("No QSOs found"); font.pixelSize: 13; font.bold: true; color: textSecondary }
                     Text { anchors.horizontalCenter: parent.horizontalCenter; text: searchField.text.length > 0 ? "Try a different search" : "Start making contacts!"; font.pixelSize: 10; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.35) }
                 }
             }
@@ -653,9 +1071,9 @@ Popup {
                             width: 132; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editCall.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editCall; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"; font.bold: true
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily; font.bold: true
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -672,9 +1090,9 @@ Popup {
                             width: 78; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editGrid.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editGrid; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -691,9 +1109,9 @@ Popup {
                             width: 66; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editBand.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editBand; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -710,9 +1128,9 @@ Popup {
                             width: 66; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editMode.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editMode; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -729,9 +1147,9 @@ Popup {
                             width: 56; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editSent.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editSent; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -748,9 +1166,9 @@ Popup {
                             width: 56; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editRcvd.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editRcvd; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -775,9 +1193,9 @@ Popup {
                             Layout.fillWidth: true; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editComment.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField {
+                            DecoTextField {
                                 id: editComment; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Monospace"
+                                font.pixelSize: 11; font.family: decodiumMonoFontFamily
                                 leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
                                 verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
@@ -798,7 +1216,7 @@ Popup {
                             border.color: accentGreen
                             Behavior on color { ColorAnimation { duration: 150 } }
 
-                            Text { id: saveLabel; anchors.centerIn: parent; text: "\u2713 Salva"; font.pixelSize: 10; font.bold: true; color: accentGreen }
+                            Text { id: saveLabel; anchors.centerIn: parent; text: qsTr("\u2713 Save"); font.pixelSize: 10; font.bold: true; color: accentGreen }
                             MouseArea {
                                 id: saveMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: {
@@ -827,7 +1245,7 @@ Popup {
                             border.color: "#d32f2f"
                             Behavior on color { ColorAnimation { duration: 150 } }
 
-                            Text { id: deleteLabel; anchors.centerIn: parent; text: "\u2715 Elimina"; font.pixelSize: 10; font.bold: true; color: "#d32f2f" }
+                            Text { id: deleteLabel; anchors.centerIn: parent; text: qsTr("\u2715 Delete"); font.pixelSize: 10; font.bold: true; color: "#d32f2f" }
                             MouseArea {
                                 id: deleteMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: {
@@ -847,7 +1265,7 @@ Popup {
                             border.color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
                             Behavior on color { ColorAnimation { duration: 150 } }
 
-                            Text { id: cancelLabel; anchors.centerIn: parent; text: "Annulla"; font.pixelSize: 10; color: textSecondary }
+                            Text { id: cancelLabel; anchors.centerIn: parent; text: qsTr("Cancel"); font.pixelSize: 10; color: textSecondary }
                             MouseArea {
                                 id: cancelMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: clearSelection()
@@ -876,7 +1294,7 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "TOTAL"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.totalQsos || "0"; font.pixelSize: 20; font.bold: true; color: accentGreen; font.family: "Monospace" }
+                    Text { text: stats.totalQsos || "0"; font.pixelSize: 20; font.bold: true; color: accentGreen; font.family: decodiumMonoFontFamily }
                 }
 
                 Rectangle { width: 1; height: 30; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1) }
@@ -884,27 +1302,27 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "CALLS"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.uniqueCalls || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: "Monospace" }
+                    Text { text: stats.uniqueCalls || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: decodiumMonoFontFamily }
                 }
 
                 Column {
                     spacing: 0
                     Text { text: "GRIDS"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.uniqueGrids || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: "Monospace" }
+                    Text { text: stats.uniqueGrids || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: decodiumMonoFontFamily }
                 }
 
                 Rectangle { width: 1; height: 30; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1) }
 
                 Column {
                     spacing: 0
-                    Text { text: "MAX DIST"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: (stats.maxDistance || 0) + " km"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: "Monospace" }
+                    Text { text: qsTr("MAX DIST"); font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
+                    Text { text: logWindow.formatDistanceText(stats.maxDistance || 0, true) || "0 " + (logWindow.displayDistanceInMiles ? "mi" : "km"); font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: decodiumMonoFontFamily }
                 }
 
                 Column {
                     spacing: 0
                     Text { text: "FARTHEST"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.farthestCall || "-"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: "Monospace" }
+                    Text { text: stats.farthestCall || "-"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: decodiumMonoFontFamily }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -912,7 +1330,7 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "SHOWING"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: qsoList.length + " QSOs"; font.pixelSize: 14; font.bold: true; color: textPrimary; font.family: "Monospace" }
+                    Text { text: qsoList.length + " QSOs"; font.pixelSize: 14; font.bold: true; color: textPrimary; font.family: decodiumMonoFontFamily }
                 }
             }
         }

@@ -14,6 +14,11 @@ namespace
 {
   auto const unexpected = TransceiverBase::tr ("Unexpected rig error");
 
+  bool frequency_matches (Transceiver::Frequency lhs, Transceiver::Frequency rhs)
+  {
+    return lhs && rhs && lhs == rhs;
+  }
+
   void sleep_non_gui_thread (unsigned long ms)
   {
     auto * app = QCoreApplication::instance ();
@@ -57,6 +62,12 @@ void TransceiverBase::set (TransceiverState const& s,
                            unsigned sequence_number) noexcept
 {
   CAT_TRACE ("#: " << s);
+  if (sequence_number < last_sequence_number_)
+    {
+      CAT_WARNING ("dropping stale transceiver state #:" << sequence_number
+                   << "last:" << last_sequence_number_);
+      return;
+    }
 
   try
     {
@@ -173,9 +184,16 @@ void TransceiverBase::set (TransceiverState const& s,
                                        // Tx to Rx
               }
 
+          bool const rx_frequency_requested =
+              s.frequency ()
+              && s.frequency () != requested_.frequency ()
+              && !frequency_matches (s.frequency (), actual_.frequency ());
+          bool const rx_mode_requested =
+              s.mode () != UNK
+              && s.mode () != requested_.mode ()
+              && s.mode () != actual_.mode ();
           if (s.frequency ()    // ignore bogus zero frequencies
-              && ((s.frequency () != requested_.frequency () // and QSY
-                   || (s.mode () != UNK && s.mode () != requested_.mode ())))) // or mode change
+              && rx_frequency_requested) // QSY, possibly with mode change
             {
                 requested_.frequency (s.frequency ());
                 requested_.mode (s.mode ());
@@ -185,6 +203,21 @@ void TransceiverBase::set (TransceiverState const& s,
               // record what actually changed
               requested_.frequency (actual_.frequency ());
               requested_.mode (actual_.mode ());
+            }
+            else if (rx_mode_requested)
+            {
+              requested_.mode (s.mode ());
+              do_mode (s.mode ());
+              do_post_mode (s.mode ());
+              requested_.mode (actual_.mode ());
+            }
+            else if (s.frequency () && frequency_matches (s.frequency (), actual_.frequency ()))
+            {
+              requested_.frequency (actual_.frequency ());
+              if (s.mode () != UNK && s.mode () == actual_.mode ())
+                {
+                  requested_.mode (actual_.mode ());
+                }
             }
             else if (!s.tx_frequency ()
               || (s.tx_frequency () > 10000 // ignore bogus startup values
@@ -377,6 +410,47 @@ void TransceiverBase::update_swr (unsigned int p)
 {
   CAT_TRACE ("swr: " << p);
   actual_.swr (p);
+}
+
+void TransceiverBase::update_alc (unsigned int p, bool valid)
+{
+  CAT_TRACE ("alc: " << p << " valid=" << valid);
+  actual_.alc (p);
+  actual_.alc_valid (valid);
+}
+
+// 1.0.581 — strumenti del finale. Una lettura non riuscita azzera anche il
+// valore, non solo il flag: cosi' un consumatore distratto che guardasse il
+// numero senza guardare il "valido" vede uno zero evidente invece dell'ultima
+// misura buona, che sembrerebbe attuale e non lo e' piu'.
+void TransceiverBase::update_vd (unsigned int hundredth_volts, bool valid)
+{
+  CAT_TRACE ("vd: " << hundredth_volts << " valid=" << valid);
+  if (valid) actual_.vd (hundredth_volts); else actual_.vd_invalid ();
+}
+
+void TransceiverBase::update_id (unsigned int hundredth_amps, bool valid)
+{
+  CAT_TRACE ("id: " << hundredth_amps << " valid=" << valid);
+  if (valid) actual_.id (hundredth_amps); else actual_.id_invalid ();
+}
+
+void TransceiverBase::update_pa_temp (int tenth_celsius, bool valid)
+{
+  CAT_TRACE ("pa temp: " << tenth_celsius << " valid=" << valid);
+  if (valid) actual_.pa_temp (tenth_celsius); else actual_.pa_temp_invalid ();
+}
+
+void TransceiverBase::update_comp (unsigned int tenth_db, bool valid)
+{
+  CAT_TRACE ("comp: " << tenth_db << " valid=" << valid);
+  if (valid) actual_.comp (tenth_db); else actual_.comp_invalid ();
+}
+
+void TransceiverBase::update_rfpower (unsigned int thousandths, bool valid)
+{
+  CAT_TRACE ("rfpower: " << thousandths << " valid=" << valid);
+  if (valid) actual_.rfpower (thousandths); else actual_.rfpower_invalid ();
 }
 
 void TransceiverBase::update_complete (bool force_signal)

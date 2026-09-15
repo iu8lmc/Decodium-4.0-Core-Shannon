@@ -15,7 +15,7 @@
 
 extern "C"
 {
-  void jt65_init_tables_ ();
+  void setup65_ ();
   void symspec65_ (float dd[], int* npts, int* nqsym, float savg[]);
   void decode65a_ (float dd[], int* npts, int* newdat, int* nqd, float* f0, int* nflip,
                    int* mode65, int* ntrials, int* naggressive, int* ndepth, int* ntol,
@@ -150,7 +150,12 @@ int main (int argc, char** argv)
           dd[static_cast<std::size_t> (i)] = static_cast<float> (audio.at (i));
         }
 
-      jt65_init_tables_ ();
+      auto const cppSpectrum = decodium::legacy::symspec65_compute (dd.data (),
+                                                                      static_cast<int> (dd.size ()));
+      decodium::legacy::jt65_store_symspec_state (cppSpectrum);
+
+      setup65_ ();
+      decodium::legacy::jt65_initialize_tables ();
 
       int npts = static_cast<int> (dd.size ());
       int nqsym = 0;
@@ -226,9 +231,9 @@ int main (int argc, char** argv)
                         "  direct  sync2=%.9g dt=%.9g nft=%d nspecial=%d qual=%.9g nhist=%d nsmo=%d decoded='%.*s'\n",
                         wavPath.toLocal8Bit ().constData (),
                         sync2_wrapped, dt_wrapped, nft_wrapped, nspecial_wrapped, qual_wrapped,
-                        nhist_wrapped, nsmo_wrapped, decoded_wrapped.size (), decoded_wrapped.constData (),
+                        nhist_wrapped, nsmo_wrapped, static_cast<int> (decoded_wrapped.size ()), decoded_wrapped.constData (),
                         direct.sync2, direct.dt, direct.nft, direct.nspecial, direct.qual,
-                        direct.nhist, direct.nsmo, direct.decoded.size (), direct.decoded.constData ());
+                        direct.nhist, direct.nsmo, static_cast<int> (direct.decoded.size ()), direct.decoded.constData ());
           return 1;
         }
 

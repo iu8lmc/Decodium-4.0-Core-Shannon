@@ -138,6 +138,15 @@ protected:
   void update_level (int = 0);
   void update_power (unsigned int = 0);
   void update_swr (unsigned int = 0);
+  void update_alc (unsigned int = 0, bool valid = false);  // 1.0.323 — ALC meter (0..100) in TX
+  // 1.0.581 — strumenti del finale. Qui il "valid" non ha un valore
+  // predefinito, ed e' voluto: chi aggiorna deve dichiarare ogni volta se ha
+  // letto qualcosa, e dimenticarselo non deve poter passare per una misura.
+  void update_vd (unsigned int hundredth_volts, bool valid);
+  void update_id (unsigned int hundredth_amps, bool valid);
+  void update_pa_temp (int tenth_celsius, bool valid);
+  void update_comp (unsigned int tenth_db, bool valid);
+  void update_rfpower (unsigned int thousandths, bool valid);
 
   // Calling this eventually triggers the Transceiver::update(State) signal.
   void update_complete (bool force_signal = false);
