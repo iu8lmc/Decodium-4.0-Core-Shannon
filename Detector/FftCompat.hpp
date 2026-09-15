@@ -17,15 +17,19 @@ void legacy_fft_cleanup ();
 
 inline std::mutex& planner_mutex ()
 {
-  static std::mutex mutex;
-  return mutex;
+  // Intentionally leaked: thread_local FFT plans can be finalized while
+  // process-level statics are already being torn down on macOS.
+  static auto* const mutex = new std::mutex;
+  return *mutex;
 }
 
 inline void initialize_planner_thread_safety ()
 {
   static bool const initialized = [] {
+#if FFTW_HAS_THREADS
     fftwf_init_threads ();
     fftwf_make_planner_thread_safe ();
+#endif
     return true;
   } ();
   (void) initialized;
@@ -53,12 +57,20 @@ inline fftwf_plan plan_dft_c2r_1d (int n, fftwf_complex* in, float* out, unsigne
   return fftwf_plan_dft_c2r_1d (n, in, out, flags);
 }
 
-inline void destroy_plan (fftwf_plan plan)
+inline void destroy_plan (fftwf_plan plan) noexcept
 {
   if (!plan) return;
-  initialize_planner_thread_safety ();
-  std::lock_guard<std::mutex> lock {planner_mutex ()};
-  fftwf_destroy_plan (plan);
+  try
+    {
+      initialize_planner_thread_safety ();
+      std::lock_guard<std::mutex> lock {planner_mutex ()};
+      fftwf_destroy_plan (plan);
+    }
+  catch (...)
+    {
+      // During process shutdown, leaking an FFTW plan is safer than letting a
+      // thread_local destructor call std::terminate().
+    }
 }
 
 inline int import_wisdom_from_filename (char const* filename)

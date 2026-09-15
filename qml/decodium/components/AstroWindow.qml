@@ -11,15 +11,23 @@ import "../../panels"
 
 Dialog {
     id: astroWindow
-    title: "Astronomical Data"
+    title: qsTr("Astronomical Data")
     modal: false
-    width: Math.max(480, Math.min(620, (parent ? parent.width : 620) - 48))
-    height: Math.max(430, Math.min(720, (parent ? parent.height : 720) - 48))
+    width: nativeHostWindow && parent
+           ? Math.max(480, parent.width - 24)
+           : Math.max(480, Math.min(620, (parent ? parent.width : 620) - 48))
+    height: nativeHostWindow && parent
+            ? Math.max(430, parent.height - 24)
+            : Math.max(430, Math.min(720, (parent ? parent.height : 720) - 48))
     padding: 16
-    closePolicy: Popup.CloseOnEscape
+    closePolicy: nativeHostWindow ? Popup.NoAutoClose : Popup.CloseOnEscape
+    property var nativeHostWindow: null
     property bool positionInitialized: false
+    property int minimumResizeWidth: 480
+    property int minimumResizeHeight: 430
 
     function clampToParent() {
+        if (nativeHostWindow) return
         if (!parent) return
         x = Math.max(0, Math.min(x, parent.width - width))
         y = Math.max(0, Math.min(y, parent.height - height))
@@ -30,6 +38,39 @@ Dialog {
         x = Math.max(0, Math.round((parent.width - width) / 2))
         y = Math.max(0, Math.round((parent.height - height) / 2))
         positionInitialized = true
+    }
+
+    function startNativeHostMove() {
+        if (!nativeHostWindow || typeof nativeHostWindow.startSystemMove !== "function")
+            return false
+        try {
+            return nativeHostWindow.startSystemMove()
+        } catch (error) {
+            console.log("Astro native move failed: " + error)
+        }
+        return false
+    }
+
+    function finishNativeHostMove() {
+        if (nativeHostWindow && typeof nativeHostWindow.finishDesktopMove === "function")
+            nativeHostWindow.finishDesktopMove()
+    }
+
+    function requestWindowClose() {
+        if (nativeHostWindow && typeof nativeHostWindow.hideHostedWindow === "function") {
+            nativeHostWindow.hideHostedWindow()
+            return
+        }
+        astroWindow.close()
+    }
+
+    function requestWindowMinimize() {
+        if (nativeHostWindow && typeof nativeHostWindow.minimizeHostedWindow === "function") {
+            nativeHostWindow.minimizeHostedWindow()
+            return
+        }
+        astroWindowMinimized = true
+        astroWindow.close()
     }
 
     function displayPropagationValue(value, placeholder) {
@@ -71,6 +112,12 @@ Dialog {
     property color textSecondary: bridge.themeManager.textSecondary
     property color glassBorder: bridge.themeManager.glassBorder
 
+    // A Dialog hosted by a separate QQuickWindow does not inherit the
+    // ApplicationWindow's attached Material palette on every platform.
+    Material.theme: bridge.themeManager.isLightTheme ? Material.Light : Material.Dark
+    Material.accent: bridge.themeManager.primaryColor
+    Material.primary: bridge.themeManager.secondaryColor
+
     background: Rectangle {
         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
         border.color: secondaryCyan
@@ -83,28 +130,67 @@ Dialog {
         color: "transparent"
 
         MouseArea {
-            anchors.fill: parent
-            property point clickPos: Qt.point(0, 0)
+            z: 2
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            // Keep the drag handle away from the satellite, minimize and
+            // close controls.  The handle used to overlap the satellite
+            // button on compact dialog widths and consumed its click.
+            anchors.rightMargin: 160
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            property point pressGlobalPos: Qt.point(0, 0)
+            property point pressWindowPos: Qt.point(0, 0)
+            property bool nativeMoveActive: false
             cursorShape: Qt.SizeAllCursor
             onPressed: function(mouse) {
-                clickPos = Qt.point(mouse.x, mouse.y)
+                pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                pressWindowPos = astroWindow.nativeHostWindow
+                        ? Qt.point(astroWindow.nativeHostWindow.x,
+                                   astroWindow.nativeHostWindow.y)
+                        : Qt.point(astroWindow.x, astroWindow.y)
                 astroWindow.positionInitialized = true
+                nativeMoveActive = astroWindow.startNativeHostMove()
+                mouse.accepted = true
             }
             onPositionChanged: function(mouse) {
                 if (!pressed) return
-                astroWindow.x += mouse.x - clickPos.x
-                astroWindow.y += mouse.y - clickPos.y
-                astroWindow.clampToParent()
+                if (nativeMoveActive) return
+                var currentGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                if (astroWindow.nativeHostWindow) {
+                    astroWindow.nativeHostWindow.x = pressWindowPos.x
+                            + currentGlobalPos.x - pressGlobalPos.x
+                    astroWindow.nativeHostWindow.y = pressWindowPos.y
+                            + currentGlobalPos.y - pressGlobalPos.y
+                } else {
+                    astroWindow.x = pressWindowPos.x
+                            + currentGlobalPos.x - pressGlobalPos.x
+                    astroWindow.y = pressWindowPos.y
+                            + currentGlobalPos.y - pressGlobalPos.y
+                    astroWindow.clampToParent()
+                }
+                mouse.accepted = true
+            }
+            onReleased: {
+                nativeMoveActive = false
+                astroWindow.finishNativeHostMove()
+            }
+            onCanceled: {
+                nativeMoveActive = false
+                astroWindow.finishNativeHostMove()
             }
         }
 
         RowLayout {
+            z: 3
             anchors.fill: parent
             anchors.margins: 16
             spacing: 10
 
             Text {
-                text: "🌙 Astronomical Data"
+                text: qsTr("🌙 Astronomical Data")
                 font.pixelSize: 18
                 font.bold: true
                 color: secondaryCyan
@@ -112,7 +198,21 @@ Dialog {
 
             Item { Layout.fillWidth: true }
 
+            ToolButton {
+                id: satelliteTrackingButton
+                z: 3
+                text: "🛰"
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Satellite tracking")
+                onClicked: {
+                    if (typeof appEngine !== "undefined" && appEngine
+                            && appEngine.requestSatelliteTrackingWindow)
+                        appEngine.requestSatelliteTrackingWindow()
+                }
+            }
+
             Rectangle {
+                z: 3
                 width: 28
                 height: 28
                 radius: 4
@@ -134,18 +234,16 @@ Dialog {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        astroWindowMinimized = true
-                        astroWindow.close()
-                    }
+                    onClicked: astroWindow.requestWindowMinimize()
                 }
 
                 ToolTip.visible: astroMinMA.containsMouse
-                ToolTip.text: "Riduci a icona"
+                ToolTip.text: qsTr("Minimize")
                 ToolTip.delay: 500
             }
 
             Rectangle {
+                z: 3
                 width: 28
                 height: 28
                 radius: 4
@@ -167,11 +265,11 @@ Dialog {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: astroWindow.close()
+                    onClicked: astroWindow.requestWindowClose()
                 }
 
                 ToolTip.visible: astroCloseMA.containsMouse
-                ToolTip.text: "Chiudi"
+                ToolTip.text: qsTr("Close")
                 ToolTip.delay: 500
             }
         }
@@ -189,23 +287,29 @@ Dialog {
         }
     }
 
-    contentItem: ColumnLayout {
-        spacing: 10
+    contentItem: Item {
+        implicitWidth: astroContentLayout.implicitWidth
+        implicitHeight: astroContentLayout.implicitHeight
 
-        ScrollView {
-            id: astroScroll
-            clip: true
-            rightPadding: 12
-            bottomPadding: 8
-            contentWidth: availableWidth
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 0
-            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+        ColumnLayout {
+            id: astroContentLayout
+            anchors.fill: parent
+            spacing: 10
 
-            ColumnLayout {
-                width: Math.max(astroScroll.availableWidth, 0)
-                spacing: 12
+            ScrollView {
+                id: astroScroll
+                clip: true
+                rightPadding: 12
+                bottomPadding: 8
+                contentWidth: availableWidth
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 0
+                ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                ColumnLayout {
+                    width: Math.max(astroScroll.availableWidth, 0)
+                    spacing: 12
 
                 Rectangle {
                     Layout.fillWidth: true
@@ -220,7 +324,7 @@ Dialog {
                         spacing: 12
 
                         Text {
-                            text: "Location:"
+                            text: qsTr("Location:")
                             font.pixelSize: 12
                             color: textSecondary
                         }
@@ -229,7 +333,7 @@ Dialog {
                             text: astroWindow.hasAstroManager ? astroManager.gridLocator : astroWindow.fallbackGrid
                             font.pixelSize: 14
                             font.bold: true
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: primaryBlue
                         }
 
@@ -248,7 +352,7 @@ Dialog {
                         Text {
                             text: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm") + " UTC"
                             font.pixelSize: 11
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: textSecondary
                         }
                     }
@@ -312,7 +416,7 @@ Dialog {
 
                     RowLayout {
                         Text {
-                            text: "Moon"
+                            text: qsTr("Moon")
                             font.pixelSize: 14
                             font.bold: true
                             color: moonColor
@@ -341,7 +445,7 @@ Dialog {
                         Text { text: "Azimuth:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonAzimuth.toFixed(1) + "°" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -349,15 +453,15 @@ Dialog {
                         Text { text: "Elevation:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonElevation.toFixed(1) + "°" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: astroManager && astroManager.moonElevation > 0 ? accentGreen : "#f44336"
                         }
 
-                        Text { text: "Distance:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Distance:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? (astroManager.moonDistance / 1000).toFixed(0) + " Mm" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -365,23 +469,23 @@ Dialog {
                         Text { text: "Doppler:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonDoppler.toFixed(0) + " Hz" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Rise:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Rise:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonRise + " UTC" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Set:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Set:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonSet + " UTC" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -403,7 +507,7 @@ Dialog {
                     spacing: 8
 
                     Text {
-                        text: "Sun"
+                        text: qsTr("Sun")
                         font.pixelSize: 14
                         font.bold: true
                         color: sunColor
@@ -417,7 +521,7 @@ Dialog {
                         Text { text: "Azimuth:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunAzimuth.toFixed(1) + "°" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -425,23 +529,23 @@ Dialog {
                         Text { text: "Elevation:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunElevation.toFixed(1) + "°" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: astroManager && astroManager.sunElevation > 0 ? sunColor : textSecondary
                         }
 
-                        Text { text: "Sunrise:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Sunrise:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunrise + " UTC" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Sunset:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Sunset:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunset + " UTC" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -464,7 +568,7 @@ Dialog {
 
                     RowLayout {
                         Text {
-                            text: "EME (Earth-Moon-Earth)"
+                            text: qsTr("EME (Earth-Moon-Earth)")
                             font.pixelSize: 14
                             font.bold: true
                             color: accentGreen
@@ -500,7 +604,7 @@ Dialog {
                         columnSpacing: 20
                         rowSpacing: 6
 
-                        Text { text: "Status:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager && astroManager.emePossible ? "POSSIBLE" : "NOT POSSIBLE"
                             font.pixelSize: 12
@@ -508,10 +612,10 @@ Dialog {
                             color: astroManager && astroManager.emePossible ? accentGreen : "#f44336"
                         }
 
-                        Text { text: "Path Loss:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Path Loss:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.emePathLoss.toFixed(1) + " dB" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -521,25 +625,25 @@ Dialog {
                             text: astroManager
                                   ? (astroManager.emeDoppler >= 0 ? "+" : "") + astroManager.emeDoppler.toFixed(0) + " Hz"
                                   : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Frequency:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Frequency:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.frequency.toFixed(3) + " MHz" : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: secondaryCyan
                         }
 
-                        Text { text: "Window:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Window:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager
                                   ? astroManager.emeWindowStart + " - " + astroManager.emeWindowEnd + " UTC"
                                   : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                             Layout.columnSpan: 3
@@ -563,7 +667,7 @@ Dialog {
 
                     RowLayout {
                         Text {
-                            text: "Propagation (HamQSL)"
+                            text: qsTr("Propagation (HamQSL)")
                             font.pixelSize: 14
                             font.bold: true
                             color: secondaryCyan
@@ -578,7 +682,7 @@ Dialog {
                                         propagationManager.updating ? "Updating..." : "Waiting for first update")
                                   : "---"
                             font.pixelSize: 10
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             color: textSecondary
                         }
                     }
@@ -588,50 +692,50 @@ Dialog {
                         columnSpacing: 20
                         rowSpacing: 6
 
-                        Text { text: "Solar Flux:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Solar Flux:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.solarFlux) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "A-Index:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("A-Index:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.aIndex) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "K-Index:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("K-Index:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.kIndex) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "X-Ray:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("X-Ray:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.xRay) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Sunspots:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Sunspots:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.sunspots) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Solar Wind:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Solar Wind:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.solarWind) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -639,23 +743,23 @@ Dialog {
                         Text { text: "MUF:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.muf) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Geomagnetic:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Geomagnetic:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.geomagneticField) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                         }
 
-                        Text { text: "Signal Noise:"; color: textSecondary; font.pixelSize: 11 }
+                        Text { text: qsTr("Signal Noise:"); color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.signalNoise) : "---"
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 12
                             color: textPrimary
                             Layout.columnSpan: 3
@@ -698,7 +802,7 @@ Dialog {
                     spacing: 8
 
                     Text {
-                        text: "HF Band Conditions"
+                        text: qsTr("HF Band Conditions")
                         font.pixelSize: 14
                         font.bold: true
                         color: accentGreen
@@ -709,21 +813,21 @@ Dialog {
 
                         Text {
                             Layout.preferredWidth: 90
-                            text: "Band"
+                            text: qsTr("Band")
                             font.pixelSize: 11
                             font.bold: true
                             color: textSecondary
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "Day"
+                            text: qsTr("Day")
                             font.pixelSize: 11
                             font.bold: true
                             color: textSecondary
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "Night"
+                            text: qsTr("Night")
                             font.pixelSize: 11
                             font.bold: true
                             color: textSecondary
@@ -740,7 +844,7 @@ Dialog {
                             Text {
                                 Layout.preferredWidth: 90
                                 text: modelData.band
-                                font.family: "Monospace"
+                                font.family: decodiumMonoFontFamily
                                 font.pixelSize: 12
                                 color: textPrimary
                             }
@@ -781,7 +885,7 @@ Dialog {
 
                     Text {
                         visible: propagationManager && propagationManager.hfConditions.length === 0
-                        text: "No HF condition data available yet."
+                        text: qsTr("No HF condition data available yet.")
                         font.pixelSize: 11
                         color: textSecondary
                     }
@@ -804,7 +908,7 @@ Dialog {
                     spacing: 8
 
                     Text {
-                        text: "VHF Conditions"
+                        text: qsTr("VHF Conditions")
                         font.pixelSize: 14
                         font.bold: true
                         color: moonColor
@@ -836,7 +940,7 @@ Dialog {
 
                     Text {
                         visible: propagationManager && propagationManager.vhfConditions.length === 0
-                        text: "No VHF condition data available yet."
+                        text: qsTr("No VHF condition data available yet.")
                         font.pixelSize: 11
                         color: textSecondary
                     }
@@ -863,7 +967,7 @@ Dialog {
 
                 Button {
                     id: refreshButton
-                    text: "Refresh"
+                    text: qsTr("Refresh")
                     implicitWidth: 132
                     implicitHeight: 34
                     scale: down ? 0.97 : 1.0
@@ -909,6 +1013,80 @@ Dialog {
                 }
 
                 Item { Layout.fillWidth: true }
+            }
+        }
+    }
+
+        Rectangle {
+            id: astroResizeGrip
+            z: 50
+            width: 22
+            height: 22
+            radius: 5
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.rightMargin: 2
+            anchors.bottomMargin: 2
+            color: astroResizeMA.containsMouse
+                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.22)
+                   : "transparent"
+            border.color: astroResizeMA.containsMouse ? secondaryCyan : "transparent"
+
+            Rectangle {
+                width: 12
+                height: 2
+                radius: 1
+                rotation: -45
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: 5
+                anchors.bottomMargin: 7
+                color: astroResizeMA.containsMouse ? secondaryCyan : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.55)
+            }
+
+            Rectangle {
+                width: 7
+                height: 2
+                radius: 1
+                rotation: -45
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: 5
+                anchors.bottomMargin: 12
+                color: astroResizeMA.containsMouse ? secondaryCyan : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.45)
+            }
+
+            MouseArea {
+                id: astroResizeMA
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.SizeFDiagCursor
+                property point pressGlobalPos: Qt.point(0, 0)
+                property real pressWidth: 0
+                property real pressHeight: 0
+
+                onPressed: function(mouse) {
+                    pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                    pressWidth = astroWindow.width
+                    pressHeight = astroWindow.height
+                    astroWindow.positionInitialized = true
+                }
+
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    var currentGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                    var maxWidth = astroWindow.parent
+                            ? Math.max(astroWindow.minimumResizeWidth, astroWindow.parent.width - astroWindow.x)
+                            : 1200
+                    var maxHeight = astroWindow.parent
+                            ? Math.max(astroWindow.minimumResizeHeight, astroWindow.parent.height - astroWindow.y)
+                            : 900
+                    astroWindow.width = Math.max(astroWindow.minimumResizeWidth,
+                                                 Math.min(maxWidth, pressWidth + currentGlobalPos.x - pressGlobalPos.x))
+                    astroWindow.height = Math.max(astroWindow.minimumResizeHeight,
+                                                  Math.min(maxHeight, pressHeight + currentGlobalPos.y - pressGlobalPos.y))
+                }
             }
         }
     }

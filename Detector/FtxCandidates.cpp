@@ -1,7 +1,11 @@
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -121,6 +125,79 @@ void sort_group_desc (float* candidate, int begin_index, int end_index)
       candidate[i * 2] = entry.frequency;
       candidate[i * 2 + 1] = entry.strength;
     }
+	}
+
+std::vector<float> parse_candidate_trace_freqs ()
+{
+  std::vector<float> freqs;
+  char const* const raw = std::getenv ("DECODIUM_FT_CANDIDATE_TRACE_FREQS");
+  if (!raw || !*raw)
+    {
+      return freqs;
+    }
+  std::istringstream entries {raw};
+  std::string entry;
+  while (std::getline (entries, entry, ','))
+    {
+      float const freq = static_cast<float> (std::atof (entry.c_str ()));
+      if (freq > 0.0f)
+        {
+          freqs.push_back (freq);
+        }
+    }
+  return freqs;
+}
+
+std::vector<float> const& candidate_trace_freqs ()
+{
+  static std::vector<float> const freqs = parse_candidate_trace_freqs ();
+  return freqs;
+}
+
+void trace_candidate_bins (ModeConfig const& config, float df, float f_offset,
+                           float syncmin, float const* savg, float const* sbase,
+                           std::vector<float> const& savsm)
+{
+  if (candidate_trace_freqs ().empty ())
+    {
+      return;
+    }
+  for (float const target : candidate_trace_freqs ())
+    {
+      int const center_bin = static_cast<int> (std::lround ((target - f_offset) / df));
+      for (int bin = center_bin - 5; bin <= center_bin + 5; ++bin)
+        {
+          if (bin < 2 || bin >= config.nh1 - 1)
+            {
+              continue;
+            }
+          float const left = savsm[static_cast<size_t> (bin - 2)];
+          float const center = savsm[static_cast<size_t> (bin - 1)];
+          float const right = savsm[static_cast<size_t> (bin)];
+          float const den = left - 2.0f * center + right;
+          float del = 0.0f;
+          if (den != 0.0f)
+            {
+              del = 0.5f * (left - right) / den;
+            }
+          float const fpeak = (static_cast<float> (bin) + del) * df + f_offset;
+          bool const local_peak = center >= left && center >= right;
+          std::cerr << "[FTXCANDTRACE] target=" << target
+                    << " nfft=" << config.nfft1
+                    << " bin=" << bin
+                    << " fbin=" << (static_cast<float> (bin) * df + f_offset)
+                    << " fpeak=" << fpeak
+                    << " savg=" << savg[bin - 1]
+                    << " sbase=" << sbase[bin - 1]
+                    << " left=" << left
+                    << " center=" << center
+                    << " right=" << right
+                    << " syncmin=" << syncmin
+                    << " local_peak=" << (local_peak ? 1 : 0)
+                    << " would_pass=" << ((local_peak && center >= syncmin) ? 1 : 0)
+                    << '\n';
+        }
+    }
 }
 
 void run_get_candidates (ModeConfig const& config, float const* dd,
@@ -186,15 +263,75 @@ void run_get_candidates (ModeConfig const& config, float const* dd,
     }
 
   float const df = kSampleRate / static_cast<float> (config.nfft1);
+  float const f_offset = -1.5f * kSampleRate / static_cast<float> (config.nsps);
   int const min_bin = static_cast<int> (std::lround (200.0f / df));
   int nfa = static_cast<int> (fa / df);
   int nfb = static_cast<int> (fb / df);
   nfa = std::max (nfa, min_bin);
   nfb = std::min (nfb, static_cast<int> (std::lround (config.max_frequency_hz / df)));
 
-  ftx_baseline_fit_c (savg, config.nh1, nfa, nfb, config.baseline_offset_db, 1, sbase);
+  // Il rumore di fondo si stima su un intervallo LARGO, non su quello che
+  // l'utente ha scelto per la ricerca.
+  //
+  // ftx_baseline_fit_c divide l'intervallo in dieci segmenti, tiene il decimo
+  // percentile di ciascuno e adatta una quartica a quei punti. Con df ~10,4 Hz
+  // per cella, un intervallo di 200 Hz sono 19 celle: i segmenti scendono a una
+  // o due celle, il percentile non scarta piu' niente e la quartica insegue il
+  // SEGNALE invece del fondo. A quel punto il segnale non sporge piu' sopra la
+  // propria stima di fondo e non diventa mai un candidato.
+  //
+  // Misurato prima della correzione, segnale forte a -10 dB, 10 semi
+  // (lab/tools/costo_banda.sh): intervalli da 100, 200, 300, 400 e 500 Hz
+  // perdono il segnale in modo erratico (0/10, 1/10, 0/10, 5/10, 0/10); da 700
+  // Hz in su e' sempre 10/10. nfa e nfb sono l'intervallo di decodifica che
+  // l'utente imposta dall'interfaccia, quindi restringerlo faceva sparire
+  // stazioni forti senza alcun avviso.
+  //
+  // La ricerca dei candidati resta esattamente in [nfa, nfb]: si allarga solo
+  // la finestra su cui si STIMA il fondo, che e' una proprieta' del ricevitore
+  // e non della finestra scelta. Se l'intervallo e' gia' abbastanza largo non
+  // cambia nulla, quindi il caso normale resta bit-identico.
+  int const top_bin = static_cast<int> (std::lround (config.max_frequency_hz / df));
+  int const min_baseline_bins = static_cast<int> (std::lround (700.0f / df));
+  int nfa_base = std::max (min_bin, nfa - 8);
+  int nfb_base = std::min (top_bin, nfb + 8);
+  if (nfb_base - nfa_base < min_baseline_bins)
+    {
+      int const centro = (nfa_base + nfb_base) / 2;
+      int const meta = min_baseline_bins / 2;
+      int const top = top_bin;
+      nfa_base = std::max (min_bin, centro - meta);
+      nfb_base = std::min (top, centro + meta);
+      // se il bordo dello spettro ha tagliato da un lato, si recupera dall'altro
+      if (nfb_base - nfa_base < min_baseline_bins)
+        {
+          if (nfa_base == min_bin) nfb_base = std::min (top, nfa_base + min_baseline_bins);
+          else                     nfa_base = std::max (min_bin, nfb_base - min_baseline_bins);
+        }
+    }
 
-  for (int i = nfa - 1; i <= nfb - 1; ++i)
+  ftx_baseline_fit_c (savg, config.nh1, nfa_base, nfb_base, config.baseline_offset_db, 1, sbase);
+
+  // Il picco si cerca su savsm, che e' lisciato su 15 celle (+-7). Un picco
+  // lisciato e' largo una quindicina di celle piu' la larghezza del segnale: se
+  // la finestra dell'utente e' larga quanto lui, dentro non esiste nessun
+  // MASSIMO LOCALE da trovare, e il segnale non diventa mai candidato.
+  //
+  // E' un meccanismo DISTINTO da quello del fondo, e nella misura si vedeva
+  // bene: corretto il fondo, una finestra da 500 Hz centrata sul segnale lo
+  // trovava sempre, una da 400 Hz quasi mai. Stessa stima del fondo, finestra
+  // di ricerca diversa.
+  //
+  // Si allarga di 8 celle per lato la zona in cui si CERCA il massimo, e si
+  // continua ad accettare solo i picchi che cadono in [fa, fb]. Per un
+  // intervallo normale non cambia nulla: un massimo con la cella centrale fuori
+  // da [nfa, nfb] ha fpeak fuori da [fa, fb] a meno di mezza cella, e il
+  // controllo esplicito piu' sotto lo scarta.
+  int const margine = 8;
+  int const nfa_s = std::max (min_bin, nfa - margine);
+  int const nfb_s = std::min (top_bin, nfb + margine);
+
+  for (int i = nfa_s - 1; i <= nfb_s - 1; ++i)
     {
       if (sbase[i] <= 0.0f)
         {
@@ -203,11 +340,12 @@ void run_get_candidates (ModeConfig const& config, float const* dd,
       savsm[static_cast<size_t> (i)] /= sbase[i];
     }
 
+  trace_candidate_bins (config, df, f_offset, syncmin, savg, sbase, savsm);
+
   std::vector<Candidate> raw_candidates;
   raw_candidates.reserve (static_cast<size_t> (maxcand));
 
-  float const f_offset = -1.5f * kSampleRate / static_cast<float> (config.nsps);
-  for (int i = nfa + 1; i <= nfb - 1; ++i)
+  for (int i = nfa_s + 1; i <= nfb_s - 1; ++i)
     {
       float const left = savsm[static_cast<size_t> (i - 2)];
       float const center = savsm[static_cast<size_t> (i - 1)];
@@ -226,6 +364,12 @@ void run_get_candidates (ModeConfig const& config, float const* dd,
 
       float const fpeak = (static_cast<float> (i) + del) * df + f_offset;
       if (fpeak < 200.0f || fpeak > config.max_frequency_hz)
+        {
+          continue;
+        }
+      // Il picco puo' essere stato trovato nel margine: si riporta dentro
+      // l'intervallo chiesto, l'unico che il chiamante ha diritto di vedere.
+      if (fpeak < fa || fpeak > fb)
         {
           continue;
         }

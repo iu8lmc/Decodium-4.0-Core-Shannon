@@ -60,13 +60,14 @@ extern "C"
                            int* ipk, int* jpk, int* ll, int* mode_q65,
                            float const sync[85], float s3[]);
   void ftx_q65_sync_curve_c (float ccf1[], int* count, float* rms1);
+  int ftx_q65_zap_enabled_c ();
+  void ftx_q65_set_zap_enabled_c (int* enabled);
   void legacy_pack77_unpack_c (char const c77[77], int received, char msgsent[37],
                                bool* success);
 }
 
 namespace
 {
-  using decodium::fft_compat::forward_complex;
   constexpr int kQ65MaxLines {200};
   constexpr int kQ65Bits {77};
   constexpr int kQ65DecodedChars {37};
@@ -169,6 +170,48 @@ namespace
     return true;
   }
 
+  struct Q65SymspecWorkspace
+  {
+    ~Q65SymspecWorkspace ()
+    {
+      if (forward)
+        {
+          decodium::fft_compat::destroy_plan (forward);
+        }
+    }
+
+    void ensure (int new_nfft)
+    {
+      if (new_nfft == nfft)
+        {
+          return;
+        }
+      if (forward)
+        {
+          decodium::fft_compat::destroy_plan (forward);
+          forward = nullptr;
+        }
+      nfft = new_nfft;
+      time.assign (static_cast<size_t> (std::max (1, nfft)), 0.0f);
+      spectrum.assign (static_cast<size_t> (std::max (1, nfft / 2 + 1)),
+                       std::complex<float> {});
+      auto* out = reinterpret_cast<fftwf_complex*> (spectrum.data ());
+      forward = decodium::fft_compat::plan_dft_r2c_1d (nfft, time.data (), out,
+                                                       FFTW_ESTIMATE);
+    }
+
+    int nfft {0};
+    std::vector<float> time;
+    std::vector<std::complex<float>> spectrum;
+    fftwf_plan forward {nullptr};
+  };
+
+  Q65SymspecWorkspace& q65_symspec_workspace ()
+  {
+    static thread_local Q65SymspecWorkspace workspace;
+    return workspace;
+  }
+
   struct Q65Candidate
   {
     float snr {};
@@ -239,6 +282,29 @@ namespace
     std::vector<float> last_s1;
     std::vector<Q65HistEntry> history;
     std::vector<Q65CallerEntry> callers;
+  };
+
+  class ScopedQ65ZapMode
+  {
+  public:
+    explicit ScopedQ65ZapMode (bool enabled)
+      : previous_ {ftx_q65_zap_enabled_c ()}
+    {
+      int value = enabled ? 1 : 0;
+      ftx_q65_set_zap_enabled_c (&value);
+    }
+
+    ~ScopedQ65ZapMode ()
+    {
+      int value = previous_;
+      ftx_q65_set_zap_enabled_c (&value);
+    }
+
+    ScopedQ65ZapMode (ScopedQ65ZapMode const&) = delete;
+    ScopedQ65ZapMode& operator= (ScopedQ65ZapMode const&) = delete;
+
+  private:
+    int previous_ {1};
   };
 
   QByteArray to_fortran_field (QByteArray value, int width)
@@ -490,29 +556,31 @@ namespace
     int const nfft = nsps;
     float const fac = 1.0f / 32767.0f;
 
-    std::vector<std::complex<float>> c0 (static_cast<size_t> (nfft));
+    Q65SymspecWorkspace& workspace = q65_symspec_workspace ();
+    workspace.ensure (nfft);
     std::fill (s1.begin (), s1.end (), 0.0f);
 
     for (int j = 1; j <= jz; j += 2)
       {
         int const i1 = (j - 1) * istep;
         int const i2 = i1 + nsps - 1;
-        int k = -1;
-        for (int i = i1; i <= i2 && (i + 1) < static_cast<int> (iwave.size ()); i += 2)
+        int k = 0;
+        for (int i = i1; i <= i2 && k < nfft; ++i, ++k)
           {
-            float const xx = static_cast<float> (iwave[static_cast<size_t> (i)]);
-            float const yy = static_cast<float> (iwave[static_cast<size_t> (i + 1)]);
-            ++k;
-            c0[static_cast<size_t> (k)] = fac * std::complex<float> {xx, yy};
+            workspace.time[static_cast<size_t> (k)] =
+                (i >= 0 && i < static_cast<int> (iwave.size ()))
+                    ? fac * static_cast<float> (iwave[static_cast<size_t> (i)])
+                    : 0.0f;
           }
-        if (k + 1 < nfft)
+        if (k < nfft)
           {
-            std::fill (c0.begin () + (k + 1), c0.end (), std::complex<float> {});
+            std::fill (workspace.time.begin () + k, workspace.time.end (), 0.0f);
           }
-        forward_complex (c0.data (), nfft);
+        auto* out = reinterpret_cast<fftwf_complex*> (workspace.spectrum.data ());
+        fftwf_execute_dft_r2c (workspace.forward, workspace.time.data (), out);
         for (int i = 1; i <= iz; ++i)
           {
-            std::complex<float> const value = c0[static_cast<size_t> (i - 1)];
+            std::complex<float> const value = workspace.spectrum[static_cast<size_t> (i)];
             s1[static_cast<size_t> (col_major_index (i - 1, j - 1, iz))] =
                 value.real () * value.real () + value.imag () * value.imag ();
           }
@@ -1405,6 +1473,7 @@ namespace
     int npasses = (nqsoprogress == 5) ? 3 : 2;
     int nused = 1;
     int iavg = 0;
+    bool have_primary_decode = false;
     std::vector<std::string> session_decodes;
     std::vector<float> decoded_freqs;
 
@@ -1445,11 +1514,10 @@ namespace
     if (dec0.idec >= 0)
       {
         emit_decode (dec0, dec0.xdt, dec0.f0, dec0.idec, nused);
-        nqf.assign (20, 0);
-        return;
+        have_primary_decode = true;
       }
 
-    if (!(ncontest == 1 && lagain && (ndepth & 16) == 16))
+    if (!have_primary_decode && !(ncontest == 1 && lagain && (ndepth & 16) == 16))
       {
         if (!(ncontest == 1 && lagain && (ndepth & 16) == 0))
           {
@@ -1464,6 +1532,7 @@ namespace
             if (ana64_native (audio.data (), npts, c00))
               {
                 int passes = lapcqonly ? 1 : npasses;
+                bool loop_decoded = false;
                 for (int ipass = 0; ipass <= passes; ++ipass)
                   {
                     int apmask_bits[kQ65ApBits] {};
@@ -1525,16 +1594,17 @@ namespace
                             loop_dec.dat4 = dat4;
                             std::copy_n (decoded_chars, kQ65DecodedChars, loop_dec.decoded.begin ());
                             emit_decode (loop_dec, xdt1, f1, idec, nused);
-                            nqf.assign (20, 0);
-                            return;
+                            loop_decoded = true;
+                            break;
                           }
                       }
                   }
+                have_primary_decode = loop_decoded;
               }
           }
       }
 
-    if ((ndepth & 16) != 0 && state.navg[iseq] >= 2)
+    if (!have_primary_decode && (ndepth & 16) != 0 && state.navg[iseq] >= 2)
       {
         iavg = 1;
         Q65Dec0Result avg_list = q65_dec0 (state, audio, 1, ntrperiod, nfqso, ntol, false,
@@ -1544,24 +1614,25 @@ namespace
           {
             nused = state.navg[iseq];
             emit_decode (avg_list, avg_list.xdt, avg_list.f0, avg_list.idec, nused);
-            nqf.assign (20, 0);
-            return;
+            have_primary_decode = true;
           }
 
-        iavg = 2;
-        Q65Dec0Result avg_q012 = q65_dec0 (state, audio, 2, ntrperiod, nfqso, ntol, false,
-                                           lnewdat, emedelay, nsps, mode_q65, nfa, nfb,
-                                           ibwa, ibwb, npasses, maxiters, max_drift, 0, iseq);
-        if (avg_q012.idec >= 0)
+        if (!have_primary_decode)
           {
-            nused = state.navg[iseq];
-            emit_decode (avg_q012, avg_q012.xdt, avg_q012.f0, avg_q012.idec, nused);
-            nqf.assign (20, 0);
-            return;
+            iavg = 2;
+            Q65Dec0Result avg_q012 = q65_dec0 (state, audio, 2, ntrperiod, nfqso, ntol, false,
+                                               lnewdat, emedelay, nsps, mode_q65, nfa, nfb,
+                                               ibwa, ibwb, npasses, maxiters, max_drift, 0, iseq);
+            if (avg_q012.idec >= 0)
+              {
+                nused = state.navg[iseq];
+                emit_decode (avg_q012, avg_q012.xdt, avg_q012.f0, avg_q012.idec, nused);
+                have_primary_decode = true;
+              }
           }
       }
 
-    if (max_drift == 50)
+    if (!have_primary_decode && max_drift == 50)
       {
         Q65Dec0Result drift_dec = q65_dec0 (state, audio, iavg, ntrperiod, nfqso, ntol, false,
                                             lnewdat, emedelay, nsps, mode_q65, nfa, nfb,
@@ -1569,6 +1640,7 @@ namespace
         if (drift_dec.idec >= 0)
           {
             emit_decode (drift_dec, drift_dec.xdt, drift_dec.f0, drift_dec.idec, nused);
+            have_primary_decode = true;
           }
       }
 
@@ -1700,7 +1772,7 @@ namespace
     return state;
   }
 
-  void decode_q65_core_native (short const* iwave,
+  void decode_q65_core_native (short const* iwave, int iwaveSamples,
                                int* nqd0, int* nutc, int* ntrperiod, int* nsubmode,
                                int* nfqso, int* ntol, int* ndepth, int* nfa, int* nfb,
                                int* nclearave, int* single_decode, int* nagain,
@@ -1708,8 +1780,11 @@ namespace
                                char const* mycall, char const* hiscall, char const* hisgrid,
                                int* nqsoprogress, int* ncontest, int* lapcqonly,
                                int* syncsnrs, int* snrs, float* dts, float* freqs, int* idecs,
-                               int* nuseds, signed char* bits77, char* decodeds, int* nout)
+                               int* nuseds, signed char* bits77, char* decodeds, int* nout,
+                               bool zapEnabled)
   {
+    ScopedQ65ZapMode zap_mode {zapEnabled};
+
     std::fill_n (syncsnrs, kQ65MaxLines, 0);
     std::fill_n (snrs, kQ65MaxLines, 0);
     std::fill_n (dts, kQ65MaxLines, 0.0f);
@@ -1720,9 +1795,15 @@ namespace
     std::fill_n (decodeds, kQ65DecodedChars * kQ65MaxLines, ' ');
     *nout = 0;
 
-    int const expected_samples = std::max (1, *ntrperiod) * RX_SAMPLE_RATE;
+    int const period = std::clamp (*ntrperiod, 15, 300);
+    *ntrperiod = period;
+    int const expected_samples = period * RX_SAMPLE_RATE;
     std::vector<short> audio (static_cast<size_t> (expected_samples), 0);
-    std::copy_n (iwave, expected_samples, audio.data ());
+    int const source_samples = std::max (0, std::min (iwaveSamples, expected_samples));
+    if (source_samples > 0)
+      {
+        std::copy_n (iwave, source_samples, audio.data ());
+      }
 
     Q65RuntimeState& state = q65_runtime_state ();
     std::vector<Q65Line> lines;
@@ -1769,7 +1850,7 @@ namespace
       }
   }
 
-  void decode_q65_into_outputs (short const* iwave,
+  void decode_q65_into_outputs (short const* iwave, int iwaveSamples,
                                 int* nqd0, int* nutc, int* ntrperiod, int* nsubmode,
                                 int* nfqso, int* ntol, int* ndepth, int* nfa, int* nfb,
                                 int* nclearave, int* single_decode, int* nagain,
@@ -1777,7 +1858,8 @@ namespace
                                 char const* mycall, char const* hiscall, char const* hisgrid,
                                 int* nqsoprogress, int* ncontest, int* lapcqonly,
                                 int* syncsnrs, int* snrs, float* dts, float* freqs, int* idecs,
-                                int* nuseds, signed char* bits77, char* decodeds, int* nout)
+                                int* nuseds, signed char* bits77, char* decodeds, int* nout,
+                                bool zapEnabled)
   {
     if (!iwave || !nqd0 || !nutc || !ntrperiod || !nsubmode || !nfqso || !ntol || !ndepth
         || !nfa || !nfb || !nclearave || !single_decode || !nagain || !max_drift
@@ -1793,11 +1875,11 @@ namespace
       }
 
     QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
-    decode_q65_core_native (iwave, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
+    decode_q65_core_native (iwave, iwaveSamples, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
                             nfa, nfb, nclearave, single_decode, nagain, max_drift,
                             lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
                             ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
-                            nuseds, bits77, decodeds, nout);
+                            nuseds, bits77, decodeds, nout, zapEnabled);
   }
 }
 
@@ -1864,11 +1946,64 @@ extern "C" void ftx_q65_async_decode_c (short const* iwave,
                                         fortran_charlen_t, fortran_charlen_t,
                                         fortran_charlen_t, fortran_charlen_t)
 {
-  decode_q65_into_outputs (iwave, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
+  // Legacy raw-pointer entry point: no trustworthy input length is available.
+  // Internal callers use the *_len* variants below so short buffers are padded
+  // instead of read past their allocation.
+  decode_q65_into_outputs (iwave, 0, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
                            nfa, nfb, nclearave, single_decode, nagain, max_drift,
                            lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
                            ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
-                           nuseds, bits77, decodeds, nout);
+                           nuseds, bits77, decodeds, nout, true);
+}
+
+extern "C" void ftx_q65_async_decode_with_zap_c (short const* iwave,
+                                                 int* nqd0, int* nutc, int* ntrperiod,
+                                                 int* nsubmode, int* nfqso, int* ntol,
+                                                 int* ndepth, int* nfa, int* nfb,
+                                                 int* nclearave, int* single_decode,
+                                                 int* nagain, int* max_drift, int* lnewdat,
+                                                 float* emedelay, char const* mycall,
+                                                 char const* hiscall, char const* hisgrid,
+                                                 int* nqsoprogress, int* ncontest,
+                                                 int* lapcqonly, int* lzap,
+                                                 int syncsnrs[], int snrs[], float dts[],
+                                                 float freqs[], int idecs[], int nuseds[],
+                                                 signed char bits77[], char decodeds[],
+                                                 int* nout, fortran_charlen_t,
+                                                 fortran_charlen_t, fortran_charlen_t,
+                                                 fortran_charlen_t)
+{
+  bool const zapEnabled = lzap && *lzap != 0;
+  decode_q65_into_outputs (iwave, 0, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
+                           nfa, nfb, nclearave, single_decode, nagain, max_drift,
+                           lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
+                           ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
+                           nuseds, bits77, decodeds, nout, zapEnabled);
+}
+
+extern "C" void ftx_q65_async_decode_with_zap_len_c (short const* iwave, int iwave_samples,
+                                                     int* nqd0, int* nutc, int* ntrperiod,
+                                                     int* nsubmode, int* nfqso, int* ntol,
+                                                     int* ndepth, int* nfa, int* nfb,
+                                                     int* nclearave, int* single_decode,
+                                                     int* nagain, int* max_drift, int* lnewdat,
+                                                     float* emedelay, char const* mycall,
+                                                     char const* hiscall, char const* hisgrid,
+                                                     int* nqsoprogress, int* ncontest,
+                                                     int* lapcqonly, int* lzap,
+                                                     int syncsnrs[], int snrs[], float dts[],
+                                                     float freqs[], int idecs[], int nuseds[],
+                                                     signed char bits77[], char decodeds[],
+                                                     int* nout, fortran_charlen_t,
+                                                     fortran_charlen_t, fortran_charlen_t,
+                                                     fortran_charlen_t)
+{
+  bool const zapEnabled = lzap && *lzap != 0;
+  decode_q65_into_outputs (iwave, iwave_samples, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol,
+                           ndepth, nfa, nfb, nclearave, single_decode, nagain, max_drift,
+                           lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
+                           ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
+                           nuseds, bits77, decodeds, nout, zapEnabled);
 }
 
 extern "C" void ftx_q65_async_decode_c_api (short const* iwave,
@@ -1883,27 +2018,48 @@ extern "C" void ftx_q65_async_decode_c_api (short const* iwave,
                                             float freqs[], int idecs[], int nuseds[],
                                             signed char bits77[], char decodeds[], int* nout)
 {
-  decode_q65_into_outputs (iwave, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
+  decode_q65_into_outputs (iwave, 0, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
                            nfa, nfb, nclearave, single_decode, nagain, max_drift,
                            lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
                            ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
-                           nuseds, bits77, decodeds, nout);
+                           nuseds, bits77, decodeds, nout, true);
 }
 
-extern "C" void ftx_q65_async_decode_latest_c_api (short const* iwave,
-                                                    int* nqd0, int* nutc, int* ntrperiod,
-                                                    int* nsubmode, int* nfqso, int* ntol,
-                                                    int* ndepth, int* nfa, int* nfb,
-                                                    int* nclearave, int* single_decode,
-                                                    int* nagain, int* max_drift, int* lnewdat,
-                                                    float* emedelay,
-                                                    char const mycall[12],
-                                                    char const hiscall[12],
-                                                    char const hisgrid[6],
-                                                    int* nqsoprogress, int* ncontest,
-                                                    int* lapcqonly, int* snr0, float* dt0,
-                                                    int* freq0, char cq0[3], char msg0[37],
-                                                    int* found)
+extern "C" void ftx_q65_async_decode_len_c_api (short const* iwave, int iwave_samples,
+                                                int* nqd0, int* nutc, int* ntrperiod,
+                                                int* nsubmode, int* nfqso, int* ntol,
+                                                int* ndepth, int* nfa, int* nfb,
+                                                int* nclearave, int* single_decode,
+                                                int* nagain, int* max_drift, int* lnewdat,
+                                                float* emedelay, char const mycall[12],
+                                                char const hiscall[12], char const hisgrid[6],
+                                                int* nqsoprogress, int* ncontest,
+                                                int* lapcqonly, int syncsnrs[], int snrs[],
+                                                float dts[], float freqs[], int idecs[],
+                                                int nuseds[], signed char bits77[],
+                                                char decodeds[], int* nout)
+{
+  decode_q65_into_outputs (iwave, iwave_samples, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol,
+                           ndepth, nfa, nfb, nclearave, single_decode, nagain, max_drift,
+                           lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
+                           ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
+                           nuseds, bits77, decodeds, nout, true);
+}
+
+extern "C" void ftx_q65_async_decode_latest_len_c_api (short const* iwave, int iwave_samples,
+                                                        int* nqd0, int* nutc, int* ntrperiod,
+                                                        int* nsubmode, int* nfqso, int* ntol,
+                                                        int* ndepth, int* nfa, int* nfb,
+                                                        int* nclearave, int* single_decode,
+                                                        int* nagain, int* max_drift,
+                                                        int* lnewdat, float* emedelay,
+                                                        char const mycall[12],
+                                                        char const hiscall[12],
+                                                        char const hisgrid[6],
+                                                        int* nqsoprogress, int* ncontest,
+                                                        int* lapcqonly, int* snr0, float* dt0,
+                                                        int* freq0, char cq0[3],
+                                                        char msg0[37], int* found)
 {
   if (snr0)
     {
@@ -1947,12 +2103,12 @@ extern "C" void ftx_q65_async_decode_latest_c_api (short const* iwave,
   std::array<char, kQ65DecodedChars * kQ65MaxLines> decodeds {};
   int nout = 0;
 
-  decode_q65_into_outputs (iwave, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
+  decode_q65_into_outputs (iwave, iwave_samples, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
                            nfa, nfb, nclearave, single_decode, nagain, max_drift,
                            lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,
                            ncontest, lapcqonly, syncsnrs.data (), snrs.data (), dts.data (),
                            freqs.data (), idecs.data (), nuseds.data (), bits77.data (),
-                           decodeds.data (), &nout);
+                           decodeds.data (), &nout, true);
 
   int latest = -1;
   for (int i = 0; i < nout; ++i)
@@ -1981,6 +2137,28 @@ extern "C" void ftx_q65_async_decode_latest_c_api (short const* iwave,
 
   std::string const decoded = trimmed_decode (decodeds.data (), latest);
   std::memcpy (msg0, decoded.data (), std::min<size_t> (decoded.size (), 37));
+}
+
+extern "C" void ftx_q65_async_decode_latest_c_api (short const* iwave,
+                                                    int* nqd0, int* nutc, int* ntrperiod,
+                                                    int* nsubmode, int* nfqso, int* ntol,
+                                                    int* ndepth, int* nfa, int* nfb,
+                                                    int* nclearave, int* single_decode,
+                                                    int* nagain, int* max_drift, int* lnewdat,
+                                                    float* emedelay,
+                                                    char const mycall[12],
+                                                    char const hiscall[12],
+                                                    char const hisgrid[6],
+                                                    int* nqsoprogress, int* ncontest,
+                                                    int* lapcqonly, int* snr0, float* dt0,
+                                                    int* freq0, char cq0[3], char msg0[37],
+                                                    int* found)
+{
+  ftx_q65_async_decode_latest_len_c_api (
+      iwave, 0, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth, nfa, nfb,
+      nclearave, single_decode, nagain, max_drift, lnewdat, emedelay, mycall,
+      hiscall, hisgrid, nqsoprogress, ncontest, lapcqonly, snr0, dt0, freq0,
+      cq0, msg0, found);
 }
 
 extern "C" void ftx_q65_decode_and_emit_params_c (short const* iwave,
@@ -2026,13 +2204,14 @@ extern "C" void ftx_q65_decode_and_emit_params_c (short const* iwave,
   int ncontest = params->nexp_decode & 7;
   int lapcqonly = params->lapcqonly ? 1 : 0;
 
-  decode_q65_into_outputs (iwave, &nqd0, &nutc, &ntrperiod, &nsubmode, &nfqso, &ntol, &ndepth,
+  int const iwave_samples = std::max (0, ntrperiod) * RX_SAMPLE_RATE;
+  decode_q65_into_outputs (iwave, iwave_samples, &nqd0, &nutc, &ntrperiod, &nsubmode, &nfqso, &ntol, &ndepth,
                            &nfa, &nfb, &nclearave, &single_decode, &nagain, &max_drift,
                            &lnewdat, &emedelay, params->mycall, params->hiscall,
                            params->hisgrid, &nqsoprogress, &ncontest, &lapcqonly,
                            syncsnrs.data (), snrs.data (), dts.data (), freqs.data (),
                            idecs.data (), nuseds.data (), bits77.data (), decodeds.data (),
-                           &nout);
+                           &nout, true);
 
   int const count = std::max (0, std::min (nout, kQ65MaxLines));
   if (decoded_count)
