@@ -2,6 +2,8 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <utility>
@@ -23,6 +25,29 @@ constexpr int kLdpc17491MaxRowWeight = 7;
 constexpr int kLdpc17491ColWeight = 3;
 constexpr int kLdpc17491MaxNdeep = 6;
 constexpr float kAlphaMs = 0.75f;
+
+float platanh_ldpc174 (float x)
+{
+  int const sign = x < 0.0f ? -1 : 1;
+  float const z = std::fabs (x);
+  if (z <= 0.664f)
+    {
+      return x / 0.83f;
+    }
+  if (z <= 0.9217f)
+    {
+      return sign * (z - 0.4064f) / 0.322f;
+    }
+  if (z <= 0.9951f)
+    {
+      return sign * (z - 0.8378f) / 0.0524f;
+    }
+  if (z <= 0.9998f)
+    {
+      return sign * (z - 0.9914f) / 0.0012f;
+    }
+  return sign * 7.0f;
+}
 
 using Codeword174 = std::array<signed char, kLdpc17491N>;
 using Message91 = std::array<signed char, kLdpc17491K>;
@@ -606,7 +631,7 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
     }
   else if (ndeep_local == 2)
     {
-      nord = 1; npre1 = 1; npre2 = 0; nt = 40; ntheta = 10;
+      nord = 1; npre1 = 1; npre2 = 0; nt = 40; ntheta = 12;
     }
   else if (ndeep_local == 3)
     {
@@ -614,11 +639,11 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
     }
   else if (ndeep_local == 4)
     {
-      nord = 2; npre1 = 1; npre2 = 1; nt = 40; ntheta = 12; ntau = 17;
+      nord = 2; npre1 = 1; npre2 = 0; nt = 40; ntheta = 12; ntau = 19;
     }
   else if (ndeep_local == 5)
     {
-      nord = 3; npre1 = 1; npre2 = 1; nt = 40; ntheta = 12; ntau = 15;
+      nord = 2; npre1 = 1; npre2 = 1; nt = 40; ntheta = 12; ntau = 19;
     }
   else if (ndeep_local >= 6)
     {
@@ -908,6 +933,132 @@ extern "C" void ftx_ft8_stage4_set_ldpc_max_iter_c (int max_iter)
   g_ldpc_max_iter.store (v, std::memory_order_relaxed);
 }
 
+// Gate anti-false-decode sui candidati OSD.
+//
+// La CRC-14 e' l'unico filtro sui candidati e ne lascia passare uno sbagliato
+// ogni 16384; FT2 ne prova migliaia per ciclo, quindi ne passano parecchi.
+// Misurato sui log del 27/08/2026: l'80% delle decodifiche FT2 veniva scartato
+// dal filtro semantico a valle, cioe' erano nominativi inventati -- 1800 in
+// un'ora e mezza.
+//
+// nd = quanta parte dei |LLR| il candidato smentisce, sul totale:
+//
+//     nd = somma|llr[v]| sui v dove il candidato contraddice la decisione hard
+//          di canale   /   somma|llr[v]| su tutti i v
+//
+// E' un rapporto, quindi non dipende dalla scala degli LLR e la stessa soglia
+// vale a ogni SNR. Un candidato giusto smentisce il canale solo dove il rumore
+// ha davvero girato un bit; uno inventato lo smentisce ovunque.
+//
+// I bit noti per ipotesi a priori sono esclusi: hanno |LLR| grande per
+// costruzione e, lasciati dentro, gonfierebbero il denominatore fino a
+// disattivare il gate proprio quando l'AP e' attivo. Per lo stesso motivo la
+// soglia si allarga con (N/N_liberi)^2: con K bit noti lo spazio dei candidati
+// compatibili si riduce di 2^K e i falsi positivi crollano.
+//
+// Soglia regolabile con DECODIUM_LDPC_ND_MAX (0 o negativa = gate spento).
+static float ldpc174_nd_max ()
+{
+  static float const value = [] {
+    char const* const raw = std::getenv ("DECODIUM_LDPC_ND_MAX");
+    if (!raw) return 0.075f;
+    float const parsed = static_cast<float> (std::atof (raw));
+    return (parsed > 0.0f && parsed <= 1.0f) ? parsed : 0.0f;
+  }();
+  return value;
+}
+
+// true = il candidato va rifiutato.
+// Secondo criterio, indipendente da nd e piu' discriminante: quanti bit la
+// parola decisa ribalta rispetto alla decisione hard sugli LLR di canale.
+// Una decodifica vera ne ribalta pochi anche con segnale debole; una parola
+// nata dal rumore deve stravolgerne molti per chiudere la sindrome.
+//
+// DUE MISURE, DUE DOMINI, E SI SOVRAPPONGONO. Da tenere presente prima di
+// stringere questa soglia.
+//
+// Sul traffico vero (74 decodifiche di stazioni ripetute -- UX5HY, RV3ZN,
+// F5PBG, QSO IK7VKC/F5PBG, SNR da +11 a -26 dB): le corrette stanno a
+// mediana 1, p99 16, massimo 20; i fantasmi si ammassano sopra 23
+// (23->14, 24->26, 25->37, 26->70, 27->147). Da li' la soglia 22.
+//
+// Sul banco con SNR controllato (lab/, decoder originale, 1000 parole per
+// punto) il quadro e' diverso, perche' vicino alla soglia anche una
+// decodifica CORRETTA ribalta molti bit:
+//
+//     Eb/N0    gate off   hard=22   hard=30
+//     1,0 dB      833       561       828     <- a 22 si perde il 33%
+//     2,0 dB      994       928       994
+//     3,0 dB     1000       999      1000
+//
+// Il traffico vero era dominato da stazioni forti, dove 22 non costa nulla;
+// a ridosso della soglia costa un terzo delle decodifiche, cioe' proprio
+// quelle deboli che si vorrebbe recuperare. Le due popolazioni si
+// sovrappongono fra 22 e 30 e nessun valore le separa entrambe.
+//
+// Default 30: prende i casi estremi senza toccare le decodifiche marginali
+// (828 contro 833 a 1 dB). Il filtro principale resta nd, che sul campo ha
+// gia' portato lo scarto semantico dal 76% al 28% e azzerato le false con il
+// proprio nominativo. Chi vede ancora fantasmi puo' scendere a 22, sapendo
+// cosa costa; DECODIUM_LDPC_GATE_LOG=1 stampa i valori per ritarare sul
+// proprio traffico.
+static int ldpc174_max_hard ()
+{
+  static int const value = [] {
+    char const* raw = std::getenv ("DECODIUM_LDPC_MAX_HARD");
+    if (!raw) raw = std::getenv ("DECODIUM_FT2_LDPC_MAX_HARD");   // nome storico
+    int const v = raw ? std::atoi (raw) : 0;
+    return (v > 0 && v <= kLdpc17491N) ? v : 30;
+  }();
+  return value;
+}
+
+// true = il candidato va rifiutato. Applica in sequenza i due criteri: prima
+// nd (energia degli LLR smentita, normalizzata), poi il numero di bit
+// ribaltati. Sono ortogonali: il primo pesa QUANTO il candidato contraddice
+// il canale, il secondo SU QUANTI bit.
+static bool ldpc174_reject_by_nd (signed char const* cw, float const* llr,
+                                  signed char const* apmask)
+{
+  float const limit = ldpc174_nd_max ();
+  int const max_hard = ldpc174_max_hard ();
+  if (limit <= 0.0f && max_hard >= kLdpc17491N) return false;   // entrambi spenti
+
+  double num = 0.0, den = 0.0;
+  int free_bits = 0, nhard = 0;
+  for (int i = 0; i < kLdpc17491N; ++i)
+    {
+      int const hdec = llr[i] >= 0.0f ? 1 : 0;
+      int const bit = cw[i] != 0 ? 1 : 0;
+      bool const flipped = (bit != hdec);
+      if (flipped) ++nhard;                 // conta su TUTTI i bit, AP inclusi
+      if (apmask && apmask[i]) continue;    // ma nd esclude gli AP
+      double const a = std::fabs (llr[i]);
+      den += a;
+      ++free_bits;
+      if (flipped) num += a;
+    }
+
+  static bool const gate_log = [] {
+    char const* raw = std::getenv ("DECODIUM_LDPC_GATE_LOG");
+    return raw && raw[0] != 0 && raw[0] != '0';
+  }();
+  float const nd = (den > 0.0) ? static_cast<float> (num / den) : 1.0f;
+  if (gate_log)
+    {
+      std::fprintf (stderr, "[LDPCGATE] nd=%.4f hard=%d free=%d (soglie nd=%.3f hard=%d)\n",
+                    static_cast<double> (nd), nhard, free_bits,
+                    static_cast<double> (limit), max_hard);
+      std::fflush (stderr);
+    }
+
+  if (nhard > max_hard) return true;
+  if (limit <= 0.0f) return false;
+  if (den <= 0.0 || free_bits <= 0) return false;
+  float const r = static_cast<float> (kLdpc17491N) / static_cast<float> (free_bits);
+  return static_cast<float> (num / den) > limit * r * r;
+}
+
 extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, int norder,
                                      signed char const* apmask_in, signed char* message91_out,
                                      signed char* cw_out, int* ntype_out,
@@ -933,10 +1084,12 @@ extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, i
   std::array<float, kLdpc17491N> zsum {};
   std::array<std::array<float, kLdpc17491ColWeight>, kLdpc17491N> tov {};
   std::array<std::array<float, kLdpc17491MaxRowWeight>, kLdpc17491M> toc {};
+  std::array<std::array<float, kLdpc17491MaxRowWeight>, kLdpc17491M> tanhtoc {};
   std::array<signed char, kLdpc17491N> cw {};
   std::array<int, kLdpc17491M> synd {};
 
   std::copy_n (llr_in, kLdpc17491N, llr.begin ());
+  bool const use_exact_bp = maxosd >= 3 && norder >= 4;
   if (maxosd == 0)
     {
       nosd = 1;
@@ -1067,23 +1220,63 @@ extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, i
             }
         }
 
-      for (int bit = 0; bit < kLdpc17491N; ++bit)
+      if (use_exact_bp)
         {
-          for (int edge = 0; edge < tables.ncw; ++edge)
+          for (int check = 0; check < kLdpc17491M; ++check)
             {
-              int const check = mn_at (tables, edge, bit) - 1;
-              float sign_prod = 1.0f;
-              float min_abs = 1.0e30f;
               for (int row = 0; row < tables.nrw[static_cast<size_t> (check)]; ++row)
                 {
-                  if (nm_at (tables, row, check) != bit + 1)
-                    {
-                      float const value = toc[static_cast<size_t> (check)][static_cast<size_t> (row)];
-                      sign_prod *= sign_one (-value);
-                      min_abs = std::min (min_abs, std::fabs (value));
-                    }
+                  float const value = toc[static_cast<size_t> (check)][static_cast<size_t> (row)];
+                  tanhtoc[static_cast<size_t> (check)][static_cast<size_t> (row)] =
+                      std::tanh (-0.5f * value);
                 }
-              tov[static_cast<size_t> (bit)][static_cast<size_t> (edge)] = kAlphaMs * sign_prod * min_abs;
+            }
+
+          for (int bit = 0; bit < kLdpc17491N; ++bit)
+            {
+              for (int edge = 0; edge < tables.ncw; ++edge)
+                {
+                  int const check = mn_at (tables, edge, bit) - 1;
+                  float tmn = 1.0f;
+                  for (int row = 0; row < tables.nrw[static_cast<size_t> (check)]; ++row)
+                    {
+                      if (nm_at (tables, row, check) != bit + 1)
+                        {
+                          tmn *= tanhtoc[static_cast<size_t> (check)][static_cast<size_t> (row)];
+                        }
+                    }
+                  tov[static_cast<size_t> (bit)][static_cast<size_t> (edge)] =
+                      2.0f * platanh_ldpc174 (-tmn);
+                }
+            }
+        }
+      else
+        {
+          for (int bit = 0; bit < kLdpc17491N; ++bit)
+            {
+              for (int edge = 0; edge < tables.ncw; ++edge)
+                {
+                  int const check = mn_at (tables, edge, bit) - 1;
+                  float sign_prod = 1.0f;
+                  float min_abs = 1.0e30f;
+                  for (int row = 0; row < tables.nrw[static_cast<size_t> (check)]; ++row)
+                    {
+                      if (nm_at (tables, row, check) != bit + 1)
+                        {
+                          float const value = toc[static_cast<size_t> (check)][static_cast<size_t> (row)];
+                          sign_prod *= sign_one (-value);
+                          min_abs = std::min (min_abs, std::fabs (value));
+                        }
+                    }
+                  // Il segno va negato, come nel ramo esatto qui sopra, che
+                  // calcola 2*platanh(-tmn) e non 2*platanh(tmn). Senza la
+                  // negazione questo ramo produce messaggi di segno opposto
+                  // a quello corretto per ogni grado di riga, e il BP non
+                  // converge mai: misurato su 1000 parole a 1 dB, 0 parole
+                  // chiuse dal BP prima e 305 dopo, con le decodifiche
+                  // totali che passano da 713 a 834.
+                  tov[static_cast<size_t> (bit)][static_cast<size_t> (edge)] = -kAlphaMs * sign_prod * min_abs;
+                }
             }
         }
     }
@@ -1099,7 +1292,44 @@ extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, i
       auto zn_osd = zsave[static_cast<size_t> (i)];
       osd174_91_cpp (zn_osd.data (), Keff, apmask.data (), norder, message91.data (),
                      cw_osd.data (), &nhard, &dmin);
-      if (nhard >= 0)
+      if (nhard >= 0 && !ldpc174_reject_by_nd (cw_osd.data (), llr.data (), apmask_in))
+        {
+          ftx_ldpc174_91_metrics_c (cw_osd.data (), llr.data (), &nhard, &dmin);
+          if (message91_out)
+            {
+              std::copy (message91.begin (), message91.end (), message91_out);
+            }
+          if (cw_out)
+            {
+              std::copy (cw_osd.begin (), cw_osd.end (), cw_out);
+            }
+          if (ntype_out)
+            {
+              *ntype_out = 2;
+            }
+          if (nharderror_out)
+            {
+              *nharderror_out = nhard;
+            }
+          if (dmin_out)
+            {
+              *dmin_out = dmin;
+            }
+            return;
+        }
+    }
+
+  if (maxosd > 0)
+    {
+      std::array<signed char, kLdpc17491K> message91 {};
+      std::array<signed char, kLdpc17491N> cw_osd {};
+      std::array<signed char, kLdpc17491N> apmask {};
+      std::copy_n (apmask_in, kLdpc17491N, apmask.begin ());
+      int nhard = -1;
+      float dmin = 0.0f;
+      osd174_91_cpp (llr.data (), Keff, apmask.data (), norder, message91.data (),
+                     cw_osd.data (), &nhard, &dmin);
+      if (nhard >= 0 && !ldpc174_reject_by_nd (cw_osd.data (), llr.data (), apmask_in))
         {
           ftx_ldpc174_91_metrics_c (cw_osd.data (), llr.data (), &nhard, &dmin);
           if (message91_out)

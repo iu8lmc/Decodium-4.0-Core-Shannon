@@ -258,6 +258,7 @@ void DisplayText::insertText(QString const& text, QColor bg, QColor fg
       ensureCursorVisible ();
     }
   document ()->setMaximumBlockCount (document ()->maximumBlockCount ());
+  Q_EMIT lineAppended (text);
 }
 
 void DisplayText::extend_vertical_scrollbar (int min, int max)
