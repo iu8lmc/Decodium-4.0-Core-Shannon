@@ -135,8 +135,12 @@ Cmd_Lock
 };
 Q_ENUM (Tci_Cmd);
 
-qreal rxAtten;
-qreal txAtten;
+// 1.0.537 iu8lmc - rxAtten veniva letto in writeAudioData senza essere
+// mai inizializzato: il guadagno dell'audio RX via TCI dipendeva da
+// memoria indeterminata. 0 dB = guadagno unitario.
+QString device_name_;      // nome riportato dal server TCI (es. ColibriNANO)
+qreal rxAtten = 0.0;
+qreal txAtten = 45.0;
 
 public slots:
 //  void close();
@@ -232,6 +236,10 @@ private:
   QString mode_to_command (QString) const;
   std::unique_ptr<TransceiverBase> wrapped_; // may be null
   void arm_wait_timer (QTimer * timer, int ms, char const * context);
+  void send_tx_audio_frame (quint32 receiver, quint32 sample_count,
+                           quint32 format, quint32 channels);
+  void update_tx_push_state ();
+  void on_tx_push_tick ();
   void ensure_socket_worker ();
   void shutdown_socket_worker ();
   QString rx_;
@@ -316,6 +324,20 @@ private:
   quint64 txChronoFrames_;
   quint64 txAudioFrames_;
   qint64 lastTxChronoLogMs_;
+  // 1.0.542 iu8lmc - frequenza di campionamento dichiarata dal server in
+  // risposta ad audio_samplerate. Prima quella risposta cadeva nel default
+  // dello switch e veniva ignorata: si genera sempre a 48000 ma si timbrava
+  // sul frame il valore del server, quindi con un rate diverso il tono
+  // usciva alla frequenza sbagliata e i simboli fuori tempo.
+  quint32 negotiatedSampleRate_ {0};
+  bool warnedSampleRateMismatch_ {false};
+  // Alcuni server TCI non emettono TxChrono. Senza quello non trasmettevamo
+  // nulla, perche' l'audio partiva solo come risposta al loro scandire.
+  qint64 lastTxChronoMs_ {0};
+  bool txPushActive_ {false};
+  qint64 txPushStartMs_ {0};
+  qint64 txPushAudioUs_ {0};
+  QTimer * tx_push_timer_ {nullptr};
   QHash<QString,Tci_Cmd> mapCmd_;
   // from Detector
     void clear ();                // discard buffer contents

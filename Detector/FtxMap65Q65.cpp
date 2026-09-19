@@ -18,17 +18,18 @@ extern "C"
 {
 void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
 void polfit_ (float y[], int* npts, float a[]);
-void ftx_q65_async_decode_latest_c_api (short const* iwave, int* nqd0, int* nutc,
-                                        int* ntrperiod, int* nsubmode, int* nfqso,
-                                        int* ntol, int* ndepth, int* nfa, int* nfb,
-                                        int* nclearave, int* single_decode,
-                                        int* nagain, int* max_drift, int* lnewdat,
-                                        float* emedelay, char const mycall[12],
-                                        char const hiscall[12], char const hisgrid[6],
-                                        int* nqsoprogress, int* ncontest,
-                                        int* lapcqonly, int* snr0, float* dt0,
-                                        int* freq0, char cq0[3], char msg0[37],
-                                        int* found);
+void ftx_q65_async_decode_latest_len_c_api (short const* iwave, int iwave_samples,
+                                            int* nqd0, int* nutc, int* ntrperiod,
+                                            int* nsubmode, int* nfqso, int* ntol,
+                                            int* ndepth, int* nfa, int* nfb,
+                                            int* nclearave, int* single_decode,
+                                            int* nagain, int* max_drift, int* lnewdat,
+                                            float* emedelay, char const mycall[12],
+                                            char const hiscall[12], char const hisgrid[6],
+                                            int* nqsoprogress, int* ncontest,
+                                            int* lapcqonly, int* snr0, float* dt0,
+                                            int* freq0, char cq0[3], char msg0[37],
+                                            int* found);
 
 extern std::complex<float> cacb_[2 * 5376000];
 }
@@ -518,8 +519,9 @@ int decode_q65_candidate (Candidate const& candidate, int nqd, double fcenter, i
   int nqsoprogress_c = 0;
   int ncontest_c = 0;
   int lapcqonly_c = 0;
-  ftx_q65_async_decode_latest_c_api (
-      iwave.data (), &nqd_c, &nutc_c, &ntrperiod_c, &nsubmode_c, &nfqso_c, &ntol_c,
+  ftx_q65_async_decode_latest_len_c_api (
+      iwave.data (), static_cast<int> (iwave.size ()),
+      &nqd_c, &nutc_c, &ntrperiod_c, &nsubmode_c, &nfqso_c, &ntol_c,
       &ndepth_c, &nfa_c, &nfb_c, &nclearave_c, &single_decode_c, &nagain_c, &max_drift_c,
       &lnewdat_c, &emedelay_c, mycall_c.data (), hiscall_c.data (), hisgrid_c.data (),
       &nqsoprogress_c, &ncontest_c, &lapcqonly_c, &nsnr0, &xdt0, &nfreq0,

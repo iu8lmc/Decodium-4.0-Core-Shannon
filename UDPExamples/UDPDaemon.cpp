@@ -208,8 +208,9 @@ private:
     auto iter = clients_.find (key);
     if (iter != std::end (clients_))
       {
+        auto client = *iter;
         clients_.erase (iter);
-        (*iter)->deleteLater ();
+        client->deleteLater ();
       }
     std::cout << "Removed WSJT-X instance: " << key.second.toStdString ()
               << '(' << key.first.toString ().toStdString () << ')' << std::endl;

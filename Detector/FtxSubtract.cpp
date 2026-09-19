@@ -256,10 +256,13 @@ struct Ft8SubtractWorkspace
   std::vector<float> dd = std::vector<float> (static_cast<size_t> (kFt8NMax));
 };
 
+// Perdita voluta, come per gli spazi di lavoro in FtxDownsample.cpp: il
+// distruttore girerebbe dentro LdrShutdownThread, quando le strutture
+// per-thread di Qt sono gia' smontate, e la sua free corrompe lo heap.
 Ft8SubtractWorkspace& workspace ()
 {
-  thread_local Ft8SubtractWorkspace state;
-  return state;
+  thread_local Ft8SubtractWorkspace* state = new Ft8SubtractWorkspace;
+  return *state;
 }
 
 struct Ft2SubtractWorkspace

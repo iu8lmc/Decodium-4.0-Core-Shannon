@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "source": "dnet/pySSTV",
+  "sourceCommit": "d998fad154d3e6ad2d73af5add49beec0d2ab59f",
+  "sourceLicense": "MIT",
+  "sampleRate": 12000,
+  "method": "Executed pinned pySSTV gen_freq_bits with a 640x496-or-mode-sized RGB image; converted cumulative segment durations to floor(sampleRate*time). No upstream audio or image asset is copied.",
+  "scope": "Behavioural timing landmarks only. Wraase SC2-60 is absent from pySSTV and intentionally excluded.",
+  "modes": [
+    {
+      "modeId": "wraase-sc2-120",
+      "visPayload": 63,
+      "lineFrames": 5706,
+      "imageFrames": 1460805,
+      "firstLineFrames": {"sync": 0, "red": 78, "green": 1956, "blue": 3834}
+    },
+    {
+      "modeId": "wraase-sc2-180",
+      "visPayload": 55,
+      "lineFrames": 8532,
+      "imageFrames": 2184261,
+      "firstLineFrames": {"sync": 0, "red": 72, "green": 2892, "blue": 5712}
+    },
+    {
+      "modeId": "pasokon-p3",
+      "visPayload": 113,
+      "lineFrames": 4912,
+      "imageFrames": 2436600,
+      "firstLineFrames": {"sync": 0, "red": 75, "green": 1687, "blue": 3300}
+    },
+    {
+      "modeId": "pasokon-p5",
+      "visPayload": 114,
+      "lineFrames": 7368,
+      "imageFrames": 3654900,
+      "firstLineFrames": {"sync": 0, "red": 112, "green": 2531, "blue": 4950}
+    },
+    {
+      "modeId": "pasokon-p7",
+      "visPayload": 115,
+      "lineFrames": 9825,
+      "imageFrames": 4873200,
+      "firstLineFrames": {"sync": 0, "red": 150, "green": 3375, "blue": 6600}
+    }
+  ]
+}
