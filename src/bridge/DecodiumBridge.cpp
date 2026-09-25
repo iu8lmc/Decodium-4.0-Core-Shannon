@@ -48693,6 +48693,26 @@ void DecodiumBridge::onAsyncDecodeTimer()
     // PROGETTO_ASYMX_JTTY F3 (DECODIUM_FT2_ASYNC_INCREMENTALE=1): si cercano
     // solo gli inizi dei frame diventati completi dall'ultimo giro, come in
     // JTTY. Il tempo nuovo si misura in campioni, non con l'orologio.
+    // PROGETTO_ASYMX_JTTY F5 (DECODIUM_FT2_ASYNC_ATTESO=1): in QSO la risposta
+    // del corrispondente comincia fra 0,2 e 1,0 s dopo la fine della nostra
+    // trasmissione, sulla sua frequenza. La' si prova un candidato esente dai
+    // cancelli del sincronismo, con l'AP di mycall+hiscall.
+    static bool const ft2AsyncAtteso =
+        qEnvironmentVariableIntValue("DECODIUM_FT2_ASYNC_ATTESO") == 1;
+    if (ft2AsyncAtteso && !m_dxCall.trimmed().isEmpty() && m_lastTxEndMs > 0) {
+        qint64 const wallMs = QDateTime::currentMSecsSinceEpoch();
+        if (wallMs - m_lastTxEndMs >= 0 && wallMs - m_lastTxEndMs < 6000) {
+            double const windowStart = wallMs / 1000.0 - 3.75;
+            double const txEnd = m_lastTxEndMs / 1000.0;
+            int const lo = qMax(-688, static_cast<int>(std::floor((txEnd + 0.2 - windowStart) * 1333.33)));
+            int const hi = qMin(2024, static_cast<int>(std::ceil((txEnd + 1.0 - windowStart) * 1333.33)));
+            if (lo <= hi) {
+                req.expectF = static_cast<float>(nfqso);
+                req.expectLo = lo;
+                req.expectHi = hi;
+            }
+        }
+    }
     static bool const ft2AsyncIncremental =
         qEnvironmentVariableIntValue("DECODIUM_FT2_ASYNC_INCREMENTALE") == 1;
     if (ft2AsyncIncremental) {

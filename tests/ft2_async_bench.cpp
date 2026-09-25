@@ -59,6 +59,7 @@ extern "C"
                                       int* nout);
   void ftx_ft2_stage7_clravg_c ();
   void ftx_ft2_set_async_ib_range_c (int lo, int hi);
+  void ftx_ft2_set_async_expected_c (float f, int lo, int hi);
 }
 
 namespace
@@ -267,6 +268,101 @@ int gen (Args const& a)
   return 0;
 }
 
+// ------------------------------------------------------------------ QSO ASYMX
+//
+// genqso: una sequenza di scambi. La nostra trasmissione occupa 2,47 s (qui
+// solo rumore: in half-duplex non riceviamo), il corrispondente risponde a
+// una frequenza nota con una latenza fra lat-min e lat-max dalla fine della
+// nostra. Con probabilita' 1-presence non risponde: le finestre attese vuote
+// misurano i falsi. Il file delle attese ha una riga per scambio:
+//   t_fine_tx  frequenza  nominativo_corrispondente  presente(0/1)
+
+int genqso (Args const& a)
+{
+  if (a.pos.size () < 3)
+    {
+      std::fprintf (stderr, "genqso out.wav truth.txt expect.txt [--seconds=600] [--seed=1] [--snr-min=-24]\n"
+                            "    [--snr-max=-12] [--presence=0.8] [--lat-min=0.3] [--lat-max=0.9] [--mycall=IU8LMC]\n");
+      return 2;
+    }
+  double const seconds = a.num ("seconds", 600);
+  std::mt19937 rng (unsigned (a.num ("seed", 1)));
+  std::uniform_real_distribution<double> U (0.0, 1.0);
+  double const snr_min = a.num ("snr-min", -24), snr_max = a.num ("snr-max", -12);
+  double const presence = a.num ("presence", 0.8);
+  double const lat_min = a.num ("lat-min", 0.3), lat_max = a.num ("lat-max", 0.9);
+  std::string const mycall = a.get ("mycall", "IU8LMC");
+  std::size_t const total = std::size_t (seconds * kRate);
+  std::vector<float> buf (total);
+  std::normal_distribution<float> N (0.0f, 1.0f);
+  for (auto& s : buf) s = N (rng);
+  std::ofstream tf (a.pos[1]), ef (a.pos[2]);
+  int n = 0, present = 0;
+  double t = 1.0;
+  while (true)
+    {
+      double const t_end = t + kTxSeconds;
+      double const lat = lat_min + U (rng) * (lat_max - lat_min);
+      double const t0 = t_end + lat;
+      if (t0 + kTxSeconds + 1.0 > seconds) break;
+      std::string const call = random_call (rng);
+      double const f = 400.0 + U (rng) * 2200.0;
+      bool const here = U (rng) < presence;
+      ef << std::to_string (t_end) << " " << std::to_string (f) << " " << call << " " << (here ? 1 : 0) << "\n";
+      if (here)
+        {
+          double const snr = snr_min + U (rng) * (snr_max - snr_min);
+          char rep[8];
+          std::snprintf (rep, sizeof rep, "%+03d", int (std::lround (snr)));
+          int const k = int (U (rng) * 3);
+          std::string const msg = k == 0 ? mycall + " " + call + " " + rep
+                                : k == 1 ? mycall + " " + call + " R" + rep
+                                         : mycall + " " + call + " RR73";
+          auto const enc = decodium::txmsg::encodeFt2 (QString::fromStdString (msg));
+          QVector<float> const w = decodium::txwave::generateFt2Wave (enc.tones.constData (), enc.tones.size (), kNsps,
+                                                                      float (kRate), float (f));
+          float const amp = float (std::sqrt (2.0 * 2500.0 / 6000.0) * std::pow (10.0, snr / 20.0));
+          std::size_t const i0 = std::size_t (t0 * kRate);
+          for (int i = 0; i < w.size () && i0 + std::size_t (i) < total; ++i) buf[i0 + std::size_t (i)] += amp * w[i];
+          char line[200];
+          std::snprintf (line, sizeof line, "%.4f %.1f %.1f %s\n", t0, f, snr, msg.c_str ());
+          tf << line;
+          ++present;
+        }
+      ++n;
+      // prossimo scambio: dopo la risposta (o il suo posto) e un po' di pausa
+      t = t0 + kTxSeconds + 0.5 + U (rng) * 1.5;
+    }
+  std::vector<short> pcm (total);
+  for (std::size_t i = 0; i < total; ++i)
+    pcm[i] = short (std::lround (std::max (-32767.0f, std::min (32767.0f, 1000.0f * buf[i]))));
+  write_wav (a.pos[0], pcm);
+  std::printf ("genqso: %d scambi, %d risposte presenti\n", n, present);
+  return 0;
+}
+
+struct Expect
+{
+  double t_end {0};
+  double freq {0};
+  std::string call;
+  bool present {false};
+};
+
+std::vector<Expect> read_expect (std::string const& path)
+{
+  std::vector<Expect> v;
+  std::ifstream f (path);
+  Expect e;
+  int p;
+  while (f >> e.t_end >> e.freq >> e.call >> p)
+    {
+      e.present = p != 0;
+      v.push_back (e);
+    }
+  return v;
+}
+
 // ------------------------------------------------------------------ simulazione
 
 struct Shown
@@ -349,6 +445,14 @@ int run (Args const& a)
   bool const incremental = a.num ("incr", 0) != 0;
   double const incr_lead = a.num ("incr-lead", 0.0);
   double last_dispatch_t = -1.0;
+  // --expect=file: QSO ASYMX. Durante ogni scambio hiscall e' il corrispondente
+  // (AP come nell'app); con --f5=1 si indica anche la finestra di tempo in cui
+  // la risposta deve cominciare (fine della nostra TX + lat-min..lat-max).
+  std::vector<Expect> expects;
+  if (!a.get ("expect", "").empty ()) expects = read_expect (a.get ("expect", ""));
+  bool const f5 = a.num ("f5", 0) != 0;
+  double const f5_lo = a.num ("f5-lo", 0.2), f5_hi = a.num ("f5-hi", 1.0);
+  int const qso_progress = int (a.num ("qsoprog", 3));
 
   ftx_ft2_stage7_clravg_c ();
 
@@ -383,6 +487,30 @@ int run (Args const& a)
       float dts[kMaxLines] {}, freqs[kMaxLines] {}, quals[kMaxLines] {};
       signed char bits77[kMaxLines * 77] {};
       char decodeds[kMaxLines * 37] {};
+      QByteArray his_now = his;
+      int nfqso_now = nfqso;
+      ftx_ft2_set_async_expected_c (0.0f, 0, -1);
+      if (!expects.empty ())
+        {
+          // lo scambio in corso: l'ultimo la cui TX e' finita e la cui
+          // risposta puo' ancora essere nella finestra
+          for (auto const& e : expects)
+            if (e.t_end <= t && t <= e.t_end + f5_hi + kTxSeconds + 4.0)
+              {
+                his_now = QByteArray::fromStdString (e.call).leftJustified (12, ' ', true);
+                // come nell'app in QSO: RX sul corrispondente, progresso del
+                // QSO avanzato (abilita l'AP con mycall+hiscall)
+                nfqso_now = int (std::lround (e.freq));
+                nqso = qso_progress;
+                if (f5)
+                  {
+                    double const S = t - kWindow / double (kRate);
+                    int const lo = std::max (-688, int (std::floor ((e.t_end + f5_lo - S) * 1333.33)));
+                    int const hi = std::min (2024, int (std::ceil ((e.t_end + f5_hi - S) * 1333.33)));
+                    if (lo <= hi) ftx_ft2_set_async_expected_c (float (e.freq), lo, hi);
+                  }
+              }
+        }
       if (incremental)
         {
           double const tau_max = kWindow / double (kRate) - kTxSeconds + incr_lead;
@@ -393,8 +521,8 @@ int run (Args const& a)
         }
       last_dispatch_t = t;
       auto const c0 = std::chrono::steady_clock::now ();
-      ftx_ft2_async_decode_stage7_c (window.data (), &nqso, &nfqso, &nfa, &nfb, &ndepth, &ncontest,
-                                     my.constData (), his.constData (), snrs, dts, freqs, naps, quals,
+      ftx_ft2_async_decode_stage7_c (window.data (), &nqso, &nfqso_now, &nfa, &nfb, &ndepth, &ncontest,
+                                     my.constData (), his_now.constData (), snrs, dts, freqs, naps, quals,
                                      bits77, decodeds, &nout);
       double const ms = std::chrono::duration<double, std::milli> (std::chrono::steady_clock::now () - c0).count ()
           * cpu_scale;
@@ -574,6 +702,7 @@ int main (int argc, char** argv)
   std::string const cmd = argv[1];
   Args const a = parse (argc, argv, 2);
   if (cmd == "gen") return gen (a);
+  if (cmd == "genqso") return genqso (a);
   if (cmd == "run") return run (a);
   std::fprintf (stderr, "comando sconosciuto %s\n", cmd.c_str ());
   return 2;

@@ -32,6 +32,12 @@ struct AsyncDecodeRequest
   // ibHi < ibLo = ricerca completa di sempre.
   int ibLo {0};
   int ibHi {-1};
+  // PROGETTO_ASYMX_JTTY F5: la risposta attesa del corrispondente, a
+  // frequenza nota e con l'inizio in [expectLo, expectHi] (stessa scala di
+  // ibLo/ibHi). expectHi < expectLo = nessuna attesa.
+  float expectF {0.0f};
+  int expectLo {0};
+  int expectHi {-1};
 };
 
 struct DecodeRequest

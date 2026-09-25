@@ -29,6 +29,7 @@ extern "C"
   void ftx_ft2_stage7_set_cancel_c (int cancel);
   void ftx_ft2_set_ap_hash_cache_c (quint32 const* hashes, int count);  // 1.0.294 AP cache Fase 1
   void ftx_ft2_set_async_ib_range_c (int lo, int hi);                   // F3 finestra incrementale
+  void ftx_ft2_set_async_expected_c (float f, int lo, int hi);          // F5 risposta attesa nel tempo
   int ftx_ft2_ap_msg_tentativi_c ();   // tipo 8: messaggio intero atteso
   int ftx_ft2_ap_msg_successi_c ();
   int ftx_ft2_ap_msg_memoria_c ();
@@ -317,6 +318,7 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
   ftx_ft2_set_ap_hash_cache_c (request.apHashCache.constData (),
                                static_cast<int> (request.apHashCache.size ()));
   ftx_ft2_set_async_ib_range_c (request.ibLo, request.ibHi);
+  ftx_ft2_set_async_expected_c (request.expectF, request.expectLo, request.expectHi);
   QElapsedTimer decodeTimer;
   decodeTimer.start ();
   ftx_ft2_async_decode_stage7_c (iwave, &nqsoprogress, &nfqso, &nfa, &nfb,
@@ -325,6 +327,7 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
                                  &bits77[0], &decodeds[0], &nout);
   qint64 const decodeMs = decodeTimer.elapsed ();
   ftx_ft2_set_async_ib_range_c (0, -1);
+  ftx_ft2_set_async_expected_c (0.0f, 0, -1);
   ftx_ft2_set_ap_hash_cache_c (nullptr, 0);
   log_ft2_drift_rescue_if_new ();
 

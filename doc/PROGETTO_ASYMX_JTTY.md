@@ -255,5 +255,41 @@ Letture:
   che non viene dall'OSD ma dai cancelli di sincronismo/candidati. E' li' che si guadagnano dB:
   F5 (atteso nel tempo) e F6 (soglie per sorgente).
 
+### F5 e F6 (25/09/2026 sera)
+
+Scena Q1: 900 s di QSO ASYMX simulati, 132 scambi. Dopo ogni nostra trasmissione
+il corrispondente risponde con una latenza fra 0,3 e 0,9 s, a una frequenza nota,
+con un messaggio diretto a noi (`IU8LMC <call> -NN / R-NN / RR73`). Le SNR vanno
+da -24 a -10 dB; 108 risposte presenti, 24 assenti. Scena Q0: un'ora, 528 attese
+**senza** risposta, per contare i falsi. In QSO il banco fa come l'app: RX sulla
+frequenza del corrispondente, hiscall impostato, progresso del QSO 3 (AP con
+mycall+hiscall).
+
+| Variante | Risposte decodificate | Soglia 50% | Falsi (Q1) | Falsi su 528 attese vuote (Q0) |
+|---|---|---|---|---|
+| senza AP del QSO (progresso 0, RX a 1500 Hz) | 28 | -14,8 dB | 0 | — |
+| base come l'app (AP mycall+hiscall) | 45 | -16,0 dB | 0 | — |
+| **F5** risposta attesa nel tempo | **47** | **-16,6 dB** | 0 | **0** |
+| F5 + F6 (limite errori duri 60 per l'atteso che nomina noi e lui) | 47 | -16,6 dB | 0 | — |
+
+Letture:
+
+- **F5** guadagna 0,6 dB e nessun falso in un'ora di attese vuote: il candidato
+  forzato a frequenza e tempo noti, esente dai cancelli, recupera le risposte che
+  la ricerca normale non aggancia. Resta sotto il +1 dB chiesto dall'accettazione,
+  quindi e' nel codice ma **spento** (`DECODIUM_FT2_ASYNC_ATTESO=1` lo accende nel
+  bridge, dopo la fine di ogni nostra TX: 0,2-1,0 s, sulla frequenza RX).
+- **F6** misurato sul punto dove ci si aspettava un guadagno: alzare il limite
+  degli errori duri per la risposta attesa non cambia nulla, perche' sotto
+  -16 dB non e' quel cancello a scartare, e' l'LDPC a non convergere. Tolto.
+  Contabilita' dei falsi per sorgente: nessuna sorgente (normale, OSD, AP del QSO,
+  atteso nel tempo) ha prodotto falsi in 1 ora e 25 minuti di attese vuote e 10
+  minuti di rumore puro.
+- Il gradino fra -16 e -14 dB e' vicino al limite fisico della forma d'onda:
+  FT2 va a 41,7 baud, quasi sette volte l'FT8, cioe' circa 8 dB in meno di
+  sensibilita' a parita' di codice. Da qui in poi i dB si prendono solo con piu'
+  energia per bit (accumulo fra ripetizioni, AP del messaggio intero), non con i
+  cancelli.
+
 Stato: F2 e' **acceso di default** (spegnibile con `DECODIUM_FT2_ASYNC_REGISTRO=0`); F3 resta
-dietro `DECODIUM_FT2_ASYNC_INCREMENTALE=1`, spento.
+dietro `DECODIUM_FT2_ASYNC_INCREMENTALE=1` e F5 dietro `DECODIUM_FT2_ASYNC_ATTESO=1`, spenti.

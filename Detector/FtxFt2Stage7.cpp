@@ -50,6 +50,16 @@ thread_local std::vector<quint32>& g_ft2ApHashCache = *new std::vector<quint32>;
 thread_local int g_ft2AsyncIbLo = 0;
 thread_local int g_ft2AsyncIbHi = -1;
 
+// PROGETTO_ASYMX_JTTY F5 — risposta attesa NEL TEMPO. In ASYMX si sa quando
+// il corrispondente rispondera': dopo la fine della nostra trasmissione, piu'
+// la sua latenza. Il chiamante indica frequenza e intervallo di ibest in cui
+// deve cominciare la risposta; li' si prova un candidato esente dai cancelli
+// del sincronismo, come lo "sticky retry" di JTTY. hi < lo = spento.
+thread_local float g_ft2ExpectF = 0.0f;
+thread_local int g_ft2ExpectLo = 0;
+thread_local int g_ft2ExpectHi = -1;
+std::atomic<int> g_ft2_expect_candidati {0};
+
 // Vero se almeno una call del messaggio decodificato è nella cache band-wide.
 // USA ft2MessageCallHashes (CallsignHash28.h), IDENTICA al seed del bridge → match garantito.
 inline bool ft2_decode_cache_confirmed (QByteArray const& message_fixed)
@@ -3209,6 +3219,7 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
       // ipotesi sbagliate, correlate o rumore puro.
       std::array<unsigned char, kFt2MaxCand> cand_atteso {};
       std::array<unsigned char, kFt2MaxCand> cand_genie {};   // solo banco, vedi ft2_genie_f
+      std::array<unsigned char, kFt2MaxCand> cand_expect {};  // F5: risposta attesa nel tempo
       if (ft2_ap_msg_attivo () && ndepth0 != 1)
         {
           std::array<float, 16> fmem {};
@@ -3331,6 +3342,37 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
           stage7_debug_logf ("pass=%d genie f=%.1f in_lista=%d", isp, fg, vicino >= 0 ? 1 : 0);
         }
 
+      // F5: la risposta attesa, a frequenza nota e in un intervallo di tempo
+      // noto. Un candidato normale gia' vicino riceve l'esenzione e la finestra
+      // temporale ristretta; altrimenti se ne aggiunge uno.
+      if (g_ft2ExpectHi >= g_ft2ExpectLo && ndepth0 != 1 && g_ft2ExpectF > 0.0f
+          && g_ft2ExpectF >= static_cast<float> (nfa) && g_ft2ExpectF <= static_cast<float> (nfb))
+        {
+          int vicino = -1;
+          for (int j = 0; j < ncand; ++j)
+            {
+              if (std::fabs (candidate[static_cast<size_t> (j * 2)] - g_ft2ExpectF) <= 5.0f)
+                {
+                  vicino = j;
+                  break;
+                }
+            }
+          if (vicino >= 0)
+            {
+              cand_atteso[static_cast<size_t> (vicino)] = 1;
+              cand_expect[static_cast<size_t> (vicino)] = 1;
+            }
+          else if (ncand < kFt2MaxCand)
+            {
+              candidate[static_cast<size_t> (ncand * 2)] = g_ft2ExpectF;
+              candidate[static_cast<size_t> (ncand * 2 + 1)] = 1.0f;
+              cand_atteso[static_cast<size_t> (ncand)] = 1;
+              cand_expect[static_cast<size_t> (ncand)] = 1;
+              ++ncand;
+            }
+          g_ft2_expect_candidati.fetch_add (1, std::memory_order_relaxed);
+        }
+
       // Accumulo fra slot: ogni stazione in tabella vale un candidato atteso
       // alla sua frequenza, esente dai cancelli, come il tipo 8. E' il
       // sincronismo accumulato nella forma piu' semplice: una stazione vista
@@ -3402,7 +3444,10 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
             }
 
           float segment1_smax = -99.0f;
-          bool const async_incremental = g_ft2AsyncIbHi >= g_ft2AsyncIbLo;
+          bool const expect_window = cand_expect[static_cast<size_t> (icand)] != 0;
+          bool const async_incremental = g_ft2AsyncIbHi >= g_ft2AsyncIbLo || expect_window;
+          int const range_lo = expect_window ? g_ft2ExpectLo : g_ft2AsyncIbLo;
+          int const range_hi = expect_window ? g_ft2ExpectHi : g_ft2AsyncIbHi;
           for (int iseg = 1; iseg <= 3; ++iseg)
             {
               if (abort_if_cancelled ())
@@ -3435,8 +3480,8 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
 
                   if (isync == 1 && async_incremental)
                     {
-                      ibmin = g_ft2AsyncIbLo;
-                      ibmax = g_ft2AsyncIbHi;
+                      ibmin = range_lo;
+                      ibmax = range_hi;
                     }
                   else if (isync == 1)
                     {
@@ -4359,6 +4404,18 @@ extern "C" void ftx_ft2_stage7_set_cancel_c (int cancel)
 
 // 1.0.294 — AP cache Fase 1: il worker setta lo snapshot degli hash28 (call viste in
 // banda) PRIMA del decode e lo azzera dopo. thread_local → per-thread, niente lock.
+extern "C" void ftx_ft2_set_async_expected_c (float f, int lo, int hi)
+{
+  g_ft2ExpectF = f;
+  g_ft2ExpectLo = lo;
+  g_ft2ExpectHi = hi;
+}
+
+extern "C" int ftx_ft2_async_expected_candidati_c ()
+{
+  return g_ft2_expect_candidati.load (std::memory_order_relaxed);
+}
+
 extern "C" void ftx_ft2_set_async_ib_range_c (int lo, int hi)
 {
   g_ft2AsyncIbLo = lo;
