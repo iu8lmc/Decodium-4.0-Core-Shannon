@@ -1,6 +1,6 @@
 // -*- Mode: C++ -*-
 #include "DecodiumWebServer.hpp"
-#include "../DecodiumBridge.h"
+#include "DecodiumBridge.h"
 
 #include <QDateTime>
 #include <QHostAddress>
@@ -12,9 +12,13 @@
 #include <QVariantMap>
 #include <QWebSocketServer>
 #include <QWebSocket>
+#include <QUrl>
+#include <QUrlQuery>
 
 namespace
 {
+    constexpr int kMaxWebSocketClients = 8;
+
     QString clientIpAddressString()
     {
         QString preferred;
@@ -35,6 +39,16 @@ namespace
             }
         }
         return preferred;
+    }
+
+    QString htmlEscaped(QString value)
+    {
+        value.replace(QLatin1Char('&'), QStringLiteral("&amp;"));
+        value.replace(QLatin1Char('<'), QStringLiteral("&lt;"));
+        value.replace(QLatin1Char('>'), QStringLiteral("&gt;"));
+        value.replace(QLatin1Char('"'), QStringLiteral("&quot;"));
+        value.replace(QLatin1Char('\''), QStringLiteral("&#39;"));
+        return value;
     }
 }
 
@@ -83,12 +97,20 @@ DecodiumWebServer::~DecodiumWebServer()
     stop();
 }
 
-bool DecodiumWebServer::start(quint16 port)
+bool DecodiumWebServer::start(quint16 port, QString const& accessToken)
 {
+    QString const token = accessToken.trimmed();
+    if (token.size() < 24) {
+        emit errorOccurred(QStringLiteral("WebServer token missing or too short"));
+        return false;
+    }
+
     if (m_server && m_server->isListening() && m_port == port) {
+        m_accessToken = token;
         return true;  // gia' OK
     }
     stop();
+    m_accessToken = token;
 
     m_server = new QTcpServer(this);
     connect(m_server, &QTcpServer::newConnection,
@@ -149,6 +171,18 @@ void DecodiumWebServer::onWebSocketConnected()
     while (m_wsServer->hasPendingConnections()) {
         QWebSocket* ws = m_wsServer->nextPendingConnection();
         if (!ws) continue;
+        if (!isAuthorizedQuery(ws->requestUrl().query())) {
+            ws->close();
+            ws->deleteLater();
+            emit errorOccurred(QStringLiteral("WS unauthorized client rejected"));
+            continue;
+        }
+        if (m_wsClients.size() >= kMaxWebSocketClients) {
+            ws->close();
+            ws->deleteLater();
+            emit errorOccurred(QStringLiteral("WS client limit reached"));
+            continue;
+        }
         connect(ws, &QWebSocket::disconnected,
                 this, &DecodiumWebServer::onWebSocketDisconnected);
         // 1.0.171 fase 4: comandi remoti dal client (iPad/mobile)
@@ -273,10 +307,38 @@ bool DecodiumWebServer::isRunning() const
 
 QString DecodiumWebServer::accessUrl() const
 {
+    QString const base = baseUrl();
+    if (base.isEmpty()) return QString();
+    return base + tokenQuery();
+}
+
+QString DecodiumWebServer::qrUrl() const
+{
+    QString const base = baseUrl();
+    if (base.isEmpty()) return QString();
+    return base + QStringLiteral("qr") + tokenQuery();
+}
+
+QString DecodiumWebServer::baseUrl() const
+{
     if (!isRunning()) return QString();
     QString const ip = clientIpAddressString();
     if (ip.isEmpty()) return QString();
     return QStringLiteral("http://%1:%2/").arg(ip).arg(m_port);
+}
+
+QString DecodiumWebServer::tokenQuery() const
+{
+    return QStringLiteral("?token=%1").arg(QString::fromLatin1(QUrl::toPercentEncoding(m_accessToken)));
+}
+
+bool DecodiumWebServer::isAuthorizedQuery(QString const& query) const
+{
+    if (m_accessToken.isEmpty()) {
+        return false;
+    }
+    QUrlQuery const urlQuery(query);
+    return urlQuery.queryItemValue(QStringLiteral("token")) == m_accessToken;
 }
 
 void DecodiumWebServer::onNewConnection()
@@ -324,9 +386,13 @@ void DecodiumWebServer::onReadyRead()
 void DecodiumWebServer::handleRequest(QTcpSocket* socket, QString const& method,
                                        QString const& path, QString const& query)
 {
-    Q_UNUSED(query)
     if (method != QStringLiteral("GET")) {
         writeHttpResponse(socket, 405, "text/plain", "Method Not Allowed");
+        return;
+    }
+    bool const publicAsset = path == QStringLiteral("/favicon.ico");
+    if (!publicAsset && !isAuthorizedQuery(query)) {
+        writeHttpResponse(socket, 401, "text/plain", "Unauthorized");
         return;
     }
 
@@ -338,36 +404,28 @@ void DecodiumWebServer::handleRequest(QTcpSocket* socket, QString const& method,
         QByteArray simpleQrHtml;
         simpleQrHtml += "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"utf-8\">"
                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-               "<title>Decodium QR</title>"
+               "<title>Decodium Remote</title>"
                "<style>body{margin:0;padding:24px;background:#0e1014;color:#e8edf2;"
                "font-family:-apple-system,sans-serif;text-align:center;}"
                ".card{background:#161a21;border:1px solid rgba(58,142,220,0.5);"
                "border-radius:12px;padding:24px;max-width:380px;margin:24px auto;}"
                "h1{color:#3a8edc;font-size:18px;margin:0 0 16px;}"
-               ".qr{margin:16px auto;background:white;padding:12px;width:300px;height:300px;display:flex;align-items:center;justify-content:center;}"
-               ".qr canvas{width:280px;height:280px;}"
+               ".url{display:block;background:#0e1014;border:1px solid rgba(58,142,220,0.55);"
+               "border-radius:8px;padding:14px;text-decoration:none;}"
                ".url{font-family:Consolas,monospace;font-size:13px;color:#9aa4af;"
                "word-break:break-all;margin:12px 0;}"
+               ".btn{display:inline-block;margin-top:12px;padding:10px 14px;border-radius:8px;"
+               "border:1px solid #3a8edc;color:#e8edf2;text-decoration:none;background:rgba(58,142,220,0.18);}"
                "p{color:#9aa4af;font-size:13px;line-height:1.5;}"
                "</style></head><body>"
                "<div class=\"card\">"
-               "<h1>Scansiona da iPad / iPhone</h1>"
-               "<div class=\"qr\"><canvas id=\"qrcanvas\" width=\"280\" height=\"280\"></canvas></div>";
-        simpleQrHtml += "<div class=\"url\">" + url.toUtf8() + "</div>";
-        simpleQrHtml += "<p>Apri la fotocamera iOS e inquadra il QR. Tocca il banner per aprire Decodium Remote in Safari, poi <b>Condividi &rarr; Aggiungi a Home Screen</b> per la PWA standalone.</p>"
-               "</div>"
-               "<script src=\"https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js\"></script>"
-               "<script>"
-               "var url='" + url.toUtf8() + "';"
-               "var qr=qrcode(0,'L');qr.addData(url);qr.make();"
-               "var cnv=document.getElementById('qrcanvas');"
-               "var ctx=cnv.getContext('2d');"
-               "var n=qr.getModuleCount();var sz=280/n;"
-               "ctx.fillStyle='white';ctx.fillRect(0,0,280,280);"
-               "ctx.fillStyle='black';"
-               "for(var r=0;r<n;r++)for(var c=0;c<n;c++)"
-               "if(qr.isDark(r,c))ctx.fillRect(Math.floor(c*sz),Math.floor(r*sz),Math.ceil(sz),Math.ceil(sz));"
-               "</script></body></html>";
+               "<h1>Decodium Remote</h1>";
+        QString const escapedUrl = htmlEscaped(url);
+        simpleQrHtml += "<a class=\"url\" href=\"" + escapedUrl.toUtf8() + "\">" + escapedUrl.toUtf8() + "</a>";
+        simpleQrHtml += "<a class=\"btn\" href=\"" + escapedUrl.toUtf8() + "\">Apri Remote</a>"
+               "<p>Questo URL include un token locale. Non condividerlo fuori dalla tua LAN. "
+               "In Safari puoi usare <b>Condividi &rarr; Aggiungi a Home Screen</b> per la PWA standalone.</p>"
+               "</div></body></html>";
         writeHttpResponse(socket, 200, "text/html; charset=utf-8", simpleQrHtml);
     } else if (path == QStringLiteral("/api/state")) {
         writeHttpResponse(socket, 200, "application/json; charset=utf-8", buildStateJson());
@@ -414,7 +472,9 @@ QByteArray DecodiumWebServer::buildStateJson() const
 QByteArray DecodiumWebServer::buildDecodesJson() const
 {
     QJsonArray arr;
+    bool distanceInMiles = false;
     if (m_bridge) {
+        distanceInMiles = m_bridge->getSetting(QStringLiteral("Miles"), false).toBool();
         QVariantList const decodes = m_bridge->decodeList();
         // Limit a 200 entries piu' recenti per non saturare il payload
         int const start = qMax(0, decodes.size() - 200);
@@ -436,6 +496,8 @@ QByteArray DecodiumWebServer::buildDecodesJson() const
         }
     }
     QJsonObject root;
+    root[QStringLiteral("distanceInMiles")] = distanceInMiles;
+    root[QStringLiteral("distanceUnit")] = distanceInMiles ? QStringLiteral("mi") : QStringLiteral("km");
     root[QStringLiteral("decodes")] = arr;
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
@@ -449,7 +511,7 @@ QByteArray DecodiumWebServer::buildManifestJson() const
     m[QStringLiteral("background_color")] = QStringLiteral("#0e1014");
     m[QStringLiteral("theme_color")]      = QStringLiteral("#3a8edc");
     m[QStringLiteral("orientation")]      = QStringLiteral("any");
-    m[QStringLiteral("start_url")] = QStringLiteral("/");
+    m[QStringLiteral("start_url")] = QStringLiteral("/") + tokenQuery();
     QJsonArray icons;
     icons.append(QJsonObject{
         {"src", "/favicon.ico"}, {"sizes", "64x64"}, {"type", "image/gif"}});
@@ -479,7 +541,7 @@ QByteArray DecodiumWebServer::buildIndexHtml() const
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Decodium">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="/manifest.json__DECODIUM_AUTH_QUERY__">
 <title>Decodium Remote</title>
 <style>
 :root {
@@ -650,7 +712,7 @@ main { padding-bottom: 200px; } /* leave space for footer + TX panel + activity 
     <thead>
       <tr>
         <th>UTC</th><th>SNR</th><th>DT</th><th>Hz</th><th>Msg</th>
-        <th class="country">Country</th><th class="dist">km</th>
+        <th class="country">Country</th><th class="dist" id="distHead">km</th>
       </tr>
     </thead>
     <tbody id="decodes"></tbody>
@@ -673,6 +735,7 @@ main { padding-bottom: 200px; } /* leave space for footer + TX panel + activity 
   <button id="btnClear" class="danger">Clear DX</button>
 </footer>
 <script>
+const AUTH_QUERY = "__DECODIUM_AUTH_QUERY__";
 const $ = (id) => document.getElementById(id);
 let pollTimer = null;
 let ws = null;
@@ -722,13 +785,18 @@ function renderDecodes(payload) {
   const tbody = $("decodes");
   const rows = [];
   const fullList = (payload.decodes || []);
+  const distanceInMiles = !!payload.distanceInMiles;
+  const distanceUnit = distanceInMiles ? "mi" : "km";
+  const distHead = $("distHead");
+  if (distHead) distHead.textContent = distanceUnit;
   const list = fullList.slice(-100).reverse();
   for (const e of list) {
     let cls = "";
     if (e.isTx) cls = "tx";
     else if (e.isMyCall) cls = "mycall";
     else if (e.isCQ) cls = "cq";
-    const distStr = e.dxDistance > 0 ? Math.round(e.dxDistance) : "";
+    const distValue = distanceInMiles ? e.dxDistance * 0.621371192 : e.dxDistance;
+    const distStr = e.dxDistance > 0 ? Math.round(distValue) : "";
     rows.push(`<tr class="${cls}" data-freq="${e.freq}" data-dxcall="${escapeHtml(e.dxCallsign||"")}">
       <td>${e.time}</td>
       <td>${e.db}</td>
@@ -779,8 +847,8 @@ async function pollOnce() {
   try {
     const t0 = Date.now();
     const [s, d] = await Promise.all([
-      fetch("/api/state").then(r => r.json()),
-      fetch("/api/decodes").then(r => r.json())
+      fetch("/api/state" + AUTH_QUERY).then(r => r.json()),
+      fetch("/api/decodes" + AUTH_QUERY).then(r => r.json())
     ]);
     renderState(s);
     renderDecodes(d);
@@ -800,7 +868,7 @@ function stopPolling() {
 }
 function connectWS() {
   try {
-    const wsUrl = "ws://" + location.hostname + ":" + (parseInt(location.port||80)+1) + "/";
+    const wsUrl = "ws://" + location.hostname + ":" + (parseInt(location.port||80)+1) + "/" + AUTH_QUERY;
     ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       stopPolling();
@@ -839,7 +907,7 @@ document.getElementById("decodes").addEventListener("click", decodeRowClick);
 document.getElementById("btnMonitor").addEventListener("click", () => {
   // toggle: leggi state attuale dalla pillola TX (se TX visible è monitor=on+transmitting)
   // più semplice: chiediamo state poi togglare.
-  fetch("/api/state").then(r=>r.json()).then(s => {
+  fetch("/api/state" + AUTH_QUERY).then(r=>r.json()).then(s => {
     sendCmd("setMonitoring", {on: !s.monitoring});
   });
 });
@@ -862,7 +930,9 @@ document.getElementById("btnHalt").addEventListener("click", () => {
 </body>
 </html>
 )HTML";
-    return QByteArray(kHtml);
+    QByteArray html(kHtml);
+    html.replace("__DECODIUM_AUTH_QUERY__", tokenQuery().toUtf8());
+    return html;
 }
 
 void DecodiumWebServer::writeHttpResponse(QTcpSocket* socket, int statusCode,
@@ -874,6 +944,7 @@ void DecodiumWebServer::writeHttpResponse(QTcpSocket* socket, int statusCode,
     if (!socket || !socket->isOpen()) return;
     QByteArray reason = "OK";
     if (statusCode == 400) reason = "Bad Request";
+    else if (statusCode == 401) reason = "Unauthorized";
     else if (statusCode == 404) reason = "Not Found";
     else if (statusCode == 405) reason = "Method Not Allowed";
     else if (statusCode == 500) reason = "Internal Server Error";
@@ -883,7 +954,9 @@ void DecodiumWebServer::writeHttpResponse(QTcpSocket* socket, int statusCode,
     header += "Content-Type: " + contentType + "\r\n";
     header += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
     header += "Cache-Control: no-store\r\n";
-    header += "Access-Control-Allow-Origin: *\r\n";
+    header += "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws:; img-src 'self' data:; style-src 'self' 'unsafe-inline'\r\n";
+    header += "Referrer-Policy: no-referrer\r\n";
+    header += "X-Content-Type-Options: nosniff\r\n";
     header += "Connection: close\r\n";
     header += "\r\n";
 

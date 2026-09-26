@@ -40,7 +40,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Text {
-                text: "MESSAGE AVERAGING"
+                text: qsTr("MESSAGE AVERAGING")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontTiny
                 font.bold: true
@@ -61,7 +61,7 @@ Rectangle {
                 implicitWidth: 40; implicitHeight: 18
                 onClicked: clear()
                 contentItem: Text {
-                    text: "Clear"
+                    text: qsTr("Clear")
                     font.family: Theme.fontFamily
                     font.pixelSize: 9
                     color: Theme.alertRed
@@ -82,9 +82,9 @@ Rectangle {
             Text { text: "UTC"; font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 50 }
             Text { text: "SNR"; font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 35 }
             Text { text: "DT"; font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 40 }
-            Text { text: "Freq"; font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 50 }
-            Text { text: "Avg"; font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 25 }
-            Text { text: "Message"; font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.fillWidth: true }
+            Text { text: qsTr("Freq"); font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 50 }
+            Text { text: qsTr("Avg"); font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.preferredWidth: 25 }
+            Text { text: qsTr("Message"); font.pixelSize: Theme.fontTiny; color: Theme.textDim; Layout.fillWidth: true }
         }
 
         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
@@ -160,7 +160,7 @@ Rectangle {
             Text {
                 anchors.centerIn: parent
                 visible: avgModel.count === 0
-                text: "No averaged results yet"
+                text: qsTr("No averaged results yet")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontTiny
                 color: Theme.textDim

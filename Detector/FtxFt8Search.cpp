@@ -29,6 +29,7 @@ constexpr int kNHSYM = 372;
 constexpr int kJZ = 80;
 constexpr int kMaxPreCand = 1000;
 constexpr int kFt8VarEdgeWindow = 201;
+constexpr int kFt8VarMaxCandidates = 960;
 
 struct RealFftBuffers
 {
@@ -71,8 +72,12 @@ struct RealFftBuffers
 
 RealFftBuffers& fft_buffers ()
 {
-  thread_local RealFftBuffers instance;
-  return instance;
+  // Stessa ragione di ComplexFft32 in FtxBitmetrics.cpp: il distruttore
+  // girerebbe dentro LdrShutdownThread alla morte del thread, quando heap e
+  // loader sono gia' in smontaggio, e liberare un piano FFTW da li' corrompe
+  // lo heap o blocca il thread sul loader lock. Perdita voluta.
+  static thread_local auto* instance = new RealFftBuffers;
+  return *instance;
 }
 
 std::vector<float> make_ft8_window ()
@@ -591,7 +596,7 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
     }
 
   *ncand = 0;
-  std::fill (candidate, candidate + 4 * 460, 0.0f);
+  std::fill (candidate, candidate + 4 * kFt8VarMaxCandidates, 0.0f);
 
   auto& fft = fft_buffers ();
   if (!fft.valid ())
@@ -605,7 +610,7 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
   std::vector<float> red (static_cast<size_t> (kNH1 + 1), 0.0f);
   std::vector<int> jpeak (static_cast<size_t> (kNH1 + 1), 0);
   std::vector<unsigned char> redcq (static_cast<size_t> (kNH1 + 1), 0);
-  std::vector<Ft8VarCandidate> candidate0 (450);
+  std::vector<Ft8VarCandidate> candidate0 (kFt8VarMaxCandidates);
 
   auto s_at = [&s] (int i, int j) -> float& {
     return s[static_cast<size_t> ((i - 1) + kNH1 * (j - 1))];
@@ -757,7 +762,7 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
           continue;
         }
       if (jpeak[static_cast<size_t> (n)] < -49 || jpeak[static_cast<size_t> (n)] > 76) continue;
-      if (k >= 450) break;
+      if (k >= kFt8VarMaxCandidates) break;
       Ft8VarCandidate& item = candidate0[static_cast<size_t> (k)];
       item.frequency = freq;
       item.dt = static_cast<float> (jpeak[static_cast<size_t> (n)] - 1) * tstep;
@@ -836,14 +841,14 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
         }
     }
 
-  if (lqsothread != 0 && out <= 460)
+  if (lqsothread != 0 && out <= kFt8VarMaxCandidates)
     {
       candidate_at (1, out) = static_cast<float> (nfqso);
       candidate_at (2, out) = 5.0f;
       ++out;
       ++ncandfqso;
     }
-  if (lqsothread != 0 && out <= 460)
+  if (lqsothread != 0 && out <= kFt8VarMaxCandidates)
     {
       candidate_at (1, out) = static_cast<float> (nfqso);
       candidate_at (2, out) = -5.0f;
@@ -857,7 +862,7 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
       float const syncmin1 = std::fabs (item.frequency - static_cast<float> (nfqso)) > 3.0f ? syncmin : 1.1f;
       if (item.sync >= syncmin1)
         {
-          if (out > 460) break;
+          if (out > kFt8VarMaxCandidates) break;
           candidate_at (1, out) = item.frequency;
           candidate_at (2, out) = item.dt;
           candidate_at (3, out) = item.sync;
@@ -887,6 +892,7 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
 
 extern "C" void ftx_sync8_search_stage4_c (float const* dd, int npts, float nfa, float nfb,
                                             float syncmin, float nfqso, int maxcand, int ipass,
+                                            int candidate_thin,
                                             float* candidate, int* ncand, float* sbase)
 {
   if (!dd || !candidate || !ncand || !sbase || maxcand <= 0 || npts < kNSPS)
@@ -901,7 +907,7 @@ extern "C" void ftx_sync8_search_stage4_c (float const* dd, int npts, float nfa,
   fill_ft8_stage4_sbase (dd, npts, nfa, nfb, sbase);
 
   std::array<float, kFt8VarEdgeWindow> const edge_window = make_ft8_sync8var_edge_window ();
-  std::array<float, 4 * 460> var_candidate {};
+  std::array<float, 4 * kFt8VarMaxCandidates> var_candidate {};
   int var_ncand = 0;
   int const nfa_i = static_cast<int> (std::lround (nfa));
   int const nfb_i = static_cast<int> (std::lround (nfb));
@@ -911,9 +917,11 @@ extern "C" void ftx_sync8_search_stage4_c (float const* dd, int npts, float nfa,
   ftx_sync8var_c (dd, edge_window.data (), 1.0f / 300.0f,
                   nfa_i, nfb_i, syncmin, nfqso_i,
                   var_candidate.data (), &var_ncand,
-                  -62, 62, pass, 0, 100, 0, 0, 0, nfa_i, nfb_i);
+                  -62, 62, pass, 0, std::max (1, std::min (candidate_thin, 100)),
+                  0, 0, 0, nfa_i, nfb_i);
 
-  int const out_count = std::min (std::max (0, var_ncand), std::min (maxcand, 460));
+  int const out_count = std::min (std::max (0, var_ncand),
+                                  std::min (maxcand, kFt8VarMaxCandidates));
   for (int i = 0; i < out_count; ++i)
     {
       candidate[i * 4 + 0] = var_candidate[4 * i + 0];
