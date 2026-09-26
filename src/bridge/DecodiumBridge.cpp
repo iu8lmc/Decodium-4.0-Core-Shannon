@@ -13208,10 +13208,15 @@ void DecodiumBridge::syncLegacyBackendState()
         isFt2LinkApplicationMode(m_mode)
         && m_monitorRequested
         && usingLegacyBackendForRx();
+    qint64 const syncNowMs = QDateTime::currentMSecsSinceEpoch();
+    bool const startupMonitorGrace = m_monitorRequested
+        && syncNowMs < m_monitorStartupGraceUntilMs
+        && !legacyTxOrTune;
     bool const effectiveLegacyMonitoring = m_legacyBackend->monitoring()
         || nativeSstvMonitoring
         || nativeRttyMonitoring
         || ft2LinkLegacyRxRequested
+        || startupMonitorGrace
         || (m_monitorRequested
             && usingLegacyBackendForRx()
             && (legacyMonitoringStartPending || legacyTxOrTune));
@@ -18172,8 +18177,14 @@ void DecodiumBridge::setMode(const QString& v) {
         bool const enteringRtty = isStreamingKeyboardMode(normalizedMode);
         // Compute this before m_mode is changed.  A legacy FT8/JT monitor
         // needs a deliberate hand-off to the native RTTY PCM capture.
+        // JTTY owns the native PCM capture while it is active.  Leaving it
+        // for a legacy FT8/FT4 mode must perform the same explicit hand-off
+        // as entering RTTY; otherwise the old SoundInput remains attached
+        // while the legacy backend starts its period monitor, freezing the
+        // panadapter/waterfall on the first slot after the mode change.
+        bool const leavingJtty = previousMode == QStringLiteral("JTTY");
         bool const rearmModernMonitor = monitorWasActive
-            && (!usingLegacyBackendForRx() || enteringRtty);
+            && (!usingLegacyBackendForRx() || enteringRtty || leavingJtty);
         quint64 const monitorSessionId = monitorShouldStayActive ? ++m_periodTimerSessionId : m_periodTimerSessionId;
         if (rearmModernMonitor && m_periodTimer) {
             m_periodTimer->stop();
@@ -23377,6 +23388,11 @@ void DecodiumBridge::startRx()
               " m_audioInputDevice=" + m_audioInputDevice +
               " m_audioInputDeviceId=" + audioDeviceIdSettingForLog(m_audioInputDeviceId));
     m_monitorRequested = true;
+    // The embedded legacy monitor reports its state asynchronously. During
+    // the first FT8 slot it may briefly say OFF while its worker attaches;
+    // keep the dashboard visual pipeline alive through that transition.
+    m_monitorStartupGraceUntilMs = QDateTime::currentMSecsSinceEpoch()
+        + qMax<qint64>(effectivePeriodMsForMode(m_mode) * 2, 20000);
     if (m_monitoring) { bridgeLog("startRx: already monitoring, skip"); return; }
     ++m_decodeSessionId;
     resetNativeDecodeDedupIndex();
@@ -49586,7 +49602,8 @@ void DecodiumBridge::onSpectrumTimer()
     int wfAvail = qMin(m_wfRingPos, (int)WF_RING_SIZE);
     metricWfAvail = wfAvail;
     if (wfAvail < 512) {
-        if (nowMs - m_lastPanadapterFrameMs > 6000
+        if (nowMs >= m_audioWatchdogIgnoreUntilMs
+            && nowMs - m_lastPanadapterFrameMs > 6000
             && nowMs - m_lastSpectrumRecoveryMs > 12000) {
             m_lastSpectrumRecoveryMs = nowMs;
             if (m_legacyPcmSpectrumFeed && usingLegacyBackendForRx()) {
@@ -51796,7 +51813,8 @@ void DecodiumBridge::restartAudioCaptureForModeChange(const QString& previousMod
     }
 
     qint64 const now = QDateTime::currentMSecsSinceEpoch();
-    bool const keepExistingQtCapture = (!m_tciAudioCaptureActive && m_soundInput)
+    bool const keepExistingQtCapture = (previousMode != QStringLiteral("JTTY")
+                                        && !m_tciAudioCaptureActive && m_soundInput)
         || (m_rtlSdrInput && m_rtlSdrInput->isActive());
 
     if (keepExistingQtCapture) {
@@ -51807,7 +51825,10 @@ void DecodiumBridge::restartAudioCaptureForModeChange(const QString& previousMod
                       .arg(previousMode, m_mode));
         stopAudioCapture();
     }
-    m_audioWatchdogIgnoreUntilMs = now + 5000;
+    // JTTY tears down and recreates its native PCM path on exit. Give the
+    // replacement capture and scene graph time to settle before recovery.
+    m_audioWatchdogIgnoreUntilMs = now
+        + (previousMode == QStringLiteral("JTTY") ? 15000 : 5000);
     m_audioUnhealthyStartMs = 0;
     resetRxPeriodAccumulation(true);
     resetTimeSyncDecodeMetrics();
@@ -52008,7 +52029,6 @@ void DecodiumBridge::restartAudioCaptureFromWatchdog(const QString& reason)
 
     bridgeLog(QStringLiteral("Audio watchdog: restarting RX capture (%1)").arg(reason));
     emit statusMessage(QStringLiteral("Audio RX riavviato: watchdog audio"));
-
     m_audioWatchdogIgnoreUntilMs = now + 5000;
     resetRxPeriodAccumulation(true);
     m_spectrumBuf.clear();

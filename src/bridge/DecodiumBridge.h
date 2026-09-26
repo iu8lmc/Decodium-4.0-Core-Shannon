@@ -2813,6 +2813,11 @@ private:
 #endif
     QDateTime m_monitoringSince;  // IU8LMC: inizio ascolto (autodiagnosi banda morta)
     bool m_monitorRequested {false};
+    // During startup the legacy backend can report MONITOR=off briefly while
+    // its audio/period worker is attaching. Keep the dashboard monitor alive
+    // for one initial FT8 period instead of treating that transient state as
+    // an operator stop and freezing the visual feed.
+    qint64 m_monitorStartupGraceUntilMs {0};
     bool m_transmitting {false};
     bool m_txRequested {false};
     bool m_pttPending {false};

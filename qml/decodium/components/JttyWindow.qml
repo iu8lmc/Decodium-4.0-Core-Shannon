@@ -392,10 +392,38 @@ Window {
             TextField {
                 id: txField
                 Layout.fillWidth: true
+                implicitHeight: 40
                 font.family: win.mono
                 font.pixelSize: 14
+                verticalAlignment: Text.AlignVCenter
+                leftPadding: 10
+                rightPadding: 10
+                color: win.cText
+                placeholderTextColor: win.cDim
+                selectionColor: Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.35)
+                selectedTextColor: win.cText
+                background: Rectangle {
+                    color: win.cBg
+                    border.color: txField.activeFocus ? win.cAccent : win.cBorder
+                    border.width: 1
+                    radius: 5
+                }
                 maximumLength: 80
-                placeholderText: qsTr("Type a message and press Enter (Esc stops the transmission)")
+                // Material's floating placeholder is drawn above the custom
+                // TextField background and overlaps the preceding panel.
+                // Render the hint ourselves inside the editor instead.
+                placeholderText: ""
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: txField.leftPadding
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: txField.text.length === 0 && !txField.activeFocus
+                    color: win.cDim
+                    font: txField.font
+                    text: qsTr("Type a message and press Enter (Esc stops the transmission)")
+                    elide: Text.ElideRight
+                    width: Math.max(0, txField.width - txField.leftPadding - txField.rightPadding)
+                }
                 onAccepted: win.sendTyped()
                 Component.onCompleted: forceActiveFocus()
             }

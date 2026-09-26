@@ -1399,7 +1399,11 @@ namespace
 #if defined(Q_OS_LINUX)
   constexpr int default_rx_audio_buffer_frames {-1}; // keep ALSA/PipeWire default latency tuning
 #else
-  constexpr int default_rx_audio_buffer_frames {16384}; // ~341ms @ 48kHz, reduces QAudioSource drop bursts on macOS/Windows
+  // Keep the embedded legacy capture aligned with the modern bridge capture
+  // (8192 frames at 48 kHz).  Using 16384 here while the bridge uses 8192
+  // causes two consecutive CoreAudio starts during startup/mode changes and
+  // makes the panadapter/waterfall visibly stall while the streams settle.
+  constexpr int default_rx_audio_buffer_frames {8192}; // ~170ms @ 48kHz
 #endif
 #if defined(Q_OS_LINUX)
   constexpr int default_tx_audio_buffer_frames {1024}; // ~21ms @ 48kHz; FT2/FT4 need a much smaller Linux TX queue
