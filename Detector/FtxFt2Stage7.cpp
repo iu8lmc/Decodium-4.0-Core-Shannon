@@ -59,6 +59,12 @@ thread_local float g_ft2ExpectF = 0.0f;
 thread_local int g_ft2ExpectLo = 0;
 thread_local int g_ft2ExpectHi = -1;
 std::atomic<int> g_ft2_expect_candidati {0};
+// Esito dell'ultima decodifica di questo thread per la prova in aria di F5:
+// righe uscite dal candidato atteso, e se quel candidato la ricerca normale
+// non l'aveva trovato (forzato = guadagno vero di F5).
+thread_local int g_ft2_expect_righe = 0;
+thread_local int g_ft2_expect_forzate = 0;
+thread_local std::string g_ft2_expect_ultimo;
 
 // Vero se almeno una call del messaggio decodificato è nella cache band-wide.
 // USA ft2MessageCallHashes (CallsignHash28.h), IDENTICA al seed del bridge → match garantito.
@@ -3367,7 +3373,7 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
               candidate[static_cast<size_t> (ncand * 2)] = g_ft2ExpectF;
               candidate[static_cast<size_t> (ncand * 2 + 1)] = 1.0f;
               cand_atteso[static_cast<size_t> (ncand)] = 1;
-              cand_expect[static_cast<size_t> (ncand)] = 1;
+              cand_expect[static_cast<size_t> (ncand)] = 2;   // forzato
               ++ncand;
             }
           g_ft2_expect_candidati.fetch_add (1, std::memory_order_relaxed);
@@ -4136,6 +4142,12 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                                    naps, quals, bits77, decodeds);
                   ft2_ap_msg_registra (f1_best, napForRow, decoded_best.bits);
                   ft2_storico_registra (f1_best, decoded_best.message_fixed);
+                  if (expect_window)
+                    {
+                      ++g_ft2_expect_righe;
+                      if (cand_expect[static_cast<size_t> (icand)] == 2) ++g_ft2_expect_forzate;
+                      g_ft2_expect_ultimo = decoded_best.message_fixed.trimmed ().constData ();
+                    }
                 }
               ++ndecodes;
               break;
@@ -4409,6 +4421,21 @@ extern "C" void ftx_ft2_set_async_expected_c (float f, int lo, int hi)
   g_ft2ExpectF = f;
   g_ft2ExpectLo = lo;
   g_ft2ExpectHi = hi;
+}
+
+// F5 in aria: esito dell'ultima decodifica del thread chiamante (poi azzerato).
+extern "C" int ftx_ft2_async_expected_esito_c (int* forzate, char* msg_out, int msg_cap)
+{
+  int const righe = g_ft2_expect_righe;
+  if (forzate) *forzate = g_ft2_expect_forzate;
+  if (msg_out && msg_cap > 0)
+    {
+      std::snprintf (msg_out, static_cast<size_t> (msg_cap), "%s", g_ft2_expect_ultimo.c_str ());
+    }
+  g_ft2_expect_righe = 0;
+  g_ft2_expect_forzate = 0;
+  g_ft2_expect_ultimo.clear ();
+  return righe;
 }
 
 extern "C" int ftx_ft2_async_expected_candidati_c ()

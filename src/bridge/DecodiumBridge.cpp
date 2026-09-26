@@ -48729,6 +48729,12 @@ void DecodiumBridge::onAsyncDecodeTimer()
                 req.expectF = static_cast<float>(nfqso);
                 req.expectLo = lo;
                 req.expectHi = hi;
+                static qint64 s_lastF5LoggedTxEndMs = 0;
+                if (s_lastF5LoggedTxEndMs != m_lastTxEndMs) {
+                    s_lastF5LoggedTxEndMs = m_lastTxEndMs;
+                    bridgeLog(QStringLiteral("[FT2-ATTESO] attesa dopo TX: dx=%1 f=%2")
+                                  .arg(m_dxCall.trimmed()).arg(nfqso));
+                }
             }
         }
     }
