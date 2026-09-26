@@ -7,6 +7,10 @@
 #include <QStringList>
 #include <QVector>
 #include <atomic>
+#include <memory>
+
+#include "Detector/Ft2AsyncSottrazione.hpp"
+
 
 namespace decodium
 {
@@ -38,6 +42,9 @@ struct AsyncDecodeRequest
   float expectF {0.0f};
   int expectLo {0};
   int expectHi {-1};
+  // PROGETTO_ASYMX_JTTY F4: posizione assoluta (campioni dal via del ring)
+  // del campione dopo l'ultimo della finestra; -1 = sconosciuta, F4 spento.
+  qint64 audioEnd {-1};
 };
 
 struct DecodeRequest
@@ -79,6 +86,9 @@ private:
   std::atomic<quint64> m_latestDecodeSerial {0};
   std::atomic<bool> m_decodeEnabled {true};
   std::atomic<bool> m_shuttingDown {false};
+  // PROGETTO_ASYMX_JTTY F4: segnali gia' decodificati da sottrarre alle
+  // finestre successive (solo nel thread del worker).
+  std::unique_ptr<AsyncSottrazione> m_sottrazione;
 };
 
 }

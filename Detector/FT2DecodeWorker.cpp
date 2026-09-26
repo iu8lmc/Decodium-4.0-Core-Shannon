@@ -321,10 +321,35 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
   ftx_ft2_set_async_expected_c (request.expectF, request.expectLo, request.expectHi);
   QElapsedTimer decodeTimer;
   decodeTimer.start ();
-  ftx_ft2_async_decode_stage7_c (iwave, &nqsoprogress, &nfqso, &nfa, &nfb,
-                                 &ndepth, &ncontest, mycall.data (), hiscall.data (),
-                                 &snrs[0], &dts[0], &freqs[0], &naps[0], &quals[0],
-                                 &bits77[0], &decodeds[0], &nout);
+  // PROGETTO_ASYMX_JTTY F4 (DECODIUM_FT2_ASYNC_AVANTI=1): prima del decode si
+  // tolgono dalla finestra i segnali gia' decodificati che vi entrano solo in
+  // parte (Detector/Ft2AsyncSottrazione.hpp).
+  static bool const f4Avanti = qEnvironmentVariableIntValue ("DECODIUM_FT2_ASYNC_AVANTI") == 1;
+  if (f4Avanti && request.audioEnd >= kFt2AsyncSampleCount)
+    {
+      if (!m_sottrazione) m_sottrazione = std::make_unique<AsyncSottrazione> ();
+      AsyncDecodeOut out;
+      m_sottrazione->decodifica (iwave, request.audioEnd, out, [&] (short* iw, AsyncDecodeOut& o) {
+        ftx_ft2_async_decode_stage7_c (iw, &nqsoprogress, &nfqso, &nfa, &nfb, &ndepth, &ncontest,
+                                       mycall.data (), hiscall.data (), o.snrs, o.dts, o.freqs, o.naps,
+                                       o.quals, o.bits77, o.decodeds, &o.nout);
+      });
+      nout = std::min (out.nout, kFt2MaxLines);
+      std::copy_n (out.snrs, nout, snrs);
+      std::copy_n (out.dts, nout, dts);
+      std::copy_n (out.freqs, nout, freqs);
+      std::copy_n (out.naps, nout, naps);
+      std::copy_n (out.quals, nout, quals);
+      std::copy_n (out.decodeds, nout * kDecodedChars, decodeds);
+    }
+  else
+    {
+      if (m_sottrazione) m_sottrazione->reset ();
+      ftx_ft2_async_decode_stage7_c (iwave, &nqsoprogress, &nfqso, &nfa, &nfb,
+                                     &ndepth, &ncontest, mycall.data (), hiscall.data (),
+                                     &snrs[0], &dts[0], &freqs[0], &naps[0], &quals[0],
+                                     &bits77[0], &decodeds[0], &nout);
+    }
   qint64 const decodeMs = decodeTimer.elapsed ();
   ftx_ft2_set_async_ib_range_c (0, -1);
   ftx_ft2_set_async_expected_c (0.0f, 0, -1);

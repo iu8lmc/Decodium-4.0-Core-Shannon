@@ -48632,6 +48632,9 @@ void DecodiumBridge::onAsyncDecodeTimer()
     uint64_t const start = (pos - 45000) % ASYNC_BUF_SIZE;
     for (int i = 0; i < 45000; ++i)
         req.audio[i] = m_asyncAudio[(start + i) % ASYNC_BUF_SIZE];
+    // PROGETTO_ASYMX_JTTY F4: la posizione assoluta serve al worker per
+    // ritrovare nella finestra i segnali decodificati nei giri precedenti.
+    req.audioEnd = static_cast<qint64>(pos);
 
     int const nfqso = qBound(m_nfa, m_rxFrequency, m_nfb);
     int const decodePeriodMs = periodMsForMode(QStringLiteral("FT2"));

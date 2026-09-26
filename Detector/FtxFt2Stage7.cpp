@@ -4416,6 +4416,24 @@ extern "C" int ftx_ft2_async_expected_candidati_c ()
   return g_ft2_expect_candidati.load (std::memory_order_relaxed);
 }
 
+// PROGETTO_ASYMX_JTTY F4: toglie da dd un segnale gia' decodificato altrove
+// (Detector/Ft2AsyncSottrazione.hpp). dt e' quello di sottrazione del decoder:
+// ibest * kFt2FreqDtScale, cioe' il DT della riga + 0,5 s.
+extern "C" void ftx_ft2_sottrai_bits77_c (float* dd, signed char const* bits77, float f0, float dt)
+{
+  if (!dd || !bits77)
+    {
+      return;
+    }
+  std::array<signed char, kFt2Bits> bits {};
+  std::copy (bits77, bits77 + kFt2Bits, bits.begin ());
+  std::array<int, kFt2Nn> tones {};
+  if (message77_to_ft2_tones (bits, &tones))
+    {
+      ftx_subtract_ft2_c (dd, tones.data (), f0, dt);
+    }
+}
+
 extern "C" void ftx_ft2_set_async_ib_range_c (int lo, int hi)
 {
   g_ft2AsyncIbLo = lo;

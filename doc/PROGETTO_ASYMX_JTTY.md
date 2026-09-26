@@ -293,3 +293,53 @@ Letture:
 
 Stato: F2 e' **acceso di default** (spegnibile con `DECODIUM_FT2_ASYNC_REGISTRO=0`); F3 resta
 dietro `DECODIUM_FT2_ASYNC_INCREMENTALE=1` e F5 dietro `DECODIUM_FT2_ASYNC_ATTESO=1`, spenti.
+
+### F4: sovrapposizioni e sottrazione (26/09/2026)
+
+Scena genpair (`ft2_async_bench genpair`, seme 41): 149 coppie in 900 s, un
+debole a -16..-10 dB e un forte a -8..-2 dB, a 5-50 Hz e fino a +-1 s. Lo stesso
+rumore e gli stessi deboli sono anche in un file senza i forti; il controllo
+(`--dfmin=250 --dfmax=400`) mette i forti lontani.
+
+| Percorso vivo, registro acceso | Deboli presi (su 149) | Soglia 50% |
+|---|---|---|
+| deboli da soli | 111 | -14,5 dB |
+| forte lontano 250-400 Hz (controllo) | 110 | -14,2 dB |
+| forte accanto, sottrazione classica (filtro 700) | 78 | -12,9 dB |
+| + F4 avanti (toglie prima i noti tagliati dalla finestra) | 76 | -12,8 dB |
+| + F4 avanti e retro sweep | 76 | -12,8 dB |
+| filtro di sottrazione 1400 | 90 | -13,6 dB |
+| **filtro di sottrazione 2000 (nuovo default)** | **95** | **-13,8 dB** |
+| filtro 2000 + F4 avanti | 97 | -13,7 dB |
+| filtro 2800 | 98 | -14,0 dB |
+| filtro 2800 + F4 avanti | 103 | — |
+
+I forti sono presi 147-149 su 149 in ogni variante; nessun falso, nessun doppione.
+
+Letture:
+
+- La perdita e' della sovrapposizione in frequenza (FT2 e' largo ~167 Hz): col
+  forte lontano non si perde niente.
+- Il retro sweep di JTTY non serve all'FT2 asincrono: 149 finestre rifatte, 1
+  riga nuova. Il debole ha di solito una sola finestra viva che lo contiene
+  intero (un giro ogni ~0,7 s, 1,28 s utili) e in 18 casi persi su 35 in quella
+  finestra il forte era intero: il decoder lo decodificava e lo sottraeva, ma la
+  sottrazione si portava via anche il debole.
+- La sottrazione stima ampiezza e fase del forte con un filtro di 700 campioni
+  (58 ms, ~17 Hz di banda). Sottraendo un forte 10 dB sopra, il debole a 5-50 Hz
+  resta sporco a -8,7 dB della sua energia (`ft2_async_bench danno`); con 2000
+  campioni a -12,9 dB, con 2800 a -14,1. Il residuo del forte da solo passa da
+  -28,6 a -30,0 dB.
+- Il prezzo del filtro lungo e' la deriva del forte (`ft2_async_bench deriva`):
+  residuo -27,9 dB a 1 Hz/s (-28,6 col filtro classico), -23,1 dB a 2 Hz/s
+  (-28,3), -14,6 dB a 4 Hz/s (-26,4). 2000 e' il compromesso: 2800 prende 3
+  deboli in piu' ma a 2 Hz/s scende a -19 dB.
+- Scena L1 (240 trasmissioni sparse): 123-124 prese con ogni variante, soglia
+  -14,4 dB invariata. Scena QSO Q1 con l'AP: 45 risposte, -16,0 dB, identica.
+  Rumore puro: 0 righe.
+
+Stato: filtro di sottrazione FT2 a 2000 campioni **di default** (con la
+correzione ai bordi del frame, come FT8); `DECODIUM_FT2_SUB_NFILT=700` torna al
+classico. F4 avanti nel codice ma **spento** (`DECODIUM_FT2_ASYNC_AVANTI=1`):
++2 deboli col filtro 2000 e +5 col 2800, al limite della variabilita' dei
+tempi del banco: da riprovare in aria o su una scena piu' lunga. Retro sweep tolto.
