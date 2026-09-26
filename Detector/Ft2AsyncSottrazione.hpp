@@ -1,5 +1,5 @@
 // Sottrazione dei segnali gia' decodificati nel decode FT2 asincrono
-// (PROGETTO_ASYMX_JTTY, fase F4, DECODIUM_FT2_ASYNC_AVANTI=1).
+// (FT2 asincrono, fase F4, DECODIUM_FT2_ASYNC_AVANTI=1).
 //
 // Il decode asincrono rilegge gli ultimi 3,75 s (45 000 campioni). Un segnale
 // che la finestra contiene solo in parte non si decodifica e quindi il

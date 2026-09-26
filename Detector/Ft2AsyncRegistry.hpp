@@ -1,5 +1,5 @@
 // Registro delle trasmissioni FT2 viste dal decode asincrono
-// (PROGETTO_ASYMX_JTTY, fase F2).
+// (FT2 asincrono, fase F2).
 //
 // Il decode asincrono rilegge ogni 100 ms gli ultimi 3,75 s: la stessa
 // trasmissione esce da piu' finestre. Il bridge la riconosceva con la chiave

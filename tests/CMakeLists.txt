@@ -108,7 +108,7 @@ add_executable (ft2_make_test_wav ft2_make_test_wav.cpp)
 target_link_libraries (ft2_make_test_wav wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_dependencies (test_qt_helpers ft2_make_test_wav)
 
-# Banco del ricevitore asincrono FT2 (PROGETTO_ASYMX_JTTY, fase F0): scene
+# Banco del ricevitore asincrono FT2 (FT2 asincrono, fase F0): scene
 # lunghe con trasmissioni a istanti casuali e simulazione del path vivo del
 # bridge (timer 100 ms, finestra 3,75 s, single-flight, doppioni per slot).
 add_executable (ft2_async_bench ft2_async_bench.cpp)

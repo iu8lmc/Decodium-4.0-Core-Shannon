@@ -41,7 +41,7 @@ namespace
 // Perdita voluta, come sopra: vive quanto il processo.
 thread_local std::vector<quint32>& g_ft2ApHashCache = *new std::vector<quint32>;
 
-// PROGETTO_ASYMX_JTTY F3 — finestra incrementale del decode asincrono. Come in
+// FT2 asincrono F3 — finestra incrementale del decode asincrono. Come in
 // JTTY, a ogni giro si cercano solo gli inizi di frame che sono diventati
 // completi dall'ultimo giro: il worker imposta l'intervallo di ibest (campioni
 // a 1333,33 Hz dall'inizio della finestra) prima del decode e lo spegne dopo.
@@ -50,7 +50,7 @@ thread_local std::vector<quint32>& g_ft2ApHashCache = *new std::vector<quint32>;
 thread_local int g_ft2AsyncIbLo = 0;
 thread_local int g_ft2AsyncIbHi = -1;
 
-// PROGETTO_ASYMX_JTTY F5 — risposta attesa NEL TEMPO. In ASYMX si sa quando
+// FT2 asincrono F5 — risposta attesa NEL TEMPO. In ASYMX si sa quando
 // il corrispondente rispondera': dopo la fine della nostra trasmissione, piu'
 // la sua latenza. Il chiamante indica frequenza e intervallo di ibest in cui
 // deve cominciare la risposta; li' si prova un candidato esente dai cancelli
@@ -4443,7 +4443,7 @@ extern "C" int ftx_ft2_async_expected_candidati_c ()
   return g_ft2_expect_candidati.load (std::memory_order_relaxed);
 }
 
-// PROGETTO_ASYMX_JTTY F4: toglie da dd un segnale gia' decodificato altrove
+// FT2 asincrono F4: toglie da dd un segnale gia' decodificato altrove
 // (Detector/Ft2AsyncSottrazione.hpp). dt e' quello di sottrazione del decoder:
 // ibest * kFt2FreqDtScale, cioe' il DT della riga + 0,5 s.
 extern "C" void ftx_ft2_sottrai_bits77_c (float* dd, signed char const* bits77, float f0, float dt)

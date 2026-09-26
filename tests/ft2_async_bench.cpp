@@ -1,5 +1,5 @@
 // Banco del ricevitore asincrono FT2 (ASYMX / Async L2) — fase F0 del
-// progetto PROGETTO_ASYMX_JTTY.
+// progetto FT2 asincrono (doc/PROGETTO_ASYMX_JTTY.md).
 //
 // Riproduce fuori dall'app quello che fa il percorso VIVO del bridge
 // (DecodiumBridge::onAsyncDecodeTimer -> FT2DecodeWorker::decodeAsync ->

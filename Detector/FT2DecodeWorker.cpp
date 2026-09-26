@@ -322,7 +322,7 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
   ftx_ft2_set_async_expected_c (request.expectF, request.expectLo, request.expectHi);
   QElapsedTimer decodeTimer;
   decodeTimer.start ();
-  // PROGETTO_ASYMX_JTTY F4 (DECODIUM_FT2_ASYNC_AVANTI=1): prima del decode si
+  // FT2 asincrono F4 (DECODIUM_FT2_ASYNC_AVANTI=1): prima del decode si
   // tolgono dalla finestra i segnali gia' decodificati che vi entrano solo in
   // parte (Detector/Ft2AsyncSottrazione.hpp).
   static bool const f4Avanti = qEnvironmentVariableIntValue ("DECODIUM_FT2_ASYNC_AVANTI") == 1;

@@ -4124,7 +4124,7 @@ private:
     int   m_wfRingPos {0};
     int   m_lastWaterfallAudioBufferSize {0};
     qint64 m_lastFt2AsyncDecodeDispatchMs {0};
-    // PROGETTO_ASYMX_JTTY F2 (acceso; DECODIUM_FT2_ASYNC_REGISTRO=0 lo spegne): i doppioni del
+    // FT2 asincrono F2 (acceso; DECODIUM_FT2_ASYNC_REGISTRO=0 lo spegne): i doppioni del
     // decode asincrono si riconoscono dall'inizio assoluto della trasmissione e
     // dalla frequenza, non dallo slot di 3,75 s calcolato al dispatch.
     decodium::ft2::AsyncRegistry<QString> m_ft2AsyncRegistry;

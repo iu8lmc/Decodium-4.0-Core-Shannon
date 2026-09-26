@@ -1,5 +1,5 @@
 // Il ring del decode asincrono FT2 deve essere una copia CONTIGUA dell'audio
-// ricevuto (PROGETTO_ASYMX_JTTY, fase F1).
+// ricevuto (FT2 asincrono, fase F1).
 //
 // Si simula il Detector: scrive d2 a blocchi della dimensione reale e
 // segnala framesWritten con la posizione cumulativa nel periodo; a fine

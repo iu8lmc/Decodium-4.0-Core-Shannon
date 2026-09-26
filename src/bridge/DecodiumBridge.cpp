@@ -48648,7 +48648,7 @@ void DecodiumBridge::onAsyncDecodeTimer()
     uint64_t const start = (pos - 45000) % ASYNC_BUF_SIZE;
     for (int i = 0; i < 45000; ++i)
         req.audio[i] = m_asyncAudio[(start + i) % ASYNC_BUF_SIZE];
-    // PROGETTO_ASYMX_JTTY F4: la posizione assoluta serve al worker per
+    // FT2 asincrono F4: la posizione assoluta serve al worker per
     // ritrovare nella finestra i segnali decodificati nei giri precedenti.
     req.audioEnd = static_cast<qint64>(pos);
 
@@ -48709,10 +48709,10 @@ void DecodiumBridge::onAsyncDecodeTimer()
     if (m_ft2ApHashCache)
         req.apHashCache = m_hashedCallsignCache.snapshotValid(nowMs);
 
-    // PROGETTO_ASYMX_JTTY F3 (DECODIUM_FT2_ASYNC_INCREMENTALE=1): si cercano
+    // FT2 asincrono F3 (DECODIUM_FT2_ASYNC_INCREMENTALE=1): si cercano
     // solo gli inizi dei frame diventati completi dall'ultimo giro, come in
     // JTTY. Il tempo nuovo si misura in campioni, non con l'orologio.
-    // PROGETTO_ASYMX_JTTY F5 (DECODIUM_FT2_ASYNC_ATTESO=1): in QSO la risposta
+    // FT2 asincrono F5 (DECODIUM_FT2_ASYNC_ATTESO=1): in QSO la risposta
     // del corrispondente comincia fra 0,2 e 1,0 s dopo la fine della nostra
     // trasmissione, sulla sua frequenza. La' si prova un candidato esente dai
     // cancelli del sincronismo, con l'AP di mycall+hiscall.

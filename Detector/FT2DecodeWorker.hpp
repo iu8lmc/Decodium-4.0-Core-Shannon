@@ -31,18 +31,18 @@ struct AsyncDecodeRequest
   QByteArray mycall;
   QByteArray hiscall;
   QVector<quint32> apHashCache;  // 1.0.294 — snapshot hash28 call viste in banda (AP cache Fase 1)
-  // PROGETTO_ASYMX_JTTY F3: intervallo di ibest (campioni a 1333,33 Hz
+  // FT2 asincrono F3: intervallo di ibest (campioni a 1333,33 Hz
   // dall'inizio della finestra) dei frame completati dall'ultimo giro.
   // ibHi < ibLo = ricerca completa di sempre.
   int ibLo {0};
   int ibHi {-1};
-  // PROGETTO_ASYMX_JTTY F5: la risposta attesa del corrispondente, a
+  // FT2 asincrono F5: la risposta attesa del corrispondente, a
   // frequenza nota e con l'inizio in [expectLo, expectHi] (stessa scala di
   // ibLo/ibHi). expectHi < expectLo = nessuna attesa.
   float expectF {0.0f};
   int expectLo {0};
   int expectHi {-1};
-  // PROGETTO_ASYMX_JTTY F4: posizione assoluta (campioni dal via del ring)
+  // FT2 asincrono F4: posizione assoluta (campioni dal via del ring)
   // del campione dopo l'ultimo della finestra; -1 = sconosciuta, F4 spento.
   qint64 audioEnd {-1};
 };
@@ -86,7 +86,7 @@ private:
   std::atomic<quint64> m_latestDecodeSerial {0};
   std::atomic<bool> m_decodeEnabled {true};
   std::atomic<bool> m_shuttingDown {false};
-  // PROGETTO_ASYMX_JTTY F4: segnali gia' decodificati da sottrarre alle
+  // FT2 asincrono F4: segnali gia' decodificati da sottrarre alle
   // finestre successive (solo nel thread del worker).
   std::unique_ptr<AsyncSottrazione> m_sottrazione;
 };

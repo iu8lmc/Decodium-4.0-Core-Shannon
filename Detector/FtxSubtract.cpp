@@ -372,7 +372,7 @@ struct Ft2SubtractFilter
   bool ready {false};
 };
 
-// PROGETTO_ASYMX_JTTY F4: lunghezza del filtro che stima ampiezza e fase del
+// FT2 asincrono F4: lunghezza del filtro che stima ampiezza e fase del
 // segnale da sottrarre. I 700 campioni classici (58 ms, ~17 Hz di banda) si
 // portano via anche un debole vicino: sottraendo un forte 10 dB sopra, il
 // debole a 5-50 Hz resta sporco a -8,7 dB della sua energia; con 2000
