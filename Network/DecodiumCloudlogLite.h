@@ -1,6 +1,7 @@
 #ifndef DECODIUMCLOUDLOGLITE_H
 #define DECODIUMCLOUDLOGLITE_H
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QDateTime>
@@ -46,10 +47,14 @@ public:
                 const QString& reportRcvd,
                 const QString& myCall,
                 const QString& myGrid);
+    void uploadAdif(const QString& dxCall,
+                    const QByteArray& adifRecord,
+                    quint32 requestId = 0);
 
     // --- Connectivity test -------------------------------------------------
-    // GETs {m_apiUrl}/api/auth?key={m_apiKey} and emits apiKeyOk() or
-    // apiKeyInvalid() depending on the JSON response.
+    // POSTs a harmless dummy ADIF record to the same Cloudlog API endpoint used
+    // by real uploads, so URL, host authentication and write permissions are
+    // tested together without creating a real QSO.
     Q_INVOKABLE void testApi();
 
 signals:
@@ -57,6 +62,10 @@ signals:
     void apiKeyInvalid();
     void qsoLogged(const QString& dxCall);
     void errorOccurred(const QString& msg);
+    void adifUploadFinished(quint32 requestId,
+                            const QString& dxCall,
+                            bool ok,
+                            const QString& detail);
 
 private:
     // Builds a standard ADIF record string from the given QSO parameters.

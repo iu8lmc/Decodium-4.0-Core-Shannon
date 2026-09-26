@@ -32,21 +32,21 @@ Rectangle {
                 anchors.margins: 12
                 spacing: 8
 
-                Text { text: "Contest Mode"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
+                Text { text: qsTr("Contest Mode"); font.pixelSize: 14; font.bold: true; color: primaryBlue }
 
                 RowLayout {
                     spacing: 20
                     CheckBox {
                         id: contestCheck
-                        text: "Enable Contest Mode"
+                        text: qsTr("Enable Contest Mode")
                         checked: appEngine ? appEngine.inContestMode : false
                         onCheckedChanged: if (appEngine) appEngine.contestType = checked ? 1 : 0
                     }
-                    Text { text: "Exchange:"; color: textSecondary; font.pixelSize: 11 }
-                    TextField {
+                    Text { text: qsTr("Exchange:"); color: textSecondary; font.pixelSize: 11 }
+                    DecoTextField {
                         Layout.preferredWidth: 100
                         text: appEngine ? appEngine.contestExchange : ""
-                        placeholderText: "e.g., 599 001"
+                        placeholderText: qsTr("e.g., 599 001")
                         onTextChanged: if (appEngine) appEngine.contestExchange = text
                         background: Rectangle {
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
@@ -71,7 +71,7 @@ Rectangle {
                 anchors.margins: 12
                 spacing: 8
 
-                Text { text: "TX Macros"; font.pixelSize: 14; font.bold: true; color: secondaryCyan }
+                Text { text: qsTr("TX Macros"); font.pixelSize: 14; font.bold: true; color: secondaryCyan }
 
                 GridLayout {
                     columns: 2
@@ -89,7 +89,7 @@ Rectangle {
                                 color: textSecondary
                                 Layout.preferredWidth: 40
                             }
-                            TextField {
+                            DecoTextField {
                                 Layout.preferredWidth: 220
                                 text: appEngine && appEngine.macroManager ? appEngine.macroManager.getMacro(index) : ""
                                 placeholderText: "Macro " + (index + 1)
@@ -119,13 +119,13 @@ Rectangle {
                         anchors.margins: 8
                         spacing: 4
 
-                        Text { text: "Available Variables:"; font.pixelSize: 10; font.bold: true; color: textSecondary }
+                        Text { text: qsTr("Available Variables:"); font.pixelSize: 10; font.bold: true; color: textSecondary }
                         Text {
-                            text: "%CALL - Their callsign | %MYCALL - Your callsign | %GRID - Their grid"
+                            text: qsTr("%CALL - Their callsign | %MYCALL - Your callsign | %GRID - Their grid")
                             font.pixelSize: 9; color: textSecondary; wrapMode: Text.Wrap
                         }
                         Text {
-                            text: "%RST - Signal report | %EXCH - Contest exchange | %73 - 73 message"
+                            text: qsTr("%RST - Signal report | %EXCH - Contest exchange | %73 - 73 message")
                             font.pixelSize: 9; color: textSecondary; wrapMode: Text.Wrap
                         }
                     }

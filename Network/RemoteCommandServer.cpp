@@ -44,6 +44,17 @@ QString normalize_grid(QString grid)
   return grid.trimmed().toUpper();
 }
 
+bool plausible_target_call(QString const& call)
+{
+  // Sanity gate sul call remoto: charset radioamatoriale, lunghezza ragionevole
+  // e adiacenza lettera-cifra (come Radio::is_callsign). Loose di proposito:
+  // accetta compound (IU8LMC/P) e special event, rigetta stringhe arbitrarie
+  // che finirebbero in dxCallEntry/genStdMsgs con auto TX attivo.
+  static QRegularExpression const charset_re {QStringLiteral("^[A-Z0-9/]{3,13}$")};
+  static QRegularExpression const adjacency_re {QStringLiteral("[0-9][A-Z]|[A-Z][0-9]")};
+  return call.contains(charset_re) && call.contains(adjacency_re);
+}
+
 bool is_loopback_origin_host(QString const& host)
 {
   auto normalized = host.trimmed().toLower();
@@ -51,102 +62,6 @@ bool is_loopback_origin_host(QString const& host)
       || normalized == QStringLiteral("127.0.0.1")
       || normalized == QStringLiteral("::1")
       || normalized == QStringLiteral("[::1]");
-}
-
-struct RemoteBandDial
-{
-  char const* key;
-  qint64 lowerHz;
-  qint64 upperHz;
-  qint64 ft8Hz;
-  qint64 ft2Hz;
-  qint64 ft4Hz;
-};
-
-RemoteBandDial const kRemoteBandDials[] = {
-  {"160M",  1800000,    2000000,    1840000,    1843000,        0},
-  {"80M",   3500000,    4000000,    3573000,    3568000,  3575000},
-  {"60M",   5060000,    5450000,    5357000,    5360000,        0},
-  {"40M",   7000000,    7300000,    7074000,    7052000,  7047500},
-  {"30M",  10100000,   10150000,   10136000,   10144000, 10140000},
-  {"20M",  14000000,   14350000,   14074000,   14084000, 14080000},
-  {"17M",  18068000,   18168000,   18100000,   18108000, 18104000},
-  {"15M",  21000000,   21450000,   21074000,   21144000, 21140000},
-  {"12M",  24890000,   24990000,   24915000,   24923000, 24919000},
-  {"10M",  28000000,   29700000,   28074000,   28184000, 28180000},
-  {"6M",   50000000,   54000000,   50313000,   50313000, 50318000},
-  {"4M",   70000000,   71000000,   70154000,   70154000,        0},
-  {"2M",  144000000,  148000000,  144174000,  144174000,        0},
-  {"70CM",420000000,  450000000,  432174000,  432174000,        0},
-};
-
-QString remoteBandKeyFromFrequency(qint64 dialFrequencyHz)
-{
-  if (dialFrequencyHz <= 0) {
-    return {};
-  }
-  for (auto const& band : kRemoteBandDials) {
-    if (dialFrequencyHz >= band.lowerHz && dialFrequencyHz <= band.upperHz) {
-      return QString::fromLatin1(band.key);
-    }
-  }
-  return {};
-}
-
-QString normalizeRemoteBandKey(QString band, qint64 fallbackDialFrequencyHz)
-{
-  auto text = band.trimmed().toUpper();
-  text.remove(QRegularExpression(QStringLiteral("\\s+")));
-  if (text.isEmpty()) {
-    return remoteBandKeyFromFrequency(fallbackDialFrequencyHz);
-  }
-  if (text == QStringLiteral("70CM")) {
-    return text;
-  }
-  if (text.endsWith(QStringLiteral("MHZ"))) {
-    bool ok = false;
-    auto const mhz = text.left(text.size() - 3).toDouble(&ok);
-    if (ok) {
-      auto inferred = remoteBandKeyFromFrequency(qRound64(mhz * 1000000.0));
-      if (!inferred.isEmpty()) {
-        return inferred;
-      }
-    }
-  }
-  if (text.endsWith(QLatin1Char('M'))) {
-    return text;
-  }
-  bool ok = false;
-  auto const meters = text.toInt(&ok);
-  if (ok && meters > 0) {
-    return QString::number(meters) + QStringLiteral("M");
-  }
-  return remoteBandKeyFromFrequency(fallbackDialFrequencyHz);
-}
-
-qint64 remoteNominalDialFrequency(QString const& band,
-                                  QString const& mode,
-                                  qint64 fallbackDialFrequencyHz)
-{
-  auto const key = normalizeRemoteBandKey(band, fallbackDialFrequencyHz);
-  if (key.isEmpty()) {
-    return 0;
-  }
-
-  auto const normalizedMode = mode.trimmed().toUpper();
-  for (auto const& bandDial : kRemoteBandDials) {
-    if (key != QString::fromLatin1(bandDial.key)) {
-      continue;
-    }
-    if (normalizedMode == QStringLiteral("FT2") && bandDial.ft2Hz > 0) {
-      return bandDial.ft2Hz;
-    }
-    if (normalizedMode == QStringLiteral("FT4") && bandDial.ft4Hz > 0) {
-      return bandDial.ft4Hz;
-    }
-    return bandDial.ft8Hz;
-  }
-  return 0;
 }
 
 QByteArray dashboard_html()
@@ -1719,7 +1634,7 @@ R"FT2JS((() => {
     '160M': {FT8:1840000, FT2:1843000},
     '80M': {FT8:3573000, FT2:3568000, FT4:3575000},
     '60M': {FT8:5357000, FT2:5360000},
-    '40M': {FT8:7074000, FT2:7052000, FT4:7047500},
+    '40M': {FT8:7074000, FT2:7062000, FT4:7047500},
     '30M': {FT8:10136000, FT2:10144000, FT4:10140000},
     '20M': {FT8:14074000, FT2:14084000, FT4:14080000},
     '17M': {FT8:18100000, FT2:18108000, FT4:18104000},
@@ -3241,38 +3156,20 @@ R"FT2JS((() => {
       renderActivity();
     };
   }
-  document.querySelectorAll('.mode-btn').forEach((b) => {
-    b.addEventListener('click', () => {
-      const mode = b.dataset.mode;
-      const payload = {type:'set_mode', mode};
-      const dialHz = dialForBandMode(activeBand, mode);
-      if (dialHz) payload.dial_frequency_hz = dialHz;
-      sendCommand(payload)
-        .then((ack) => {
-          const ackDial = (ack && typeof ack.dial_frequency_hz === 'number') ? Number(ack.dial_frequency_hz) : 0;
-          const targetDial = ackDial || dialHz || 0;
-          if (targetDial) return sendCommand({type:'set_dial_frequency', dial_frequency_hz:targetDial});
-          return null;
-        })
-        .catch(handleCommandError);
-    });
-  });
-  document.querySelectorAll('.band-btn').forEach((b) => {
-    b.addEventListener('click', () => {
-      const band = b.dataset.band;
-      const payload = {type:'set_band', band};
-      const dialHz = dialForBandMode(band, activeMode || currentMode);
-      if (dialHz) payload.dial_frequency_hz = dialHz;
-      sendCommand(payload)
-        .then((ack) => {
-          const ackDial = (ack && typeof ack.dial_frequency_hz === 'number') ? Number(ack.dial_frequency_hz) : 0;
-          const targetDial = ackDial || dialHz || 0;
-          if (targetDial) return sendCommand({type:'set_dial_frequency', dial_frequency_hz:targetDial});
-          return null;
-        })
-        .catch(handleCommandError);
-    });
-  });
+	  document.querySelectorAll('.mode-btn').forEach((b) => {
+	    b.addEventListener('click', () => {
+	      const mode = b.dataset.mode;
+	      sendCommand({type:'set_mode', mode})
+	        .catch(handleCommandError);
+	    });
+	  });
+	  document.querySelectorAll('.band-btn').forEach((b) => {
+	    b.addEventListener('click', () => {
+	      const band = b.dataset.band;
+	      sendCommand({type:'set_band', band})
+	        .catch(handleCommandError);
+	    });
+	  });
 
   if (btnActivityPause) {
     btnActivityPause.addEventListener('click', () => {
@@ -4124,7 +4021,7 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
   qint64 const nowUtcMs = currentUtcMs();
   pruneSeenIds(nowUtcMs);
 
-  if (!authToken_.isEmpty())
+  if (!authToken_.isEmpty() && !bindAddress_.isLoopback())
     {
       QString token = tokenOverride.trimmed();
       if (token.isEmpty())
@@ -4193,11 +4090,20 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
           result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("target_call is required"));
           return result;
         }
-
-      auto const mode = state.mode.trimmed().toUpper();
-      if (mode != QStringLiteral("FT2"))
+      if (!plausible_target_call(targetCall))
         {
-          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_state"), QStringLiteral("mode is not FT2"));
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("target_call is not a plausible callsign"));
+          return result;
+        }
+
+      // Risposta a un chiamante consentita in qualsiasi modo della famiglia FT:
+      // lo scheduling usa state.periodMs, che riflette il ciclo del modo attivo.
+      // Restano esclusi i modi beacon/test, dove auto TX ciclico non ha senso.
+      auto const currentMode = state.mode.trimmed().toUpper();
+      if (currentMode == QStringLiteral("WSPR") || currentMode == QStringLiteral("FST4W")
+          || currentMode == QStringLiteral("ECHO") || currentMode == QStringLiteral("FREQCAL"))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_state"), QStringLiteral("select_caller not available in beacon/test modes"));
           return result;
         }
 
@@ -4260,10 +4166,6 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
         {
           return result;
         }
-      if (dialFrequency <= 0)
-        {
-          dialFrequency = remoteNominalDialFrequency(state.band, mode, state.dialFrequencyHz);
-        }
       seenCommandIds_.insert(commandId, nowUtcMs);
       Q_EMIT setModeRequested(commandId, mode);
       if (dialFrequency > 0)
@@ -4301,10 +4203,6 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
         {
           return result;
         }
-      if (dialFrequency <= 0)
-        {
-          dialFrequency = remoteNominalDialFrequency(band, state.mode, state.dialFrequencyHz);
-        }
       seenCommandIds_.insert(commandId, nowUtcMs);
       Q_EMIT setBandRequested(commandId, band);
       if (dialFrequency > 0)
@@ -4326,6 +4224,33 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
         {
           result.payload.insert(QStringLiteral("dial_frequency_hz"), static_cast<double>(dialFrequency));
         }
+      return result;
+    }
+
+  if (commandType == QStringLiteral("send_cw"))
+    {
+      auto text = object.value(QStringLiteral("text")).toString().trimmed();
+      if (text.isEmpty())
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("text is required"));
+          return result;
+        }
+      qint64 dialHz = 0;
+      auto const fv = object.value(QStringLiteral("dial_frequency_hz"));
+      if (fv.isDouble()) dialHz = static_cast<qint64>(fv.toDouble());
+      int wpm = object.value(QStringLiteral("wpm")).toInt(22);
+      if (wpm < 5)  wpm = 5;
+      if (wpm > 60) wpm = 60;
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT sendCwRequested(commandId, text, dialHz, wpm);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", QStringLiteral("send_cw")},
+        {"status", QStringLiteral("accepted_immediate")},
+        {"server_now_ms", nowUtcMs},
+      };
       return result;
     }
 
@@ -4430,6 +4355,51 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
         {"type", QStringLiteral("set_tx_enabled")},
         {"status", QStringLiteral("accepted_immediate")},
         {"enabled", enabled},
+        {"server_now_ms", nowUtcMs},
+      };
+      return result;
+    }
+
+  if (commandType == QStringLiteral("send_tx"))
+    {
+      int slot = 6;
+      if (object.contains(QStringLiteral("slot")))
+        {
+          bool ok = false;
+          int const requestedSlot = object.value(QStringLiteral("slot")).toVariant().toInt(&ok);
+          if (!ok || requestedSlot < 1 || requestedSlot > 6)
+            {
+              result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("slot must be 1..6"));
+              return result;
+            }
+          slot = requestedSlot;
+        }
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT sendTxRequested(commandId, slot);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", QStringLiteral("send_tx")},
+        {"status", QStringLiteral("accepted_immediate")},
+        {"slot", slot},
+        {"server_now_ms", nowUtcMs},
+      };
+      return result;
+    }
+
+  if (commandType == QStringLiteral("stop_tx")
+      || commandType == QStringLiteral("halt")
+      || commandType == QStringLiteral("abort_tx"))
+    {
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT stopTxRequested(commandId);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", commandType},
+        {"status", QStringLiteral("accepted_immediate")},
         {"server_now_ms", nowUtcMs},
       };
       return result;

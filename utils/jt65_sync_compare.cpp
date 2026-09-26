@@ -145,6 +145,10 @@ int main (int argc, char** argv)
           dd[static_cast<std::size_t> (i)] = static_cast<float> (audio.at (i));
         }
 
+      auto const cppSpectrum = decodium::legacy::symspec65_compute (dd.data (),
+                                                                      static_cast<int> (dd.size ()));
+      decodium::legacy::jt65_store_symspec_state (cppSpectrum);
+
       int npts = static_cast<int> (dd.size ());
       int nqsym = 0;
       std::vector<float> savg (3413, 0.0f);
