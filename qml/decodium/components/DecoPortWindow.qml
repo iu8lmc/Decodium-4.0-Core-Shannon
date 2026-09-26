@@ -38,8 +38,6 @@ Window {
         running: win.visible && !!(win.gw && win.gw.running)
         onTriggered: win.rileggiTraffico()
     }
-    Component.onCompleted: win.rileggiTraffico()
-
     readonly property var tm: eng ? eng.themeManager : null
     readonly property color cBg:      tm ? tm.bgDeep        : "#0a0f14"
     readonly property color cPanel:   tm ? tm.panelColor    : "#111a22"
@@ -79,7 +77,12 @@ Window {
             disc.stop()
     }
 
-    Component.onCompleted: refreshPasswordState()
+    // Un solo Component.onCompleted per oggetto: con due, QML rifiuta il file
+    // ("Property value set multiple times") e la finestra non si apre piu'.
+    Component.onCompleted: {
+        refreshPasswordState()
+        win.rileggiTraffico()
+    }
 
     component Chip: Rectangle {
         id: chip

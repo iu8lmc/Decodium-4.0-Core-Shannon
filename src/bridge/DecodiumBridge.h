@@ -3285,6 +3285,8 @@ private:
     QTimer*    m_decoPortTxPacer {nullptr};
     void decoPortPlayTxAudio(const QVector<short>& samples, bool fromRtty = false);
     bool       m_decoPortRemoteKeyed {false};
+    // Da quale porta e' stato alzato il PTT condiviso: va riabbassato li'.
+    bool       m_sharedPttViaOwnRig {false};
     bool       m_rttyTxActive {false};
     QTimer*    m_decoPortTxGuard {nullptr};
     QThread*           m_decoPortTxOutThread {nullptr};

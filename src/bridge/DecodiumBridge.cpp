@@ -21529,8 +21529,15 @@ void DecodiumBridge::keySharedAudioTransmitter(bool on, bool allowWithoutCat)
         });
     }
 
+    // L'RTTY locale passa dal CAT principale quando c'e': la radio propria del
+    // gateway DecoPort puo' essere aperta su un'altra porta (sulla FT-991 la
+    // COM "Standard", che i comandi CAT non li ascolta), e il PTT spariva li'
+    // mentre l'audio AFSK usciva regolarmente. Il rilascio torna sulla stessa
+    // porta dell'aggancio.
+    if (on)
+        m_sharedPttViaOwnRig = haveOwnRig && !(allowWithoutCat && m_catConnected);
     m_decoPortRemoteKeyed = on;
-    if (m_decoPortRig && m_decoPortRig->isOpen())
+    if (m_sharedPttViaOwnRig && m_decoPortRig && m_decoPortRig->isOpen())
         m_decoPortRig->setPtt(on);
     else if (m_catConnected)
         activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, on,
