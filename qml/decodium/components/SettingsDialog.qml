@@ -6,31 +6,98 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
-import QtQuick.Dialogs
-import QtQuick.Effects  // 1.0.180 — MultiEffect Qt 6.5+
 import QtQuick.Layouts
 
 Dialog {
     id: settingsDialog
+    // 1.0.412 — richiesta di schermo intero gestita da Main.qml (mainWindow non è in scope qui).
+    signal fullScreenRequested()
+    property var nativeHostWindow: null
+    readonly property int popupViewportMargin: 16
+    readonly property int popupParentWidth: (parent && parent.width > 0) ? Math.round(parent.width) : 1440
+    readonly property int popupParentHeight: (parent && parent.height > 0) ? Math.round(parent.height) : 960
+    readonly property var popupScreenGeometry: availableScreenGeometry()
+    readonly property int popupScreenWidth: Number(popupScreenGeometry.width) > 0
+                                             ? Math.round(Number(popupScreenGeometry.width))
+                                             : popupParentWidth
+    readonly property int popupScreenHeight: Number(popupScreenGeometry.height) > 0
+                                              ? Math.round(Number(popupScreenGeometry.height))
+                                              : popupParentHeight
+    readonly property int popupBaseWidth: Math.min(popupParentWidth, popupScreenWidth)
+    readonly property int popupBaseHeight: Math.min(popupParentHeight, popupScreenHeight)
+    readonly property int popupMaxWidth: Math.max(1, popupBaseWidth - popupViewportMargin)
+    readonly property int popupMaxHeight: Math.max(1, popupBaseHeight - popupViewportMargin)
+    // Accessibility zoom for this Setup instance only.  It deliberately does
+    // not use bridge.fontScale, which also changes the main operating window.
+    property real settingsFontScale: 1.0
+    readonly property int settingsFontZoomPercent: Math.round(settingsFontScale * 100)
+    readonly property real effectiveSettingsContentWidth: width / settingsFontScale
+    // At 1280 px the dialog still has about 1,050 px for the page after the
+    // sidebar.  The old 1180 px threshold therefore selected the wide grid
+    // and pushed its fourth column beyond the screen.
+    readonly property bool compactSettingsLayout: effectiveSettingsContentWidth < 1420
+    readonly property bool narrowSettingsLayout: effectiveSettingsContentWidth < 1060
     title: qsTr("Settings")
     modal: !warmupInProgress
     opacity: warmupInProgress ? 0 : 1
-    width: Math.min(Math.round(((parent && parent.width > 0) ? parent.width : 1440) * 0.94), 1520)
-    height: Math.min(Math.round(((parent && parent.height > 0) ? parent.height : 960) * 0.94), 980)
+    width: nativeHostWindow && parent
+           ? Math.max(360, parent.width)
+           : Math.min(Math.max(360, Math.round(popupBaseWidth * 0.998)), popupMaxWidth, 2200)
+    height: nativeHostWindow && parent
+            ? Math.max(320, parent.height)
+            : Math.min(Math.max(320, Math.round(popupBaseHeight * 0.98)), popupMaxHeight, 1080)
     closePolicy: Popup.CloseOnEscape
     property bool positionInitialized: false
     property bool warmupInProgress: false
+    // Keep the dialog shell cheap.  The selected settings page is created only
+    // after the popup is visible, so a heavy page cannot extend the Setup click.
+    property bool tabsReady: false
+    // Do not persist CAT/settings while the dialog tree emits initial signals.
+    property bool initializationInProgress: true
+    readonly property var appBridge: bridge
+    readonly property var clearCallsignCacheDialogRef: clearCallsignCacheDialog
     property int currentTab: {
         var savedTab = Number(bridge.getSetting("uiSettingsCurrentTab", 0))
-        return isFinite(savedTab) ? Math.max(0, Math.min(11, Math.floor(savedTab))) : 0
+        return isFinite(savedTab) ? Math.max(0, Math.min(13, Math.floor(savedTab))) : 0
     }
-    readonly property int labelWidth: 140
-    readonly property int fieldMinWidth: 300
-    readonly property int wideFieldMinWidth: 420
-    readonly property int portFieldMinWidth: 190
-    readonly property int frequencyPageMinWidth: 1120
-    property string dataDownloadStatus: ""
-    property bool dataDownloadIsError: false
+    property bool closeAlreadyPersisted: false
+
+    function increaseSetupFont() {
+        settingsFontScale = Math.min(1.3,
+                                     Math.round((settingsFontScale + 0.1) * 10) / 10)
+    }
+
+    function decreaseSetupFont() {
+        settingsFontScale = Math.max(1.0,
+                                     Math.round((settingsFontScale - 0.1) * 10) / 10)
+    }
+
+    function resetSetupFont() {
+        settingsFontScale = 1.0
+    }
+
+    readonly property int labelWidth: narrowSettingsLayout ? 112 : (compactSettingsLayout ? 132 : 172)
+    readonly property int fieldMinWidth: narrowSettingsLayout ? 180 : (compactSettingsLayout ? 240 : 380)
+    readonly property int wideFieldMinWidth: narrowSettingsLayout ? 260 : (compactSettingsLayout ? 340 : 620)
+    readonly property int portFieldMinWidth: narrowSettingsLayout ? 140 : (compactSettingsLayout ? 180 : 270)
+    readonly property int numericFieldMinWidth: narrowSettingsLayout ? 120 : (compactSettingsLayout ? 160 : 220)
+    readonly property int comboFieldMinWidth: narrowSettingsLayout ? 180 : (compactSettingsLayout ? 240 : 320)
+    readonly property int frequencyPageMinWidth: narrowSettingsLayout ? 760 : (compactSettingsLayout ? 900 : 1120)
+    readonly property int scrollLeftMargin: 10
+    readonly property int scrollTopMargin: 10
+    readonly property int scrollRightMargin: 12
+    readonly property int scrollBottomMargin: 96
+
+    function settingsPageMinimumContentWidth(columnCount) {
+        var margins = scrollLeftMargin + scrollRightMargin
+        var spacing = 10
+        if (Number(columnCount) <= 2) {
+            return margins + labelWidth
+                    + Math.max(fieldMinWidth, wideFieldMinWidth, comboFieldMinWidth)
+                    + spacing
+        }
+        return margins + 2 * labelWidth + 2 * fieldMinWidth + 3 * spacing
+    }
     property string uiFontLabel: bridge.fontSettingLabel("Font", "", 0)
     property string decodedFontLabel: bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)
     property string fontPickerKey: ""
@@ -51,9 +118,108 @@ Dialog {
     property var frequencyBandOptions: bridge.frequencyBandOptions()
     property int selectedWorkingFrequencyIndex: -1
     property int selectedStationFrequencyIndex: -1
+    property string stationFrequencyEditorStatus: ""
+    property bool stationFrequencyEditorError: false
     property string qrzLogbookTestStatus: ""
     property bool qrzLogbookTestIsError: false
     property bool qrzLogbookTestBusy: false
+    readonly property var callsignService: bridge ? bridge.callsignIntelligence : null
+
+    function callsignDatabaseEntries() {
+        var entries = []
+        if (settingsDialog.callsignService) {
+            var providerEntries = settingsDialog.callsignService.databases
+            for (var i = 0; i < providerEntries.length; ++i)
+                entries.push(providerEntries[i])
+        }
+        if (bridge) {
+            entries.push(bridge.ctyDatState)
+            entries.push(bridge.call3TxtState)
+        }
+        return entries
+    }
+
+    function callsignDatabaseLabel(entry) {
+        var id = entry && entry.id ? String(entry.id) : ""
+        switch (id) {
+        case "fcc_uls":
+            return qsTr("FCC ULS")
+        case "lotw":
+            return qsTr("LoTW - User activity")
+        case "lotw_confirmed":
+            return qsTr("LoTW - Confirmations received")
+        case "eqsl":
+            return qsTr("eQSL AG")
+        case "eqsl_inbox":
+            return qsTr("eQSL InBox - Confirmations received")
+        case "qrz_confirmed":
+            return qsTr("QRZ.com - Confirmations received")
+        case "clublog_oqrs":
+            return qsTr("Club Log OQRS")
+        case "dxcc":
+        case "cty_dat":
+            return qsTr("DXCC cty.dat")
+        case "call3_txt":
+            return qsTr("CALL3.TXT")
+        default:
+            return entry && entry.label ? String(entry.label) : ""
+        }
+    }
+
+    function callsignDatabaseUpdating(provider) {
+        if (provider === "cty_dat")
+            return bridge && bridge.ctyDatUpdating
+        if (provider === "call3_txt")
+            return bridge && bridge.call3TxtUpdating
+        return settingsDialog.callsignService && settingsDialog.callsignService.databaseUpdatePending
+    }
+
+    function refreshCallsignDatabase(provider) {
+        if (provider === "cty_dat") {
+            bridge.checkCtyDatUpdate(true)
+        } else if (provider === "call3_txt") {
+            bridge.downloadCall3Txt()
+        } else if (settingsDialog.callsignService) {
+            settingsDialog.callsignService.refreshDatabase(provider)
+        }
+    }
+
+    Dialog {
+        id: clearCallsignCacheDialog
+        modal: true
+        title: qsTr("Clear global lookup cache")
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        width: Math.min(520, Math.max(360, settingsDialog.width - 48))
+        anchors.centerIn: parent
+
+        contentItem: Text {
+            text: qsTr("All locally stored callsign lookup results for every provider will be deleted. The FCC, LoTW, eQSL and Club Log databases will not be deleted. Continue?")
+            color: textPrimary
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignLeft
+            verticalAlignment: Text.AlignVCenter
+            padding: 16
+        }
+
+        onAccepted: {
+            if (settingsDialog.callsignService)
+                settingsDialog.callsignService.clearCache()
+        }
+    }
+
+    function availableScreenGeometry() {
+        var geometry = null
+        try {
+            if (nativeHostWindow && nativeHostWindow.screen
+                    && nativeHostWindow.screen.availableGeometry)
+                geometry = nativeHostWindow.screen.availableGeometry
+            if (bridge && typeof bridge.primaryScreenAvailableGeometry === "function")
+                geometry = geometry || bridge.primaryScreenAvailableGeometry()
+        } catch (error) {
+            console.log("SettingsDialog: screen geometry unavailable: " + error)
+        }
+        return geometry || {}
+    }
 
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
@@ -80,13 +246,71 @@ Dialog {
             bridge.setSetting(key, value)
     }
 
+    function territorySettingMatches(key, code, aliases) {
+        var raw = String(bridge.getSetting(key, "") || "")
+        if (raw.trim().length === 0)
+            return false
+
+        var text = raw.toUpperCase().replace(/[^A-Z]+/g, " ").trim()
+        var compact = text.replace(/\s+/g, "")
+        var accepted = [code].concat(aliases || [])
+        for (var i = 0; i < accepted.length; ++i) {
+            var alias = String(accepted[i] || "").toUpperCase().replace(/[^A-Z]+/g, " ").trim()
+            if (alias.length === 0)
+                continue
+            var aliasCompact = alias.replace(/\s+/g, "")
+            if (text === alias || compact === aliasCompact || text.indexOf(alias) >= 0)
+                return true
+        }
+        return false
+    }
+
+    function normalizeTerritorySetting(key, code, aliases) {
+        var raw = String(bridge.getSetting(key, "") || "")
+        if (raw.trim().length === 0)
+            return
+        bridge.setSetting(key, territorySettingMatches(key, code, aliases) ? code : "")
+    }
+
+    function setTerritoryExcluded(key, code, excluded) {
+        var value = excluded ? code : ""
+        if (String(bridge.getSetting(key, "") || "") !== value)
+            bridge.setSetting(key, value)
+    }
+
+    // 1.0.306 (#4) — config "bande operative": lista completa (lambda + etichetta) e helper
+    // per il setting "uiDisabledBands" (CSV di lambda nascosti dal selettore). Vuoto = tutte.
+    readonly property var allBandsForConfig: [
+        { l: "160M", n: "1.8" }, { l: "80M", n: "3.5" }, { l: "60M", n: "5" }, { l: "40M", n: "7" },
+        { l: "30M", n: "10" }, { l: "20M", n: "14" }, { l: "17M", n: "18" }, { l: "15M", n: "21" },
+        { l: "12M", n: "24" }, { l: "10M", n: "28" }, { l: "8M", n: "40" }, { l: "6M", n: "50" },
+        { l: "4M", n: "70" }, { l: "2M", n: "144" }, { l: "1.25M", n: "222" }, { l: "70CM", n: "432" },
+        { l: "33CM", n: "902" }, { l: "23CM", n: "1296" }, { l: "13CM", n: "2304" }, { l: "9CM", n: "3400" },
+        { l: "6CM", n: "5760" }, { l: "3CM", n: "10G" }, { l: "1.25CM", n: "24G" }
+    ]
+    property string disabledBandsCsv: bridge ? String(bridge.getSetting("uiDisabledBands", "") || "") : ""
+    function bandEnabledCfg(lambda) {
+        return ("," + disabledBandsCsv + ",").indexOf("," + lambda + ",") < 0
+    }
+    function toggleBandCfg(lambda, enable) {
+        var set = disabledBandsCsv.length ? disabledBandsCsv.split(",").filter(function(x){ return x.length > 0 }) : []
+        var idx = set.indexOf(lambda)
+        if (enable) { if (idx >= 0) set.splice(idx, 1) }
+        else        { if (idx <  0) set.push(lambda) }
+        var csv = set.join(",")
+        if (bridge) bridge.setSetting("uiDisabledBands", csv)
+        disabledBandsCsv = csv
+    }
+
     function setLoggingMode(promptMode) {
         if (loggingChecksUpdating)
             return
 
         loggingChecksUpdating = true
-        promptToLogCheck.checked = promptMode
-        autoLogCheck.checked = !promptMode
+        if (typeof promptToLogCheck !== "undefined")
+            promptToLogCheck.checked = promptMode
+        if (typeof autoLogCheck !== "undefined")
+            autoLogCheck.checked = !promptMode
         bridge.setSetting("PromptToLog", promptMode)
         bridge.setSetting("AutoLog", !promptMode)
         loggingChecksUpdating = false
@@ -102,8 +326,10 @@ Dialog {
             bridge.setSetting("PromptToLog", false)
             bridge.setSetting("AutoLog", true)
         }
-        promptToLogCheck.checked = promptMode
-        autoLogCheck.checked = autoMode
+        if (typeof promptToLogCheck !== "undefined")
+            promptToLogCheck.checked = promptMode
+        if (typeof autoLogCheck !== "undefined")
+            autoLogCheck.checked = autoMode
         loggingChecksUpdating = false
     }
 
@@ -131,10 +357,15 @@ Dialog {
             selectedWorkingFrequencyIndex = -1
         if (selectedStationFrequencyIndex >= stationFrequencyRows.length)
             selectedStationFrequencyIndex = -1
-        if (typeof frequencySlopeField !== "undefined")
-            frequencySlopeField.text = Number(bridge.frequencyCalibrationSlopePpm()).toFixed(5)
-        if (typeof frequencyInterceptField !== "undefined")
-            frequencyInterceptField.text = Number(bridge.frequencyCalibrationInterceptHz()).toFixed(2)
+        var page = frequencySettingsPage()
+        if (page) {
+            page.calibrationSlopeFieldControl.text = Number(bridge.frequencyCalibrationSlopePpm()).toFixed(5)
+            page.calibrationInterceptFieldControl.text = Number(bridge.frequencyCalibrationInterceptHz()).toFixed(2)
+        }
+    }
+
+    function frequencySettingsPage() {
+        return settingsTab7Loader && settingsTab7Loader.item ? settingsTab7Loader.item : null
     }
 
     function commitFrequencySlope(text) {
@@ -170,34 +401,89 @@ Dialog {
         if (!row)
             return
         selectedWorkingFrequencyIndex = Number(row.index)
-        setComboText(frequencyRegionCombo, row.region || "All")
-        setComboText(frequencyModeCombo, row.mode || "FT8")
-        frequencyMHzField.text = row.frequencyMHz || ""
-        frequencyPreferredCheck.checked = !!row.preferred
-        frequencyDescriptionField.text = row.description || ""
-        frequencyStartField.text = row.startTime || ""
-        frequencyEndField.text = row.endTime || ""
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        setComboText(page.workingFrequencyRegionControl, row.region || "All")
+        setComboText(page.workingFrequencyModeControl, row.mode || "FT8")
+        page.workingFrequencyMHzControl.text = row.frequencyMHz || ""
+        page.workingFrequencyPreferredControl.checked = !!row.preferred
+        page.workingFrequencyDescriptionControl.text = row.description || ""
+        page.workingFrequencyStartControl.text = row.startTime || ""
+        page.workingFrequencyEndControl.text = row.endTime || ""
     }
 
     function clearWorkingFrequencyEditor() {
         selectedWorkingFrequencyIndex = -1
-        setComboText(frequencyRegionCombo, "All")
-        setComboText(frequencyModeCombo, bridge.mode || "FT8")
-        frequencyMHzField.text = ""
-        frequencyPreferredCheck.checked = false
-        frequencyDescriptionField.text = ""
-        frequencyStartField.text = ""
-        frequencyEndField.text = ""
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        setComboText(page.workingFrequencyRegionControl, "All")
+        setComboText(page.workingFrequencyModeControl, bridge.mode || "FT8")
+        page.workingFrequencyMHzControl.text = ""
+        page.workingFrequencyPreferredControl.checked = false
+        page.workingFrequencyDescriptionControl.text = ""
+        page.workingFrequencyStartControl.text = ""
+        page.workingFrequencyEndControl.text = ""
+    }
+
+    function workingFrequencyEditorFrequencyText() {
+        var page = frequencySettingsPage()
+        if (!page)
+            return ""
+        var text = String(page.workingFrequencyMHzControl.text || "").trim()
+        var lower = text.toLowerCase()
+        var explicitMHz = lower.indexOf("mhz") >= 0
+        var explicitHz = lower.indexOf("hz") >= 0 && !explicitMHz
+        text = text.replace(/,/g, ".")
+        text = text.replace(/mhz/ig, "")
+        text = text.replace(/hz/ig, "")
+        text = text.replace(/\s+/g, "")
+        if (text.length === 0)
+            return ""
+        return text + (explicitMHz ? " MHz" : (explicitHz ? " Hz" : ""))
+    }
+
+    function workingFrequencyEditorHasValidFrequency() {
+        var text = workingFrequencyEditorFrequencyText()
+        if (text.length === 0)
+            return false
+        var numeric = Number(text.replace(/mhz|hz/ig, "").trim())
+        return isFinite(numeric) && numeric > 0
+    }
+
+    function newWorkingFrequencyEditor() {
+        selectedWorkingFrequencyIndex = -1
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        setComboText(page.workingFrequencyRegionControl, "All")
+        setComboText(page.workingFrequencyModeControl, bridge.mode || "FT8")
+        var currentHz = Number(bridge.frequency) || 0
+        page.workingFrequencyMHzControl.text = currentHz > 0 ? (currentHz / 1000000.0).toFixed(6) : ""
+        page.workingFrequencyPreferredControl.checked = true
+        page.workingFrequencyDescriptionControl.text = ""
+        page.workingFrequencyStartControl.text = ""
+        page.workingFrequencyEndControl.text = ""
+        Qt.callLater(function() {
+            page.workingFrequencyMHzControl.forceActiveFocus()
+            page.workingFrequencyMHzControl.selectAll()
+        })
     }
 
     function addWorkingFrequencyFromEditor() {
-        if (bridge.addWorkingFrequencyRow(frequencyRegionCombo.currentText,
-                                          frequencyModeCombo.currentText,
-                                          frequencyMHzField.text,
-                                          frequencyDescriptionField.text,
-                                          frequencyStartField.text,
-                                          frequencyEndField.text,
-                                          frequencyPreferredCheck.checked)) {
+        if (!workingFrequencyEditorHasValidFrequency())
+            return
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        if (bridge.addWorkingFrequencyRow(page.workingFrequencyRegionControl.currentText,
+                                          page.workingFrequencyModeControl.currentText,
+                                          workingFrequencyEditorFrequencyText(),
+                                          page.workingFrequencyDescriptionControl.text,
+                                          page.workingFrequencyStartControl.text,
+                                          page.workingFrequencyEndControl.text,
+                                          page.workingFrequencyPreferredControl.checked)) {
             refreshFrequencySettings()
         }
     }
@@ -205,14 +491,19 @@ Dialog {
     function updateWorkingFrequencyFromEditor() {
         if (selectedWorkingFrequencyIndex < 0)
             return
+        if (!workingFrequencyEditorHasValidFrequency())
+            return
+        var page = frequencySettingsPage()
+        if (!page)
+            return
         if (bridge.updateWorkingFrequencyRow(selectedWorkingFrequencyIndex,
-                                             frequencyRegionCombo.currentText,
-                                             frequencyModeCombo.currentText,
-                                             frequencyMHzField.text,
-                                             frequencyDescriptionField.text,
-                                             frequencyStartField.text,
-                                             frequencyEndField.text,
-                                             frequencyPreferredCheck.checked)) {
+                                             page.workingFrequencyRegionControl.currentText,
+                                             page.workingFrequencyModeControl.currentText,
+                                             workingFrequencyEditorFrequencyText(),
+                                             page.workingFrequencyDescriptionControl.text,
+                                             page.workingFrequencyStartControl.text,
+                                             page.workingFrequencyEndControl.text,
+                                             page.workingFrequencyPreferredControl.checked)) {
             refreshFrequencySettings()
         }
     }
@@ -230,22 +521,46 @@ Dialog {
         if (!row)
             return
         selectedStationFrequencyIndex = Number(row.index)
-        setComboText(stationBandCombo, row.band || "20m")
-        stationOffsetField.text = row.offsetMHz || String(row.offset || "").replace(" MHz", "")
-        stationAntennaField.text = row.antenna || ""
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        setComboText(page.stationFrequencyBandControl, row.band || "20m")
+        page.stationFrequencyOffsetControl.text = row.offsetMHz || String(row.offset || "").replace(" MHz", "")
+        page.stationFrequencyAntennaControl.text = row.antenna || ""
+        stationFrequencyEditorStatus = ""
+        stationFrequencyEditorError = false
     }
 
     function clearStationFrequencyEditor() {
         selectedStationFrequencyIndex = -1
-        setComboText(stationBandCombo, "20m")
-        stationOffsetField.text = "0.000000"
-        stationAntennaField.text = ""
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        setComboText(page.stationFrequencyBandControl, "20m")
+        page.stationFrequencyOffsetControl.text = "0.000000"
+        page.stationFrequencyAntennaControl.text = ""
+        stationFrequencyEditorStatus = ""
+        stationFrequencyEditorError = false
     }
 
     function addStationFrequencyFromEditor() {
-        if (bridge.addStationFrequencyRow(stationBandCombo.currentText,
-                                          stationOffsetField.text,
-                                          stationAntennaField.text)) {
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        var offsetText = String(page.stationFrequencyOffsetControl.text || "").trim()
+        if (offsetText.length === 0) {
+            stationFrequencyEditorError = true
+            stationFrequencyEditorStatus = qsTr("Enter a valid offset, for example -2556 MHz")
+            return
+        }
+        var saved = bridge.addStationFrequencyRow(page.stationFrequencyBandControl.currentText,
+                                                  offsetText,
+                                                  page.stationFrequencyAntennaControl.text)
+        stationFrequencyEditorError = !saved
+        stationFrequencyEditorStatus = saved
+                ? qsTr("Offset saved and verified")
+                : qsTr("Offset was not saved; check the value and settings-file permissions")
+        if (saved) {
             refreshFrequencySettings()
         }
     }
@@ -253,10 +568,24 @@ Dialog {
     function updateStationFrequencyFromEditor() {
         if (selectedStationFrequencyIndex < 0)
             return
-        if (bridge.updateStationFrequencyRow(selectedStationFrequencyIndex,
-                                             stationBandCombo.currentText,
-                                             stationOffsetField.text,
-                                             stationAntennaField.text)) {
+        var page = frequencySettingsPage()
+        if (!page)
+            return
+        var offsetText = String(page.stationFrequencyOffsetControl.text || "").trim()
+        if (offsetText.length === 0) {
+            stationFrequencyEditorError = true
+            stationFrequencyEditorStatus = qsTr("Enter a valid offset, for example -2556 MHz")
+            return
+        }
+        var saved = bridge.updateStationFrequencyRow(selectedStationFrequencyIndex,
+                                                      page.stationFrequencyBandControl.currentText,
+                                                      offsetText,
+                                                      page.stationFrequencyAntennaControl.text)
+        stationFrequencyEditorError = !saved
+        stationFrequencyEditorStatus = saved
+                ? qsTr("Offset saved and verified")
+                : qsTr("Offset was not saved; check the value and settings-file permissions")
+        if (saved) {
             refreshFrequencySettings()
         }
     }
@@ -288,55 +617,8 @@ Dialog {
 
         bridge[prop] = normalized
         bridge.setSetting(prop, normalized)
-        bridge.saveSettings()
+        bridge.saveSettingsAsync()
         return true
-    }
-
-    component SettingsComboPopup: Popup {
-        id: comboPopup
-        property var combo: null
-        property int minPopupWidth: 220
-        property int maxPopupHeight: 360
-        readonly property var comboOrigin: combo && parent ? combo.mapToItem(parent, 0, 0) : Qt.point(0, 0)
-        readonly property real wantedHeight: Math.min(maxPopupHeight, comboPopupList.contentHeight + padding * 2)
-        readonly property real spaceBelow: parent && combo ? parent.height - comboOrigin.y - combo.height - 8 : maxPopupHeight
-        readonly property real spaceAbove: parent && combo ? comboOrigin.y - 8 : 0
-        readonly property bool openAbove: wantedHeight > spaceBelow && spaceAbove > spaceBelow
-
-        parent: Overlay.overlay
-        modal: false
-        focus: true
-        padding: 6
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        width: parent ? Math.min(Math.max(combo ? combo.width : 0, minPopupWidth), Math.max(80, parent.width - 16))
-                      : Math.max(combo ? combo.width : 0, minPopupWidth)
-        height: Math.max(44, Math.min(wantedHeight, Math.max(44, openAbove ? spaceAbove : spaceBelow)))
-        x: parent ? Math.max(8, Math.min(comboOrigin.x, parent.width - width - 8)) : 0
-        y: parent
-           ? (openAbove
-              ? Math.max(8, comboOrigin.y - height - 2)
-              : Math.min(comboOrigin.y + (combo ? combo.height : 0) + 2, parent.height - height - 8))
-           : 0
-        onOpened: comboPopupList.forceActiveFocus()
-
-        background: Rectangle {
-            color: bgDeep
-            border.color: glassBorder
-            radius: 4
-        }
-
-        contentItem: ListView {
-            id: comboPopupList
-            anchors.fill: parent
-            clip: true
-            model: comboPopup.visible && combo ? combo.delegateModel : null
-            currentIndex: combo ? combo.highlightedIndex : -1
-            boundsBehavior: Flickable.StopAtBounds
-            flickableDirection: Flickable.VerticalFlick
-            interactive: true
-            focus: true
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-        }
     }
 
     function setAlertEnabled(value) {
@@ -387,11 +669,33 @@ Dialog {
     }
 
     function openDirectoryPicker(settingKey, currentPath) {
-        directoryPickerDialog.settingKey = settingKey
-        var folderUrl = localDirectoryToUrl(currentPath)
-        if (folderUrl.length > 0)
-            directoryPickerDialog.currentFolder = folderUrl
-        directoryPickerDialog.open()
+        var title = settingKey === "AzElDirectory" ? qsTr("Select AzEl directory") : qsTr("Select save directory")
+        var path = bridge.openDirectoryDialog(title, currentPath)
+        if (settingKey === "" || path === "")
+            return
+        bridge.setSetting(settingKey, path)
+        if (settingKey === "SaveDirectory")
+            saveDirectoryField.text = path
+        else if (settingKey === "AzElDirectory")
+            azElDirectoryField.text = path
+    }
+
+    function openWorkingFrequenciesLoadDialog(mergeMode) {
+        var path = bridge.openFileDialog(mergeMode ? qsTr("Merge Working Frequencies") : qsTr("Load Working Frequencies"),
+                                         "",
+                                         [qsTr("Frequency files (*.qrg *.qrg.json)"), qsTr("All files (*)")])
+        if (path.length > 0 && bridge.loadWorkingFrequenciesFile(path, mergeMode)) {
+            settingsDialog.clearWorkingFrequencyEditor()
+            settingsDialog.refreshFrequencySettings()
+        }
+    }
+
+    function openWorkingFrequenciesSaveDialog() {
+        var path = bridge.saveFileDialog(qsTr("Save Working Frequencies"),
+                                         "",
+                                         [qsTr("Frequency files (*.qrg *.qrg.json)"), qsTr("All files (*)")])
+        if (path.length > 0)
+            bridge.saveWorkingFrequenciesFile(path)
     }
 
     Connections {
@@ -403,23 +707,17 @@ Dialog {
         }
         function onStatusMessage(msg) {
             var text = String(msg || "")
-            var lower = text.toLowerCase()
-            if (settingsDialog.updateQrzLogbookTestStatus(text, false))
-                return
-            if (lower.indexOf("cty.dat") >= 0 || lower.indexOf("call3.txt") >= 0) {
-                dataDownloadStatus = text
-                dataDownloadIsError = false
-            }
+            settingsDialog.updateQrzLogbookTestStatus(text, false)
         }
         function onErrorMessage(msg) {
             var text = String(msg || "")
-            var lower = text.toLowerCase()
-            if (settingsDialog.updateQrzLogbookTestStatus(text, true))
-                return
-            if (lower.indexOf("cty.dat") >= 0 || lower.indexOf("call3.txt") >= 0) {
-                dataDownloadStatus = text
-                dataDownloadIsError = true
-            }
+            settingsDialog.updateQrzLogbookTestStatus(text, true)
+        }
+        function onActiveCatProfileChanged() {
+            settingsDialog.refreshCatProfileDraft()
+        }
+        function onCatProfilesChanged() {
+            settingsDialog.refreshCatProfileDraft()
         }
     }
 
@@ -529,6 +827,21 @@ Dialog {
         return -1
     }
 
+    // Port names must never use the permissive lookup above: COM1 is not the
+    // same device as COM10, COM15, or COM16. The generic helper intentionally
+    // supports partial labels elsewhere in Settings, but that behavior drops
+    // valid virtual serial ports from the PTT selector on Windows.
+    function exactStringListIndexOf(list, value) {
+        if (!list || value === undefined || value === null)
+            return -1
+        var wanted = String(value).trim().toLowerCase()
+        for (var i = 0; i < list.length; ++i) {
+            if (String(list[i]).trim().toLowerCase() === wanted)
+                return i
+        }
+        return -1
+    }
+
     function selectTciRigIfNeeded() {
         var controller = activeCatController()
         if (!controller || controller.rigName === undefined || controller.rigName === null)
@@ -557,9 +870,10 @@ Dialog {
         var controller = activeCatController()
         if (!controller || controller.civAddress === undefined || controller.civAddress === null)
             return ""
-        var v = parseInt(controller.civAddress)
-        if (!v)
+        var v = Number(controller.civAddress)
+        if (!isFinite(v) || v <= 0)
             return ""
+        v = Math.max(0, Math.min(255, Math.round(v)))
         return "0x" + v.toString(16).toUpperCase().padStart(2, "0")
     }
 
@@ -570,6 +884,20 @@ Dialog {
         if (rig.indexOf("IC7300") !== -1)
             return "0x94 (IC-7300)"
         return qsTr("Auto")
+    }
+
+    // CI-V addresses are conventionally written in hexadecimal.  Bare values
+    // such as "94" therefore mean 0x94, not decimal 94.  Keep this parser in
+    // the dialog so every CAT backend exposed by catManager uses the same UI
+    // validation before its integer property is updated.
+    function civAddressFromText(value) {
+        var raw = String(value || "").trim()
+        if (!/^(?:0[xX])?[0-9a-fA-F]{1,2}$/.test(raw))
+            return -1
+        if (raw.length >= 2 && raw.slice(0, 2).toLowerCase() === "0x")
+            raw = raw.slice(2)
+        var parsed = parseInt(raw, 16)
+        return isFinite(parsed) && parsed >= 0 && parsed <= 255 ? parsed : -1
     }
 
     function usesSerialControls() {
@@ -583,6 +911,14 @@ Dialog {
 
     function usesTciControls() {
         return bridge.catBackend === "tci" || activeCatPortType() === "tci"
+    }
+
+    function usesCat4OmControls() {
+        return bridge.catBackend === "cat4om" || activeCatPortType() === "cat4om"
+    }
+
+    function usesProtocolCatOnly() {
+        return usesTciControls() || usesCat4OmControls()
     }
 
     function activePttMethod() {
@@ -610,14 +946,14 @@ Dialog {
         var ports = controller.portList || []
         for (var i = 0; i < ports.length; ++i) {
             var port = String(ports[i]).trim()
-            if (port !== "" && settingsDialog.stringListIndexOf(options, port) < 0)
+            if (port !== "" && settingsDialog.exactStringListIndexOf(options, port) < 0)
                 options.push(port)
         }
 
         var saved = controller.pttPort !== undefined && controller.pttPort !== null
                 ? String(controller.pttPort).trim() : ""
         if (saved !== "" && saved.toUpperCase() !== "CAT"
-                && settingsDialog.stringListIndexOf(options, saved) < 0)
+                && settingsDialog.exactStringListIndexOf(options, saved) < 0)
             options.push(saved)
         return options
     }
@@ -779,7 +1115,7 @@ Dialog {
 
     function openTab(index) {
         var tab = Number(index)
-        currentTab = isFinite(tab) ? Math.max(0, Math.min(11, Math.floor(tab))) : 0
+        currentTab = isFinite(tab) ? Math.max(0, Math.min(13, Math.floor(tab))) : 0
         open()
     }
 
@@ -805,6 +1141,23 @@ Dialog {
     function refreshCatPorts() {
         var controller = activeCatController()
         if (controller && controller.refreshPorts) controller.refreshPorts()
+    }
+
+    function refreshCatProfileDraft() {
+        var page = settingsTab1Loader.item
+        if (page && page.refreshCatProfileDraft)
+            page.refreshCatProfileDraft()
+    }
+
+    function finishInitialSettingsLoad() {
+        if (!initializationInProgress)
+            return
+        Qt.callLater(function() {
+            if (settingsDialog.initializationInProgress) {
+                settingsDialog.initializationInProgress = false
+                console.log("SETUP page initialization complete")
+            }
+        })
     }
 
     function refreshAudioDevices() {
@@ -852,17 +1205,24 @@ Dialog {
     }
 
     function scheduleCatPersist() {
-        var controller = activeCatController()
-        if (controller && controller.saveSettings)
-            controller.saveSettings()
+        if (initializationInProgress)
+            return
         catPersistTimer.restart()
     }
 
     function persistSettingsNow() {
+        if (initializationInProgress)
+            return
         var controller = activeCatController()
         if (controller && controller.saveSettings)
             controller.saveSettings()
-        bridge.saveSettings()
+        bridge.saveSettingsAsync()
+    }
+
+    function closeAfterPersist() {
+        closeAlreadyPersisted = true
+        persistSettingsNow()
+        close()
     }
 
     function scheduleSettingsPersist() {
@@ -872,7 +1232,7 @@ Dialog {
     }
 
     function clampToParent() {
-        if (!parent) return
+        if (nativeHostWindow || !parent) return
         var parentWidth = parent.width > 0 ? parent.width : width
         var parentHeight = parent.height > 0 ? parent.height : height
         x = Math.max(0, Math.min(x, parentWidth - width))
@@ -881,6 +1241,12 @@ Dialog {
 
     function ensureInitialPosition() {
         if (positionInitialized || !parent) return
+        if (nativeHostWindow) {
+            x = 0
+            y = 0
+            positionInitialized = true
+            return
+        }
         var parentWidth = parent.width > 0 ? parent.width : width
         var parentHeight = parent.height > 0 ? parent.height : height
         x = Math.max(0, Math.round((parentWidth - width) / 2))
@@ -888,14 +1254,49 @@ Dialog {
         positionInitialized = true
     }
 
-    onAboutToShow: {
-        if (!warmupInProgress)
-            ensureInitialPosition()
+    function startNativeHostMove() {
+        if (!nativeHostWindow)
+            return false
+        if (typeof nativeHostWindow.beginDesktopMove === "function")
+            nativeHostWindow.beginDesktopMove()
+        if (typeof nativeHostWindow.startSystemMove !== "function")
+            return false
+        try {
+            return nativeHostWindow.startSystemMove()
+        } catch (error) {
+            console.log("Settings startSystemMove failed: " + error)
+        }
+        return false
     }
 
-    onClosed: {
-        if (!warmupInProgress)
-            persistSettingsNow()
+    function finishNativeHostMove() {
+        if (nativeHostWindow && typeof nativeHostWindow.finishDesktopMove === "function")
+            nativeHostWindow.finishDesktopMove()
+    }
+
+    function requestWindowClose() {
+        if (nativeHostWindow && typeof nativeHostWindow.hideHostedWindow === "function") {
+            nativeHostWindow.hideHostedWindow()
+            return
+        }
+        settingsDialog.close()
+    }
+
+    onAboutToShow: {
+        if (!warmupInProgress) {
+            ensureInitialPosition()
+            clampToParent()
+        }
+    }
+
+    onWidthChanged: {
+        if (visible && !warmupInProgress)
+            clampToParent()
+    }
+
+    onHeightChanged: {
+        if (visible && !warmupInProgress)
+            clampToParent()
     }
 
     onCurrentTabChanged: {
@@ -905,11 +1306,35 @@ Dialog {
             refreshFrequencySettings()
     }
 
+    onOpened: {
+        if (!warmupInProgress) {
+            closeAlreadyPersisted = false
+            refreshCatProfileDraft()
+            // Let the popup enter the scene graph before constructing the
+            // selected page.  This keeps the mouse event and first paint short.
+            Qt.callLater(function() { settingsDialog.tabsReady = true })
+        }
+    }
+
+    onClosed: {
+        settingsPersistTimer.stop()
+        catPersistTimer.stop()
+        if (!warmupInProgress && !closeAlreadyPersisted)
+            persistSettingsNow()
+        closeAlreadyPersisted = false
+    }
+
+    Component.onCompleted: {
+        // Keep persistence muted until the first visible page has finished
+        // constructing its controls and initial bindings.
+    }
+
     Timer {
         id: warmupCloseTimer
         interval: 1
         repeat: false
         onTriggered: {
+            settingsDialog.closeAlreadyPersisted = true
             settingsDialog.close()
             settingsDialog.warmupInProgress = false
             settingsDialog.positionInitialized = false
@@ -920,7 +1345,8 @@ Dialog {
         id: catPersistTimer
         interval: 300
         repeat: false
-        onTriggered: bridge.saveSettings()
+        onTriggered: if (!settingsDialog.initializationInProgress)
+                         settingsDialog.persistSettingsNow()
     }
 
     Timer {
@@ -928,48 +1354,6 @@ Dialog {
         interval: 500
         repeat: false
         onTriggered: settingsDialog.persistSettingsNow()
-    }
-
-    FolderDialog {
-        id: directoryPickerDialog
-        property string settingKey: ""
-        title: settingKey === "AzElDirectory" ? "Select AzEl directory" : "Select save directory"
-        onAccepted: {
-            var path = settingsDialog.folderUrlToLocalDirectory(selectedFolder)
-            if (settingKey === "" || path === "")
-                return
-            bridge.setSetting(settingKey, path)
-            if (settingKey === "SaveDirectory")
-                saveDirectoryField.text = path
-            else if (settingKey === "AzElDirectory")
-                azElDirectoryField.text = path
-        }
-    }
-
-    FileDialog {
-        id: workingFrequenciesLoadDialog
-        property bool mergeMode: false
-        title: mergeMode ? qsTr("Merge Working Frequencies") : qsTr("Load Working Frequencies")
-        nameFilters: [qsTr("Frequency files (*.qrg *.qrg.json)"), qsTr("All files (*)")]
-        onAccepted: {
-            var path = settingsDialog.fileUrlToLocalPath(selectedFile)
-            if (path.length > 0 && bridge.loadWorkingFrequenciesFile(path, mergeMode)) {
-                settingsDialog.clearWorkingFrequencyEditor()
-                settingsDialog.refreshFrequencySettings()
-            }
-        }
-    }
-
-    FileDialog {
-        id: workingFrequenciesSaveDialog
-        title: qsTr("Save Working Frequencies")
-        fileMode: FileDialog.SaveFile
-        nameFilters: [qsTr("Frequency files (*.qrg *.qrg.json)"), qsTr("All files (*)")]
-        onAccepted: {
-            var path = settingsDialog.fileUrlToLocalPath(selectedFile)
-            if (path.length > 0)
-                bridge.saveWorkingFrequenciesFile(path)
-        }
     }
 
     // ── Theme colors ─────────────────────────────────────────────────────
@@ -987,6 +1371,7 @@ Dialog {
     readonly property int controlHeight: Qt.platform.os === "linux" ? 36 : 32
     readonly property int controlFontSize: 12
     readonly property int controlVerticalPadding: Qt.platform.os === "linux" ? 1 : 0
+    readonly property int spinTextSidePadding: 52
 
     // ── Preset colors for color pickers ──────────────────────────────────
     readonly property var presetColors: [
@@ -1008,11 +1393,12 @@ Dialog {
         { label: qsTr("New Grid"),               prop: "colorNewGrid",          defaultColor: "#FF8C00" },
         { label: qsTr("New Callsign on Band"),   prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
         { label: qsTr("New Callsign"),           prop: "colorNewCall",          defaultColor: "#00E0E0" },
-        { label: qsTr("LoTW User"),              prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
+        { label: qsTr("LoTW marker"),            prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
         { label: qsTr("CQ in Message"),          prop: "colorCQ",               defaultColor: "#33FF33" },
         { label: qsTr("DX Entity"),              prop: "colorDXEntity",         defaultColor: "#FFAA33" },
         { label: qsTr("73 / RR73"),              prop: "color73",               defaultColor: "#5599FF" },
-        { label: qsTr("B4 (Worked)"),            prop: "colorB4",               defaultColor: "#888888" }
+        { label: qsTr("B4 (Worked)"),            prop: "colorB4",               defaultColor: "#888888" },
+        { label: qsTr("Normal decodes"),         prop: "colorDecodeText",       defaultColor: "#AFC4D8" }
     ]
 
     Popup {
@@ -1050,7 +1436,7 @@ Dialog {
                 font.pixelSize: 11
             }
 
-            TextField {
+            DecoTextField {
                 id: fontSearchField
                 Layout.fillWidth: true
                 implicitHeight: controlHeight
@@ -1139,6 +1525,8 @@ Dialog {
                     Layout.preferredWidth: 140
                     onValueChanged: settingsDialog.fontPickerPointSize = value
                     contentItem: TextInput {
+                        selectByMouse: true
+                        onActiveFocusChanged: if (activeFocus) selectAll()
                         text: fontPointSpin.textFromValue(fontPointSpin.value, fontPointSpin.locale)
                         color: textPrimary
                         font.pixelSize: controlFontSize
@@ -1177,7 +1565,7 @@ Dialog {
                 Text {
                     anchors.fill: parent
                     anchors.margins: 10
-                    text: "173045  -21  0.1  1045  CQ LB9ZG JP20"
+                    text: qsTr("173045  -21  0.1  1045  CQ LB9ZG JP20")
                     color: textPrimary
                     font.family: settingsDialog.fontPickerFamily
                     font.pointSize: settingsDialog.fontPickerPointSize
@@ -1210,20 +1598,9 @@ Dialog {
         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
         border.color: secondaryCyan; border.width: 2; radius: 12
 
-        // 1.0.180 — MultiEffect shadow gated su uiQuality. Su Low/Medium niente
-        // shadow per non appesantire PC modesti. Su High abilitato con
-        // blurMax basso per efficacia su integrated GPU.
-        layer.enabled: bridge && bridge.uiQuality === "High"
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowBlur: 0.5
-            shadowColor: Qt.rgba(0, 0, 0, 0.45)
-            shadowVerticalOffset: 4
-            shadowHorizontalOffset: 0
-            // downsampleFactor non disponibile in MultiEffect base; usiamo
-            // blurMax basso per limitare il costo.
-            blurMax: 16
-        }
+        // Keep this dialog compatible with the Linux Qt 6.4 AppImage runtime.
+        // QtQuick.Effects/MultiEffect is only available from Qt 6.5.
+        layer.enabled: false
     }
 
     // 1.0.180 — Apertura/chiusura su render thread con OpacityAnimator.
@@ -1242,16 +1619,43 @@ Dialog {
         MouseArea {
             anchors.fill: parent
             property point clickPos: Qt.point(0, 0)
+            property point pressGlobalPos: Qt.point(0, 0)
+            property point pressWindowPos: Qt.point(0, 0)
+            property bool nativeMoveActive: false
             cursorShape: Qt.SizeAllCursor
             onPressed: function(mouse) {
                 clickPos = Qt.point(mouse.x, mouse.y)
                 settingsDialog.positionInitialized = true
+                if (settingsDialog.nativeHostWindow) {
+                    pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                    pressWindowPos = Qt.point(settingsDialog.nativeHostWindow.x,
+                                              settingsDialog.nativeHostWindow.y)
+                    nativeMoveActive = settingsDialog.startNativeHostMove()
+                }
             }
             onPositionChanged: function(mouse) {
                 if (!pressed) return
+                if (settingsDialog.nativeHostWindow) {
+                    if (nativeMoveActive)
+                        return
+                    var currentGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                    settingsDialog.nativeHostWindow.x = Math.round(
+                                pressWindowPos.x + currentGlobalPos.x - pressGlobalPos.x)
+                    settingsDialog.nativeHostWindow.y = Math.round(
+                                pressWindowPos.y + currentGlobalPos.y - pressGlobalPos.y)
+                    return
+                }
                 settingsDialog.x += mouse.x - clickPos.x
                 settingsDialog.y += mouse.y - clickPos.y
                 settingsDialog.clampToParent()
+            }
+            onReleased: {
+                nativeMoveActive = false
+                settingsDialog.finishNativeHostMove()
+            }
+            onCanceled: {
+                nativeMoveActive = false
+                settingsDialog.finishNativeHostMove()
             }
         }
 
@@ -1268,10 +1672,112 @@ Dialog {
 
             Rectangle {
                 width: 34; height: 34; radius: 6
+                readonly property bool available: settingsDialog.settingsFontScale > 1.0
+                color: !available ? Qt.rgba(1, 1, 1, 0.04)
+                       : setupFontDecreaseMA.containsMouse
+                       ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.20)
+                       : Qt.rgba(1, 1, 1, 0.1)
+                border.color: !available ? glassBorder
+                              : setupFontDecreaseMA.containsMouse ? secondaryCyan : glassBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("A−")
+                    color: !parent.available ? textDim
+                           : setupFontDecreaseMA.containsMouse ? secondaryCyan : textPrimary
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: setupFontDecreaseMA
+                    anchors.fill: parent
+                    enabled: parent.available
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: settingsDialog.decreaseSetupFont()
+                }
+
+                ToolTip.visible: setupFontDecreaseMA.containsMouse
+                ToolTip.delay: 400
+                ToolTip.text: qsTr("Setup text size: %1%. Decrease. This affects Setup only.")
+                              .arg(settingsDialog.settingsFontZoomPercent)
+            }
+
+            Rectangle {
+                width: 34; height: 34; radius: 6
+                readonly property bool available: settingsDialog.settingsFontScale < 1.3
+                color: !available ? Qt.rgba(1, 1, 1, 0.04)
+                       : setupFontIncreaseMA.containsMouse
+                         ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.20)
+                         : Qt.rgba(1, 1, 1, 0.1)
+                border.color: !available ? glassBorder
+                              : setupFontIncreaseMA.containsMouse ? secondaryCyan : glassBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("A+")
+                    color: !parent.available ? textDim
+                           : setupFontIncreaseMA.containsMouse ? secondaryCyan : textPrimary
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: setupFontIncreaseMA
+                    anchors.fill: parent
+                    enabled: parent.available
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: settingsDialog.increaseSetupFont()
+                }
+
+                ToolTip.visible: setupFontIncreaseMA.containsMouse
+                ToolTip.delay: 400
+                ToolTip.text: qsTr("Setup text size: %1%. Increase. This affects Setup only.")
+                              .arg(settingsDialog.settingsFontZoomPercent)
+            }
+
+            Rectangle {
+                width: 48; height: 34; radius: 6
+                readonly property bool available: settingsDialog.settingsFontScale !== 1.0
+                color: !available ? Qt.rgba(1, 1, 1, 0.04)
+                       : setupFontResetMA.containsMouse
+                         ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.20)
+                         : Qt.rgba(1, 1, 1, 0.1)
+                border.color: !available ? glassBorder
+                              : setupFontResetMA.containsMouse ? secondaryCyan : glassBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("Reset")
+                    color: !parent.available ? textDim
+                           : setupFontResetMA.containsMouse ? secondaryCyan : textPrimary
+                    font.pixelSize: 9
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: setupFontResetMA
+                    anchors.fill: parent
+                    enabled: parent.available
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: settingsDialog.resetSetupFont()
+                }
+
+                ToolTip.visible: setupFontResetMA.containsMouse
+                ToolTip.delay: 400
+                ToolTip.text: qsTr("Setup text size: %1%. Reset to 100%. This affects Setup only.")
+                              .arg(settingsDialog.settingsFontZoomPercent)
+            }
+
+            Rectangle {
+                width: 34; height: 34; radius: 6
                 color: closeMA.containsMouse ? Qt.rgba(0.95,0.26,0.21,0.3) : Qt.rgba(1,1,1,0.1)
                 border.color: closeMA.containsMouse ? "#f44336" : glassBorder
-                Text { anchors.centerIn: parent; text: "\u2715"; color: closeMA.containsMouse ? "#f44336" : textPrimary; font.pixelSize: 14 }
-                MouseArea { id: closeMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.close() }
+                Text { anchors.centerIn: parent; text: qsTr("\u2715"); color: closeMA.containsMouse ? "#f44336" : textPrimary; font.pixelSize: 14 }
+                MouseArea { id: closeMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.requestWindowClose() }
             }
         }
     }
@@ -1284,11 +1790,12 @@ Dialog {
 
         RowLayout {
             anchors.fill: parent
-            anchors.margins: 12
-            spacing: 10
+            anchors.margins: settingsDialog.width < 520 ? 8 : 12
+            spacing: settingsDialog.width < 520 ? 8 : 10
 
             Text {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 text: qsTr("Changes are applied immediately where supported.")
                 color: textSecondary
                 font.pixelSize: 11
@@ -1296,8 +1803,9 @@ Dialog {
             }
 
             Rectangle {
-                width: 110
-                height: 36
+                Layout.preferredWidth: settingsDialog.width < 520 ? 84 : 110
+                Layout.minimumWidth: 72
+                Layout.preferredHeight: 36
                 radius: 6
                 color: closeFooterMA.containsMouse ? Qt.rgba(1,1,1,0.08) : bgMedium
                 border.color: glassBorder
@@ -1314,13 +1822,14 @@ Dialog {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: settingsDialog.close()
+                    onClicked: settingsDialog.requestWindowClose()
                 }
             }
 
             Rectangle {
-                width: 110
-                height: 36
+                Layout.preferredWidth: settingsDialog.width < 520 ? 84 : 110
+                Layout.minimumWidth: 72
+                Layout.preferredHeight: 36
                 radius: 6
                 color: okFooterMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.22) : bgMedium
                 border.color: accentGreen
@@ -1338,10 +1847,7 @@ Dialog {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        bridge.saveSettings()
-                        settingsDialog.close()
-                    }
+                    onClicked: settingsDialog.closeAfterPersist()
                 }
             }
         }
@@ -1349,32 +1855,59 @@ Dialog {
 
     // ── Content ──────────────────────────────────────────────────────────
     contentItem: Item {
-        RowLayout {
-            anchors.fill: parent
-            spacing: 0
+        clip: true
 
-            // ── Sidebar ──────────────────────────────────────────────
-            Rectangle {
-                Layout.preferredWidth: 190
-                Layout.fillHeight: true
-                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
+        Item {
+            id: settingsContentScaler
+            width: parent.width / settingsDialog.settingsFontScale
+            height: parent.height / settingsDialog.settingsFontScale
+            scale: settingsDialog.settingsFontScale
+            transformOrigin: Item.TopLeft
 
-                Column {
+            RowLayout {
+                anchors.fill: parent
+                spacing: 0
+
+                // ── Sidebar ──────────────────────────────────────────────
+                Rectangle {
+                    Layout.preferredWidth: settingsDialog.narrowSettingsLayout ? 156 : (settingsDialog.compactSettingsLayout ? 180 : 210)
+                    Layout.minimumWidth: settingsDialog.narrowSettingsLayout ? 148 : (settingsDialog.compactSettingsLayout ? 160 : 210)
+                    Layout.fillHeight: true
+                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
+
+                Flickable {
+                    id: settingsTabScroll
                     anchors.fill: parent
-                    anchors.topMargin: 8
-                    anchors.bottomMargin: 8
-                    anchors.leftMargin: 6
-                    anchors.rightMargin: 6
-                    spacing: 2
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.VerticalFlick
+                    contentWidth: width
+                    contentHeight: Math.max(height, settingsTabColumn.implicitHeight + 16)
+                    ScrollBar.horizontal: ScrollBar {
+                        policy: ScrollBar.AlwaysOff
+                    }
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                        interactive: true
+                        active: hovered || pressed
+                    }
 
-                    Repeater {
-                        model: [qsTr("Station"), qsTr("Radio"), qsTr("Audio"), qsTr("TX"), qsTr("Display"), qsTr("Decode"), qsTr("Reporting"), qsTr("Frequencies"), qsTr("Colors"), qsTr("Advanced"), qsTr("Alerts"), qsTr("Filters")]
-                        delegate: Rectangle {
-                            width: parent.width; height: 36; radius: 6
-                            color: tabStack.currentIndex === index ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (tabMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
-                            border.color: tabStack.currentIndex === index ? primaryBlue : "transparent"
-                            Text { anchors.centerIn: parent; text: modelData; color: tabStack.currentIndex === index ? primaryBlue : textSecondary; font.pixelSize: 12 }
-                            MouseArea { id: tabMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.currentTab = index }
+                    Column {
+                        id: settingsTabColumn
+                        x: 6
+                        y: 8
+                        width: Math.max(0, parent.width - 12)
+                        spacing: 2
+
+                        Repeater {
+                            model: [qsTr("Station"), qsTr("Radio"), qsTr("Audio"), qsTr("TX"), qsTr("Display"), qsTr("Decode"), qsTr("Reporting"), qsTr("Frequencies"), qsTr("Colors"), qsTr("Advanced"), qsTr("Alerts"), qsTr("Filters"), qsTr("UI Buttons"), qsTr("Callsign")]
+                            delegate: Rectangle {
+                                width: settingsTabColumn.width; height: 36; radius: 6
+                                color: tabStack.currentIndex === index ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (tabMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
+                                border.color: tabStack.currentIndex === index ? primaryBlue : "transparent"
+                                Text { anchors.centerIn: parent; text: modelData; color: tabStack.currentIndex === index ? primaryBlue : textSecondary; font.pixelSize: 12 }
+                                MouseArea { id: tabMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.currentTab = index }
+                            }
                         }
                     }
                 }
@@ -1384,4814 +1917,284 @@ Dialog {
             Rectangle { Layout.fillHeight: true; width: 1; color: glassBorder }
 
             // ── StackLayout ──────────────────────────────────────────
-            StackLayout {
+            Item {
                 id: tabStack
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: settingsDialog.currentTab
+                property int currentIndex: settingsDialog.currentTab
 
                 // ═══════════ TAB 0 — STAZIONE ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Dettagli Stazione ──
-                        Text { text: qsTr("STATION DETAILS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("My Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.callsign; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.callsign = text
-                        }
-                        Text { text: qsTr("My Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.grid; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.grid = text
-                        }
-
-                        Text { text: qsTr("Auto Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        CheckBox {
-                            checked: bridge.getSetting("AutoGrid", false)
-                            onCheckedChanged: bridge.setSetting("AutoGrid", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("IARU Region:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            model: ["1","2","3"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: Number(bridge.getSetting("Region", 0))
-                            onActivated: bridge.setSetting("Region", currentIndex)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: parent.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                        }
-
-                        Text { text: qsTr("Type 2 Msg Gen:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            model: [qsTr("Full"),qsTr("Type 1 prefix"),qsTr("Type 2 prefix")]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: Number(bridge.getSetting("Type2MsgGen", 0))
-                            onActivated: bridge.setSetting("Type2MsgGen", currentIndex)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: parent.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                        }
-                        Text { text: qsTr("Op Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.getSetting("OpCall", ""); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("OpCall", text)
-                        }
-
-                        // ── Info Stazione ──
-                        Text { text: qsTr("STATION INFO"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Station Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.stationName; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.stationName = text
-                        }
-                        Text { text: qsTr("QTH:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.stationQth; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.stationQth = text
-                        }
-
-                        Text { text: qsTr("Rig Info:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.stationRigInfo; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.stationRigInfo = text
-                        }
-                        Text { text: qsTr("Antenna:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            text: bridge.stationAntenna; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.stationAntenna = text
-                        }
-
-                        Text { text: qsTr("Power (W):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        SpinBox {
-                            id: stPowerSpin
-                            from: 0; to: 9999; value: bridge.stationPowerWatts; editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth
-                            onValueChanged: bridge.stationPowerWatts = value
-                            contentItem: TextInput { text: stPowerSpin.textFromValue(stPowerSpin.value, stPowerSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !stPowerSpin.editable; validator: stPowerSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                // Lazy Settings tab 0
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 0
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab0.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=0")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 1 — RADIO ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Backend CAT ──
-                        Text { text: qsTr("BACKEND CAT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Backend:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Row {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 6
-                            Repeater {
-                                model: [["native",qsTr("Native (15 radios)")],["hamlib",qsTr("Hamlib (300+ radios)")],["tci","TCI"],["omnirig","OmniRig"]]
-                                delegate: Rectangle {
-                                    property string bk: modelData[0]
-                                    property bool active: bridge.catBackend === bk
-                                    property bool catBusy: settingsDialog.catConnectionInProgress()
-                                    width: 170; height: 30; radius: 6
-                                    color: active ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (catBusy ? Qt.rgba(1,1,1,0.025) : (bkMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent"))
-                                    border.color: active ? primaryBlue : glassBorder
-                                    Text { anchors.centerIn: parent; text: modelData[1]; color: active ? primaryBlue : (catBusy ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.55) : textSecondary); font.pixelSize: 11 }
-                                    MouseArea { id: bkMA; anchors.fill: parent; hoverEnabled: true; enabled: !parent.catBusy; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        onClicked: {
-                                            bridge.catBackend = bk
-                                            if (bk === "tci")
-                                                settingsDialog.selectTciRigIfNeeded()
-                                            settingsDialog.scheduleCatPersist()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Banner: porta seriale occupata da altro software
-                        Item {
-                            Layout.columnSpan: 4
-                            Layout.fillWidth: true
-                            visible: bridge.lastCatError.indexOf("occupata") !== -1
-                            implicitHeight: visible ? (settingsBannerText.implicitHeight + 16) : 0
-                            Rectangle {
-                                anchors.fill: parent
-                                color: Qt.rgba(1.0, 0.65, 0.0, 0.15)
-                                border.color: Qt.rgba(1.0, 0.65, 0.0, 0.6)
-                                border.width: 1
-                                radius: 6
-                                Text {
-                                    id: settingsBannerText
-                                    anchors.fill: parent
-                                    anchors.margins: 8
-                                    wrapMode: Text.WordWrap
-                                    color: textPrimary
-                                    font.pixelSize: 11
-                                    text: bridge.lastCatError + "\n" + qsTr("Tip: close OmniRig from the Windows tray icon, then press Connect again.")
-                                }
-                            }
-                        }
-
-                        // ── Stato connessione ──
-                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Row {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 8
-                            Rectangle { width: 12; height: 12; radius: 6; color: bridge.catConnected ? accentGreen : "#f44336"; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: bridge.catConnected ? qsTr("Connected") + " — " + bridge.catRigName + " — " + bridge.catMode : qsTr("Disconnected"); color: bridge.catConnected ? accentGreen : "#f44336"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
-                            Item { width: 20; height: 1 }
-                            Rectangle {
-                                width: 100; height: 28; radius: 6
-                                color: connMA.containsMouse ? (bridge.catConnected ? Qt.rgba(0.95,0.26,0.21,0.2) : Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.2)) : "transparent"
-                                border.color: bridge.catConnected ? "#f44336" : accentGreen
-                                Text { anchors.centerIn: parent; text: bridge.catConnected ? qsTr("Disconnect") : qsTr("Connect"); color: bridge.catConnected ? "#f44336" : accentGreen; font.pixelSize: 11 }
-                                MouseArea { id: connMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: settingsDialog.toggleCatConnection()
-                                }
-                            }
-                            Rectangle {
-                                width: 28; height: 28; radius: 6
-                                color: refreshMA.containsMouse ? bgMedium : "transparent"
-                                border.color: glassBorder
-                                Text { anchors.centerIn: parent; text: "↻"; color: secondaryCyan; font.pixelSize: 16 }
-                                MouseArea { id: refreshMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: settingsDialog.refreshCatPorts()
-                                }
-                            }
-                        }
-
-                        // ── Controllo CAT ──
-                        Text { text: qsTr("CAT CONTROL"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Rig:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: rigCombo
-                            model: bridge.catBackend === "tci" ? ["TCI Client RX1", "TCI Client RX2"] : (bridge.catManager ? bridge.catManager.rigList : []); Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
-                            Layout.minimumWidth: wideFieldMinWidth
-                            property string filterText: ""
-                            property var filteredRigList: {
-                                var src = bridge.catBackend === "tci" ? ["TCI Client RX1", "TCI Client RX2"] : (bridge.catManager ? bridge.catManager.rigList : [])
-                                var q = filterText.trim().toLowerCase()
-                                if (q.length === 0)
-                                    return src
-
-                                var terms = q.split(/\s+/)
-                                var out = []
-                                for (var i = 0; i < src.length; ++i) {
-                                    var name = String(src[i])
-                                    var haystack = name.toLowerCase()
-                                    var match = true
-                                    for (var t = 0; t < terms.length; ++t) {
-                                        if (terms[t].length > 0 && haystack.indexOf(terms[t]) < 0) {
-                                            match = false
-                                            break
-                                        }
-                                    }
-                                    if (match)
-                                        out.push(name)
-                                }
-                                return out
-                            }
-                            function chooseRig(name) {
-                                var idx = model.indexOf(name)
-                                if (idx >= 0)
-                                    currentIndex = idx
-                                if (bridge.catManager) {
-                                    bridge.catManager.rigName = name
-                                    settingsDialog.enforceForceLineAvailability()
-                                }
-                                settingsDialog.scheduleCatPersist()
-                                rigComboPopup.close()
-                            }
-                            currentIndex: {
-                                if (!bridge.catManager)
-                                    return -1
-                                return find(bridge.catManager.rigName)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) {
-                                    bridge.catManager.rigName = currentText
-                                    settingsDialog.enforceForceLineAvailability()
-                                }
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text {
-                                text: rigCombo.currentIndex >= 0 ? rigCombo.displayText : settingsDialog.activeRigName()
-                                color: textPrimary
-                                font.pixelSize: controlFontSize
-                                leftPadding: 8
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
-                            }
-                            popup: Popup {
-                                id: rigComboPopup
-                                parent: Overlay.overlay
-                                readonly property var comboOrigin: rigCombo && parent ? rigCombo.mapToItem(parent, 0, 0) : Qt.point(0, 0)
-                                readonly property real wantedHeight: Math.min(420,
-                                                 Math.max(180,
-                                                          Math.min(settingsDialog.height - 160,
-                                                                   54 + Math.max(34, rigComboPopupList.contentHeight))))
-                                readonly property real spaceBelow: parent ? parent.height - comboOrigin.y - rigCombo.height - 8 : wantedHeight
-                                readonly property real spaceAbove: parent ? comboOrigin.y - 8 : 0
-                                readonly property bool openAbove: wantedHeight > spaceBelow && spaceAbove > spaceBelow
-                                x: parent ? Math.max(8, Math.min(comboOrigin.x, parent.width - width - 8)) : 0
-                                y: parent
-                                   ? (openAbove
-                                      ? Math.max(8, comboOrigin.y - height - 2)
-                                      : Math.min(comboOrigin.y + rigCombo.height + 2, parent.height - height - 8))
-                                   : 0
-                                width: parent ? Math.min(Math.max(rigCombo.width, 560), Math.max(80, parent.width - 16))
-                                              : Math.max(rigCombo.width, 560)
-                                height: Math.min(420,
-                                                 Math.max(180,
-                                                          Math.min(settingsDialog.height - 160,
-                                                                   54 + Math.max(34, rigComboPopupList.contentHeight))))
-                                focus: true
-                                onOpened: {
-                                    rigCombo.filterText = ""
-                                    rigSearchField.forceActiveFocus()
-                                }
-                                background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                                contentItem: Column {
-                                    width: rigComboPopup.width
-                                    spacing: 6
-
-                                    TextField {
-                                        id: rigSearchField
-                                        x: 8
-                                        width: parent.width - 16
-                                        height: 36
-                                        placeholderText: qsTr("Search radio, model or brand...")
-                                        text: rigCombo.filterText
-                                        selectByMouse: true
-                                        color: textPrimary
-                                        placeholderTextColor: textSecondary
-                                        font.pixelSize: controlFontSize
-                                        leftPadding: 10
-                                        rightPadding: 10
-                                        onTextChanged: rigCombo.filterText = text
-                                        background: Rectangle {
-                                            color: bgMedium
-                                            border.color: activeFocus ? secondaryCyan : glassBorder
-                                            radius: 4
-                                        }
-                                    }
-
-                                    ListView {
-                                        id: rigComboPopupList
-                                        x: 8
-                                        width: parent.width - 16
-                                        height: rigComboPopup.height - rigSearchField.height - 22
-                                        clip: true
-                                        model: rigCombo.filteredRigList
-                                        currentIndex: -1
-                                        boundsBehavior: Flickable.StopAtBounds
-                                        flickableDirection: Flickable.VerticalFlick
-                                        interactive: true
-                                        focus: true
-                                        reuseItems: true
-                                        delegate: ItemDelegate {
-                                            width: rigComboPopupList.width
-                                            height: 34
-                                            highlighted: modelData === settingsDialog.activeRigName()
-                                            contentItem: Text {
-                                                text: modelData
-                                                color: parent.highlighted ? secondaryCyan : textPrimary
-                                                font.pixelSize: 12
-                                                verticalAlignment: Text.AlignVCenter
-                                                elide: Text.ElideRight
-                                            }
-                                            background: Rectangle {
-                                                color: hovered || parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
-                                            }
-                                            onClicked: rigCombo.chooseRig(modelData)
-                                        }
-                                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
-                                    }
-                                }
-                            }
-                        }
-
-                        Text {
-                            visible: settingsDialog.usesSerialControls()
-                            text: qsTr("Serial Port:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        RowLayout {
-                            visible: settingsDialog.usesSerialControls()
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: wideFieldMinWidth
-                            spacing: 8
-
-                            ComboBox {
-                                id: serialPortCombo
-                                visible: settingsDialog.usesSerialControls()
-                                model: bridge.catManager ? bridge.catManager.portList : []
-                                Layout.fillWidth: true
-                                implicitHeight: controlHeight
-                                currentIndex: {
-                                    if (!bridge.catManager)
-                                        return -1
-                                    return find(bridge.catManager.serialPort)
-                                }
-                                onActivated: {
-                                    if (bridge.catManager) {
-                                        bridge.catManager.serialPort = currentText
-                                        settingsDialog.enforceForceLineAvailability()
-                                    }
-                                    settingsDialog.scheduleCatPersist()
-                                }
-                                background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                                contentItem: Text {
-                                    text: serialPortCombo.currentIndex >= 0 ? serialPortCombo.displayText : (bridge.catManager ? bridge.catManager.serialPort : "")
-                                    color: textPrimary
-                                    font.pixelSize: controlFontSize
-                                    leftPadding: 8
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-                                delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                    background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                                popup: SettingsComboPopup { combo: serialPortCombo }
-                            }
-
-                            Rectangle {
-                                id: serialPortRefreshButton
-                                Layout.preferredWidth: controlHeight
-                                Layout.preferredHeight: controlHeight
-                                radius: 4
-                                color: serialPortRefreshMA.containsMouse ? bgMedium : "transparent"
-                                border.color: secondaryCyan
-                                border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "↻"
-                                    color: secondaryCyan
-                                    font.pixelSize: 17
-                                    font.bold: true
-                                }
-
-                                MouseArea {
-                                    id: serialPortRefreshMA
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: settingsDialog.refreshCatPorts()
-                                }
-
-                                ToolTip.visible: serialPortRefreshMA.containsMouse
-                                ToolTip.text: qsTr("Refresh serial ports")
-                            }
-                        }
-                        Text {
-                            visible: settingsDialog.usesSerialControls()
-                            text: qsTr("Baud Rate:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        ComboBox {
-                            id: baudCombo
-                            visible: settingsDialog.usesSerialControls()
-                            model: bridge.catManager && bridge.catManager.baudList ? bridge.catManager.baudList : ["4800","9600","19200","38400","57600","115200"]
-                            Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                var baud = settingsDialog.activeBaudRateText()
-                                return baud === "" ? -1 : settingsDialog.stringListIndexOf(model, baud)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) bridge.catManager.baudRate = parseInt(currentText)
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text {
-                                text: baudCombo.currentIndex >= 0 ? baudCombo.displayText : settingsDialog.activeBaudRateText()
-                                color: textPrimary
-                                font.pixelSize: controlFontSize
-                                leftPadding: 8
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: baudCombo }
-                        }
-
-                        // ── CI-V Address (solo rig ICOM) ──
-                        Text {
-                            visible: settingsDialog.usesSerialControls() && settingsDialog.rigIsIcom()
-                            text: qsTr("CI-V Addr:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        TextField {
-                            id: civAddrField
-                            visible: settingsDialog.usesSerialControls() && settingsDialog.rigIsIcom()
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            Layout.minimumWidth: wideFieldMinWidth
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            placeholderText: settingsDialog.civAddressPlaceholderText()
-                            readOnly: true
-                            selectByMouse: true
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            text: settingsDialog.civAddressText()
-                        }
-
-                        Text {
-                            visible: settingsDialog.usesNetworkControls()
-                            text: qsTr("Host:Port:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        TextField {
-                            visible: settingsDialog.usesNetworkControls()
-                            text: bridge.catManager ? bridge.catManager.networkPort : ""
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            Layout.minimumWidth: wideFieldMinWidth
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            placeholderText: bridge.catManager && bridge.catManager.rigName === "Ham Radio Deluxe" ? "127.0.0.1:7809" : "host:port"
-                            selectByMouse: true
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onEditingFinished: {
-                                if (bridge.catManager) bridge.catManager.networkPort = text.trim()
-                                settingsDialog.scheduleCatPersist()
-                            }
-                        }
-
-                        Text {
-                            visible: bridge.catManager && bridge.catManager.rigName === "Ham Radio Deluxe"
-                            text: qsTr("HRD Radio:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        CheckBox {
-                            id: hrdStrictRadioMatchCheck
-                            visible: bridge.catManager && bridge.catManager.rigName === "Ham Radio Deluxe"
-                            checked: bridge.catManager ? bridge.catManager.hrdStrictRadioMatch : true
-                            text: qsTr("Strict match (abort if configured radio is not current in HRD)")
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            onCheckedChanged: {
-                                if (bridge.catManager && bridge.catManager.hrdStrictRadioMatch !== checked) {
-                                    bridge.catManager.hrdStrictRadioMatch = checked
-                                    settingsDialog.scheduleCatPersist()
-                                }
-                            }
-                            contentItem: Text {
-                                text: parent.text
-                                color: textPrimary
-                                font.pixelSize: 12
-                                leftPadding: 26
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-
-                        Text {
-                            visible: settingsDialog.usesTciControls()
-                            text: qsTr("TCI Host:Port:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        TextField {
-                            visible: settingsDialog.usesTciControls()
-                            text: bridge.catManager ? bridge.catManager.tciPort : ""
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            Layout.minimumWidth: wideFieldMinWidth
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            placeholderText: "localhost:50001"
-                            selectByMouse: true
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: {
-                                if (bridge.catManager) bridge.catManager.tciPort = text
-                                settingsDialog.scheduleCatPersist()
-                            }
-                        }
-
-                        Text {
-                            visible: settingsDialog.usesTciControls()
-                            text: qsTr("TCI Audio:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 100
-                        }
-                        CheckBox {
-                            visible: settingsDialog.usesTciControls()
-                            checked: bridge.catManager ? bridge.catManager.tciAudioEnabled : true
-                            text: qsTr("RX/TX via TCI")
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            onCheckedChanged: {
-                                if (bridge.catManager) bridge.catManager.tciAudioEnabled = checked
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            contentItem: Text {
-                                text: parent.text
-                                color: textPrimary
-                                font.pixelSize: 12
-                                leftPadding: 26
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-
-                        Text { text: qsTr("PTT Method:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: pttCombo
-                            enabled: !settingsDialog.usesTciControls()
-                            model: settingsDialog.usesTciControls()
-                                   ? ["CAT"]
-                                   : (bridge.catManager && bridge.catManager.pttMethodList ? bridge.catManager.pttMethodList : ["CAT","DTR","RTS","VOX"])
-                            Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                if (settingsDialog.usesTciControls())
-                                    return 0
-                                var methods = (bridge.catManager && bridge.catManager.pttMethodList)
-                                              ? bridge.catManager.pttMethodList
-                                              : ["CAT","DTR","RTS","VOX"]
-                                var savedMethod = bridge.catManager ? bridge.catManager.pttMethod : "CAT"
-                                var idx = settingsDialog.stringListIndexOf(methods, savedMethod)
-                                return idx >= 0 ? idx : 0
-                            }
-                            onActivated: {
-                                if (bridge.catManager) {
-                                    bridge.catManager.pttMethod = currentText
-                                    settingsDialog.enforceForceLineAvailability()
-                                }
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text {
-                                text: {
-                                    if (pttCombo.currentIndex >= 0 && pttCombo.displayText !== "")
-                                        return pttCombo.displayText
-                                    if (bridge.catManager && bridge.catManager.pttMethod !== undefined && bridge.catManager.pttMethod !== null) {
-                                        var fallback = String(bridge.catManager.pttMethod).trim().toUpperCase()
-                                        return fallback !== "" ? fallback : "CAT"
-                                    }
-                                    return "CAT"
-                                }
-                                color: pttCombo.enabled ? textPrimary : textSecondary
-                                font.pixelSize: controlFontSize
-                                leftPadding: 8
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: pttCombo }
-                        }
-                        Text {
-                            visible: settingsDialog.usesSeparatePttPort()
-                            text: qsTr("PTT Port:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: labelWidth
-                        }
-                        ComboBox {
-                            id: pttPortCombo
-                            visible: settingsDialog.usesSeparatePttPort()
-                            model: settingsDialog.pttPortOptions()
-                            Layout.fillWidth: true
-                            implicitHeight: controlHeight
-                            currentIndex: {
-                                if (!bridge.catManager)
-                                    return -1
-                                var idx = find(bridge.catManager.pttPort)
-                                return idx >= 0 ? idx : (count > 0 ? 0 : -1)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) {
-                                    bridge.catManager.pttPort = currentText
-                                    settingsDialog.enforceForceLineAvailability()
-                                }
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: pttPortCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: pttPortCombo }
-                        }
-                        Item { visible: settingsDialog.usesSeparatePttPort(); Layout.fillWidth: true; Layout.columnSpan: 2 }
-                        Text { text: qsTr("Poll Interval (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: pollSpin
-                            from: 1; to: 99; value: bridge.catManager ? bridge.catManager.pollInterval : 3; editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: {
-                                if (bridge.catManager) bridge.catManager.pollInterval = value
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            contentItem: TextInput { text: pollSpin.textFromValue(pollSpin.value, pollSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !pollSpin.editable; validator: pollSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        // ── Parametri Seriali ──
-                        Text {
-                            visible: settingsDialog.usesSerialControls()
-                            text: qsTr("SERIAL PARAMETERS")
-                            color: secondaryCyan
-                            font.pixelSize: 12
-                            font.bold: true
-                            Layout.columnSpan: 4
-                            Layout.topMargin: 10
-                        }
-                        Rectangle {
-                            visible: settingsDialog.usesSerialControls()
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 4
-                            height: 1
-                            color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3)
-                        }
-
-                        Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Data Bits:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: dataBitsCombo
-                            visible: settingsDialog.usesSerialControls()
-                            model: ["Default","8","7"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                if (!bridge.catManager)
-                                    return 0
-                                return settingsDialog.catSerialChoiceIndex(model, bridge.catManager.dataBits, 0)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) bridge.catManager.dataBits = currentText
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: dataBitsCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: dataBitsCombo }
-                        }
-                        Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Stop Bits:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: stopBitsCombo
-                            visible: settingsDialog.usesSerialControls()
-                            model: ["Default","1","2"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                return settingsDialog.catSerialChoiceIndex(model, settingsDialog.activeStopBitsText(), 0)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) bridge.catManager.stopBits = currentText
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: stopBitsCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: stopBitsCombo }
-                        }
-
-                        Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Handshake:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: handshakeCombo
-                            visible: settingsDialog.usesSerialControls()
-                            model: ["Default","none","xonxoff","hardware"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                if (!bridge.catManager)
-                                    return 0
-                                return settingsDialog.catSerialChoiceIndex(model, bridge.catManager.handshake, 0)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) {
-                                    bridge.catManager.handshake = currentText
-                                    settingsDialog.enforceForceLineAvailability()
-                                }
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.handshakeChoiceLabel(handshakeCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.handshakeChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: handshakeCombo }
-                        }
-                        Item { visible: settingsDialog.usesSerialControls(); Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceDtrControlEnabled(); text: qsTr("Force DTR:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: forceDtrCombo
-                            visible: settingsDialog.usesSerialControls()
-                            enabled: settingsDialog.forceDtrControlEnabled()
-                            model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                if (!enabled || !bridge.catManager)
-                                    return 0
-                                var v = settingsDialog.forceLineMode(bridge.catManager.forceDtr, bridge.catManager.dtrHigh)
-                                var idx = find(v)
-                                return idx >= 0 ? idx : 0
-                            }
-                            onActivated: settingsDialog.applyForceLineValue("dtr", currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            // Lookup diretto su model[currentIndex] — displayText non si propaga
-                            // affidabilmente al primo render con model JS array (Qt 6 quirk).
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.model[Math.max(0, forceDtrCombo.currentIndex)]); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: forceDtrCombo }
-                        }
-                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceRtsControlEnabled(); text: qsTr("Force RTS:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: forceRtsCombo
-                            visible: settingsDialog.usesSerialControls()
-                            enabled: settingsDialog.forceRtsControlEnabled()
-                            model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: {
-                                if (!enabled || !bridge.catManager)
-                                    return 0
-                                var v = settingsDialog.forceLineMode(bridge.catManager.forceRts, bridge.catManager.rtsHigh)
-                                var idx = find(v)
-                                return idx >= 0 ? idx : 0
-                            }
-                            onActivated: settingsDialog.applyForceLineValue("rts", currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.model[Math.max(0, forceRtsCombo.currentIndex)]); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: forceRtsCombo }
-                        }
-
-                        // ── Operazione Split ──
-                        Text { text: qsTr("SPLIT OPERATION"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Split:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: splitCombo
-                            model: settingsDialog.splitModeOptions(); Layout.fillWidth: true; implicitHeight: controlHeight
-                            textRole: "label"
-                            currentIndex: {
-                                if (!bridge.catManager)
-                                    return 0
-                                for (var i = 0; i < splitCombo.model.length; ++i) {
-                                    if (splitCombo.model[i].value === String(bridge.catManager.splitMode))
-                                        return i
-                                }
-                                return 0
-                            }
-                            onActivated: {
-                                if (bridge.catManager) bridge.catManager.splitMode = splitCombo.model[currentIndex].value
-                                settingsDialog.scheduleCatPersist()
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: splitCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData.label; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: splitCombo }
-                        }
-                        Text { text: qsTr("Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: modeCombo
-                            model: ["USB","Data/Pkt","None"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: settingsDialog.settingChoiceIndex("CATMode", model, 0)
-                            onActivated: bridge.setSetting("CATMode", currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(modeCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: modeCombo }
-                        }
-
-                        Text { visible: !settingsDialog.usesTciControls(); text: qsTr("TX Audio Src:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: txAudioSrcCombo
-                            visible: !settingsDialog.usesTciControls()
-                            model: ["Rear/Data","Front/Mic"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: settingsDialog.settingChoiceIndex("TXAudioSource", model, 0)
-                            onActivated: bridge.setSetting("TXAudioSource", currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(txAudioSrcCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: txAudioSrcCombo }
-                        }
-                        Text { visible: settingsDialog.usesTciControls(); text: qsTr("TX Audio:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            visible: settingsDialog.usesTciControls()
-                            text: qsTr("TCI Audio")
-                            readOnly: true
-                            enabled: false
-                            Layout.fillWidth: true
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textSecondary
-                            font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── Diagnostica ──
-                        Text { text: qsTr("DIAGNOSTICS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Check SWR:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.supportsSwrTelemetry() ? bridge.getSetting("CheckSWR", false) : false
-                            enabled: settingsDialog.supportsSwrTelemetry()
-                            onCheckedChanged: if (enabled) {
-                                bridge.setSetting("CheckSWR", checked)
-                                if (checked && !bridge.getSetting("PWRandSWR", false))
-                                    bridge.setSetting("PWRandSWR", true)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("PWR and SWR:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.supportsSwrTelemetry() ? bridge.getSetting("PWRandSWR", false) : false
-                            enabled: settingsDialog.supportsSwrTelemetry()
-                            onCheckedChanged: if (enabled) bridge.setSetting("PWRandSWR", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: ""; Layout.preferredWidth: 100 }
-                        RowLayout {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 10
-                            Rectangle {
-                                property bool catBusy: settingsDialog.catConnectionInProgress()
-                                width: 100; height: controlHeight; radius: 4
-                                color: catBusy ? bgMedium : (catConnMA.containsMouse ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.3) : bgMedium)
-                                border.color: catBusy ? glassBorder : accentGreen
-                                Text { anchors.centerIn: parent; text: parent.catBusy ? qsTr("Connecting...") : qsTr("Connect"); color: parent.catBusy ? textSecondary : accentGreen; font.pixelSize: 12 }
-                                MouseArea { id: catConnMA; anchors.fill: parent; hoverEnabled: true; enabled: !parent.catBusy; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.connectRig() } }
-                            }
-                            Rectangle {
-                                property bool catBusy: settingsDialog.catConnectionInProgress()
-                                width: 100; height: controlHeight; radius: 4
-                                color: catBusy ? bgMedium : (catDiscMA.containsMouse ? Qt.rgba(1,0.3,0.3,0.3) : bgMedium)
-                                border.color: catBusy ? glassBorder : "#f44336"
-                                Text { anchors.centerIn: parent; text: qsTr("Disconnect"); color: parent.catBusy ? textSecondary : "#f44336"; font.pixelSize: 12 }
-                                MouseArea { id: catDiscMA; anchors.fill: parent; hoverEnabled: true; enabled: !parent.catBusy; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.disconnectRig() } }
-                            }
-                        }
-                        Text {
-                            visible: bridge.catBackend === "hamlib"
-                            text: qsTr("Hamlib:")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            Layout.preferredWidth: labelWidth
-                        }
-                        RowLayout {
-                            visible: bridge.catBackend === "hamlib"
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            spacing: 10
-                            Rectangle {
-                                width: 180; height: controlHeight; radius: 4
-                                color: hamlibUpdateMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
-                                border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: qsTr("Open Hamlib update"); color: primaryBlue; font.pixelSize: 12 }
-                                MouseArea {
-                                    id: hamlibUpdateMA
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: bridge.openHamlibUpdatePage()
-                                }
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                text: qsTr("Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.")
-                                wrapMode: Text.Wrap
-                                color: textSecondary
-                                font.pixelSize: 11
-                            }
-                        }
+                // Lazy Settings tab 1
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 1
+                    id: settingsTab1Loader
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab1.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=1")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 2 — AUDIO ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Dispositivi Audio ──
-                        Text { text: qsTr("AUDIO DEVICES"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 2; Layout.topMargin: 4 }
-                        Item { Layout.fillWidth: true }
-                        Rectangle {
-                            Layout.preferredWidth: 110
-                            Layout.preferredHeight: 28
-                            Layout.alignment: Qt.AlignRight
-                            radius: 6
-                            color: audioRefreshMA.containsMouse ? bgMedium : "transparent"
-                            border.color: glassBorder
-                            Text {
-                                anchors.centerIn: parent
-                                text: qsTr("↻  Refresh")
-                                color: secondaryCyan
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            MouseArea {
-                                id: audioRefreshMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsDialog.refreshAudioDevices()
-                            }
-                        }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Input Device:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            id: audioInDevCombo
-                            model: bridge.audioInputDevices
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            Layout.minimumWidth: wideFieldMinWidth
-                            implicitHeight: controlHeight
-                            currentIndex: settingsDialog.stringListIndexOf(bridge.audioInputDevices, bridge.audioInputDevice)
-                            onActivated: bridge.audioInputDevice = currentText
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: audioInDevCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.width: Math.max(audioInDevCombo.width, 560)
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Input Channel:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            id: audioInChCombo
-                            model: [qsTr("Mono"),qsTr("Left"),qsTr("Right"),qsTr("Both")]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            Layout.minimumWidth: fieldMinWidth
-                            currentIndex: bridge.audioInputChannel
-                            onActivated: bridge.audioInputChannel = currentIndex
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: audioInChCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Item { Layout.columnSpan: 2 }
-
-                        Text { text: qsTr("Output Device:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            id: audioOutDevCombo
-                            model: bridge.audioOutputDevices
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            Layout.minimumWidth: wideFieldMinWidth
-                            implicitHeight: controlHeight
-                            currentIndex: settingsDialog.stringListIndexOf(bridge.audioOutputDevices, bridge.audioOutputDevice)
-                            onActivated: bridge.audioOutputDevice = currentText
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: audioOutDevCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.width: Math.max(audioOutDevCombo.width, 560)
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Output Channel:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            id: audioOutChCombo
-                            model: [qsTr("Mono"),qsTr("Left"),qsTr("Right"),qsTr("Both")]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            Layout.minimumWidth: fieldMinWidth
-                            currentIndex: bridge.audioOutputChannel
-                            onActivated: bridge.audioOutputChannel = currentIndex
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: audioOutChCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-
-                        // ── Livelli ──
-                        Text { text: qsTr("LEVELS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("RX Input Level:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        Slider {
-                            id: setupRxInputLevelSlider
-                            from: 0; to: 100; live: true; stepSize: 1
-                            Layout.fillWidth: true; Layout.columnSpan: 3
-                            Binding on value { value: bridge.rxInputLevel; when: !setupRxInputLevelSlider.pressed }
-                            onMoved: bridge.rxInputLevel = value
-                            onPressedChanged: {
-                                if (!pressed && Math.abs(bridge.rxInputLevel - value) >= 0.5)
-                                    bridge.rxInputLevel = value
-                            }
-                        }
-
-                        Text { text: qsTr("TX Output Level:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        Slider {
-                            id: setupTxOutputLevelSlider
-                            from: 450; to: 0; live: true; stepSize: 1
-                            Layout.fillWidth: true; Layout.columnSpan: 3
-                            Binding on value { value: bridge.txOutputLevel; when: !setupTxOutputLevelSlider.pressed }
-                            onMoved: bridge.txOutputLevel = value
-                            onPressedChanged: {
-                                if (!pressed && Math.abs(bridge.txOutputLevel - value) >= 0.5)
-                                    bridge.txOutputLevel = value
-                            }
-                        }
-
-                        // ── Directory ──
-                        Text { text: qsTr("DIRECTORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Save Directory:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            id: saveDirectoryField
-                            text: bridge.getSetting("SaveDirectory", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            readOnly: true
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("SaveDirectory", text)
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsDialog.openDirectoryPicker("SaveDirectory", saveDirectoryField.text)
-                            }
-                        }
-
-                        Text { text: qsTr("AzEl Directory:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        TextField {
-                            id: azElDirectoryField
-                            text: bridge.getSetting("AzElDirectory", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            topPadding: controlVerticalPadding; bottomPadding: controlVerticalPadding; verticalAlignment: TextInput.AlignVCenter
-                            readOnly: true
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AzElDirectory", text)
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsDialog.openDirectoryPicker("AzElDirectory", azElDirectoryField.text)
-                            }
-                        }
-
-                        // ── Power Memory ──
-                        Text { text: qsTr("POWER MEMORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Band TX Memory:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("PowerBandTXMemory", false)
-                            onCheckedChanged: bridge.setSetting("PowerBandTXMemory", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Band Tune Mem:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("PowerBandTuneMemory", false)
-                            onCheckedChanged: bridge.setSetting("PowerBandTuneMemory", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                // Lazy Settings tab 2
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 2
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab2.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=2")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 3 — TX ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Frequenza e Timing ──
-                        Text { text: qsTr("FREQUENCY AND TIMING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("TX Frequency:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: txFreqSpin
-                            from: 0; to: 5000; value: bridge.txFrequency; editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: {
-                                if (bridge.txFrequency !== value)
-                                    bridge.txFrequency = value
-                                bridge.setSetting("txFrequency", value)
-                            }
-                            contentItem: TextInput { text: txFreqSpin.textFromValue(txFreqSpin.value, txFreqSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txFreqSpin.editable; validator: txFreqSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("TX Slot:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: txSlotCombo
-                            model: [qsTr("Second (:15/:45)"), qsTr("First (:00/:30)")]
-                            currentIndex: bridge.txPeriod === 1 ? 1 : 0
-                            Layout.fillWidth: true; implicitHeight: controlHeight
-                            onActivated: {
-                                bridge.txPeriod = currentIndex === 1 ? 1 : 0
-                                bridge.setSetting("txPeriod", bridge.txPeriod)
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: txSlotCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("TX Delay (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: txDelaySpin
-                            from: 0; to: 5; stepSize: 1; value: Math.round(Number(bridge.getSetting("TxDelay", 0.2)) * 10); editable: true
-                            textFromValue: function(value, locale) { return Number(value / 10).toLocaleString(locale, "f", 1) }
-                            valueFromText: function(text, locale) {
-                                var parsed = Number.fromLocaleString(locale, text)
-                                return isNaN(parsed) ? 0 : Math.round(parsed * 10)
-                            }
-                            validator: DoubleValidator { bottom: 0.0; top: 0.5; decimals: 1; notation: DoubleValidator.StandardNotation }
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("TxDelay", value / 10)
-                            contentItem: TextInput { text: txDelaySpin.textFromValue(txDelaySpin.value, txDelaySpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txDelaySpin.editable; validator: txDelaySpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Allow TX QSY:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("TxQSYAllowed", false)
-                            onCheckedChanged: bridge.setSetting("TxQSYAllowed", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        // ── Sequenza Automatica ──
-                        Text { text: qsTr("AUTO SEQUENCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Item {
-                            Layout.columnSpan: 4
-                            Layout.fillWidth: true
-                            implicitHeight: autoSequenceGrid.implicitHeight
-
-                            GridLayout {
-                                id: autoSequenceGrid
-                                width: parent.width
-                                columns: 4
-                                columnSpacing: 14
-                                rowSpacing: 10
-                                property int checkWidth: 34
-                                property real labelWidth: Math.max(150, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
-
-                                Text {
-                                    text: qsTr("Auto Sequence:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge.autoSeq
-                                    onCheckedChanged: {
-                                        bridge.autoSeq = checked
-                                        bridge.setSetting("autoSeq", checked)
-                                        bridge.setSetting("AutoSeq", checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text {
-                                    text: qsTr("Send RR73:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge.sendRR73
-                                    onCheckedChanged: {
-                                        bridge.sendRR73 = checked
-                                        bridge.setSetting("sendRR73", checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text {
-                                    text: qsTr("Quick QSO:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge.quickQsoEnabled
-                                    onCheckedChanged: {
-                                        bridge.quickQsoEnabled = checked
-                                        bridge.setSetting("quickQsoEnabled", checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text {
-                                    text: qsTr("Disable TX after 73:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge.getSetting("73TxDisable", true)
-                                    onCheckedChanged: bridge.setSetting("73TxDisable", checked)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text {
-                                    text: qsTr("MSK/Q65 TX until 73:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge.getSetting("RepeatTx", false)
-                                    onCheckedChanged: bridge.setSetting("RepeatTx", checked)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                // Conservative FT2 (weak-signal mode) — opt-in tuning
-                                // anti-QSB: ghost filter rilassato, retry cap esteso SNR-
-                                // adattivo, same-step wait piu' permissivo per partner
-                                // marginali. Default OFF: comportamento standard FT2.
-                                Text {
-                                    text: qsTr("Conservative FT2 (weak-signal mode):")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    id: ft2ConservativeCheck
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge ? bridge.ft2Conservative : false
-                                    onCheckedChanged: {
-                                        if (bridge) bridge.setFt2Conservative(checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                    hoverEnabled: true
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    ToolTip.text: qsTr("Tuning anti-QSB: ghost filter -24 dB invece di -22, retry cap esteso SNR-adattivo (+2..+4 extra), same-step wait rilassato per partner deboli. Default OFF — attivalo se hai partner DX deboli o propagazione marginale.")
-                                }
-
-                                // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory cache (30s)
-                                Text {
-                                    text: qsTr("FT2 partner-memory (anti-QSB):")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    id: ft2PartnerMemoryCheck
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge ? bridge.ft2PartnerMemoryEnabled : false
-                                    enabled: bridge ? bridge.ft2Conservative : false
-                                    onCheckedChanged: {
-                                        if (bridge) bridge.setFt2PartnerMemoryEnabled(checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                    hoverEnabled: true
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    ToolTip.text: qsTr("Cache stato partner (callsign + TX num + qsoProgress + SNR) per 30 secondi: se il partner sparisce per QSB e ricompare entro 30s, ripristina il qsoProgress invece di ripartire da TX1. Richiede Conservative FT2 attivo. Default OFF (opt-in dopo revert 1.0.186 — gate stretto + log [FT2WS-F]). Disattivato in automatico se Conservative OFF.")
-                                }
-
-                                // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
-                                Text {
-                                    text: qsTr("FT2 TX2 re-send on stall:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    id: ft2Tx2ResendCheck
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge ? bridge.ft2Tx2ResendOnStall : true
-                                    enabled: bridge ? bridge.ft2Conservative : false
-                                    onCheckedChanged: {
-                                        if (bridge) bridge.setFt2Tx2ResendOnStall(checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                    hoverEnabled: true
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    ToolTip.text: qsTr("Se sei in TX3 (R+report) e il partner non risponde per 2 periodi (~7.5s), ri-trasmette TX2 (signal report) una volta sola prima di lasciare il QSO. Aiuta sui partner deboli che non hanno acked la prima volta. Cap a 1 re-send per QSO (no loop). Richiede Conservative FT2 attivo. Default ON sotto Conservative.")
-                                }
-
-                                // Smooth decode flow (streaming progressivo FT8/FT4)
-                                // — spalma i decode dal batch a streaming continuo
-                                // stile WSJT-X live. Auto-fallback se UI stall.
-                                // Default ON; disattiva se vedi rallentamenti.
-                                Text {
-                                    text: qsTr("Smooth decode flow:")
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
-                                    Layout.preferredHeight: controlHeight
-                                }
-                                CheckBox {
-                                    id: smoothDecodeFlowCheck
-                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
-                                    Layout.preferredHeight: controlHeight
-                                    checked: bridge ? bridge.smoothDecodeFlow : true
-                                    onCheckedChanged: {
-                                        if (bridge) bridge.setSmoothDecodeFlow(checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                    hoverEnabled: true
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    ToolTip.text: qsTr("Spalma i decode FT8/FT4 dal batch finale del periodo a streaming continuo con fade animato (~100ms per row). FT2 async resta invariato (gia' streaming). Default ON; auto-fallback se rileva UI stall su PC modesti. Disattiva per comportamento batch legacy.")
-                                }
-                                Item { Layout.preferredWidth: autoSequenceGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                Item { Layout.preferredWidth: autoSequenceGrid.checkWidth; Layout.preferredHeight: controlHeight }
-                            }
-                        }
-
-                        // ── Watchdog ──
-                        Text { text: qsTr("WATCHDOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("TX Watchdog (min):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: txWdSpin
-                            from: 0; to: 999; value: Number(bridge.getSetting("TxWatchdog", bridge.txWatchdogMode === 1 ? bridge.txWatchdogTime : 6)); editable: true
-                            property bool completed: false
-                            function applyWatchdog() {
-                                bridge.txWatchdogTime = value
-                                bridge.txWatchdogMode = value > 0 ? 1 : 0
-                                bridge.setSetting("TxWatchdog", value)
-                                bridge.setSetting("txWatchdogMode", bridge.txWatchdogMode)
-                                bridge.setSetting("txWatchdogTime", bridge.txWatchdogTime)
-                            }
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: if (completed) applyWatchdog()
-                            Component.onCompleted: { completed = true; applyWatchdog() }
-                            contentItem: TextInput { text: txWdSpin.textFromValue(txWdSpin.value, txWdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txWdSpin.editable; validator: txWdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Tune Watchdog (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: 6
-                            CheckBox {
-                                id: tuneWdCheck
-                                checked: bridge.getSetting("TuneWatchdog", true)
-                                onCheckedChanged: bridge.setSetting("TuneWatchdog", checked)
-                                indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                contentItem: Text { text: ""; leftPadding: 24 }
-                            }
-                            SpinBox {
-                                id: tuneWdSpin
-                                from: 0; to: 300; value: Number(bridge.getSetting("TuneWatchdogTime", 90)); editable: true; enabled: tuneWdCheck.checked
-                                implicitHeight: controlHeight; Layout.fillWidth: true
-                                onValueChanged: bridge.setSetting("TuneWatchdogTime", value)
-                                contentItem: TextInput { text: tuneWdSpin.textFromValue(tuneWdSpin.value, tuneWdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !tuneWdSpin.editable; validator: tuneWdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                                background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            }
-                        }
-
-                        // ── CW ID ──
-                        Text { text: qsTr("CW ID"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("CW ID after 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("After73", false)
-                            onCheckedChanged: bridge.setSetting("After73", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("CW ID Interval (min):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: cwIdIntSpin
-                            from: 0; to: 999; value: Number(bridge.getSetting("IDint", 0)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("IDint", value)
-                            contentItem: TextInput { text: cwIdIntSpin.textFromValue(cwIdIntSpin.value, cwIdIntSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !cwIdIntSpin.editable; validator: cwIdIntSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        // ── Tone Spacing ──
-                        Text { text: qsTr("TONE SPACING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("2x Tone Spacing:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: x2ToneSpacingCheck
-                            checked: bridge.getSetting("x2ToneSpacing", false)
-                            onCheckedChanged: {
-                                if (checked) {
-                                    x4ToneSpacingCheck.checked = false
-                                    bridge.setSetting("x4ToneSpacing", false)
-                                }
-                                bridge.setSetting("x2ToneSpacing", checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("4x Tone Spacing:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: x4ToneSpacingCheck
-                            checked: bridge.getSetting("x4ToneSpacing", false)
-                            onCheckedChanged: {
-                                if (checked) {
-                                    x2ToneSpacingCheck.checked = false
-                                    bridge.setSetting("x2ToneSpacing", false)
-                                }
-                                bridge.setSetting("x4ToneSpacing", checked)
-                            }
-                            Component.onCompleted: {
-                                if (checked && x2ToneSpacingCheck.checked) {
-                                    x2ToneSpacingCheck.checked = false
-                                    bridge.setSetting("x2ToneSpacing", false)
-                                }
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Alt F1-F6 Bind:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("AlternateBindings", false)
-                            onCheckedChanged: bridge.setSetting("AlternateBindings", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                // Lazy Settings tab 3
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 3
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab3.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=3")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 4 — DISPLAY ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Aspetto / Tema ──
-                        Text { text: qsTr("ASPETTO / TEMA"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Tema:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                        ComboBox {
-                            id: themeCombo
-                            Layout.fillWidth: true
-                            implicitHeight: controlHeight
-                            model: bridge.themeManager.availableThemes
-                            currentIndex: Math.max(0, model.indexOf(bridge.themeManager.currentTheme))
-                            onActivated: bridge.themeManager.applyThemeByName(currentText)
-                            Connections {
-                                target: bridge.themeManager
-                                function onCurrentThemeChanged() {
-                                    var i = themeCombo.model.indexOf(bridge.themeManager.currentTheme)
-                                    if (i >= 0 && themeCombo.currentIndex !== i)
-                                        themeCombo.currentIndex = i
-                                }
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: parent.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate {
-                                contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium }
-                            }
-                        }
-                        // riga vuota per riempire le 4 colonne
-                        Item { Layout.columnSpan: 2; Layout.preferredHeight: controlHeight }
-
-                        // 1.0.189 — Riorganizzato in 2 sub-section per UX migliore:
-                        // PERFORMANCE (gates anti-stall) + STYLE (estetica).
-                        // ── UI — PERFORMANCE ──
-                        Text { text: qsTr("UI — PERFORMANCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        // 1.0.180 — Quality preset: gate per effetti visivi pesanti.
-                        Text { text: qsTr("UI Quality preset:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        ComboBox {
-                            id: uiQualityCombo
-                            Layout.preferredWidth: 180
-                            Layout.columnSpan: 1
-                            model: ["Low", "Medium", "High"]
-                            currentIndex: {
-                                if (!bridge) return 1
-                                const q = bridge.uiQuality
-                                return q === "Low" ? 0 : (q === "High" ? 2 : 1)
-                            }
-                            onActivated: {
-                                if (bridge) bridge.setUiQuality(model[currentIndex])
-                            }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Low = nessun effetto (PC modesti). Medium = ombre leggere + Animator. High = MultiEffect shadow + tutte le animazioni. Default Medium.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.180 — Style (richiede restart)
-                        Text { text: qsTr("UI Style (restart):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        ComboBox {
-                            id: uiStyleCombo
-                            Layout.preferredWidth: 180
-                            Layout.columnSpan: 1
-                            // 1.0.185 — Whitelist 4 stili customizable. "Default" rimosso
-                            // dal model: era un alias confondente perche' su Windows con
-                            // Qt 6.11 risolveva al native style non-customizable (warning
-                            // massivi + UI degradata). Material e' la prima voce, baseline
-                            // visiva storica Decodium (default fino al 1.0.179).
-                            model: ["Material", "FluentWinUI3", "Universal", "Fusion"]
-                            currentIndex: {
-                                if (!bridge) return 0
-                                // Default e' alias per Material, mostra Material
-                                let idx = model.indexOf(bridge.uiStyle)
-                                return idx < 0 ? 0 : idx
-                            }
-                            onActivated: {
-                                if (bridge) bridge.setUiStyle(model[currentIndex])
-                            }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr(
-                                "Stile QML Quick Controls (richiede restart):\n" +
-                                "• Material (consigliato) — Google Material 3, customizable, default storico Decodium\n" +
-                                "• FluentWinUI3 — Windows 11 nativo (Mica/acrylic). Fallback automatico per SplitView/StackView.\n" +
-                                "• Universal — Microsoft Universal (WinPhone-style)\n" +
-                                "• Fusion — cross-platform desktop neutro"
-                            )
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.180 — Frameless pop-out
-                        Text { text: qsTr("Frameless pop-out:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: framelessPopoutsCheck
-                            checked: bridge ? bridge.uiFramelessPopouts : false
-                            onCheckedChanged: {
-                                if (bridge) bridge.setUiFramelessPopouts(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Le finestre pop-out (Waterfall, Period1, DecoSync) diventano frameless con drag tramite il bordo. Estetica Windows 11. Default OFF. Richiede chiusura+riapertura della finestra.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.186 — Auto-detach Full Spectrum (Pasquale-pattern)
-                        Text { text: qsTr("Detach Full Spectrum:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: autoDetachFullSpectrumCheck
-                            checked: bridge ? bridge.autoDetachFullSpectrum : false
-                            onCheckedChanged: {
-                                if (bridge) bridge.setAutoDetachFullSpectrum(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("All'avvio apre il Full Spectrum (Band Activity) in finestra separata, isolando il render thread del Main dalle animazioni ListView. Riduce stall su PC modesti. Default OFF. Richiede restart.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.186 — Spectrum FPS cap (15/20/30)
-                        Text { text: qsTr("Spectrum FPS cap:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        ComboBox {
-                            id: spectrumFpsCombo
-                            Layout.preferredWidth: 120
-                            model: ["15 fps", "20 fps", "30 fps"]
-                            currentIndex: {
-                                if (!bridge) return 1
-                                const cap = bridge.spectrumFpsCap
-                                if (cap <= 15) return 0
-                                if (cap >= 30) return 2
-                                return 1
-                            }
-                            onActivated: {
-                                if (!bridge) return
-                                const map = [15, 20, 30]
-                                bridge.setSpectrumFpsCap(map[currentIndex])
-                            }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Frame rate massimo del waterfall/panadapter integrato. 15=PC modesti, 20=default bilanciato, 30=hardware moderno. Quando Full Spectrum è detached il render thread separato regge i 30 fps senza impatto sul decode.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.189 — Telemetria pressione CPU (sessione corrente, read-only).
-                        // Se i contatori sono alti, considera Low Quality / FPS cap=15 / Detach ON.
-                        Text { text: qsTr("Eventi CPU pressure:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        Text {
-                            id: cpuPressureTelemetryText
-                            Layout.preferredWidth: 240
-                            Layout.columnSpan: 1
-                            color: {
-                                if (!bridge) return textSecondary
-                                const severe = bridge.cpuPressureSevereEventCount
-                                if (severe >= 5) return "#ff8844"
-                                if (severe >= 1) return secondaryCyan
-                                return textSecondary
-                            }
-                            font.pixelSize: 12
-                            text: bridge
-                                  ? qsTr("totale=%1 · severi=%2 (sessione)")
-                                        .arg(bridge.cpuPressureEventCount)
-                                        .arg(bridge.cpuPressureSevereEventCount)
-                                  : qsTr("totale=0 · severi=0")
-                            // 1.0.190 hotfix — hoverEnabled / ToolTip.* non sono
-                            // proprieta' di Text. Tooltip e' attached property
-                            // gestita da MouseArea con .text dedicato.
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.NoButton
-                                ToolTip.visible: containsMouse
-                                ToolTip.delay: 400
-                                ToolTip.text: qsTr("Contatori eventi cpuPressure dalla sessione corrente. Severi (≥1100ms o burst 4+ short stall) sono il segnale più forte: se vedi >=5 dopo un'ora di uso, abbassa UI Quality a Low oppure Spectrum FPS cap a 15.")
-                            }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── Font ──
-                        Text { text: qsTr("FONT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Font:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: controlHeight
-                                radius: 4
-                                color: bgMedium
-                                border.color: glassBorder
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    text: settingsDialog.uiFontLabel
-                                    color: textPrimary
-                                    font.pixelSize: controlFontSize
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-                            }
-                            Rectangle {
-                                width: 78; height: controlHeight; radius: 4
-                                color: fontChooseMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
-                                border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: qsTr("Choose"); color: primaryBlue; font.pixelSize: 11 }
-                                MouseArea { id: fontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.openFontPicker("Font", "", 0, false) }
-                            }
-                            Rectangle {
-                                width: 64; height: controlHeight; radius: 4
-                                color: fontResetMA.containsMouse ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.18) : bgMedium
-                                border.color: glassBorder
-                                Text { anchors.centerIn: parent; text: qsTr("Reset"); color: textSecondary; font.pixelSize: 11 }
-                                MouseArea { id: fontResetMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.resetFontSetting("Font", "", 0) }
-                            }
-                        }
-                        Text { text: qsTr("Decoded Font:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: controlHeight
-                                radius: 4
-                                color: bgMedium
-                                border.color: glassBorder
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    text: settingsDialog.decodedFontLabel
-                                    color: textPrimary
-                                    font.pixelSize: controlFontSize
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-                            }
-                            Rectangle {
-                                width: 78; height: controlHeight; radius: 4
-                                color: decodedFontChooseMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
-                                border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: qsTr("Choose"); color: primaryBlue; font.pixelSize: 11 }
-                                MouseArea { id: decodedFontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.openFontPicker("DecodedTextFont", "Courier", 10, true) }
-                            }
-                            Rectangle {
-                                width: 64; height: controlHeight; radius: 4
-                                color: decodedFontResetMA.containsMouse ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.18) : bgMedium
-                                border.color: glassBorder
-                                Text { anchors.centerIn: parent; text: qsTr("Reset"); color: textSecondary; font.pixelSize: 11 }
-                                MouseArea { id: decodedFontResetMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.resetFontSetting("DecodedTextFont", "Courier", 10) }
-                            }
-                        }
-
-                        // ── Decodifiche ──
-                        Text { text: qsTr("DECODES"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Show DXCC:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("ShowDXCC", true)
-                            onCheckedChanged: bridge.setSetting("ShowDXCC", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("TX Msg to RX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("TXMessagesToRX", true)
-                            onCheckedChanged: bridge.setSetting("TXMessagesToRX", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Waterfall Calls:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("uiWaterfallShowCallsigns", true)
-                            onCheckedChanged: bridge.setSetting("uiWaterfallShowCallsigns", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── Mappa e Distanza ──
-                        Text { text: qsTr("MAP AND DISTANCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Miles:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("Miles", false)
-                            onCheckedChanged: bridge.setSetting("Miles", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Greyline:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("ShowGreyline", false)
-                            onCheckedChanged: bridge.setSetting("ShowGreyline", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Map All Msgs:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("MapAllMessages", false)
-                            onCheckedChanged: bridge.setSetting("MapAllMessages", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Click TX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("MapSingleClickTX", false)
-                            onCheckedChanged: bridge.setSetting("MapSingleClickTX", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        // ── Allineamento ──
-                        Text { text: qsTr("ALIGNMENT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Align:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("Align", false)
-                            onCheckedChanged: bridge.setSetting("Align", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Align Steps:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: alignStepsSpin
-                            from: 0; to: 999; value: Number(bridge.getSetting("AlignSteps", 0)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("AlignSteps", value)
-                            contentItem: TextInput { text: alignStepsSpin.textFromValue(alignStepsSpin.value, alignStepsSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !alignStepsSpin.editable; validator: alignStepsSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Align Steps 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: alignSteps2Spin
-                            from: 0; to: 999; value: Number(bridge.getSetting("AlignSteps2", 0)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("AlignSteps2", value)
-                            contentItem: TextInput { text: alignSteps2Spin.textFromValue(alignSteps2Spin.value, alignSteps2Spin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !alignSteps2Spin.editable; validator: alignSteps2Spin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                // Lazy Settings tab 4
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 4
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab4.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=4")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 5 — DECODIFICA ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Remote Web Server (PWA per iPad/mobile) ──
-                        Text { text: qsTr("REMOTE WEB SERVER (iPad / mobile PWA)"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Abilita Web Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
-                        CheckBox {
-                            id: webServerToggle
-                            checked: bridge.webServerRunning()
-                            onCheckedChanged: {
-                                if (checked) {
-                                    var port = parseInt(webServerPortField.text) || 8080
-                                    bridge.startWebServer(port)
-                                    bridge.setSetting("WebServerEnabled", true)
-                                    bridge.setSetting("WebServerPort", port)
-                                } else {
-                                    bridge.stopWebServer()
-                                    bridge.setSetting("WebServerEnabled", false)
-                                }
-                                webServerUrlLabel.text = bridge.webServerUrl() || "(non attivo)"
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Porta TCP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
-                        TextField {
-                            id: webServerPortField
-                            text: String(bridge.getSetting("WebServerPort", 8080))
-                            Layout.preferredWidth: 80
-                            validator: IntValidator { bottom: 1024; top: 65535 }
-                            color: textPrimary
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 3 }
-                            onEditingFinished: bridge.setSetting("WebServerPort", parseInt(text) || 8080)
-                        }
-
-                        Text { text: qsTr("URL accesso:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
-                        Text {
-                            id: webServerUrlLabel
-                            text: bridge.webServerUrl() || "(non attivo)"
-                            color: bridge.webServerRunning() ? accentGreen : textSecondary
-                            font.pixelSize: 12
-                            font.family: Qt.platform.os === "osx" ? "Menlo" : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
-                            Layout.columnSpan: 3
-                            Layout.fillWidth: true
-                        }
-
-                        Text { text: qsTr(""); Layout.preferredWidth: 160 }
-                        Button {
-                            // 1.0.170 fase 3 PWA: apri QR code in browser locale
-                            text: "📱 Apri QR per iPad"
-                            enabled: bridge.webServerRunning()
-                            Layout.columnSpan: 3
-                            onClicked: {
-                                var url = bridge.webServerUrl()
-                                if (url) Qt.openUrlExternally(url + "qr")
-                            }
-                            background: Rectangle {
-                                color: parent.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
-                                                     : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
-                                border.color: primaryBlue
-                                border.width: 1
-                                radius: 4
-                            }
-                            contentItem: Text {
-                                text: parent.text
-                                color: parent.enabled ? textPrimary : textSecondary
-                                font.pixelSize: 12; font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-
-                        // ── Decode list display (Decodium 3-style) ──
-                        Text { text: qsTr("DECODE LIST DISPLAY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 12 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Colored period separator:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
-                        CheckBox {
-                            // 1.0.149: bind diretto al Q_INVOKABLE C++ invece che
-                            // alla QSettings raw — cosi' il toggle aggiorna anche
-                            // m_decodeShowPeriodSeparator a runtime (era solo
-                            // letto al boot via loadSettings).
-                            checked: bridge.decodeShowPeriodSeparator()
-                            onCheckedChanged: {
-                                bridge.setDecodeShowPeriodSeparator(checked)
-                                bridge.setSetting("decodeShowPeriodSeparator", checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Newest first:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
-                        CheckBox {
-                            checked: bridge.getSetting("decodeNewestFirst", false)
-                            onCheckedChanged: bridge.setSetting("decodeNewestFirst", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        // ── Parametri Decodifica ──
-                        Text { text: qsTr("DECODE PARAMETERS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Decode Depth:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: decodeDepthCombo
-                            model: [qsTr("Fast"),qsTr("Normal"),qsTr("Deep")]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: Math.max(0, Math.min(count - 1, bridge.ndepth - 1))
-                            onActivated: bridge.ndepth = currentIndex + 1
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: decodeDepthCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        Text { text: qsTr("Low Freq (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: nfaSpin
-                            from: 0; to: 5000; value: bridge.nfa; editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.nfa = value
-                            contentItem: TextInput { text: nfaSpin.textFromValue(nfaSpin.value, nfaSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !nfaSpin.editable; validator: nfaSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("High Freq (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: nfbSpin
-                            from: 0; to: 5000; value: bridge.nfb; editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.nfb = value
-                            contentItem: TextInput { text: nfbSpin.textFromValue(nfbSpin.value, nfbSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !nfbSpin.editable; validator: nfbSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("RX Bandwidth:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: rxBwSpin
-                            from: 100; to: 5000; value: Number(bridge.getSetting("RXBandwidth", 2500)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("RXBandwidth", value)
-                            contentItem: TextInput { text: rxBwSpin.textFromValue(rxBwSpin.value, rxBwSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !rxBwSpin.editable; validator: rxBwSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Decode at 52s:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("DecodeAt52s", false)
-                            onCheckedChanged: bridge.setSetting("DecodeAt52s", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Single Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.singleDecode
-                            onToggled: bridge.singleDecode = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── JT65 VHF/UHF ──
-                        Text { text: qsTr("JT65 VHF/UHF"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Erasure Patterns:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: erasurePatSpin
-                            from: 0; to: 99999; value: Number(bridge.getSetting("RandomErasurePatterns", 7)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("RandomErasurePatterns", value)
-                            contentItem: TextInput { text: erasurePatSpin.textFromValue(erasurePatSpin.value, erasurePatSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !erasurePatSpin.editable; validator: erasurePatSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Aggressive:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: aggressiveSpin
-                            from: 0; to: 10; value: Number(bridge.getSetting("AggressiveLevel", 0)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("AggressiveLevel", value)
-                            contentItem: TextInput { text: aggressiveSpin.textFromValue(aggressiveSpin.value, aggressiveSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !aggressiveSpin.editable; validator: aggressiveSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Two-Pass:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("TwoPassDecoding", false)
-                            onCheckedChanged: bridge.setSetting("TwoPassDecoding", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── Sidelobe Control ──
-                        Text { text: qsTr("SIDELOBE CONTROL"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Sidelobe Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: sidelobeCombo
-                            model: [qsTr("Low Sidelobes"),qsTr("Max Sensitivity")]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: Number(bridge.getSetting("SidelobeMode", 0))
-                            onActivated: bridge.setSetting("SidelobeMode", currentIndex)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: sidelobeCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Degrade S/N:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: degradeSnSpin
-                            from: 0; to: 100; value: Number(bridge.getSetting("DegradeSN", 0)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("DegradeSN", value)
-                            contentItem: TextInput { text: degradeSnSpin.textFromValue(degradeSnSpin.value, degradeSnSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !degradeSnSpin.editable; validator: degradeSnSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        // ── Filtri Decodifica ──
-                        Text { text: qsTr("DECODE FILTERS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("CQ Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.filterCqOnly
-                            onCheckedChanged: bridge.filterCqOnly = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("My Call Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.filterMyCallOnly
-                            onCheckedChanged: bridge.filterMyCallOnly = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Zap:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.zapEnabled
-                            onCheckedChanged: bridge.zapEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Deep Search:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.deepSearchEnabled
-                            onCheckedChanged: bridge.deepSearchEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("AP Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.ft8ApEnabled
-                            onCheckedChanged: bridge.ft8ApEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Avg Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.avgDecodeEnabled
-                            onCheckedChanged: bridge.avgDecodeEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                // Lazy Settings tab 5
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 5
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab5.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=5")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 6 — REPORTING ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Servizi di Rete ──
-                        Text { text: qsTr("NETWORK SERVICES"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("PSK Reporter:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.pskReporterEnabled
-                            onCheckedChanged: bridge.pskReporterEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("TCP/IP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("PSKReporterTCPIP", false)
-                            onCheckedChanged: bridge.setSetting("PSKReporterTCPIP", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        // ── DX Cluster ──
-                        Text { text: qsTr("DX CLUSTER"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            id: dxClusterHostField
-                            text: bridge.dxCluster && bridge.dxCluster.host !== undefined ? String(bridge.dxCluster.host) : ""
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: wideFieldMinWidth
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            placeholderText: "dx.iz7auh.net"
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.host = text.trim()
-                        }
-                        Text { text: qsTr("Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: dxClusterPortSpin
-                            from: 1; to: 65535
-                            value: {
-                                var port = bridge.dxCluster && bridge.dxCluster.port !== undefined ? Number(bridge.dxCluster.port) : 8000
-                                return isFinite(port) ? port : 8000
-                            }
-                            editable: true
-                            implicitHeight: controlHeight
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: if (bridge.dxCluster) bridge.dxCluster.port = value
-                            contentItem: TextInput { text: dxClusterPortSpin.textFromValue(dxClusterPortSpin.value, dxClusterPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !dxClusterPortSpin.editable; validator: dxClusterPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                            spacing: 10
-
-                            Text {
-                                text: bridge.dxCluster && bridge.dxCluster.connected ? qsTr("Connected") : qsTr("Disconnected")
-                                color: bridge.dxCluster && bridge.dxCluster.connected ? accentGreen : textSecondary
-                                font.pixelSize: 12
-                            }
-
-                            Rectangle {
-                                width: 96; height: controlHeight; radius: 4
-                                color: dxClusterConnMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.25) : bgMedium
-                                border.color: accentGreen
-                                Text { anchors.centerIn: parent; text: qsTr("Connect"); color: accentGreen; font.pixelSize: 12 }
-                                MouseArea {
-                                    id: dxClusterConnMA
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (!bridge.dxCluster) return
-                                        bridge.dxCluster.host = dxClusterHostField.text.trim()
-                                        bridge.dxCluster.port = dxClusterPortSpin.value
-                                        bridge.dxCluster.callsign = bridge.callsign
-                                        bridge.connectDxCluster()
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 110; height: controlHeight; radius: 4
-                                color: dxClusterDiscMA.containsMouse ? Qt.rgba(0.95,0.26,0.21,0.2) : bgMedium
-                                border.color: "#f44336"
-                                Text { anchors.centerIn: parent; text: qsTr("Disconnect"); color: "#f44336"; font.pixelSize: 12 }
-                                MouseArea {
-                                    id: dxClusterDiscMA
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: bridge.disconnectDxCluster()
-                                }
-                            }
-                        }
-
-                        Text { text: qsTr("Detail:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        Text {
-                            text: bridge.dxCluster && bridge.dxCluster.lastStatus ? bridge.dxCluster.lastStatus : qsTr("No message")
-                            color: textSecondary
-                            font.pixelSize: 12
-                            wrapMode: Text.Wrap
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 3
-                        }
-
-                        // ── Cloudlog ──
-                        Text { text: qsTr("CLOUDLOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.cloudlogEnabled
-                            onCheckedChanged: bridge.cloudlogEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        Text { text: qsTr("API URL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.cloudlogUrl; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.cloudlogUrl = text
-                        }
-
-                        Text { text: qsTr("API Key:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.cloudlogApiKey; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
-                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.cloudlogApiKey = text
-                        }
-
-                        Text { text: qsTr("Station ID:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: cloudlogStIdSpin
-                            from: 0; to: 999; value: Number(bridge.getSetting("CloudlogStationID", 1)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("CloudlogStationID", value)
-                            contentItem: TextInput { text: cloudlogStIdSpin.textFromValue(cloudlogStIdSpin.value, cloudlogStIdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !cloudlogStIdSpin.editable; validator: cloudlogStIdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── QRZ Logbook ──
-                        Text { text: qsTr("QRZ LOGBOOK"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.qrzLogbookEnabled
-                            onCheckedChanged: bridge.qrzLogbookEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Replace duplicates:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 130 }
-                        CheckBox {
-                            checked: bridge.qrzLogbookReplaceDuplicates
-                            onCheckedChanged: bridge.qrzLogbookReplaceDuplicates = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("API Key:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.qrzLogbookApiKey; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
-                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: {
-                                bridge.qrzLogbookApiKey = text
-                                settingsDialog.qrzLogbookTestStatus = ""
-                                settingsDialog.qrzLogbookTestIsError = false
-                                settingsDialog.qrzLogbookTestBusy = false
-                            }
-                        }
-
-                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Rectangle {
-                            width: 110; height: controlHeight; radius: 4
-                            opacity: settingsDialog.qrzLogbookTestBusy ? 0.75 : 1
-                            color: qrzTestMA.containsMouse && !settingsDialog.qrzLogbookTestBusy ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.2) : bgMedium
-                            border.color: settingsDialog.qrzLogbookTestBusy ? textSecondary : secondaryCyan
-                            Text {
-                                anchors.centerIn: parent
-                                text: settingsDialog.qrzLogbookTestBusy ? qsTr("Testing...") : qsTr("Test")
-                                color: settingsDialog.qrzLogbookTestBusy ? textSecondary : secondaryCyan
-                                font.pixelSize: 12
-                            }
-                            MouseArea {
-                                id: qrzTestMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                enabled: !settingsDialog.qrzLogbookTestBusy
-                                onClicked: {
-                                    settingsDialog.qrzLogbookTestBusy = true
-                                    settingsDialog.qrzLogbookTestIsError = false
-                                    settingsDialog.qrzLogbookTestStatus = qsTr("Testing QRZ API key...")
-                                    bridge.testQrzLogbookApi()
-                                }
-                            }
-                        }
-                        Text {
-                            text: settingsDialog.qrzLogbookTestStatus
-                            visible: text.length > 0
-                            color: settingsDialog.qrzLogbookTestIsError ? "#ff5252" : (settingsDialog.qrzLogbookTestBusy ? textSecondary : accentGreen)
-                            font.pixelSize: 12
-                            wrapMode: Text.Wrap
-                            verticalAlignment: Text.AlignVCenter
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 2
-                            Layout.preferredHeight: Math.max(controlHeight, implicitHeight)
-                        }
-
-                        // ── LotW ──
-                        Text { text: qsTr("LOTW"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("LotW Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.lotwEnabled
-                            onCheckedChanged: bridge.lotwEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Password:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("LoTWPassword", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("LoTWPassword", text)
-                        }
-
-                        Text { text: qsTr("Non-QSL'd:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("LoTWNonQSL", false)
-                            onCheckedChanged: bridge.setSetting("LoTWNonQSL", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Days Upload:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: lotwDaysSpin
-                            from: 0; to: 9999; value: Number(bridge.getSetting("LoTWDaysSinceUpload", 365)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("LoTWDaysSinceUpload", value)
-                            contentItem: TextInput { text: lotwDaysSpin.textFromValue(lotwDaysSpin.value, lotwDaysSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !lotwDaysSpin.editable; validator: lotwDaysSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        // ── Logging ──
-                        Text { text: qsTr("LOGGING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Prompt to Log:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: promptToLogCheck
-                            checked: boolSetting("PromptToLog", false)
-                            onToggled: {
-                                if (!settingsDialog.loggingChecksUpdating)
-                                    settingsDialog.setLoggingMode(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Auto Log:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: autoLogCheck
-                            checked: boolSetting("AutoLog", true)
-                            onToggled: {
-                                if (!settingsDialog.loggingChecksUpdating)
-                                    settingsDialog.setLoggingMode(!checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            Component.onCompleted: Qt.callLater(function() { settingsDialog.normalizeLoggingModeChecks() })
-                        }
-
-                        Text { text: qsTr("Log as RTTY:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("LogAsRTTY", false)
-                            onCheckedChanged: bridge.setSetting("LogAsRTTY", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("4-digit Grids:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("Log4DigitGrids", false)
-                            onCheckedChanged: bridge.setSetting("Log4DigitGrids", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Contest Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            enabled: !promptToLogCheck.checked
-                            opacity: enabled ? 1.0 : 0.45
-                            checked: bridge.getSetting("ContestingOnly", false)
-                            onCheckedChanged: bridge.setSetting("ContestingOnly", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Spec Op Cmts:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("SpecOpInComments", false)
-                            onCheckedChanged: bridge.setSetting("SpecOpInComments", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("dB in Cmts:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("dBReportsToComments", false)
-                            onCheckedChanged: bridge.setSetting("dBReportsToComments", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("ZZ00:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("ZZ00", false)
-                            onCheckedChanged: bridge.setSetting("ZZ00", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── Registrazione ──
-                        Text { text: qsTr("RECORDING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Record RX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.recordRxEnabled
-                            onCheckedChanged: bridge.recordRxEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Record TX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.recordTxEnabled
-                            onCheckedChanged: bridge.recordTxEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("WSPR Upload:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.wsprUploadEnabled
-                            onCheckedChanged: bridge.wsprUploadEnabled = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── Remote Web Dashboard ──
-                        Text { text: qsTr("REMOTE WEB DASHBOARD (LAN)"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("RemoteWebEnabled", false)
-                            onCheckedChanged: bridge.setSetting("RemoteWebEnabled", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("HTTP port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: remoteHttpPortSpin
-                            from: 1025; to: 65535; value: Number(bridge.getSetting("RemoteHttpPort", 19091)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("RemoteHttpPort", value)
-                            contentItem: TextInput { text: remoteHttpPortSpin.textFromValue(remoteHttpPortSpin.value, remoteHttpPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !remoteHttpPortSpin.editable; validator: remoteHttpPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("WS socket port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            readOnly: true
-                            text: String(bridge.remoteWebSocketPort())
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: portFieldMinWidth
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("WS bind:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("RemoteWsBind", "0.0.0.0"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("RemoteWsBind", text)
-                        }
-                        Text { text: qsTr("Username:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("RemoteUser", "admin"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("RemoteUser", text)
-                        }
-
-                        Text { text: qsTr("Access token:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("RemoteToken", ""); Layout.fillWidth: true; Layout.columnSpan: 3; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
-                            placeholderText: qsTr("Required for LAN/WAN")
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("RemoteToken", text)
-                        }
-
-                        Text {
-                            text: qsTr("App restart required. For LAN/WAN, use a token of at least 12 characters.")
-                            color: textSecondary
-                            font.pixelSize: 11
-                            wrapMode: Text.Wrap
-                            Layout.columnSpan: 4
-                        }
-
-                        // ── UDP Server ──
-                        Text { text: qsTr("UDP SERVER"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Client ID:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            id: udpClientIdField
-                            text: bridge.getSetting("UDPClientId", "WSJTX")
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: fieldMinWidth
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            maximumLength: 64
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            inputMethodHints: Qt.ImhNoPredictiveText
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onEditingFinished: {
-                                var cleaned = String(text).trim()
-                                if (!cleaned.length)
-                                    cleaned = "WSJTX"
-                                if (cleaned !== text)
-                                    text = cleaned
-                                bridge.setSetting("UDPClientId", cleaned)
-                            }
-                        }
-                        Text { text: qsTr("Preset:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        ComboBox {
-                            id: udpClientIdPreset
-                            model: ["WSJTX", "Decodium"]
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: fieldMinWidth
-                            implicitHeight: controlHeight
-                            Component.onCompleted: currentIndex = Math.max(0, find(String(bridge.getSetting("UDPClientId", "WSJTX"))))
-                            onActivated: {
-                                udpClientIdField.text = currentText
-                                bridge.setSetting("UDPClientId", currentText)
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: udpClientIdPreset.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Server Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("UDPServer", "127.0.0.1"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("UDPServer", text)
-                        }
-                        Text { text: qsTr("Server Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpPortSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPServerPort", 2237)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPServerPort", value)
-                            contentItem: TextInput { text: udpPortSpin.textFromValue(udpPortSpin.value, udpPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpPortSpin.editable; validator: udpPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Listen Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpListenSpin
-                            from: 0; to: 65535; value: Number(bridge.getSetting("UDPListenPort", 0)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPListenPort", value)
-                            contentItem: TextInput { text: udpListenSpin.textFromValue(udpListenSpin.value, udpListenSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpListenSpin.editable; validator: udpListenSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Multicast TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpTtlSpin
-                            from: 0; to: 255; value: Number(bridge.getSetting("UDPTTL", 1)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPTTL", value)
-                            contentItem: TextInput { text: udpTtlSpin.textFromValue(udpTtlSpin.value, udpTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpTtlSpin.editable; validator: udpTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Interface Used:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        ComboBox {
-                            id: udpInterfaceCombo
-                            model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: fieldMinWidth
-                            implicitHeight: controlHeight
-                            Component.onCompleted: {
-                                var saved = bridge.udpInterfaceName()
-                                currentIndex = saved && saved.length ? Math.max(0, find(saved)) : 0
-                            }
-                            onActivated: bridge.setUdpInterfaceName(currentIndex <= 0 ? "" : currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: udpInterfaceCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Send ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: udpPrimaryAdifCheck
-                            checked: boolSetting("UDPPrimaryLoggedAdifEnabled", true)
-                            onToggled: setBoolSettingIfChanged("UDPPrimaryLoggedAdifEnabled", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Secondary UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        CheckBox {
-                            id: udpSecondaryCheck
-                            checked: boolSetting("UDPSecondaryEnabled", true)
-                            onToggled: setBoolSettingIfChanged("UDPSecondaryEnabled", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Secondary Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("UDPSecondaryServer", bridge.getSetting("UDPServer", "127.0.0.1")); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("UDPSecondaryServer", text)
-                        }
-
-                        Text { text: qsTr("Secondary Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpSecondaryPortSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPSecondaryServerPort", 2239)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPSecondaryServerPort", value)
-                            contentItem: TextInput { text: udpSecondaryPortSpin.textFromValue(udpSecondaryPortSpin.value, udpSecondaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryPortSpin.editable; validator: udpSecondaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Secondary TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpSecondaryTtlSpin
-                            from: 0; to: 255; value: Number(bridge.getSetting("UDPSecondaryTTL", bridge.getSetting("UDPTTL", 1))); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPSecondaryTTL", value)
-                            contentItem: TextInput { text: udpSecondaryTtlSpin.textFromValue(udpSecondaryTtlSpin.value, udpSecondaryTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryTtlSpin.editable; validator: udpSecondaryTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Secondary Interface:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        ComboBox {
-                            id: udpSecondaryInterfaceCombo
-                            model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: fieldMinWidth
-                            implicitHeight: controlHeight
-                            Component.onCompleted: {
-                                var saved = String(bridge.getSetting("UDPSecondaryInterface", ""))
-                                currentIndex = saved && saved.length ? Math.max(0, find(saved)) : 0
-                            }
-                            onActivated: bridge.setSetting("UDPSecondaryInterface", currentIndex <= 0 ? "" : currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: udpSecondaryInterfaceCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Secondary ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: udpSecondaryAdifCheck
-                            checked: boolSetting("UDPSecondaryLoggedAdifEnabled", true)
-                            onToggled: setBoolSettingIfChanged("UDPSecondaryLoggedAdifEnabled", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Tertiary UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        CheckBox {
-                            id: udpTertiaryCheck
-                            checked: boolSetting("UDPTertiaryEnabled", false)
-                            onToggled: setBoolSettingIfChanged("UDPTertiaryEnabled", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Tertiary Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("UDPTertiaryServer", "127.0.0.1"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            enabled: udpTertiaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("UDPTertiaryServer", text)
-                        }
-
-                        Text { text: qsTr("Tertiary Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpTertiaryPortSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPTertiaryServerPort", 2237)); editable: true
-                            enabled: udpTertiaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPTertiaryServerPort", value)
-                            contentItem: TextInput { text: udpTertiaryPortSpin.textFromValue(udpTertiaryPortSpin.value, udpTertiaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpTertiaryPortSpin.editable; validator: udpTertiaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpTertiaryPortSpin.enabled }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("Tertiary TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpTertiaryTtlSpin
-                            from: 0; to: 255; value: Number(bridge.getSetting("UDPTertiaryTTL", bridge.getSetting("UDPTTL", 1))); editable: true
-                            enabled: udpTertiaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPTertiaryTTL", value)
-                            contentItem: TextInput { text: udpTertiaryTtlSpin.textFromValue(udpTertiaryTtlSpin.value, udpTertiaryTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpTertiaryTtlSpin.editable; validator: udpTertiaryTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpTertiaryTtlSpin.enabled }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Tertiary Interface:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        ComboBox {
-                            id: udpTertiaryInterfaceCombo
-                            model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
-                            enabled: udpTertiaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: fieldMinWidth
-                            implicitHeight: controlHeight
-                            Component.onCompleted: {
-                                var saved = String(bridge.getSetting("UDPTertiaryInterface", ""))
-                                currentIndex = saved && saved.length ? Math.max(0, find(saved)) : 0
-                            }
-                            onActivated: bridge.setSetting("UDPTertiaryInterface", currentIndex <= 0 ? "" : currentText)
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: udpTertiaryInterfaceCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Tertiary ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            id: udpTertiaryAdifCheck
-                            checked: boolSetting("UDPTertiaryLoggedAdifEnabled", true)
-                            enabled: udpTertiaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            onToggled: setBoolSettingIfChanged("UDPTertiaryLoggedAdifEnabled", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── N1MM Logger+ / EasyLog (binary UDP) ──
-                        Text { text: qsTr("N1MM / EasyLog"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enable N1MM:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        CheckBox {
-                            id: n1mmEnableCheck
-                            checked: boolSetting("BroadcastToN1MM", false)
-                            onToggled: setBoolSettingIfChanged("BroadcastToN1MM", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("N1MM Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: n1mmPortSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("N1MMServerPort", 2333)); editable: true
-                            enabled: n1mmEnableCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("N1MMServerPort", value)
-                            contentItem: TextInput { text: n1mmPortSpin.textFromValue(n1mmPortSpin.value, n1mmPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !n1mmPortSpin.editable; validator: n1mmPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: n1mmPortSpin.enabled }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("N1MM Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("N1MMServer", "127.0.0.1"); Layout.fillWidth: true; Layout.columnSpan: 3; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            enabled: n1mmEnableCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("N1MMServer", text)
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 4; Layout.preferredHeight: 6 }
-
-                        Text { text: qsTr("Accept UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            // Default allineato con Configuration.cpp (true) per evitare
-                            // che il primo onCheckedChanged scriva `false` nel legacy INI
-                            // prima che Configuration abbia fatto write_settings.
-                            checked: bridge.getSetting("AcceptUDPRequests", true)
-                            onCheckedChanged: bridge.setSetting("AcceptUDPRequests", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Notify Request:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("NotifyOnRequest", false)
-                            onCheckedChanged: bridge.setSetting("NotifyOnRequest", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Restore Win:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("udpWindowRestore", false)
-                            onCheckedChanged: bridge.setSetting("udpWindowRestore", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── ADIF TCP ──
-                        Text { text: qsTr("ADIF TCP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enable TCP ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        CheckBox {
-                            id: adifTcpCheck
-                            checked: boolSetting("ADIFTcpEnabled", false)
-                            onToggled: setBoolSettingIfChanged("ADIFTcpEnabled", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("TCP Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: adifTcpPortSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("ADIFTcpPort", 52001)); editable: true
-                            enabled: adifTcpCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("ADIFTcpPort", value)
-                            contentItem: TextInput { text: adifTcpPortSpin.textFromValue(adifTcpPortSpin.value, adifTcpPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !adifTcpPortSpin.editable; validator: adifTcpPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: adifTcpPortSpin.enabled }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("TCP Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        TextField {
-                            text: bridge.getSetting("ADIFTcpServer", "127.0.0.1"); Layout.fillWidth: true; Layout.columnSpan: 3; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            enabled: adifTcpCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("ADIFTcpServer", text)
-                        }
-
-                        Item {
-                            Layout.columnSpan: 4
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 96
-                        }
+                // Lazy Settings tab 6
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 6
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab6.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=6")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 7 — FREQUENCIES ═══════════
-                ScrollView {
-                    id: frequenciesScrollView
-                    clip: true
-                    readonly property int pageContentWidth: settingsDialog.frequencyPageMinWidth
-                    contentWidth: settingsDialog.frequencyPageMinWidth + 20
-                    contentHeight: frequenciesContent.implicitHeight + 20
-                    ScrollBar.horizontal.policy: ScrollBar.AsNeeded
-
-                    ColumnLayout {
-                        id: frequenciesContent
-                        width: settingsDialog.frequencyPageMinWidth
-                        anchors { left: parent.left; top: parent.top; margins: 10 }
-                        spacing: 10
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: qsTr("FREQUENCY CALIBRATION")
-                                color: secondaryCyan
-                                font.pixelSize: 12
-                                font.bold: true
-                                Layout.fillWidth: true
-                            }
-                            Button {
-                                id: refreshFrequencyButton
-                                text: qsTr("Refresh")
-                                implicitHeight: controlHeight
-                                Layout.preferredWidth: 94
-                                onClicked: settingsDialog.refreshFrequencySettings()
-                                background: Rectangle {
-                                    color: refreshFrequencyButton.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.24) : bgMedium
-                                    border.color: glassBorder
-                                    radius: 4
-                                }
-                                contentItem: Text {
-                                    text: refreshFrequencyButton.text
-                                    color: textSecondary
-                                    font.pixelSize: 11
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                        }
-                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: 6
-                            columnSpacing: 10
-                            rowSpacing: 8
-
-                            Text { text: qsTr("Slope:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 80; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                            TextField {
-                                id: frequencySlopeField
-                                text: Number(bridge.frequencyCalibrationSlopePpm()).toFixed(5)
-                                Layout.preferredWidth: 130
-                                implicitHeight: controlHeight
-                                leftPadding: 8
-                                color: textPrimary
-                                font.pixelSize: controlFontSize
-                                horizontalAlignment: TextInput.AlignRight
-                                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                                validator: DoubleValidator { bottom: -200; top: 200; decimals: 5; notation: DoubleValidator.StandardNotation }
-                                topPadding: controlVerticalPadding
-                                bottomPadding: controlVerticalPadding
-                                verticalAlignment: TextInput.AlignVCenter
-                                background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                onEditingFinished: text = settingsDialog.commitFrequencySlope(text)
-                            }
-                            Text { text: qsTr("ppm"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 44; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-
-                            Text { text: qsTr("Intercept:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 88; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                            TextField {
-                                id: frequencyInterceptField
-                                text: Number(bridge.frequencyCalibrationInterceptHz()).toFixed(2)
-                                Layout.preferredWidth: 130
-                                implicitHeight: controlHeight
-                                leftPadding: 8
-                                color: textPrimary
-                                font.pixelSize: controlFontSize
-                                horizontalAlignment: TextInput.AlignRight
-                                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                                validator: DoubleValidator { bottom: -1000; top: 1000; decimals: 2; notation: DoubleValidator.StandardNotation }
-                                topPadding: controlVerticalPadding
-                                bottomPadding: controlVerticalPadding
-                                verticalAlignment: TextInput.AlignVCenter
-                                background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                onEditingFinished: text = settingsDialog.commitFrequencyIntercept(text)
-                            }
-                            Text { text: qsTr("Hz"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 22; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                            // 1.0.192 — Reset button per Frequency Calibration (slope=0, intercept=0)
-                            Button {
-                                id: frequencyCalibrationResetButton
-                                text: qsTr("Reset")
-                                implicitHeight: controlHeight
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    if (!bridge) return
-                                    bridge.setFrequencyCalibrationSlopePpm(0.0)
-                                    bridge.setFrequencyCalibrationInterceptHz(0.0)
-                                    frequencySlopeField.text = Number(0).toFixed(5)
-                                    frequencyInterceptField.text = Number(0).toFixed(2)
-                                }
-                                background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                                contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                hoverEnabled: true
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 400
-                                ToolTip.text: qsTr("Azzera la calibrazione (slope=0, intercept=0). La frequenza viene scritta al rig senza correzione (fast path).")
-                            }
-                        }
-
-                        // 1.0.193 — Live preview della correzione su frequenze tipiche FT8
-                        // (banda 20m 14.074 MHz, banda 10m 28.074 MHz). Aggiornato a ogni
-                        // edit dei TextField slope/intercept tramite property binding.
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 6
-                            spacing: 12
-                            Text {
-                                text: qsTr("Preview correzione:")
-                                color: textSecondary
-                                font.pixelSize: 11
-                                font.italic: true
-                            }
-                            Text {
-                                id: frequencyCalibrationPreview
-                                readonly property double slope: parseFloat(frequencySlopeField.text) || 0.0
-                                readonly property double intercept: parseFloat(frequencyInterceptField.text) || 0.0
-                                readonly property double delta14: 14074000.0 * slope * 1e-6 + intercept
-                                readonly property double delta28: 28074000.0 * slope * 1e-6 + intercept
-                                text: qsTr("14.074 MHz → %1 Hz · 28.074 MHz → %2 Hz")
-                                          .arg(delta14.toFixed(2))
-                                          .arg(delta28.toFixed(2))
-                                color: (Math.abs(delta14) > 50 || Math.abs(delta28) > 100)
-                                       ? "#ff8844" : secondaryCyan
-                                font.pixelSize: 11
-                                font.family: mainWindow.decodedTextFontFamily
-                            }
-                            Item { Layout.fillWidth: true }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 8
-                            Text {
-                                text: qsTr("WORKING FREQUENCIES")
-                                color: secondaryCyan
-                                font.pixelSize: 12
-                                font.bold: true
-                                Layout.fillWidth: true
-                            }
-                            Button {
-                                id: loadWorkingFrequenciesButton
-                                text: qsTr("Load")
-                                implicitHeight: controlHeight
-                                Layout.preferredWidth: 78
-                                onClicked: {
-                                    workingFrequenciesLoadDialog.mergeMode = false
-                                    workingFrequenciesLoadDialog.open()
-                                }
-                                background: Rectangle { color: loadWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
-                                contentItem: Text { text: loadWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            }
-                            Button {
-                                id: mergeWorkingFrequenciesButton
-                                text: qsTr("Merge")
-                                implicitHeight: controlHeight
-                                Layout.preferredWidth: 78
-                                onClicked: {
-                                    workingFrequenciesLoadDialog.mergeMode = true
-                                    workingFrequenciesLoadDialog.open()
-                                }
-                                background: Rectangle { color: mergeWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
-                                contentItem: Text { text: mergeWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            }
-                            Button {
-                                id: saveWorkingFrequenciesButton
-                                text: qsTr("Save as")
-                                implicitHeight: controlHeight
-                                Layout.preferredWidth: 88
-                                onClicked: workingFrequenciesSaveDialog.open()
-                                background: Rectangle { color: saveWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
-                                contentItem: Text { text: saveWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            }
-                            Button {
-                                id: resetWorkingFrequenciesButton
-                                text: qsTr("Defaults")
-                                implicitHeight: controlHeight
-                                Layout.preferredWidth: 104
-                                onClicked: {
-                                    bridge.resetWorkingFrequenciesToDefaults()
-                                    settingsDialog.clearWorkingFrequencyEditor()
-                                    settingsDialog.refreshFrequencySettings()
-                                }
-                                background: Rectangle { color: resetWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
-                                contentItem: Text { text: resetWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            }
-                        }
-                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 168
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.44)
-                            border.color: glassBorder
-                            radius: 6
-                            clip: true
-
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: qsTr("Region:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 58; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    ComboBox {
-                                        id: frequencyRegionCombo
-                                        model: settingsDialog.frequencyRegionOptions
-                                        Layout.preferredWidth: 132
-                                        implicitHeight: controlHeight
-                                    }
-                                    Text { text: qsTr("Mode:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 44; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    ComboBox {
-                                        id: frequencyModeCombo
-                                        model: settingsDialog.frequencyModeOptions
-                                        Layout.preferredWidth: 124
-                                        implicitHeight: controlHeight
-                                        Component.onCompleted: settingsDialog.setComboText(frequencyModeCombo, bridge.mode || "FT8")
-                                    }
-                                    Text { text: qsTr("Freq MHz:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 68; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    TextField {
-                                        id: frequencyMHzField
-                                        placeholderText: "14.074000"
-                                        color: textPrimary
-                                        font.pixelSize: controlFontSize
-                                        horizontalAlignment: TextInput.AlignRight
-                                        inputMethodHints: Qt.ImhFormattedNumbersOnly
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 120
-                                        implicitHeight: controlHeight
-                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                    }
-                                    CheckBox {
-                                        id: frequencyPreferredCheck
-                                        text: qsTr("Pref")
-                                        Layout.preferredWidth: 82
-                                        implicitHeight: controlHeight
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: qsTr("Description:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 94; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    TextField {
-                                        id: frequencyDescriptionField
-                                        color: textPrimary
-                                        font.pixelSize: controlFontSize
-                                        Layout.fillWidth: true
-                                        implicitHeight: controlHeight
-                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: qsTr("Start:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 46; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    TextField {
-                                        id: frequencyStartField
-                                        placeholderText: "yyyy-MM-dd HH:mm"
-                                        color: textPrimary
-                                        font.pixelSize: controlFontSize
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 170
-                                        implicitHeight: controlHeight
-                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                    }
-                                    Text { text: qsTr("End:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 38; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    TextField {
-                                        id: frequencyEndField
-                                        placeholderText: "yyyy-MM-dd HH:mm"
-                                        color: textPrimary
-                                        font.pixelSize: controlFontSize
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 170
-                                        implicitHeight: controlHeight
-                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Item { Layout.fillWidth: true }
-                                    Button {
-                                        id: addWorkingFrequencyButton
-                                        text: qsTr("Add")
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 86
-                                        onClicked: settingsDialog.addWorkingFrequencyFromEditor()
-                                        background: Rectangle { color: addWorkingFrequencyButton.hovered ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.18) : bgMedium; border.color: accentGreen; radius: 4 }
-                                        contentItem: Text { text: addWorkingFrequencyButton.text; color: accentGreen; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                    Button {
-                                        id: updateWorkingFrequencyButton
-                                        text: qsTr("Update")
-                                        enabled: settingsDialog.selectedWorkingFrequencyIndex >= 0
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 96
-                                        onClicked: settingsDialog.updateWorkingFrequencyFromEditor()
-                                        background: Rectangle { color: updateWorkingFrequencyButton.enabled && updateWorkingFrequencyButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: updateWorkingFrequencyButton.enabled ? primaryBlue : glassBorder; radius: 4 }
-                                        contentItem: Text { text: updateWorkingFrequencyButton.text; color: updateWorkingFrequencyButton.enabled ? primaryBlue : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                    Button {
-                                        id: deleteWorkingFrequencyButton
-                                        text: qsTr("Delete")
-                                        enabled: settingsDialog.selectedWorkingFrequencyIndex >= 0
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 96
-                                        onClicked: settingsDialog.deleteSelectedWorkingFrequency()
-                                        background: Rectangle { color: deleteWorkingFrequencyButton.enabled && deleteWorkingFrequencyButton.hovered ? Qt.rgba(1,0.2,0.2,0.16) : bgMedium; border.color: deleteWorkingFrequencyButton.enabled ? "#ff5b5b" : glassBorder; radius: 4 }
-                                        contentItem: Text { text: deleteWorkingFrequencyButton.text; color: deleteWorkingFrequencyButton.enabled ? "#ff7777" : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                    Button {
-                                        id: clearWorkingFrequencyButton
-                                        text: qsTr("New")
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 86
-                                        onClicked: settingsDialog.clearWorkingFrequencyEditor()
-                                        background: Rectangle { color: clearWorkingFrequencyButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.16) : bgMedium; border.color: glassBorder; radius: 4 }
-                                        contentItem: Text { text: clearWorkingFrequencyButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(420, Math.max(260, settingsDialog.height * 0.40))
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.62)
-                            border.color: glassBorder
-                            radius: 6
-                            clip: true
-
-                            Flickable {
-                                id: frequencyTableFlick
-                                anchors.fill: parent
-                                contentWidth: Math.max(width, 1120)
-                                contentHeight: frequencyTableColumn.height
-                                boundsBehavior: Flickable.StopAtBounds
-                                clip: true
-                                ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
-                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-                                Column {
-                                    id: frequencyTableColumn
-                                    width: frequencyTableFlick.contentWidth
-                                    Rectangle {
-                                        width: parent.width
-                                        height: 30
-                                        color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.18)
-                                        Row {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 10
-                                            anchors.rightMargin: 10
-                                            spacing: 8
-                                            Text { text: qsTr("IARU Region"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: qsTr("Mode"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 80; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: qsTr("Frequency"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 210; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: qsTr("Pref"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 56; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: qsTr("Description"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 250; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: qsTr("Start Date/Time"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: qsTr("End Date/Time"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                        }
-                                    }
-                                    Repeater {
-                                        id: frequencySettingsList
-                                        model: settingsDialog.workingFrequencyRows
-                                        delegate: Rectangle {
-                                            id: frequencySettingsRow
-                                            width: frequencyTableColumn.width
-                                            height: 30
-                                            color: settingsDialog.selectedWorkingFrequencyIndex === Number(row.index)
-                                                   ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.22)
-                                                   : (index % 2 === 0 ? Qt.rgba(1,1,1,0.035) : Qt.rgba(1,1,1,0.015))
-                                            property var row: modelData
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                onClicked: settingsDialog.selectWorkingFrequencyRow(frequencySettingsRow.row)
-                                            }
-                                            Row {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 10
-                                                anchors.rightMargin: 10
-                                                spacing: 8
-                                                Text { text: frequencySettingsRow.row.region || ""; color: textPrimary; font.pixelSize: 11; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                                Text { text: frequencySettingsRow.row.mode || ""; color: textPrimary; font.pixelSize: 11; width: 80; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                                Text { text: frequencySettingsRow.row.frequency || ""; color: textPrimary; font.pixelSize: 11; width: 210; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                                CheckBox {
-                                                    id: preferredFrequencyCheck
-                                                    checked: !!frequencySettingsRow.row.preferred
-                                                    width: 56
-                                                    height: 30
-                                                    onClicked: {
-                                                        bridge.setWorkingFrequencyPreferred(Number(frequencySettingsRow.row.index), checked)
-                                                        settingsDialog.refreshFrequencySettings()
-                                                    }
-                                                    indicator: Rectangle { width: 14; height: 14; radius: 3; color: preferredFrequencyCheck.checked ? primaryBlue : bgMedium; border.color: glassBorder; x: preferredFrequencyCheck.width / 2 - width / 2; y: preferredFrequencyCheck.height / 2 - height / 2 }
-                                                    contentItem: Text { text: "" }
-                                                }
-                                                Text { text: frequencySettingsRow.row.description || ""; color: textPrimary; font.pixelSize: 11; width: 250; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                                Text { text: frequencySettingsRow.row.startTime || ""; color: textSecondary; font.pixelSize: 11; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                                Text { text: frequencySettingsRow.row.endTime || ""; color: textSecondary; font.pixelSize: 11; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 8
-                            spacing: 3
-                            Text {
-                                text: qsTr("STATION INFORMATION")
-                                color: secondaryCyan
-                                font.pixelSize: 12
-                                font.bold: true
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                text: qsTr("Band offset is the transverter/station frequency offset for that band; use 0.000000 when unused.")
-                                color: textSecondary
-                                font.pixelSize: 10
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 106
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.44)
-                            border.color: glassBorder
-                            radius: 6
-                            clip: true
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: qsTr("Band:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 46; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    ComboBox {
-                                        id: stationBandCombo
-                                        model: settingsDialog.frequencyBandOptions
-                                        Layout.preferredWidth: 132
-                                        implicitHeight: controlHeight
-                                        Component.onCompleted: settingsDialog.setComboText(stationBandCombo, "20m")
-                                    }
-                                    Text { text: qsTr("Offset MHz:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 82; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    TextField {
-                                        id: stationOffsetField
-                                        text: "0.000000"
-                                        color: textPrimary
-                                        font.pixelSize: controlFontSize
-                                        horizontalAlignment: TextInput.AlignRight
-                                        inputMethodHints: Qt.ImhFormattedNumbersOnly
-                                        Layout.preferredWidth: 146
-                                        implicitHeight: controlHeight
-                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                    }
-                                    Text { text: qsTr("Antenna:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 70; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
-                                    TextField {
-                                        id: stationAntennaField
-                                        color: textPrimary
-                                        font.pixelSize: controlFontSize
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 160
-                                        implicitHeight: controlHeight
-                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Item { Layout.fillWidth: true }
-                                    Button {
-                                        id: addStationFrequencyButton
-                                        text: qsTr("Add")
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 86
-                                        onClicked: settingsDialog.addStationFrequencyFromEditor()
-                                        background: Rectangle { color: addStationFrequencyButton.hovered ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.18) : bgMedium; border.color: accentGreen; radius: 4 }
-                                        contentItem: Text { text: addStationFrequencyButton.text; color: accentGreen; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                    Button {
-                                        id: updateStationFrequencyButton
-                                        text: qsTr("Update")
-                                        enabled: settingsDialog.selectedStationFrequencyIndex >= 0
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 96
-                                        onClicked: settingsDialog.updateStationFrequencyFromEditor()
-                                        background: Rectangle { color: updateStationFrequencyButton.enabled && updateStationFrequencyButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: updateStationFrequencyButton.enabled ? primaryBlue : glassBorder; radius: 4 }
-                                        contentItem: Text { text: updateStationFrequencyButton.text; color: updateStationFrequencyButton.enabled ? primaryBlue : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                    Button {
-                                        id: deleteStationFrequencyButton
-                                        text: qsTr("Delete")
-                                        enabled: settingsDialog.selectedStationFrequencyIndex >= 0
-                                        implicitHeight: controlHeight
-                                        Layout.preferredWidth: 96
-                                        onClicked: settingsDialog.deleteSelectedStationFrequency()
-                                        background: Rectangle { color: deleteStationFrequencyButton.enabled && deleteStationFrequencyButton.hovered ? Qt.rgba(1,0.2,0.2,0.16) : bgMedium; border.color: deleteStationFrequencyButton.enabled ? "#ff5b5b" : glassBorder; radius: 4 }
-                                        contentItem: Text { text: deleteStationFrequencyButton.text; color: deleteStationFrequencyButton.enabled ? "#ff7777" : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 210
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.62)
-                            border.color: glassBorder
-                            radius: 6
-                            clip: true
-                            Column {
-                                anchors.fill: parent
-                                Rectangle {
-                                    width: parent.width
-                                    height: 30
-                                    color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.18)
-                                    Row {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 10
-                                        anchors.rightMargin: 10
-                                        spacing: 8
-                                        Text { text: qsTr("Band"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                        Text { text: qsTr("Offset"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 160; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                        Text { text: qsTr("Antenna Description"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: parent.width - 310; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                    }
-                                }
-                                ListView {
-                                    id: stationSettingsList
-                                    width: parent.width
-                                    height: parent.height - 30
-                                    clip: true
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    model: settingsDialog.stationFrequencyRows
-                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                                    delegate: Rectangle {
-                                        id: stationSettingsRow
-                                        width: stationSettingsList.width
-                                        height: 30
-                                        color: settingsDialog.selectedStationFrequencyIndex === Number(row.index)
-                                               ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.22)
-                                               : (index % 2 === 0 ? Qt.rgba(1,1,1,0.035) : Qt.rgba(1,1,1,0.015))
-                                        property var row: modelData
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: settingsDialog.selectStationFrequencyRow(stationSettingsRow.row)
-                                        }
-                                        Row {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 10
-                                            anchors.rightMargin: 10
-                                            spacing: 8
-                                            Text { text: stationSettingsRow.row.band || ""; color: textPrimary; font.pixelSize: 11; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: stationSettingsRow.row.offset || ""; color: textPrimary; font.pixelSize: 11; width: 160; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                            Text { text: stationSettingsRow.row.antenna || ""; color: textPrimary; font.pixelSize: 11; width: parent.width - 310; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 24
-                        }
-
-                        Component.onCompleted: settingsDialog.refreshFrequencySettings()
+                // Lazy Settings tab 7
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 7
+                    id: settingsTab7Loader
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab7.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=7")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 8 — COLORI ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Colori Decodifica ──
-                        Text { text: qsTr("DECODE COLORS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Repeater {
-                            model: settingsDialog.decodeColorModel
-                            delegate: RowLayout {
-                                id: decodeColorRow
-                                Layout.columnSpan: 4
-                                Layout.fillWidth: true
-                                spacing: 10
-                                property string targetProp: modelData.prop
-                                property string defaultColor: modelData.defaultColor
-                                property string currentColor: bridge[targetProp] || defaultColor
-
-                                Text {
-                                    text: modelData.label + ":"
-                                    color: textSecondary
-                                    font.pixelSize: 12
-                                    Layout.preferredWidth: 210
-                                    elide: Text.ElideRight
-                                }
-
-                                Rectangle {
-                                    width: 60
-                                    height: 24
-                                    radius: 4
-                                    color: settingsDialog.validHexColor(decodeColorRow.currentColor) ? decodeColorRow.currentColor : decodeColorRow.defaultColor
-                                    border.color: glassBorder
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: decodeColorPresetPop.open()
-                                    }
-                                    Popup {
-                                        id: decodeColorPresetPop
-                                        width: 232
-                                        height: 88
-                                        background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
-                                        Flow {
-                                            anchors.fill: parent
-                                            anchors.margins: 8
-                                            spacing: 4
-                                            Repeater {
-                                                model: settingsDialog.presetColors.concat([decodeColorRow.defaultColor])
-                                                delegate: Rectangle {
-                                                    width: 20
-                                                    height: 20
-                                                    radius: 3
-                                                    color: modelData
-                                                    border.color: glassBorder
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            settingsDialog.setDecodeHighlightColor(decodeColorRow.targetProp, modelData)
-                                                            decodeColorInput.text = settingsDialog.normalizedHexColor(modelData)
-                                                            decodeColorPresetPop.close()
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                TextField {
-                                    id: decodeColorInput
-                                    text: decodeColorRow.currentColor
-                                    selectByMouse: true
-                                    implicitHeight: controlHeight
-                                    Layout.preferredWidth: 110
-                                    color: settingsDialog.validHexColor(text) ? textPrimary : "#ff5555"
-                                    font.pixelSize: controlFontSize
-                                    onActiveFocusChanged: {
-                                        if (!activeFocus)
-                                            text = decodeColorRow.currentColor
-                                    }
-                                    onAccepted: {
-                                        if (settingsDialog.setDecodeHighlightColor(decodeColorRow.targetProp, text))
-                                            text = settingsDialog.normalizedHexColor(text)
-                                    }
-                                    background: Rectangle {
-                                        color: bgMedium
-                                        border.color: decodeColorInput.activeFocus ? secondaryCyan : glassBorder
-                                        radius: 4
-                                    }
-                                }
-
-                                Button {
-                                    text: qsTr("Reset")
-                                    Layout.preferredWidth: 72
-                                    implicitHeight: controlHeight
-                                    onClicked: {
-                                        settingsDialog.setDecodeHighlightColor(decodeColorRow.targetProp, decodeColorRow.defaultColor)
-                                        decodeColorInput.text = decodeColorRow.defaultColor
-                                    }
-                                    background: Rectangle {
-                                        color: parent.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.24) : bgMedium
-                                        border.color: glassBorder
-                                        radius: 4
-                                    }
-                                    contentItem: Text {
-                                        text: parent.text
-                                        color: textPrimary
-                                        font.pixelSize: 11
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                }
-
-                                Item { Layout.fillWidth: true }
-                            }
-                        }
-                        Text { text: qsTr("B4 Strikethrough:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.b4Strikethrough
-                            onCheckedChanged: {
-                                bridge.b4Strikethrough = checked
-                                bridge.setSetting("b4Strikethrough", checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        // ── Highlighting ──
-                        Text { text: qsTr("HIGHLIGHTING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Highlight 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("Highlight73", true)
-                            onCheckedChanged: bridge.setSetting("Highlight73", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        Text { text: qsTr("HL Orange:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("HighlightOrange", false)
-                            onCheckedChanged: bridge.setSetting("HighlightOrange", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Orange Calls:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("HighlightOrangeCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("HighlightOrangeCallsigns", text.toUpperCase())
-                        }
-
-                        Text { text: qsTr("HL Blue:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("HighlightBlue", false)
-                            onCheckedChanged: bridge.setSetting("HighlightBlue", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Blue Calls:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("HighlightBlueCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("HighlightBlueCallsigns", text.toUpperCase())
-                        }
-
-                        // ── Spettro ──
-                        Text { text: qsTr("SPECTRUM"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Palette:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: paletteCombo
-                            model: ["SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR","Aether Default","Aether BlueGreen","Aether Fire","Aether Plasma","FlexRadio"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
-                            currentIndex: Math.max(0, bridge.uiPaletteIndex)
-                            onActivated: {
-                                bridge.uiPaletteIndex = currentIndex
-                                bridge.setSetting("uiPaletteIndex", currentIndex)
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: paletteCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("Black Level:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Slider {
-                            from: 0; to: 100; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallBlackLevel", 15)); Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.setSetting("uiWaterfallBlackLevel", value)
-                        }
-
-                        Text { text: qsTr("Color Gain:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Slider {
-                            from: 0; to: 100; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallColorGain", 50)); Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.setSetting("uiWaterfallColorGain", value)
-                        }
-
-                        Text { text: qsTr("Contrast:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Slider {
-                            from: 10; to: 150; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallContrast", 80)); Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.setSetting("uiWaterfallContrast", value)
-                        }
-
-                        // ── Download Dati ──
-                        Text { text: qsTr("DATA DOWNLOAD"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: ""; Layout.preferredWidth: 100 }
-                        RowLayout {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 10
-                            Rectangle {
-                                width: 170; height: controlHeight; radius: 4
-                                opacity: bridge.ctyDatUpdating ? 0.65 : 1.0
-                                color: dlCtyMA.containsMouse && !bridge.ctyDatUpdating ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
-                                border.color: primaryBlue
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: bridge.ctyDatUpdating ? "Download CTY.dat..." : "Download CTY.dat"
-                                    color: primaryBlue
-                                    font.pixelSize: 12
-                                }
-                                MouseArea {
-                                    id: dlCtyMA
-                                    anchors.fill: parent
-                                    enabled: !bridge.ctyDatUpdating
-                                    hoverEnabled: true
-                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                    onClicked: {
-                                        dataDownloadStatus = "Verifica cty.dat..."
-                                        dataDownloadIsError = false
-                                        bridge.checkCtyDatUpdate()
-                                    }
-                                }
-                            }
-                            Rectangle {
-                                width: 190; height: controlHeight; radius: 4
-                                color: dlCall3MA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
-                                border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: qsTr("Download CALL3.TXT"); color: primaryBlue; font.pixelSize: 12 }
-                                MouseArea { id: dlCall3MA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.downloadCall3Txt() }
-                            }
-                        }
-                        Text {
-                            text: dataDownloadStatus.length > 0 ? dataDownloadStatus : "Dopo il click compare qui un messaggio con esito o errore."
-                            color: dataDownloadIsError ? "#ff5555" : (dataDownloadStatus.length > 0 ? secondaryCyan : textSecondary)
-                            font.pixelSize: 11
-                            wrapMode: Text.Wrap
-                            Layout.columnSpan: 4
-                        }
+                // Lazy Settings tab 8
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 8
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab8.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=8")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 9 — AVANZATE ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Avvio ──
-                        Text { text: qsTr("STARTUP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Item {
-                            Layout.columnSpan: 4
-                            Layout.fillWidth: true
-                            implicitHeight: advancedStartupGrid.implicitHeight
-
-                            GridLayout {
-                                id: advancedStartupGrid
-                                width: parent.width
-                                columns: 4
-                                columnSpacing: 14
-                                rowSpacing: 10
-                                property int checkWidth: 34
-                                property real labelWidth: Math.max(190, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
-
-                                Text { text: qsTr("Monitor OFF:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    enabled: false
-                                    checked: false
-                                    Component.onCompleted: settingsDialog.setBoolSettingIfChanged("MonitorOFF", false, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; opacity: parent.enabled ? 1.0 : 0.55; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Monitor Last:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("MonitorLastUsed", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("MonitorLastUsed", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Auto Astro:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: bridge.getSetting("AutoAstroWindow", false)
-                                    onCheckedChanged: bridge.setSetting("AutoAstroWindow", checked)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("kHz no k:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("kHzWithoutK", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("kHzWithoutK", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Progress Red:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("ProgressBarRed", true)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("ProgressBarRed", checked, true)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("High DPI:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("HighDPI", true)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("HighDPI", checked, true)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Larger Tab:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: bridge.getSetting("LargerTabWidget", false)
-                                    onCheckedChanged: bridge.setSetting("LargerTabWidget", checked)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Direct Visual:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("DirectVisualAudioCaptureUnsafe", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("DirectVisualAudioCaptureUnsafe", checked, false)
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Fast visual panadapter. In legacy mode it may open a second audio capture; in normal mode it only raises the visual refresh rate.")
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Low CPU:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: bridge.lowCpuModeEnabled
-                                    onToggled: bridge.lowCpuModeEnabled = checked
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Profile for slow PCs: up to 2 FT threads, slower waterfall, reduced early/deep decoding.")
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text {
-                                    text: qsTr("Reduces FT threads, waterfall refresh, and QML rendering during monitor/TX.")
-                                    color: textSecondary
-                                    font.pixelSize: 11
-                                    wrapMode: Text.Wrap
-                                    Layout.columnSpan: 2
-                                    Layout.fillWidth: true
-                                }
-                            }
-                        }
-
-                        // ── Comportamento ──
-                        Text { text: qsTr("BEHAVIOR"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Item {
-                            Layout.columnSpan: 4
-                            Layout.fillWidth: true
-                            implicitHeight: advancedBehaviorGrid.implicitHeight
-
-                            GridLayout {
-                                id: advancedBehaviorGrid
-                                width: parent.width
-                                columns: 4
-                                columnSpacing: 14
-                                rowSpacing: 10
-                                property int checkWidth: 34
-                                property real labelWidth: Math.max(190, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
-
-                                Text { text: qsTr("Quick Call:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("QuickCall", true)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("QuickCall", checked, true)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Force Call 1st:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("ForceCallFirst", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("ForceCallFirst", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("VHF/UHF:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: bridge.vhfUhfFeatures
-                                    onToggled: {
-                                        bridge.vhfUhfFeatures = checked
-                                        bridge.setSetting("VHFUHF", checked)
-                                    }
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Wait Features:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("WaitFeaturesEnabled", true)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("WaitFeaturesEnabled", checked, true)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Erase Band Act:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("erase_BandActivity", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("erase_BandActivity", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Clear DX Grid:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("clear_DXgrid", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXgrid", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Clear DX Call:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("clear_DXcall", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXcall", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("RX>TX after QSO:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("set_RXtoTX", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("set_RXtoTX", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-
-                                Text { text: qsTr("Alt Erase Btn:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("AlternateEraseButtonBehavior", true)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("AlternateEraseButtonBehavior", checked, true)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("No Btn Color:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("TxWarningDisabled", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("TxWarningDisabled", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                            }
-                        }
-
-                        // ── Modo Operativo ──
-                        Text { text: qsTr("OPERATING MODE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Item {
-                            Layout.columnSpan: 4
-                            Layout.fillWidth: true
-                            implicitHeight: advancedOperatingGrid.implicitHeight
-
-                            GridLayout {
-                                id: advancedOperatingGrid
-                                width: parent.width
-                                columns: 4
-                                columnSpacing: 14
-                                rowSpacing: 10
-                                property int checkWidth: 34
-                                property real labelWidth: Math.max(190, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
-
-                                Text { text: qsTr("Fox Mode:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: bridge.foxMode
-                                    onToggled: bridge.foxMode = checked
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Hound Mode:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: bridge.houndMode
-                                    onToggled: bridge.houndMode = checked
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("SuperFox:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("SuperFox", true)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("SuperFox", checked, true)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                                Text { text: qsTr("Show OTP:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
-                                CheckBox {
-                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
-                                    checked: settingsDialog.boolSetting("ShowOTP", false)
-                                    onToggled: settingsDialog.setBoolSettingIfChanged("ShowOTP", checked, false)
-                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                                    contentItem: Text { text: ""; leftPadding: 24 }
-                                }
-                            }
-                        }
-
-                        // ── Contest ──
-                        Text { text: qsTr("CONTEST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Activity:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ComboBox {
-                            id: contestCombo
-                            model: [qsTr("None"),"NA VHF","EU VHF",qsTr("Field Day"),"RTTY Roundup","WW DIGI",qsTr("Fox"),qsTr("Hound"),"ARRL Digi","Q65 Pileup"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
-                            currentIndex: Math.max(0, Math.min(model.length - 1, bridge.specialOperationActivity))
-                            onActivated: {
-                                bridge.specialOperationActivity = currentIndex
-                            }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: contestCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: qsTr("FD Exchange:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("Field_Day_Exchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Field_Day_Exchange", text.toUpperCase())
-                        }
-                        Text { text: qsTr("RTTY Exchange:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("RTTY_Exchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("RTTY_Exchange", text.toUpperCase())
-                        }
-
-                        Text { text: qsTr("Contest Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("Contest_Name", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Contest_Name", text.toUpperCase())
-                        }
-                        Text { text: qsTr("Indiv Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("Individual_Contest_Name", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("Individual_Contest_Name", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("NCCC Sprint:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("NCCC_Sprint", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("NCCC_Sprint", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // ── NTP Time Sync ──
-                        Text { text: qsTr("NTP TIME SYNC"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enable NTP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.ntpEnabled
-                            onClicked: bridge.setSetting("NTPEnabled", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text {
-                            text: bridge.ntpEnabled
-                                  ? (bridge.ntpSynced ? "Synced" : "Syncing / waiting reply")
-                                  : "Disabled"
-                            color: bridge.ntpEnabled ? (bridge.ntpSynced ? accentGreen : "#FF9800") : textSecondary
-                            font.pixelSize: 12
-                            Layout.columnSpan: 2
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        Text { text: qsTr("Custom Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            id: ntpServerField
-                            text: bridge.getSetting("NTPCustomServer", "")
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 2
-                            implicitHeight: controlHeight
-                            leftPadding: 8
-                            color: textPrimary
-                            font.pixelSize: controlFontSize
-                            placeholderText: qsTr("Empty = automatic public servers")
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onEditingFinished: bridge.setSetting("NTPCustomServer", text.trim())
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: controlHeight
-                            radius: 4
-                            color: ntpSyncNowMouse.containsMouse && bridge.ntpEnabled
-                                   ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.25)
-                                   : bgMedium
-                            border.color: bridge.ntpEnabled ? secondaryCyan : glassBorder
-                            opacity: bridge.ntpEnabled ? 1.0 : 0.55
-                            Text {
-                                anchors.centerIn: parent
-                                text: qsTr("Sync Now")
-                                color: bridge.ntpEnabled ? textPrimary : textSecondary
-                                font.pixelSize: 12
-                                font.bold: bridge.ntpEnabled
-                            }
-                            MouseArea {
-                                id: ntpSyncNowMouse
-                                anchors.fill: parent
-                                enabled: bridge.ntpEnabled
-                                hoverEnabled: true
-                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: bridge.syncNtpNow()
-                            }
-                        }
-
-                        Text {
-                            text: qsTr("Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.")
-                            color: textSecondary
-                            font.pixelSize: 11
-                            wrapMode: Text.WordWrap
-                            Layout.columnSpan: 4
-                        }
-
-                        // ── ADV Decoding ──
-                        Text { text: qsTr("ADV DECODING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Auto Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        ColumnLayout {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
-                            Switch {
-                                text: qsTr("AUTO - enable the 3 technologies when needed")
-                                checked: bridge.advAutoModeEnabled
-                                onToggled: bridge.advAutoModeEnabled = checked
-                                contentItem: Text {
-                                    text: parent.text; color: textPrimary; font.pixelSize: 12; font.bold: true
-                                    leftPadding: parent.indicator.width + 8
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            Text {
-                                text: qsTr("When ON, the 3 features below are managed automatically. Trigger: Neural+Turbo when decodes < 2/slot for 4 slots. Coherent when Q65 SNR < -22 dB.")
-                                color: "#888"; font.pixelSize: 10
-                                wrapMode: Text.WordWrap; Layout.fillWidth: true
-                                leftPadding: 8
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true; spacing: 12
-                                visible: bridge.advAutoModeEnabled
-                                Text { text: qsTr("Live state:"); color: "#888"; font.pixelSize: 10 }
-                                Rectangle { width: 8; height: 8; radius: 4; color: bridge.advNeuralSyncActive ? "#0f0" : "#444" }
-                                Text { text: qsTr("Neural"); color: bridge.advNeuralSyncActive ? "#0f0" : "#666"; font.pixelSize: 10 }
-                                Rectangle { width: 8; height: 8; radius: 4; color: bridge.advTurboFeedbackActive ? "#0f0" : "#444" }
-                                Text { text: qsTr("Turbo"); color: bridge.advTurboFeedbackActive ? "#0f0" : "#666"; font.pixelSize: 10 }
-                                Rectangle { width: 8; height: 8; radius: 4; color: bridge.advCoherentAvgActive ? "#0f0" : "#444" }
-                                Text { text: qsTr("Coherent"); color: bridge.advCoherentAvgActive ? "#0f0" : "#666"; font.pixelSize: 10 }
-                            }
-                        }
-
-                        Text { text: qsTr("Coherent Avg:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0 }
-                        ColumnLayout {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
-                            opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0
-                            Switch {
-                                text: qsTr("Coherent Average (Q65/JT65)")
-                                checked: bridge.coherentAvgEnabled
-                                onToggled: bridge.coherentAvgEnabled = checked
-                                enabled: !bridge.advAutoModeEnabled
-                                contentItem: Text {
-                                    text: parent.text; color: textPrimary; font.pixelSize: 12
-                                    leftPadding: parent.indicator.width + 8
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            Text {
-                                text: qsTr("Accumulates multi-slot averaging for Q65/JT65 decodes (+1-3 dB)")
-                                color: "#888"; font.pixelSize: 10
-                                wrapMode: Text.WordWrap; Layout.fillWidth: true
-                                leftPadding: 8
-                            }
-                        }
-
-                        Text { text: qsTr("Neural Sync:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0 }
-                        ColumnLayout {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
-                            opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0
-                            Switch {
-                                text: qsTr("Neural Sync (FT8 OSD decoder)")
-                                checked: bridge.neuralSyncEnabled
-                                onToggled: bridge.neuralSyncEnabled = checked
-                                enabled: !bridge.advAutoModeEnabled
-                                contentItem: Text {
-                                    text: parent.text; color: textPrimary; font.pixelSize: 12
-                                    leftPadding: parent.indicator.width + 8
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            Text {
-                                text: qsTr("Forces OSD-aware FT8 decoding (+2-3 dB on borderline signals)")
-                                color: "#888"; font.pixelSize: 10
-                                wrapMode: Text.WordWrap; Layout.fillWidth: true
-                                leftPadding: 8
-                            }
-                        }
-
-                        Text { text: qsTr("Turbo Feedback:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0 }
-                        ColumnLayout {
-                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
-                            opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0
-                            Switch {
-                                text: qsTr("Turbo Feedback (extended LDPC iterations)")
-                                checked: bridge.turboFeedbackEnabled
-                                onToggled: bridge.turboFeedbackEnabled = checked
-                                enabled: !bridge.advAutoModeEnabled
-                                contentItem: Text {
-                                    text: parent.text; color: textPrimary; font.pixelSize: 12
-                                    leftPadding: parent.indicator.width + 8
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            Text {
-                                text: qsTr("Extended LDPC iterations for marginal decode recovery")
-                                color: "#888"; font.pixelSize: 10
-                                wrapMode: Text.WordWrap; Layout.fillWidth: true
-                                leftPadding: 8
-                            }
-                        }
-
-                        // ── OTP ──
-                        Text { text: qsTr("OTP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("OTP Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("OTPEnabled", false)
-                            onCheckedChanged: bridge.setSetting("OTPEnabled", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("OTP Seed:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("OTPSeed", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("OTPSeed", text)
-                        }
-
-                        Text { text: qsTr("OTP Interval:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: otpIntSpin
-                            from: 1; to: 3600; value: Number(bridge.getSetting("OTPinterval", 1)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("OTPinterval", value)
-                            contentItem: TextInput { text: otpIntSpin.textFromValue(otpIntSpin.value, otpIntSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !otpIntSpin.editable; validator: otpIntSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: qsTr("OTP URL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("OTPUrl", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("OTPUrl", text)
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 4; Layout.preferredHeight: 80 }
+                // Lazy Settings tab 9
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 9
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab9.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=9")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 10 — ALERTS ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Audio Alerts ──
-                        Text { text: qsTr("AUDIO ALERTS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Alerts Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.alertSoundsEnabled
-                            onToggled: settingsDialog.setAlertEnabled(checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Button {
-                            text: qsTr("Test")
-                            enabled: bridge.alertSoundsEnabled
-                            Layout.preferredWidth: 90
-                            Layout.preferredHeight: 28
-                            onClicked: bridge.playAlert("MyCall")
-                            background: Rectangle {
-                                radius: 4
-                                color: parent.enabled ? settingsDialog.bgMedium : settingsDialog.bgDark
-                                border.color: parent.enabled ? settingsDialog.primaryBlue : settingsDialog.glassBorder
-                            }
-                            contentItem: Text {
-                                text: parent.text
-                                color: parent.enabled ? settingsDialog.primaryBlue : settingsDialog.textDim
-                                font.pixelSize: 11
-                                font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-
-                        // Alert grid
-                        Text { text: qsTr("CQ in Msg:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.alertOnCq
-                            onToggled: settingsDialog.setAlertCq(checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("My Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.alertOnMyCall
-                            onToggled: settingsDialog.setAlertMyCall(checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("New DXCC:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_DXCC", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXCC", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("New DXCC Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_DXCCOB", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXCCOB", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("New Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_Grid", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_Grid", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("New Grid Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_GridOB", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_GridOB", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("New Continent:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_Continent", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_Continent", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("New Cont Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_ContinentOB", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_ContinentOB", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("New CQ Zone:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_CQZ", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_CQZ", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("CQ Zone Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_CQZOB", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_CQZOB", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("New ITU Zone:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_ITUZ", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_ITUZ", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("ITU Zone Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_ITUZOB", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_ITUZOB", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("DX Call/Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_DXcall", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXcall", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("QSY Message:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("alert_QSYmessage", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_QSYmessage", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                // Lazy Settings tab 10
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 10
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab10.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=10")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-                // ═══════════ TAB 11 — FILTRI ═══════════
-                ScrollView {
-                    clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                    GridLayout {
-                        width: parent.width - 20
-                        columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-
-                        // ── Blacklist ──
-                        Text { text: qsTr("BLACKLIST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("Blacklisted", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("Blacklisted", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // Blacklist 1-12 (2 per row)
-                        Text { text: qsTr("Blacklist 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist1", text.toUpperCase()) }
-                        Text { text: qsTr("Blacklist 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist2", text.toUpperCase()) }
-
-                        Text { text: qsTr("Blacklist 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist3", text.toUpperCase()) }
-                        Text { text: qsTr("Blacklist 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist4", text.toUpperCase()) }
-
-                        Text { text: qsTr("Blacklist 5:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist5", text.toUpperCase()) }
-                        Text { text: qsTr("Blacklist 6:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist6", text.toUpperCase()) }
-
-                        Text { text: qsTr("Blacklist 7:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist7", text.toUpperCase()) }
-                        Text { text: qsTr("Blacklist 8:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist8", text.toUpperCase()) }
-
-                        Text { text: qsTr("Blacklist 9:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist9", text.toUpperCase()) }
-                        Text { text: qsTr("Blacklist 10:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist10", text.toUpperCase()) }
-
-                        Text { text: qsTr("Blacklist 11:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist11", text.toUpperCase()) }
-                        Text { text: qsTr("Blacklist 12:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Blacklist12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist12", text.toUpperCase()) }
-
-                        // ── Whitelist ──
-                        Text { text: qsTr("WHITELIST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("Whitelisted", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("Whitelisted", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        Text { text: qsTr("Whitelist 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist1", text.toUpperCase()) }
-                        Text { text: qsTr("Whitelist 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist2", text.toUpperCase()) }
-
-                        Text { text: qsTr("Whitelist 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist3", text.toUpperCase()) }
-                        Text { text: qsTr("Whitelist 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist4", text.toUpperCase()) }
-
-                        Text { text: qsTr("Whitelist 5:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist5", text.toUpperCase()) }
-                        Text { text: qsTr("Whitelist 6:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist6", text.toUpperCase()) }
-
-                        Text { text: qsTr("Whitelist 7:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist7", text.toUpperCase()) }
-                        Text { text: qsTr("Whitelist 8:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist8", text.toUpperCase()) }
-
-                        Text { text: qsTr("Whitelist 9:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist9", text.toUpperCase()) }
-                        Text { text: qsTr("Whitelist 10:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist10", text.toUpperCase()) }
-
-                        Text { text: qsTr("Whitelist 11:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist11", text.toUpperCase()) }
-                        Text { text: qsTr("Whitelist 12:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Whitelist12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist12", text.toUpperCase()) }
-
-                        // ── Always Pass ──
-                        Text { text: qsTr("ALWAYS PASS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("AlwaysPass", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("AlwaysPass", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        Text { text: qsTr("Always Pass 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass1", text.toUpperCase()) }
-                        Text { text: qsTr("Always Pass 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass2", text.toUpperCase()) }
-
-                        Text { text: qsTr("Always Pass 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass3", text.toUpperCase()) }
-                        Text { text: qsTr("Always Pass 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass4", text.toUpperCase()) }
-
-                        Text { text: qsTr("Always Pass 5:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass5", text.toUpperCase()) }
-                        Text { text: qsTr("Always Pass 6:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass6", text.toUpperCase()) }
-
-                        Text { text: qsTr("Always Pass 7:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass7", text.toUpperCase()) }
-                        Text { text: qsTr("Always Pass 8:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass8", text.toUpperCase()) }
-
-                        Text { text: qsTr("Always Pass 9:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass9", text.toUpperCase()) }
-                        Text { text: qsTr("Always Pass 10:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass10", text.toUpperCase()) }
-
-                        Text { text: qsTr("Always Pass 11:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass11", text.toUpperCase()) }
-                        Text { text: qsTr("Always Pass 12:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Pass12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Pass12", text.toUpperCase()) }
-
-                        // ── Territory ──
-                        Text { text: qsTr("TERRITORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Europe:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
-                        TextField { text: bridge.getSetting("Territory1",""); placeholderText: qsTr("EU / Europe"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Territory1", text) }
-                        Text { text: qsTr("Africa:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
-                        TextField { text: bridge.getSetting("Territory2",""); placeholderText: qsTr("AF / Africa"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Territory2", text) }
-
-                        Text { text: qsTr("Oceania:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
-                        TextField { text: bridge.getSetting("Territory3",""); placeholderText: qsTr("OC / Oceania"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Territory3", text) }
-                        Text { text: qsTr("Asia:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
-                        TextField { text: bridge.getSetting("Territory4",""); placeholderText: qsTr("AS / Asia"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Territory4", text) }
-
-                        Text { text: qsTr("North America:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
-                        TextField { text: bridge.getSetting("Territory5",""); placeholderText: qsTr("NA / North America"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Territory5", text) }
-                        Text { text: qsTr("South America:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
-                        TextField { text: bridge.getSetting("Territory6",""); placeholderText: qsTr("SA / South America"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Territory6", text) }
-
-                        // ── Opzioni Filtro ──
-                        Text { text: qsTr("FILTER OPTIONS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: qsTr("Wait & Pounce:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.waitPounceActive
-                            onToggled: bridge.waitPounceActive = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("W&P Filters Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("FiltersForWaitAndPounceOnly", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWaitAndPounceOnly", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Calling Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("FiltersForWord2", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWord2", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                // Lazy Settings tab 11
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 11
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab11.qml", { dialog: settingsDialog })
                     }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=11")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
                 }
 
-            } // StackLayout
+                // Lazy Settings tab 12
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 12
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab12.qml", { dialog: settingsDialog })
+                    }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=12")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
+                }
+
+                // Lazy Settings tab 13
+                Loader {
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: settingsDialog.tabsReady && tabStack.currentIndex === 13
+                    function ensureLoaded() {
+                        if (!settingsDialog.tabsReady)
+                            return
+                        if (active && !item)
+                            setSource("SettingsTab13.qml", { dialog: settingsDialog })
+                    }
+                    onLoaded: {
+                        console.log("SETUP tab loaded index=13")
+                        if (active) settingsDialog.finishInitialSettingsLoad()
+                    }
+                    onActiveChanged: ensureLoaded()
+                    Component.onCompleted: ensureLoaded()
+                }
+
+            } // tab host
         } // RowLayout
-    } // contentItem
-}
+    } // settingsContentScaler
+} // contentItem
+
+} // SettingsDialog

@@ -180,7 +180,8 @@ QString normalize_otp_key (QString const& raw)
 
 void clear_fox_state ()
 {
-  std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+  foxcom_ensure_wave (&foxcom_);
+  std::fill_n (foxcom_.wave, static_cast<int> (FOXCOM_WAVE_SIZE), 0.0f);
   std::fill_n (&foxcom_.cmsg[0][0], static_cast<int> (sizeof (foxcom_.cmsg)), ' ');
   std::fill_n (foxcom_.textMsg, static_cast<int> (sizeof (foxcom_.textMsg)), ' ');
   std::fill_n (&foxcom3_.cmsg2[0][0], static_cast<int> (sizeof (foxcom3_.cmsg2)), ' ');
@@ -251,7 +252,7 @@ void populate_messages (QString const& foxcall, int nh1, int nh2, bool more_cqs,
       lines << QStringLiteral ("CQ %1 FN20").arg (foxcall);
     }
 
-  foxcom_.nslots = std::min (lines.size (), 5);
+  foxcom_.nslots = static_cast<int> (std::min<qsizetype> (lines.size (), 5));
   foxcom_.nfreq = 750;
   foxcom_.bMoreCQs = more_cqs;
   foxcom_.bSendMsg = send_msg;

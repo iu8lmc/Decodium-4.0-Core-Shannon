@@ -36,8 +36,11 @@ ComboBox {
 
     contentItem: Text {
         text: control.currentText !== undefined && control.currentText !== "" ? control.currentText : control.displayText
-        font.family: control.font.family
+        font.family: control.font.family && control.font.family.length > 0
+                     ? control.font.family
+                     : (Qt.platform.os === "osx" ? "Helvetica Neue" : "")
         font.pixelSize: control.effectiveFontPixelSize
+        font.bold: control.font.bold
         color: control.textColor
         horizontalAlignment: control.textHorizontalAlignment
         verticalAlignment: Text.AlignVCenter
@@ -46,6 +49,7 @@ ComboBox {
         rightPadding: control.rightPadding
         topPadding: control.topPadding
         bottomPadding: control.bottomPadding
+        renderType: Text.QtRendering
     }
 
     indicator: Canvas {
@@ -79,13 +83,17 @@ ComboBox {
         contentItem: Text {
             text: modelData !== undefined ? modelData : (model.text !== undefined ? model.text : "")
             color: highlighted ? "#ffffff" : control.textColor
+            font.family: control.font.family && control.font.family.length > 0
+                         ? control.font.family
+                         : (Qt.platform.os === "osx" ? "Helvetica Neue" : "")
             font.pixelSize: control.effectiveFontPixelSize
-            font.bold: highlighted
+            font.bold: control.font.bold || highlighted
             elide: Text.ElideRight
             horizontalAlignment: control.textHorizontalAlignment
             verticalAlignment: Text.AlignVCenter
             leftPadding: 12
             rightPadding: 12
+            renderType: Text.QtRendering
         }
 
         background: Rectangle {

@@ -6,10 +6,10 @@ Current release flow
 - Current Decodium macOS releases are distributed as `.dmg` and `.zip`.
 - No `.pkg` installer is produced in the current release flow.
 - Normal installation is simply:
-  1. drag `ft2.app` to `/Applications`
+  1. drag `Decodium4.app` to `/Applications`
   2. if Gatekeeper blocks startup, run:
 
-     sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
+     sudo xattr -r -d com.apple.quarantine /Applications/Decodium4.app
 
 Shared-memory note
 ------------------

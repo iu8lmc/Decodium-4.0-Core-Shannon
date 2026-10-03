@@ -1,6 +1,7 @@
 #include "asyncmodewidget.h"
 
 #include <QContextMenuEvent>
+#include <QFontDatabase>
 #include <QLinearGradient>
 #include <QMenu>
 #include <QPainter>
@@ -13,6 +14,14 @@ namespace {
   constexpr int SNR_MAX  =  10;
   constexpr qreal TWO_PI = 2.0 * M_PI;
   constexpr int FPS      =  25;
+
+  QFont uiFont (int pointSize, bool bold = false)
+  {
+    QFont font = QFontDatabase::systemFont (QFontDatabase::GeneralFont);
+    font.setPointSize (pointSize);
+    font.setBold (bold);
+    return font;
+  }
 }
 
 AsyncModeWidget::AsyncModeWidget (QWidget *parent)
@@ -94,7 +103,7 @@ void AsyncModeWidget::paintEvent (QPaintEvent *)
 
   if (!m_running) {
     p.setPen (QColor (0x44, 0x44, 0x44));
-    p.setFont (QFont {"Segoe UI", 7, QFont::Bold});
+    p.setFont (uiFont (7, true));
     p.drawText (rect (), Qt::AlignCenter, "FT2");
     return;
   }
@@ -103,7 +112,7 @@ void AsyncModeWidget::paintEvent (QPaintEvent *)
       ? QColor (0xff, 0x44, 0x44)
       : QColor (0x00, 0xe6, 0x76);
 
-  p.setFont (QFont {"Segoe UI", 6, QFont::Bold});
+  p.setFont (uiFont (6, true));
   p.setPen (waveColor);
   QString const label = m_transmitting ? QStringLiteral ("TX") : QStringLiteral ("ASYNC");
   p.drawText (QRect (0, 1, w, 10), Qt::AlignCenter, label);
@@ -154,7 +163,7 @@ void AsyncModeWidget::paintEvent (QPaintEvent *)
     grad.setColorAt (1.0, QColor (0x00, 0xff, 0x88));
     p.fillRect (meterX, meterY, barW, meterH, grad);
 
-    p.setFont (QFont {"Segoe UI", 6});
+    p.setFont (uiFont (6));
     p.setPen (Qt::white);
     QString const dbText = (m_snr <= -99) ? QStringLiteral ("--- dB") : QStringLiteral ("%1 dB").arg (m_snr);
     p.drawText (QRect (0, meterY - 9, w, 9), Qt::AlignCenter, dbText);

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "fixtureKind": "pinned-source-protocol-landmarks-no-pcm",
+  "sources": [
+    {
+      "project": "MMSSTV open-source mirror",
+      "revision": "8060b5f1e9727b0052d74108081c6db7b26babad",
+      "paths": ["mode.txt", "sstv.cpp", "Main.cpp"],
+      "role": "original mode description plus executable RX/TX behaviour"
+    },
+    {
+      "project": "QSSTV",
+      "revision": "8c27d6d169d8c6c197eb47c2089870e39bc06a02",
+      "paths": ["src/sstv/sstvparam.cpp", "src/sstv/visfskid.cpp", "src/sstv/modes"],
+      "role": "second implementation-lineage cross-check"
+    }
+  ],
+  "units": {
+    "duration": "microseconds",
+    "frequency": "hertz"
+  },
+  "wideExtendedVis": {
+    "headerDurationUs": 1150000,
+    "markerRawOctet": 35,
+    "bitOrder": "LSB-first",
+    "bitDurationUs": 30000,
+    "oneHz": 1100,
+    "zeroHz": 1300,
+    "modes": [
+      {"id":"mp-73","width":320,"height":256,"scans":128,"linesPerScan":2,"extensionRawOctet":37,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"componentUs":140000,"scanUs":570000,"imageBodyUs":72960000,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mp-115","width":320,"height":256,"scans":128,"linesPerScan":2,"extensionRawOctet":41,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"componentUs":223000,"scanUs":902000,"imageBodyUs":115456000,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mp-140","width":320,"height":256,"scans":128,"linesPerScan":2,"extensionRawOctet":42,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"componentUs":270000,"scanUs":1090000,"imageBodyUs":139520000,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mp-175","width":320,"height":256,"scans":128,"linesPerScan":2,"extensionRawOctet":44,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"componentUs":340000,"scanUs":1370000,"imageBodyUs":175360000,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mr-73","width":320,"height":256,"scans":256,"linesPerScan":1,"extensionRawOctet":69,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":138000,"chromaUs":69000,"holdLastUs":100,"scanUs":286300,"imageBodyUs":73292800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mr-90","width":320,"height":256,"scans":256,"linesPerScan":1,"extensionRawOctet":70,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":171000,"chromaUs":85500,"holdLastUs":100,"scanUs":352300,"imageBodyUs":90188800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mr-115","width":320,"height":256,"scans":256,"linesPerScan":1,"extensionRawOctet":73,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":220000,"chromaUs":110000,"holdLastUs":100,"scanUs":450300,"imageBodyUs":115276800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mr-140","width":320,"height":256,"scans":256,"linesPerScan":1,"extensionRawOctet":74,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":269000,"chromaUs":134500,"holdLastUs":100,"scanUs":548300,"imageBodyUs":140364800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"mr-175","width":320,"height":256,"scans":256,"linesPerScan":1,"extensionRawOctet":76,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":337000,"chromaUs":168500,"holdLastUs":100,"scanUs":684300,"imageBodyUs":175180800,"pixelLowHz":1500,"pixelHighHz":2300,"sourceConflict":"QSSTV table typo says raw 0x4a; MMSSTV transmitter, mode.txt and Handbook say raw 0x4c"},
+      {"id":"ml-180","width":640,"height":496,"scans":496,"linesPerScan":1,"extensionRawOctet":133,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":176500,"chromaUs":88250,"holdLastUs":100,"scanUs":363300,"imageBodyUs":180196800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"ml-240","width":640,"height":496,"scans":496,"linesPerScan":1,"extensionRawOctet":134,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":236500,"chromaUs":118250,"holdLastUs":100,"scanUs":483300,"imageBodyUs":239716800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"ml-280","width":640,"height":496,"scans":496,"linesPerScan":1,"extensionRawOctet":137,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":277500,"chromaUs":138750,"holdLastUs":100,"scanUs":565300,"imageBodyUs":280388800,"pixelLowHz":1500,"pixelHighHz":2300},
+      {"id":"ml-320","width":640,"height":496,"scans":496,"linesPerScan":1,"extensionRawOctet":138,"layout":"Y,hold-last,Cr-half-horizontal,hold-last,Cb-half-horizontal,hold-last","syncHz":1200,"syncUs":9000,"porchHz":1500,"porchUs":1000,"lumaUs":317500,"chromaUs":158750,"holdLastUs":100,"scanUs":645300,"imageBodyUs":320068800,"pixelLowHz":1500,"pixelHighHz":2300}
+    ]
+  },
+  "narrowVis": {
+    "headerDurationUs": 950000,
+    "groups": [45, 21, "payload", "21 xor payload"],
+    "groupBitOrder": "LSB-first",
+    "bitDurationUs": 22000,
+    "oneHz": 1900,
+    "zeroHz": 2100,
+    "modes": [
+      {"id":"mp-73-narrow","width":320,"height":256,"scans":128,"linesPerScan":2,"payload":2,"packedWireValue":6038893,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1900,"syncUs":9000,"porchHz":2044,"porchUs":1000,"componentUs":140000,"scanUs":570000,"imageBodyUs":72960000,"pixelLowHz":2044,"pixelHighHz":2300},
+      {"id":"mp-110-narrow","width":320,"height":256,"scans":128,"linesPerScan":2,"payload":4,"packedWireValue":4474221,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1900,"syncUs":9000,"porchHz":2044,"porchUs":1000,"componentUs":212000,"scanUs":858000,"imageBodyUs":109824000,"pixelLowHz":2044,"pixelHighHz":2300},
+      {"id":"mp-140-narrow","width":320,"height":256,"scans":128,"linesPerScan":2,"payload":5,"packedWireValue":4216173,"layout":"Y-first,Cr-pair-average,Cb-pair-average,Y-second","syncHz":1900,"syncUs":9000,"porchHz":2044,"porchUs":1000,"componentUs":270000,"scanUs":1090000,"imageBodyUs":139520000,"pixelLowHz":2044,"pixelHighHz":2300},
+      {"id":"mc-110-narrow","width":320,"height":256,"scans":256,"linesPerScan":1,"payload":20,"packedWireValue":345453,"layout":"R,G,B","syncHz":1900,"syncUs":8000,"porchHz":2044,"porchUs":500,"componentUs":140000,"scanUs":428500,"imageBodyUs":109696000,"pixelLowHz":2044,"pixelHighHz":2300,"sourceConflict":"mode.txt prose says 143 ms; MMSSTV executable uses 140 ms and QSSTV line timing is 428.52734375 ms"},
+      {"id":"mc-140-narrow","width":320,"height":256,"scans":256,"linesPerScan":1,"payload":21,"packedWireValue":87405,"layout":"R,G,B","syncHz":1900,"syncUs":8000,"porchHz":2044,"porchUs":500,"componentUs":180000,"scanUs":548500,"imageBodyUs":140416000,"pixelLowHz":2044,"pixelHighHz":2300},
+      {"id":"mc-180-narrow","width":320,"height":256,"scans":256,"linesPerScan":1,"payload":22,"packedWireValue":877933,"layout":"R,G,B","syncHz":1900,"syncUs":8000,"porchHz":2044,"porchUs":500,"componentUs":232000,"scanUs":704500,"imageBodyUs":180352000,"pixelLowHz":2044,"pixelHighHz":2300}
+    ]
+  },
+  "evidenceLimit": "Pinned source landmarks only. This fixture is not an audio capture and does not establish live-radio or cross-application interoperability."
+}
