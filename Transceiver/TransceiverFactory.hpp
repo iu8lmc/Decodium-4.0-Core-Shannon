@@ -126,6 +126,7 @@ public:
     QString ptt_port;           // serial port device name or special
                                 // value "CAT"
     int civ_address {0};        // Icom CI-V address, 0 = Hamlib/model default
+    bool cat_keep_alive {false}; // optional low-rate CAT traffic for adapters with activity LEDs
     int poll_interval;          // in seconds for interfaces that
                                 // require polling for state changes
 
@@ -149,6 +150,7 @@ public:
         && rhs.split_mode == split_mode
         && rhs.ptt_port == ptt_port
         && rhs.civ_address == civ_address
+        && rhs.cat_keep_alive == cat_keep_alive
         && rhs.poll_interval == poll_interval
         ;
     }

@@ -6,6 +6,8 @@ Fork-specific markdown documentation is also available:
  - doc/README.en-GB.md
  - doc/README.it.md
  - doc/README.es.md
+ - docs/sstv/USER_GUIDE.md (native SSTV operator guide)
+ - docs/sstv/DEVELOPER_GUIDE.md (native SSTV developer guide)
 
 If you do not wish to build  the documentation, it is possible to skip
 this  directory  in the  WSJT-X  build  by  setting the  CMake  option

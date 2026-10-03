@@ -235,12 +235,12 @@ int encode_morse_bits (QString const& message, std::array<int, 250>* bits_out)
       (*bits_out)[static_cast<size_t> (n++)] = 0;
     }
 
-  for (int j = 0; j < 4 && n <= static_cast<int> (bits_out->size ()); ++j)
+  for (int j = 0; j < 4 && n < static_cast<int> (bits_out->size ()); ++j)
     {
       (*bits_out)[static_cast<size_t> (n++)] = 0;
     }
 
-  return n;
+  return std::min (n, static_cast<int> (bits_out->size ()));
 }
 
 void smooth_fortran_style (std::vector<float>& x, std::vector<float>& y, int nadd)
@@ -344,6 +344,96 @@ QVector<float> generate_cw_wave (QString const& message, int ifreq)
 
   float const fac = 0.99999f / max_abs;
   for (int i = 0; i < kEchoCwMaxSamples; ++i)
+    {
+      wave[i] = fac * y[static_cast<size_t> (i)] * z[static_cast<size_t> (i)];
+    }
+
+  return wave;
+}
+
+// Real-CW waveform at a FIXED WPM (variable duration). Unlike the Echo
+// variant above (fixed 2.048 s window with auto-scaled speed), this keys the
+// sidetone at the standard rate dit = 1.2/WPM seconds so a full "CQ CQ DE ..."
+// is sent at the intended speed. Used for the audio-CW TX path (USB/DATA),
+// which works on rigs whose CAT keyer is unreliable (e.g. Yaesu FT-991A).
+QVector<float> generate_cw_wave_wpm (QString const& message, int ifreq, int wpm)
+{
+  if (wpm < 5) wpm = 5;
+  if (wpm > 60) wpm = 60;
+
+  std::array<int, 250> icw {};
+  int ncw = encode_morse_bits (message, &icw);
+
+  // Trim leading/trailing key-up units so the wave starts/ends on a keyed bit.
+  int i1 = 0;
+  int i2 = 0;
+  for (int i = 0; i < ncw; ++i)
+    {
+      if (i1 == 0 && icw[static_cast<size_t> (i)] == 1) i1 = i + 1;
+      if (icw[static_cast<size_t> (i)] == 1) i2 = i + 2;
+    }
+  if (i1 < 1 || i2 < i1) return QVector<float> {};
+  if (i2 > static_cast<int> (icw.size ())) i2 = static_cast<int> (icw.size ());
+
+  ncw = i2 - i1 + 1;
+  std::array<int, 250> trimmed {};
+  for (int i = 0; i < ncw && i < static_cast<int> (trimmed.size ()); ++i)
+    {
+      trimmed[static_cast<size_t> (i)] = icw[static_cast<size_t> (i1 - 1 + i)];
+    }
+
+  double constexpr fsample = 48000.0;
+  double const nspd = 1.2 * fsample / static_cast<double> (wpm); // samples per dit unit
+  double const dt = 1.0 / fsample;
+  double const tdit = nspd * dt;
+  double const dphi = kTwoPi * static_cast<double> (ifreq) * dt;
+
+  int const nadd = static_cast<int> (0.002 / dt);                // ~2 ms key-shaping
+  long long const core = std::llround (nspd * static_cast<double> (ncw));
+  int const tail = 4 * nadd + 64;
+  long long total64 = core + tail;
+  long long constexpr kMaxCwSamples = 48000LL * 35;              // hard safety cap (~35 s)
+  if (total64 > kMaxCwSamples) total64 = kMaxCwSamples;
+  int const total = static_cast<int> (total64);
+  if (total <= tail) return QVector<float> {};
+
+  std::vector<float> x (static_cast<size_t> (total), 0.0f);
+  std::vector<float> y (static_cast<size_t> (total), 0.0f);
+  std::vector<float> z (static_cast<size_t> (total), 0.0f);
+
+  double phi = 0.0;
+  double t = 0.0;
+  for (int i = 0; i < total; ++i)
+    {
+      t += dt;
+      int const j = static_cast<int> (t / tdit) + 1;
+      phi += dphi;
+      if (phi > kTwoPi) phi -= kTwoPi;
+      x[static_cast<size_t> (i)] = (j >= 1 && j <= ncw)
+          ? static_cast<float> (trimmed[static_cast<size_t> (j - 1)])
+          : 0.0f;
+      z[static_cast<size_t> (i)] = static_cast<float> (std::sin (phi));
+    }
+
+  // Soft-key the on/off envelope to suppress key clicks (same triple-box pass
+  // used by the Echo CW generator). Envelope ends up in y.
+  smooth_fortran_style (x, y, nadd);
+  smooth_fortran_style (y, x, nadd);
+  smooth_fortran_style (x, y, nadd);
+
+  int const tail_start = std::max (0, total - 3 * nadd - 1);
+  std::fill (y.begin () + tail_start, y.end (), 0.0f);
+
+  float max_abs = 0.0f;
+  for (float value : y)
+    {
+      max_abs = std::max (max_abs, std::fabs (value));
+    }
+  if (max_abs <= 0.0f) return QVector<float> {};
+
+  float const fac = 0.99999f / max_abs;
+  QVector<float> wave (total, 0.0f);
+  for (int i = 0; i < total; ++i)
     {
       wave[i] = fac * y[static_cast<size_t> (i)] * z[static_cast<size_t> (i)];
     }
@@ -1680,6 +1770,148 @@ QVector<float> generateFt8Wave (int const* itone, int nsym, int nsps, float bt, 
   return generate_ft8_wave (itone, nsym, nsps, bt, fsample, f0);
 }
 
+QVector<float> generateJt65Wave (int const* itone, int nsym, float fsample, float f0)
+{
+  if (!itone || nsym <= 0 || fsample <= 0.0f)
+    {
+      return {};
+    }
+
+  // WSJT-X gen65 constants: 4096 samples/symbol at 11025 Hz and
+  // 11025/4096 Hz tone spacing. Rounding every boundary avoids accumulated
+  // timing error when the reference waveform is rendered at 48 kHz.
+  constexpr double kReferenceRate = 11025.0;
+  constexpr double kSamplesPerSymbol = 4096.0;
+  constexpr double kToneSpacing = kReferenceRate / kSamplesPerSymbol;
+  constexpr double kTwoPi = 6.28318530717958647692;
+  int const outputSamples = std::max (
+      1, static_cast<int> (std::llround (static_cast<double> (nsym)
+                                         * kSamplesPerSymbol * fsample
+                                         / kReferenceRate)));
+  QVector<float> wave (outputSamples, 0.0f);
+  double phase = 0.0;
+  int start = 0;
+  for (int symbol = 0; symbol < nsym && start < outputSamples; ++symbol)
+    {
+      int const end = std::min (
+          outputSamples,
+          static_cast<int> (std::llround (static_cast<double> (symbol + 1)
+                                           * kSamplesPerSymbol * fsample
+                                           / kReferenceRate)));
+      double const frequency = static_cast<double> (f0)
+                               + static_cast<double> (itone[symbol]) * kToneSpacing;
+      double const phaseStep = kTwoPi * frequency / static_cast<double> (fsample);
+      for (int sample = start; sample < end; ++sample)
+        {
+          wave[sample] = static_cast<float> (std::sin (phase));
+          phase += phaseStep;
+          if (phase >= kTwoPi || phase <= -kTwoPi)
+            {
+              phase = std::fmod (phase, kTwoPi);
+            }
+        }
+      start = end;
+    }
+  return wave;
+}
+
+QVector<float> generateJt4Wave (int const* itone, int nsym, float fsample, float f0,
+                                int submode)
+{
+  if (!itone || nsym <= 0 || fsample <= 0.0f)
+    {
+      return {};
+    }
+
+  // WSJT-X JT4: 206 channel symbols at 4.375 baud. Submodes A-G multiply
+  // the base tone spacing by nch={1,2,4,9,18,36,72}.
+  constexpr double kBaud = 4.375;
+  constexpr std::array<int, 7> kToneMultipliers {{1, 2, 4, 9, 18, 36, 72}};
+  int const boundedSubmode = std::max (0, std::min (submode, 6));
+  double const samplesPerSymbol = static_cast<double> (fsample) / kBaud;
+  int const outputSamples = std::max (
+      1, static_cast<int> (std::llround (static_cast<double> (nsym)
+                                         * samplesPerSymbol)));
+  double const toneSpacing = kBaud
+                             * static_cast<double> (
+                                 kToneMultipliers[static_cast<std::size_t> (boundedSubmode)]);
+
+  QVector<float> wave (outputSamples, 0.0f);
+  double phase = 0.0;
+  int start = 0;
+  for (int symbol = 0; symbol < nsym && start < outputSamples; ++symbol)
+    {
+      int const end = std::min (
+          outputSamples,
+          static_cast<int> (std::llround (static_cast<double> (symbol + 1)
+                                           * samplesPerSymbol)));
+      double const frequency = static_cast<double> (f0)
+                               + static_cast<double> (itone[symbol]) * toneSpacing;
+      double const phaseStep = kTwoPi * frequency / static_cast<double> (fsample);
+      for (int sample = start; sample < end; ++sample)
+        {
+          wave[sample] = static_cast<float> (std::sin (phase));
+          phase += phaseStep;
+          if (phase >= kTwoPi || phase <= -kTwoPi)
+            {
+              phase = std::fmod (phase, kTwoPi);
+            }
+        }
+      start = end;
+    }
+  return wave;
+}
+
+QVector<float> generateMsk144Wave (int const* itone, int nsym, float fsample,
+                                   float centerFrequency, double trPeriodSeconds)
+{
+  if (!itone || nsym <= 0 || fsample <= 0.0f || trPeriodSeconds <= 0.5)
+    {
+      return {};
+    }
+
+  // WSJT-X MSK144: 2000 baud continuous-phase 2-FSK, tones at center +/-500 Hz.
+  // The encoded 144-symbol frame (or 40-symbol shorthand) is repeated until
+  // 500 ms before the end of the T/R period. The final 17 ms follows the same
+  // exponential key-down ramp used by the reference Modulator.
+  constexpr double kTwoPi = 6.28318530717958647692;
+  constexpr double kBaud = 2000.0;
+  int const samplesPerSymbol = qMax (1, qRound (static_cast<double> (fsample) / kBaud));
+  int const payloadSamples = qMax (
+      0, qRound ((trPeriodSeconds - 0.5) * static_cast<double> (fsample)));
+  if (payloadSamples <= 0)
+    {
+      return {};
+    }
+
+  QVector<float> wave (payloadSamples);
+  double const dphi0 = kTwoPi * (static_cast<double> (centerFrequency) - 0.25 * kBaud)
+                       / static_cast<double> (fsample);
+  double const dphi1 = kTwoPi * (static_cast<double> (centerFrequency) + 0.25 * kBaud)
+                       / static_cast<double> (fsample);
+  int const fadeSamples = qMin (payloadSamples, qMax (1, qRound (0.017 * fsample)));
+  int const fadeStart = payloadSamples - fadeSamples;
+  double phase = 0.0;
+  double amplitude = 1.0;
+
+  for (int i = 0; i < payloadSamples; ++i)
+    {
+      int const symbol = (i / samplesPerSymbol) % nsym;
+      double const dphi = itone[symbol] == 0 ? dphi0 : dphi1;
+      if (i >= fadeStart)
+        {
+          amplitude *= 0.98;
+        }
+      wave[i] = static_cast<float> (amplitude * std::sin (phase));
+      phase += dphi;
+      if (phase >= kTwoPi)
+        {
+          phase = std::fmod (phase, kTwoPi);
+        }
+    }
+  return wave;
+}
+
 QVector<float> generateToneWave (int const* itone, int nsym, int nsps, float fsample,
                                  float toneSpacing, float f0)
 {
@@ -1689,6 +1921,11 @@ QVector<float> generateToneWave (int const* itone, int nsym, int nsps, float fsa
 QVector<float> generateCwWave (QString const& message, int ifreq)
 {
   return generate_cw_wave (message, ifreq);
+}
+
+QVector<float> generateCwWaveWpm (QString const& message, int ifreq, int wpm)
+{
+  return generate_cw_wave_wpm (message, ifreq, wpm);
 }
 
 std::array<int, 250> encodeMorseBits (QString const& message, int* symbolCount)
@@ -1900,6 +2137,7 @@ extern "C" void foxgen_ (bool* bSuperFox, char const* /*fname*/, fortran_charlen
 
   int const max_samples = FOXCOM_WAVE_SIZE;
   int const copy_samples = std::min (max_samples, (int)wave.size ());
+  if (!foxcom_ensure_wave (&foxcom_)) return;  // 1.0.376 (sec #6): alloca prima di scrivere
   std::copy_n (wave.constBegin (), copy_samples, foxcom_.wave);
   if (copy_samples < max_samples)
     {
@@ -1957,6 +2195,7 @@ extern "C" void foxgenft2_ ()
 
   int const max_samples = FOXCOM_WAVE_SIZE;
   int const copy_samples = std::min (max_samples, (int)wave.size ());
+  if (!foxcom_ensure_wave (&foxcom_)) return;  // 1.0.376 (sec #6): alloca prima di scrivere
   std::copy_n (wave.constBegin (), copy_samples, foxcom_.wave);
   if (copy_samples < max_samples)
     {

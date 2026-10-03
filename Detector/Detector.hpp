@@ -60,6 +60,13 @@ private:
   qint64 m_visualDownsampleSum {0};
   unsigned m_visualDownsampleCount {0};
   bool m_boundaryResetRequiresRuntimeLock {true};
+  // Opt-in diagnostics for legacy audio capture.  Keep the counters local to
+  // the detector so the callback path can be measured without log spam.
+  qint64 m_audioTraceStartMs {-1};
+  qint64 m_audioTraceLastLogMs {-1};
+  quint64 m_audioTraceInputFrames {0};
+  quint64 m_audioTraceAcceptedFrames {0};
+  quint64 m_audioTraceWrites {0};
 
 };
 
