@@ -1,7 +1,7 @@
 #pragma once
 // DecodiumOmniRigManager — backend OmniRig per Decodium 4.0 Core Shannon
 // Usa QAxObject (COM/ActiveX) per connettersi a OmniRig.exe (Windows only)
-// Stessa interfaccia pubblica di DecodiumCatManager / DecodiumTransceiverManager.
+// Stessa interfaccia pubblica di DecodiumTransceiverManager.
 #include <QObject>
 #include <QString>
 #include <QStringList>

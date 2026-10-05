@@ -1,7 +1,7 @@
 #pragma once
 // DecodiumTransceiverManager — wrapper QML/QObject attorno a TransceiverFactory.
 // Supporta Hamlib (100+ radio), OmniRig, HRD, DXLab Suite Commander, TCI.
-// Stessa interfaccia pubblica di DecodiumCatManager + campi aggiuntivi.
+// Gestore CAT Hamlib: interfaccia pubblica condivisa con gli altri manager + campi aggiuntivi.
 #include <QObject>
 #include <QElapsedTimer>
 #include <QString>
@@ -181,7 +181,7 @@ public:
     void setHrdStrictRadioMatch(bool v)   { if (m_hrdStrictRadioMatch != v){ m_hrdStrictRadioMatch = v; emit hrdStrictRadioMatchChanged(); } }
 
     // ── Comandi QML-invokable ─────────────────────────────────────────────
-    // Compatibilita' con DecodiumCatManager: VOX e' audio-only.
+    // VOX e' audio-only.
     bool canPtt() const { return m_connected && m_pttMethod != QStringLiteral("VOX"); }
 
     Q_INVOKABLE void setRigFrequency(double hz);

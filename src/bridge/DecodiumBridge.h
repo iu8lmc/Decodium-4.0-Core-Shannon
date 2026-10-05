@@ -33,7 +33,6 @@ namespace decodium::audio { class RttyRxRecovery; }
 #include "DecodiumThemeManager.h"
 #include "Detector/Ft2AsyncRegistry.hpp"
 #include "DecodiumSubManagers.h"
-#include "DecodiumCatManager.h"
 #include "DecodiumCat4OmManager.h"
 #include "DecodiumOmniRigManager.h"
 #include "DecodiumTransceiverManager.h"
@@ -521,12 +520,11 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(WavManager*          wavManager      READ wavManager      CONSTANT)
     Q_PROPERTY(MacroManager*        macroManager    READ macroManager    CONSTANT)
     Q_PROPERTY(BandManager*         bandManager     READ bandManager     CONSTANT)
-    // catManager ritorna QObject* (può essere DecodiumCatManager o DecodiumTransceiverManager)
+    // catManager ritorna QObject* (il manager del backend CAT attivo)
     Q_PROPERTY(QObject*                      catManager      READ catManagerObj   NOTIFY catManagerChanged)
     Q_PROPERTY(QString                       catBackend      READ catBackend      WRITE setCatBackend NOTIFY catBackendChanged)
     Q_PROPERTY(QString                       activeCatProfile READ activeCatProfile NOTIFY activeCatProfileChanged)
     Q_PROPERTY(QStringList                   catProfileList READ catProfileList NOTIFY catProfilesChanged)
-    Q_PROPERTY(DecodiumCatManager*           nativeCat       READ nativeCat       CONSTANT)
     Q_PROPERTY(DecodiumCat4OmManager*        cat4OmCat       READ cat4OmCat       CONSTANT)
     Q_PROPERTY(DecodiumOmniRigManager*       omniRigCat      READ omniRigCat      CONSTANT)
     Q_PROPERTY(DecodiumTransceiverManager*   hamlibCat       READ hamlibCat       CONSTANT)
@@ -1219,7 +1217,6 @@ public:
     MacroManager*        macroManager() const { return m_macroManager; }
     BandManager*         bandManager()  const { return m_bandManager; }
     QObject*                     catManagerObj() const {
-        if (m_catBackend == "native")   return (QObject*)m_nativeCat;
         if (m_catBackend == "cat4om")   return (QObject*)m_cat4OmCat;
         if (m_catBackend == "omnirig")  return (QObject*)m_omniRigCat;
         return (QObject*)m_hamlibCat;
@@ -1228,7 +1225,6 @@ public:
     void                         setCatBackend(const QString& v);
     QString                      activeCatProfile() const;
     QStringList                  catProfileList() const;
-    DecodiumCatManager*          nativeCat()     const { return m_nativeCat; }
     DecodiumCat4OmManager*       cat4OmCat()     const { return m_cat4OmCat; }
     DecodiumOmniRigManager*      omniRigCat()    const { return m_omniRigCat; }
     DecodiumTransceiverManager*  hamlibCat()     const { return m_hamlibCat; }
@@ -3285,7 +3281,6 @@ private:
     WavManager*           m_wavManager    {nullptr};
     MacroManager*         m_macroManager  {nullptr};
     BandManager*          m_bandManager   {nullptr};
-    DecodiumCatManager*           m_nativeCat     {nullptr};
     DecodiumCat4OmManager*        m_cat4OmCat     {nullptr};
     DecodiumOmniRigManager*       m_omniRigCat    {nullptr};
     DecodiumTransceiverManager*   m_hamlibCat     {nullptr};

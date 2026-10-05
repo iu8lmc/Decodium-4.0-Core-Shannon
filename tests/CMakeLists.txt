@@ -358,12 +358,10 @@ add_executable (test_cat4om_manager
 target_link_libraries (test_cat4om_manager Qt6::Test Qt6::Core Qt6::Network Qt6::WebSockets)
 add_test (NAME test_cat4om_manager COMMAND $<TARGET_FILE:test_cat4om_manager>)
 
-add_executable (test_civ_address_settings
-  test_civ_address_settings.cpp
-  ../src/radio/DecodiumCatManager.cpp
-  ../src/radio/DecodiumCatManager.h)
-target_link_libraries (test_civ_address_settings Qt6::Test Qt6::Core Qt6::SerialPort)
-add_test (NAME test_civ_address_settings COMMAND $<TARGET_FILE:test_civ_address_settings>)
+add_executable (test_cat_native_migration test_cat_native_migration.cpp)
+target_include_directories (test_cat_native_migration PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_cat_native_migration Qt6::Test Qt6::Core)
+add_test (NAME test_cat_native_migration COMMAND $<TARGET_FILE:test_cat_native_migration>)
 
 add_executable (test_decoport_rig_driver_thread
   test_decoport_rig_driver_thread.cpp
@@ -639,7 +637,7 @@ set (_decodium_regression_test_targets
   test_sgp4
   test_rotator_service
   test_cat4om_manager
-  test_civ_address_settings
+  test_cat_native_migration
   test_decoport_rig_driver_thread
   test_udp_client_id
   test_ftx_weak_decode

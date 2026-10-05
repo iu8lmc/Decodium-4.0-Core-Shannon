@@ -12020,17 +12020,6 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                 showStatusToast(msg, secondaryCyan)
         }
         function onErrorMessage(msg) {
-            // Ignora TUTTI gli errori rig/Hamlib/CAT/COM quando il CAT nativo gestisce il rig
-            // Questi vengono dal legacy backend che tenta di connettersi sulla stessa porta
-            if (bridge.catBackend === "native") {
-                var lower = msg.toLowerCase()
-                if (lower.indexOf("hamlib") >= 0 || lower.indexOf("com") >= 0 ||
-                    lower.indexOf("access") >= 0 || lower.indexOf("cat failure") >= 0 ||
-                    lower.indexOf("cat ") >= 0 || lower.indexOf("rig") >= 0 ||
-                    lower.indexOf("serial") >= 0 || lower.indexOf("timed out") >= 0 ||
-                    lower.indexOf("kenwood") >= 0 || lower.indexOf("communication") >= 0)
-                    return
-            }
             console.error("[Bridge ERROR]", msg)
 
             // Estrai prefisso "Sorgente: dettaglio" per titolo specifico
@@ -12041,22 +12030,6 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
             mainWindow.openWarningDialog(title, summary, "")
         }
         function onWarningRaised(title, summary, details) {
-            // Quando il CAT nativo gestisce il rig, i warning Hamlib dal legacy
-            // backend sono falsi positivi (conflitto porta COM) — li ignoriamo.
-            // PRIMA: il return sopprimeva TUTTI i warning con CAT nativo, inclusi
-            // quelli legittimi (es. logger UDP non raggiunto). Ora filtriamo solo
-            // i warning effettivamente legati a CAT/Hamlib/serial.
-            if (bridge.catBackend === "native") {
-                var lower = (String(title) + " " + String(summary) + " " + String(details)).toLowerCase()
-                var catLike = lower.indexOf("cat ") >= 0 || lower.indexOf("cat:") >= 0 ||
-                    lower.indexOf("cat[") >= 0 || lower.indexOf("[cat") >= 0 ||
-                    lower.indexOf(" cat") >= 0 || lower.indexOf("cat/") >= 0 ||
-                    lower.substr(0, 3) === "cat"
-                if (lower.indexOf("hamlib") >= 0 || catLike ||
-                    lower.indexOf("rig") >= 0 || lower.indexOf("serial") >= 0 ||
-                    lower.indexOf("com ") >= 0 || lower.indexOf("timed out") >= 0)
-                    return
-            }
             mainWindow.openWarningDialog(title, summary, details)
         }
         function onTimeSyncSettingsRequested() {
@@ -12073,7 +12046,6 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
             mainWindow.close()
         }
         function onRigErrorRaised(title, summary, details) {
-            if (bridge.catBackend === "native") return
             rigErrorDialogTitle = title
             rigErrorSummary = summary
             rigErrorDetails = details

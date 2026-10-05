@@ -1,5 +1,4 @@
 /* Decodium 4.0 Core Shannon — CAT Settings Dialog
- * Backend "native": DecodiumCatManager (QSerialPort, 15 radio)  [default]
  * Backend "hamlib":  DecodiumTransceiverManager (Hamlib, 300+ radio)
  * bridge.catManager → QObject* al backend attivo (duck-typing QML)
  */
@@ -187,7 +186,7 @@ Dialog {
                 }
 
                 Repeater {
-                    model: [["native","Nativo (QSerialPort)"],["omnirig","OmniRig"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"],["cat4om","Cat4OM"]]
+                    model: [["omnirig","OmniRig"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"],["cat4om","Cat4OM"]]
                     delegate: Rectangle {
                         property string bk: modelData[0]
                         property bool active: bridge.catBackend === bk
