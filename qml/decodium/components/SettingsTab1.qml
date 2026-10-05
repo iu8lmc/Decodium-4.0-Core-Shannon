@@ -166,7 +166,7 @@ SettingsPageScroll {
         Row {
             Layout.fillWidth: true; Layout.columnSpan: Math.max(1, pageColumns - 1); spacing: 6
             Repeater {
-                model: [["native",qsTr("Native (15 radios)")],["hamlib",qsTr("Hamlib (300+ radios)")],["tci","TCI"],["omnirig","OmniRig"],["cat4om","Cat4OM"]]
+                model: [["hamlib",qsTr("Hamlib (300+ radios)")],["tci","TCI"],["omnirig","OmniRig"],["cat4om","Cat4OM"]]
                 delegate: Rectangle {
                     property string bk: modelData[0]
                     property bool active: bridge.catBackend === bk

@@ -622,7 +622,7 @@ void appendUniqueSerialPort(QStringList& ports, QString const& rawPort)
     if (port.isEmpty())
         return;
 #if defined(Q_OS_LINUX)
-    // 1.0.352 fix: dedup CANONICO (vedi DecodiumCatManager). /dev/ttyUSB0 e
+    // 1.0.352 fix: dedup CANONICO. /dev/ttyUSB0 e
     // /dev/serial/by-id/usb-... -> stesso device fisico = una sola voce.
     QString const key = comparablePortName(port);
     for (QString const& existing : ports) {

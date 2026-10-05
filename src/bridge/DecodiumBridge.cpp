@@ -35,6 +35,7 @@
 #include "CallsignIntelligenceService.h"
 #include "MapLayerModel.h"
 #include "DecodiumProfileSettings.h"
+#include "CatNativeMigration.h"
 #include "Sequencer/QsoSequencerRules.hpp"
 #include "Sequencer/MessageTokenRules.hpp"
 #include "DecodiumDxCluster.h"
@@ -328,15 +329,31 @@ static QString const kCatProfileActiveKey = QStringLiteral("CAT_ProfileActive");
 // nascosto la sua impostazione in "hamlib".
 static QString normalizedCatBackendForSettings(QString value)
 {
+    // Il backend "native" (QSerialPort) non esiste piu': un valore salvato in
+    // passato non e' riconosciuto e torna "hamlib".
     value = value.trimmed().toLower();
-    if (value != QStringLiteral("native")
-        && value != QStringLiteral("hamlib")
+    if (value != QStringLiteral("hamlib")
         && value != QStringLiteral("tci")
         && value != QStringLiteral("cat4om")
         && value != QStringLiteral("omnirig")) {
         return QStringLiteral("hamlib");
     }
     return value;
+}
+
+// Il backend "native" (QSerialPort) e' stato rimosso: vedi CatNativeMigration.h.
+// Si fa una volta sola, prima che i manager leggano le proprie impostazioni.
+static void migrateRemovedNativeCatBackend()
+{
+    QSettings s(QSettings::IniFormat, QSettings::UserScope,
+                QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    decodium::beginActiveSettingsProfile(s);
+    int const copied = decodium::radio::migrateRemovedNativeCatBackend(s);
+    if (copied >= 0) {
+        s.sync();
+        qInfo().noquote() << "[CATDBG] Native CAT backend removed: copied" << copied
+                          << "settings to Hamlib, backend now hamlib";
+    }
 }
 
 static QString normalizedCatProfileName(QString value)
@@ -6193,16 +6210,15 @@ static inline bool decoPortIsCat(const QString& backend)
 }
 
 static inline DecodiumCat4OmManager* activeCat4OmManager(
-    DecodiumCatManager* native, DecodiumCat4OmManager* explicitManager = nullptr)
+    QObject const* owner, DecodiumCat4OmManager* explicitManager = nullptr)
 {
     if (explicitManager) return explicitManager;
-    QObject* const owner = native ? native->parent() : nullptr;
     return owner
         ? owner->findChild<DecodiumCat4OmManager*>(QString(), Qt::FindDirectChildrenOnly)
         : nullptr;
 }
 
-static inline bool activeCatCanPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
+static inline bool activeCatCanPtt(QObject const* owner, DecodiumTransceiverManager* h, const QString& b,
                                    DecodiumOmniRigManager* o = nullptr, DecodiumLegacyBackend* legacy = nullptr,
                                    DecodiumCat4OmManager* c = nullptr)
 {
@@ -6210,39 +6226,36 @@ static inline bool activeCatCanPtt(DecodiumCatManager* n, DecodiumTransceiverMan
     // protocollo, e non serve ne' VOX ne' una linea seriale.
     if (decoPortIsCat(b))
         return g_decoPortCatLink && g_decoPortCatLink->isLinked();
-    c = activeCat4OmManager(n, c);
+    c = activeCat4OmManager(owner, c);
     auto const isVox = [](QString const& method) {
         return method.trimmed().compare(QStringLiteral("VOX"), Qt::CaseInsensitive) == 0;
     };
-    if (b == QStringLiteral("native") && n && isVox(n->pttMethod())) return false;
     if (b == QStringLiteral("omnirig") && o && isVox(o->pttMethod())) return false;
-    if (b != QStringLiteral("native") && b != QStringLiteral("cat4om")
+    if (b != QStringLiteral("cat4om")
         && b != QStringLiteral("omnirig") && h && isVox(h->pttMethod())) return false;
     if (useLegacyRigControlFallback(legacy, b)) return true;
-    if (b=="native") return n->canPtt();
     if (b=="cat4om") return c && c->canPtt();
     if (b=="omnirig" && o) return o->canPtt();
     return h->canPtt();
 }
 
-static inline bool activeCatUsesVoxPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
+static inline bool activeCatUsesVoxPtt(QObject const* owner, DecodiumTransceiverManager* h, const QString& b,
                                        DecodiumOmniRigManager* o = nullptr,
                                        DecodiumCat4OmManager* c = nullptr)
 {
     // Mai VOX verso la radio remota: il PTT si dice, non si fa indovinare.
     if (decoPortIsCat(b))
         return false;
-    c = activeCat4OmManager(n, c);
+    c = activeCat4OmManager(owner, c);
     auto const isVox = [](QString const& method) {
         return method.trimmed().compare(QStringLiteral("VOX"), Qt::CaseInsensitive) == 0;
     };
-    if (b == QStringLiteral("native")) return n && isVox(n->pttMethod());
     if (b == QStringLiteral("cat4om")) return c && isVox(c->pttMethod());
     if (b == QStringLiteral("omnirig")) return o && isVox(o->pttMethod());
     return h && isVox(h->pttMethod());
 }
 
-static inline void activeCatSetPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b, bool on,
+static inline void activeCatSetPtt(QObject const* owner, DecodiumTransceiverManager* h, const QString& b, bool on,
                                    DecodiumOmniRigManager* o = nullptr, DecodiumLegacyBackend* legacy = nullptr,
                                    DecodiumCat4OmManager* c = nullptr)
 {
@@ -6250,27 +6263,26 @@ static inline void activeCatSetPtt(DecodiumCatManager* n, DecodiumTransceiverMan
         if (g_decoPortCatLink) g_decoPortCatLink->setPtt(on, 0);
         return;
     }
-    c = activeCat4OmManager(n, c);
+    c = activeCat4OmManager(owner, c);
     if (useLegacyRigControlFallback(legacy, b)) {
         legacy->setRigPtt(on);
         return;
     }
-    if (b=="native") n->setRigPtt(on);
-    else if (b=="cat4om") { if (c) c->setRigPtt(on); }
+    if (b=="cat4om") { if (c) c->setRigPtt(on); }
     else if (b=="omnirig" && o) o->setRigPtt(on);
     else h->setRigPtt(on);
 }
 
-static inline void activeCatSetTxPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
+static inline void activeCatSetTxPtt(QObject const* owner, DecodiumTransceiverManager* h, const QString& b,
                                      bool on, double txDialHz,
                                      DecodiumOmniRigManager* o = nullptr, DecodiumLegacyBackend* legacy = nullptr,
                                      DecodiumCat4OmManager* c = nullptr)
 {
     if (decoPortIsCat(b)) {
-        activeCatSetPtt(n, h, b, on, o, legacy, c);
+        activeCatSetPtt(owner, h, b, on, o, legacy, c);
         return;
     }
-    c = activeCat4OmManager(n, c);
+    c = activeCat4OmManager(owner, c);
     if (b == QStringLiteral("cat4om") && c && !useLegacyRigControlFallback(legacy, b)) {
         c->setRigTxFrequencyAndPttAsync(txDialHz, on);
         return;
@@ -6286,19 +6298,19 @@ static inline void activeCatSetTxPtt(DecodiumCatManager* n, DecodiumTransceiverM
         return;
     }
 
-    activeCatSetPtt(n, h, b, on, o, legacy, c);
+    activeCatSetPtt(owner, h, b, on, o, legacy, c);
 }
 
-static inline bool activeCatSetTxPttAsync(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
+static inline bool activeCatSetTxPttAsync(QObject const* owner, DecodiumTransceiverManager* h, const QString& b,
                                           bool on, double txDialHz,
                                           DecodiumOmniRigManager* o = nullptr, DecodiumLegacyBackend* legacy = nullptr,
                                           DecodiumCat4OmManager* c = nullptr)
 {
     if (decoPortIsCat(b)) {
-        activeCatSetPtt(n, h, b, on, o, legacy, c);
+        activeCatSetPtt(owner, h, b, on, o, legacy, c);
         return false;   // niente asincrono: il comando e' gia' partito
     }
-    c = activeCat4OmManager(n, c);
+    c = activeCat4OmManager(owner, c);
     if (b == QStringLiteral("cat4om") && c && !useLegacyRigControlFallback(legacy, b)) {
         c->setRigTxFrequencyAndPttAsync(txDialHz, on);
         return true;
@@ -6314,7 +6326,6 @@ static inline bool activeCatSetTxPttAsync(DecodiumCatManager* n, DecodiumTransce
         return true;
     }
 
-    Q_UNUSED(n)
     Q_UNUSED(o)
     Q_UNUSED(legacy)
     Q_UNUSED(c)
@@ -6354,7 +6365,7 @@ static QString audioDeviceCacheSignature(QList<QAudioDevice> const& inputs,
     return tokens.join(QLatin1Char('\n'));
 }
 
-static inline void activeCatSetFreq(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b, double hz,
+static inline void activeCatSetFreq(QObject const* owner, DecodiumTransceiverManager* h, const QString& b, double hz,
                                     DecodiumOmniRigManager* o = nullptr, DecodiumLegacyBackend* legacy = nullptr,
                                     DecodiumCat4OmManager* c = nullptr)
 {
@@ -6362,18 +6373,17 @@ static inline void activeCatSetFreq(DecodiumCatManager* n, DecodiumTransceiverMa
         if (g_decoPortCatLink && hz > 0.0) g_decoPortCatLink->tune(hz);
         return;
     }
-    c = activeCat4OmManager(n, c);
+    c = activeCat4OmManager(owner, c);
     if (useLegacyRigControlFallback(legacy, b)) {
         legacy->setDialFrequency(hz);
         return;
     }
-    if (b=="native") n->setRigFrequency(hz);
-    else if (b=="cat4om") { if (c) c->setRigFrequency(hz); }
+    if (b=="cat4om") { if (c) c->setRigFrequency(hz); }
     else if (b=="omnirig" && o) o->setRigFrequency(hz);
     else h->setRigFrequency(hz);
 }
 
-static inline void activeCatSetTxFreq(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b, double hz,
+static inline void activeCatSetTxFreq(QObject const* owner, DecodiumTransceiverManager* h, const QString& b, double hz,
                                       DecodiumOmniRigManager* o = nullptr,
                                       DecodiumCat4OmManager* c = nullptr)
 {
@@ -6381,9 +6391,8 @@ static inline void activeCatSetTxFreq(DecodiumCatManager* n, DecodiumTransceiver
     // fingere di averne due vorrebbe dire spostare quella di ricezione.
     if (decoPortIsCat(b))
         return;
-    c = activeCat4OmManager(n, c);
-    if (b=="native") n->setRigTxFrequency(hz);
-    else if (b=="cat4om") { if (c) c->setRigTxFrequency(hz); }
+    c = activeCat4OmManager(owner, c);
+    if (b=="cat4om") { if (c) c->setRigTxFrequency(hz); }
     else if (b=="omnirig" && o) o->setRigTxFrequency(hz);
     else h->setRigTxFrequency(hz);
 }
@@ -10254,14 +10263,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_bandManager->setFrequencyResolver([this](const QString& bandLambda, const QString& mode) {
         return workingFrequencyForBandMode(bandLambda, mode);
     });
-    m_nativeCat       = new DecodiumCatManager(this);
     m_cat4OmCat       = new DecodiumCat4OmManager(this);
     m_omniRigCat      = new DecodiumOmniRigManager(this);
     m_hamlibCat       = new DecodiumTransceiverManager(this);
     m_catShare        = new DecodiumCatShare(m_hamlibCat, this);
     m_amplifier       = new DecodiumAmplifier(this);
     noteActiveCatProfileAtStartup();
-    m_nativeCat->loadSettings();
+    migrateRemovedNativeCatBackend();
     m_cat4OmCat->loadSettings();
     m_omniRigCat->loadSettings();
     m_hamlibCat->loadSettings();
@@ -11278,7 +11286,6 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             emit statusMessage(msg);
         });
     };
-    connectCatSignals(m_nativeCat, "native");
     connectCatSignals(m_cat4OmCat, "cat4om");
     connectCatSignals(m_omniRigCat, "omnirig");
     connectCatSignals(m_hamlibCat, "hamlib");
@@ -11667,7 +11674,7 @@ DecodiumBridge::~DecodiumBridge()
     safeQuitThread(m_decoPortMonitorThread, "decoPortMonitor");
     m_decoPortMonitorOut = nullptr;
     if (m_decoPortRemoteKeyed) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false,
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false,
                         m_omniRigCat, m_legacyBackend);
         m_decoPortRemoteKeyed = false;
     }
@@ -12180,8 +12187,7 @@ void DecodiumBridge::runPostQmlStartupServices()
         }
     });
 
-    bool const autoConn = (m_catBackend == QStringLiteral("native")) ? m_nativeCat->catAutoConnect()
-                        : (m_catBackend == QStringLiteral("cat4om")) ? m_cat4OmCat->catAutoConnect()
+    bool const autoConn = (m_catBackend == QStringLiteral("cat4om")) ? m_cat4OmCat->catAutoConnect()
                         : (m_catBackend == QStringLiteral("omnirig")) ? m_omniRigCat->catAutoConnect()
                                                                       : m_hamlibCat->catAutoConnect();
     // Auto Connect is the explicit preference; lastSuccessfulCatConnected
@@ -12399,38 +12405,10 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                 this, &DecodiumBridge::mirrorLegacyLoggedAdif);
         connect(m_legacyBackend, &DecodiumLegacyBackend::warningRaised,
                 this, [this](QString const& title, QString const& summary, QString const& details) {
-            // Quando il CAT nativo gestisce il rig, solo i warning legacy
-            // realmente legati a rig/Hamlib/seriale sono falsi positivi.
-            // Gli altri warning, come log QSO non registrabile, devono arrivare
-            // alla shell QML.
-            if (m_catBackend == QStringLiteral("native")) {
-                QString const lower = (title + QLatin1Char(' ') + summary + QLatin1Char(' ') + details).toLower();
-                bool const catLike =
-                    lower.startsWith(QStringLiteral("cat"))
-                    || lower.contains(QStringLiteral(" cat"))
-                    || lower.contains(QStringLiteral("[cat"))
-                    || lower.contains(QStringLiteral("cat:"))
-                    || lower.contains(QStringLiteral("cat/"));
-                bool const rigWarning =
-                    lower.contains(QStringLiteral("hamlib"))
-                    || catLike
-                    || lower.contains(QStringLiteral("rig"))
-                    || lower.contains(QStringLiteral("serial"))
-                    || lower.contains(QStringLiteral("com "))
-                    || lower.contains(QStringLiteral("timed out"));
-                if (rigWarning) {
-                    bridgeLog("Legacy warning suppressed (native CAT active): " + summary);
-                    return;
-                }
-            }
             emit warningRaised(title, summary, details);
         });
         connect(m_legacyBackend, &DecodiumLegacyBackend::rigErrorRaised,
                 this, [this](QString const& title, QString const& summary, QString const& details) {
-            if (m_catBackend == QStringLiteral("native")) {
-                bridgeLog("Legacy rig error suppressed (native CAT active): " + summary);
-                return;
-            }
             emit rigErrorRaised(title, summary, details);
         });
         connect(m_legacyBackend, &DecodiumLegacyBackend::preferencesRequested,
@@ -12492,10 +12470,10 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                         };
 
                         bool const canPtt = activeCatCanPtt(
-                            m_nativeCat, m_hamlibCat, m_catBackend,
+                            this, m_hamlibCat, m_catBackend,
                             m_omniRigCat, m_legacyBackend);
                         bool const voxPtt = activeCatUsesVoxPtt(
-                            m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat);
+                            this, m_hamlibCat, m_catBackend, m_omniRigCat);
                         bool const audioOnly = voxPtt || catSuppressedByEnvironment();
                         decodium::tx::PttConfirmationMode const confirmationMode = audioOnly
                             ? decodium::tx::PttConfirmationMode::AudioActivity
@@ -12516,10 +12494,10 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                             catTimer.start();
                             m_pttOnDispatched = true;
                             bool const asyncPtt = activeCatSetTxPttAsync(
-                                m_nativeCat, m_hamlibCat, m_catBackend,
+                                this, m_hamlibCat, m_catBackend,
                                 true, txDialHz, m_omniRigCat, m_legacyBackend);
                             if (!asyncPtt) {
-                                activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                                activeCatSetTxPtt(this, m_hamlibCat, m_catBackend,
                                                   true, txDialHz,
                                                   m_omniRigCat, m_legacyBackend);
                             }
@@ -12570,7 +12548,7 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                         return;
                     }
 #endif
-                    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+                    if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
                         QElapsedTimer pttTimer;
                         pttTimer.start();
                         double txDialHz = 0.0;
@@ -12587,10 +12565,10 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                         bool const useAsyncPtt =
                             enabled && shouldUseBridgeAudioForLegacyDigitalTx();
                         bool const asyncPtt = useAsyncPtt
-                            && activeCatSetTxPttAsync(m_nativeCat, m_hamlibCat, m_catBackend,
+                            && activeCatSetTxPttAsync(this, m_hamlibCat, m_catBackend,
                                                       enabled, txDialHz, m_omniRigCat, m_legacyBackend);
                         if (!asyncPtt) {
-                            activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                            activeCatSetTxPtt(this, m_hamlibCat, m_catBackend,
                                               enabled, txDialHz, m_omniRigCat, m_legacyBackend);
                         }
                         qint64 const catMs = catTimer.elapsed();
@@ -12663,7 +12641,7 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                                 if (m_shuttingDown || !m_legacyBackend || !m_legacyBackend->transmitting()) {
                                     return;
                                 }
-                                if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+                                if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
                                     bridgeLog(QStringLiteral("legacyPttRequested: applying delayed PTT after CAT reconnect"));
 #if defined(Q_OS_MAC)
                                     if (shouldUseBridgeAudioForLegacyDigitalTx()
@@ -12683,11 +12661,11 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                                     catTimer.start();
                                     bool const useAsyncPtt = shouldUseBridgeAudioForLegacyDigitalTx();
                                     bool const asyncPtt = useAsyncPtt
-                                        && activeCatSetTxPttAsync(m_nativeCat, m_hamlibCat, m_catBackend,
+                                        && activeCatSetTxPttAsync(this, m_hamlibCat, m_catBackend,
                                                                   true, txDialHz,
                                                                   m_omniRigCat, m_legacyBackend);
                                     if (!asyncPtt) {
-                                        activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                                        activeCatSetTxPtt(this, m_hamlibCat, m_catBackend,
                                                           true, txDialHz,
                                                           m_omniRigCat, m_legacyBackend);
                                     }
@@ -17377,7 +17355,7 @@ void DecodiumBridge::requestRigFrequencyFromBridge(double hz, const QString& rea
     }
 
     if (isHamlibFamilyBackend(m_catBackend)) {
-        activeCatSetFreq(m_nativeCat, m_hamlibCat, m_catBackend, dialHz, m_omniRigCat, m_legacyBackend);
+        activeCatSetFreq(this, m_hamlibCat, m_catBackend, dialHz, m_omniRigCat, m_legacyBackend);
         schedulePostQsyCatSettledSync(hz, reason);
         bridgeLog(QStringLiteral("CAT local QSY requested by %1: %2 Hz via %3 (mode/split sync delayed)")
                       .arg(reason,
@@ -17392,7 +17370,7 @@ void DecodiumBridge::requestRigFrequencyFromBridge(double hz, const QString& rea
         applyRttyRigMode(reason + QStringLiteral("/mode"));
     else
         applyConfiguredCatRigMode(reason + QStringLiteral("/mode"));
-    activeCatSetFreq(m_nativeCat, m_hamlibCat, m_catBackend, dialHz, m_omniRigCat, m_legacyBackend);
+    activeCatSetFreq(this, m_hamlibCat, m_catBackend, dialHz, m_omniRigCat, m_legacyBackend);
     syncActiveCatTxSplitFrequency(reason + QStringLiteral("/dial"));
 
     // E ancora una volta dopo il salto. Molti apparati, la FT-991A fra questi,
@@ -17457,7 +17435,7 @@ void DecodiumBridge::schedulePostQsyCatSettledSync(double hz, const QString& rea
                                QString::number(physicalReportedHz, 'f', 0),
                                QString::number(reportedHz, 'f', 0),
                                reason));
-            activeCatSetFreq(m_nativeCat, m_hamlibCat, m_catBackend,
+            activeCatSetFreq(this, m_hamlibCat, m_catBackend,
                              applyFrequencyCalibration(hz), m_omniRigCat, m_legacyBackend);
             schedulePostQsyCatSettledSync(hz, reason, 1000, nextAttempt);
             return;
@@ -17653,7 +17631,7 @@ void DecodiumBridge::syncActiveCatTxSplitFrequency(const QString& reason)
     double const txDialCalibrated = txDialHz > 0.0
         ? applyFrequencyCalibration(txDialHz)
         : 0.0;
-    activeCatSetTxFreq(m_nativeCat, m_hamlibCat, m_catBackend, txDialCalibrated, m_omniRigCat);
+    activeCatSetTxFreq(this, m_hamlibCat, m_catBackend, txDialCalibrated, m_omniRigCat);
 
     if (txDialHz > 0.0) {
         bridgeLog(QStringLiteral("CAT split sync (%1): mode=%2 dial=%3 tx_ui=%4 xit=%5 tx_dial=%6 tx_audio=%7 via %8")
@@ -18670,9 +18648,6 @@ QString DecodiumBridge::activePttMethod() const
 
 bool DecodiumBridge::activeCatReportsPttActive() const
 {
-    if (m_catBackend == QStringLiteral("native")) {
-        return m_nativeCat && m_nativeCat->pttActive();
-    }
     if (m_catBackend == QStringLiteral("cat4om")) {
         return m_cat4OmCat && m_cat4OmCat->pttActive();
     }
@@ -18685,7 +18660,7 @@ bool DecodiumBridge::activeCatReportsPttActive() const
 bool DecodiumBridge::sstvTxUsesVoxPtt() const
 {
 #if DECODIUM_HAS_SSTV
-    return activeCatUsesVoxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+    return activeCatUsesVoxPtt(this, m_hamlibCat, m_catBackend,
                                m_omniRigCat, m_cat4OmCat);
 #else
     return false;
@@ -18695,7 +18670,7 @@ bool DecodiumBridge::sstvTxUsesVoxPtt() const
 bool DecodiumBridge::sstvTxCanControlPtt() const
 {
 #if DECODIUM_HAS_SSTV
-    return activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+    return activeCatCanPtt(this, m_hamlibCat, m_catBackend,
                            m_omniRigCat, m_legacyBackend, m_cat4OmCat);
 #else
     return false;
@@ -18718,7 +18693,7 @@ bool DecodiumBridge::sstvTxPttActive() const
 void DecodiumBridge::setSstvTxPtt(bool on)
 {
 #if DECODIUM_HAS_SSTV
-    activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, on,
+    activeCatSetPtt(this, m_hamlibCat, m_catBackend, on,
                     m_omniRigCat, m_legacyBackend, m_cat4OmCat);
 #else
     Q_UNUSED(on)
@@ -18879,9 +18854,9 @@ void DecodiumBridge::requestLegacyPttOffOnce(const QString& reason)
         return;
     }
     m_pttOffSentForTransition = true;
-    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+    if (activeCatCanPtt(this, m_hamlibCat, m_catBackend,
                         m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false,
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false,
                         m_omniRigCat, m_legacyBackend);
         txTimelineLog(QStringLiteral("[TX-TL] ptt_off_once reason=%1 backend=%2")
                           .arg(reason, m_catBackend));
@@ -18889,12 +18864,12 @@ void DecodiumBridge::requestLegacyPttOffOnce(const QString& reason)
         // physically left TX.  Recheck after the serial polling interval and
         // issue one unconditional RX retry if the radio still reports TX.
         QTimer::singleShot(2300, this, [this, reason]() {
-            if (!activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+            if (!activeCatCanPtt(this, m_hamlibCat, m_catBackend,
                                  m_omniRigCat, m_legacyBackend)) return;
             const bool stillActive = activeCatReportsPttActive();
             // Always send the follow-up RX command.  The cached state can be
             // stale/false on Hamlib even while the physical rig is in TX.
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false,
+            activeCatSetPtt(this, m_hamlibCat, m_catBackend, false,
                             m_omniRigCat, m_legacyBackend);
             if (stillActive) {
                 txTimelineLog(QStringLiteral("[TX-TL] ptt_off_retry reason=%1 backend=%2")
@@ -21420,9 +21395,8 @@ void DecodiumBridge::decoPortEnsureRigDriver()
 
     QString const wanted = port.toUpper();
     bool const clash =
-        (m_hamlibCat && (wanted == m_hamlibCat->serialPort().trimmed().toUpper()
-                         || wanted == m_hamlibCat->pttPort().trimmed().toUpper()))
-        || (m_nativeCat && wanted == m_nativeCat->serialPort().trimmed().toUpper());
+        m_hamlibCat && (wanted == m_hamlibCat->serialPort().trimmed().toUpper()
+                        || wanted == m_hamlibCat->pttPort().trimmed().toUpper());
     if (clash) {
         bridgeLog(QStringLiteral("DecoPort rig driver: %1 is already the application's CAT port; "
                                  "staying on the application hooks").arg(port));
@@ -21775,7 +21749,7 @@ void DecodiumBridge::keySharedAudioTransmitter(bool on, bool allowWithoutCat)
     if (m_sharedPttViaOwnRig && m_decoPortRig && m_decoPortRig->isOpen())
         m_decoPortRig->setPtt(on);
     else if (m_catConnected)
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, on,
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, on,
                         m_omniRigCat, m_legacyBackend);
     if (on)
         m_decoPortTxGuard->start();
@@ -22174,8 +22148,6 @@ QVariantMap DecodiumBridge::cercaAmplificatore()
         escluse << m_hamlibCat->serialPort().trimmed();
         escluse << m_hamlibCat->pttPort().trimmed();
     }
-    if (m_nativeCat)
-        escluse << m_nativeCat->serialPort().trimmed();
     escluse.removeAll(QString());
 
     bridgeLog(QStringLiteral("[AMP] ricerca avviata; porte escluse: %1")
@@ -24153,9 +24125,9 @@ void DecodiumBridge::finishModulatorIdlePlayback(const QString& reason)
         phaseTimer.start();
         requestLegacyPttOffOnce(QStringLiteral("finish:%1").arg(reason));
         pttOffMs = phaseTimer.elapsed();
-    } else if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+    } else if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
         phaseTimer.start();
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
         pttOffMs = phaseTimer.elapsed();
     }
 
@@ -26717,8 +26689,8 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     if (wasBridgeLegacyTx) {
         requestLegacyPttOffOnce(QStringLiteral("complete:%1").arg(reason));
         clearLegacyPttTransition(QStringLiteral("complete:%1").arg(reason));
-    } else if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+    } else if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
     }
     if (usingTciAudioInput()) {
         stopTciTxAudioStream(true);
@@ -27768,15 +27740,15 @@ void DecodiumBridge::startTx()
         if (!satelliteHalfDuplex) {
             syncActiveCatTxSplitFrequency(QStringLiteral("startTx"));
         }
-        bool const voxPtt = activeCatUsesVoxPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat);
+        bool const voxPtt = activeCatUsesVoxPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat);
         if (satelliteHalfDuplex && m_hamlibCat) {
             // The absolute RX/TX VFO pair was programmed before this call.
             // Reissuing generic fake-split PTT here would collapse it to the
             // FT audio offset, so assert only PTT after the settle guard.
             m_hamlibCat->setRigPtt(true);
             bridgeLog(QStringLiteral("[FT2SAT] PTT ON after CAT settle (macOS)"));
-        } else if (!voxPtt && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-            activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+        } else if (!voxPtt && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+            activeCatSetTxPtt(this, m_hamlibCat, m_catBackend,
                               true, catSplitTxPttDialFrequencyHz(),
                               m_omniRigCat, m_legacyBackend);
         } else if (voxPtt) {
@@ -27982,12 +27954,12 @@ void DecodiumBridge::startTx()
                                                      m_activeTxMessage);
     applyConfiguredCatRigMode(QStringLiteral("startTx"));
     bool const satelliteHalfDuplex = ft2LinkSatelliteHalfDuplexOperationActive();
-    bool const voxPtt = activeCatUsesVoxPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat);
+    bool const voxPtt = activeCatUsesVoxPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat);
     double const startTxDialHz = satelliteHalfDuplex
         ? static_cast<double>(m_ft2LinkSatelliteHalfDuplexTxDialHz)
         : catSplitTxPttDialFrequencyHz();
     bool const startTxCanPtt =
-        activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend);
+        activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend);
     bool const hamlibAsyncFakeSplitPtt =
         !tciAudioTx
         && !satelliteHalfDuplex
@@ -28014,17 +27986,17 @@ void DecodiumBridge::startTx()
                       .arg(m_ft2LinkSatelliteHalfDuplexRxDialHz)
                       .arg(m_ft2LinkSatelliteHalfDuplexTxDialHz));
         bridgeLog(QStringLiteral("[FT2SAT] PTT ON after CAT settle"));
-    } else if (!tciAudioTx && !voxPtt && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+    } else if (!tciAudioTx && !voxPtt && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
         QElapsedTimer catTimer;
         catTimer.start();
         bool asyncPtt = false;
         if (hamlibAsyncFakeSplitPtt || cat4OmAsyncPtt) {
-            asyncPtt = activeCatSetTxPttAsync(m_nativeCat, m_hamlibCat, m_catBackend,
+            asyncPtt = activeCatSetTxPttAsync(this, m_hamlibCat, m_catBackend,
                                               true, startTxDialHz,
                                               m_omniRigCat, m_legacyBackend);
         }
         if (!asyncPtt) {
-            activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+            activeCatSetTxPtt(this, m_hamlibCat, m_catBackend,
                               true, startTxDialHz,
                               m_omniRigCat, m_legacyBackend);
         }
@@ -28175,8 +28147,8 @@ void DecodiumBridge::startTx()
                                    toneSpacing,
                                    true,
                                    periodSeconds)) {
-            if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
-                activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+            if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
+                activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
             m_transmitting = false;
             emit transmittingChanged();
             m_txPcmData.clear();
@@ -28196,8 +28168,8 @@ void DecodiumBridge::startTx()
             return;
         }
 
-        if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+            activeCatSetPtt(this, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
             bridgeLog(QStringLiteral("PTT ON via tci after TX audio stream arm"));
         }
 
@@ -28802,8 +28774,7 @@ void DecodiumBridge::stopTx()
 
     bool const satelliteHalfDuplex = ft2LinkSatelliteHalfDuplexOperationActive();
     bool const catReportsPttActive =
-        (m_catBackend == QStringLiteral("native") && m_nativeCat && m_nativeCat->pttActive())
-        || (m_catBackend == QStringLiteral("cat4om") && m_cat4OmCat && m_cat4OmCat->pttActive())
+        (m_catBackend == QStringLiteral("cat4om") && m_cat4OmCat && m_cat4OmCat->pttActive())
         || (isHamlibFamilyBackend(m_catBackend) && m_hamlibCat && m_hamlibCat->pttActive())
         || (m_catBackend == QStringLiteral("omnirig") && m_omniRigCat && m_omniRigCat->pttActive());
     bool const pttReleaseNeeded =
@@ -28876,8 +28847,8 @@ void DecodiumBridge::stopTx()
         m_soundOutput->stop();
     m_txPcmData.clear();
     if (pttReleaseNeeded
-        && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+        && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
     }
     if (m_transmitting) {
         m_transmitting = false;
@@ -28907,8 +28878,8 @@ void DecodiumBridge::stopTx()
     }
     m_txPcmData.clear();
     if (pttReleaseNeeded
-        && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+        && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
     }
     if (usingTciAudioInput()) stopTciTxAudioStream(true);
     if (m_transmitting) {
@@ -29031,10 +29002,10 @@ void DecodiumBridge::startTune()
         emit tuningChanged();
         suspendNonAudioTxWork(QStringLiteral("tune-tci"));
 
-        bridgeLog("startTune(TCI): canPtt=" + QString::number(activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
+        bridgeLog("startTune(TCI): canPtt=" + QString::number(activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
                   " catConnected=" + QString::number(m_catConnected));
         syncActiveCatTxSplitFrequency(QStringLiteral("startTune"));
-        bool const voxPtt = activeCatUsesVoxPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat);
+        bool const voxPtt = activeCatUsesVoxPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat);
         const double freq = effectiveTxAudioFrequencyHz() > 0 ? effectiveTxAudioFrequencyHz() : 1500.0;
         if (!startTciTuneAudioStream(freq)) {
             m_tuning = false;
@@ -29043,8 +29014,8 @@ void DecodiumBridge::startTune()
             emit errorMessage(QStringLiteral("Impossibile avviare audio TUNE TCI"));
             return;
         }
-        if (!voxPtt && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        if (!voxPtt && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+            activeCatSetPtt(this, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
             bridgeLog(QStringLiteral("PTT ON via tci after TUNE audio stream arm"));
         } else if (voxPtt) {
             bridgeLog(QStringLiteral("startTune(TCI): VOX selected, no CAT/DTR/RTS PTT"));
@@ -29082,12 +29053,12 @@ void DecodiumBridge::startTune()
         emit tuningChanged();
         suspendNonAudioTxWork(QStringLiteral("tune-mac"));
 
-        bridgeLog("startTune(mac): canPtt=" + QString::number(activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
+        bridgeLog("startTune(mac): canPtt=" + QString::number(activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
                   " catConnected=" + QString::number(m_catConnected));
         syncActiveCatTxSplitFrequency(QStringLiteral("startTune"));
-        bool const voxPtt = activeCatUsesVoxPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat);
-        if (!voxPtt && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        bool const voxPtt = activeCatUsesVoxPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat);
+        if (!voxPtt && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
+            activeCatSetPtt(this, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
         else if (voxPtt)
             bridgeLog(QStringLiteral("startTune(mac): VOX audio-only tune; no CAT/DTR/RTS command will be sent"));
 
@@ -29116,12 +29087,12 @@ void DecodiumBridge::startTune()
     emit tuningChanged();
     suspendNonAudioTxWork(QStringLiteral("tune"));
 
-    bridgeLog("startTune: canPtt=" + QString::number(activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
+    bridgeLog("startTune: canPtt=" + QString::number(activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
               " catConnected=" + QString::number(m_catConnected));
     syncActiveCatTxSplitFrequency(QStringLiteral("startTune"));
-    bool const voxPtt = activeCatUsesVoxPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat);
-    if (!voxPtt && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+    bool const voxPtt = activeCatUsesVoxPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat);
+    if (!voxPtt && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
     else if (voxPtt)
         bridgeLog(QStringLiteral("startTune: VOX audio-only tune; no CAT/DTR/RTS command will be sent"));
 
@@ -29143,8 +29114,8 @@ void DecodiumBridge::startTune()
     if (!launchTuneAudio()) {
         if (m_tuneTimer) m_tuneTimer->stop();
         disarmTuneWatchdog(QStringLiteral("tune-start-failed"));
-        if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+        if (activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
+            activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
         m_tuning = false;
         emit tuningChanged();
         resumeNonAudioTxWork(QStringLiteral("tune-start-failed"));
@@ -29319,8 +29290,7 @@ void DecodiumBridge::stopTune()
     disarmTuneWatchdog(QStringLiteral("stopTune"));
 
     bool const catReportsPttActive =
-        (m_catBackend == QStringLiteral("native") && m_nativeCat && m_nativeCat->pttActive())
-        || (m_catBackend == QStringLiteral("cat4om") && m_cat4OmCat && m_cat4OmCat->pttActive())
+        (m_catBackend == QStringLiteral("cat4om") && m_cat4OmCat && m_cat4OmCat->pttActive())
         || (isHamlibFamilyBackend(m_catBackend) && m_hamlibCat && m_hamlibCat->pttActive())
         || (m_catBackend == QStringLiteral("omnirig") && m_omniRigCat && m_omniRigCat->pttActive());
     bool const pttReleaseNeeded =
@@ -29372,8 +29342,8 @@ void DecodiumBridge::stopTune()
     m_bridgeAudioTuneActive = false;
     m_txPcmData.clear();
     if (pttReleaseNeeded
-        && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+        && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
     }
     if (m_tuning) {
         m_tuning = false;
@@ -29399,8 +29369,8 @@ void DecodiumBridge::stopTune()
     }
     m_txPcmData.clear();
     if (pttReleaseNeeded
-        && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
+        && activeCatCanPtt(this, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+        activeCatSetPtt(this, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
     }
     if (usingTciAudioInput()) stopTciTxAudioStream(true);
     m_tuning = false;
@@ -30226,7 +30196,6 @@ bool DecodiumBridge::saveCatProfile(const QString& rawName)
         return false;
     }
 
-    if (m_nativeCat) m_nativeCat->saveSettings();
     if (m_cat4OmCat) m_cat4OmCat->saveSettings();
     if (m_hamlibCat) m_hamlibCat->saveSettings();
     if (m_omniRigCat) m_omniRigCat->saveSettings();
@@ -30404,7 +30373,6 @@ bool DecodiumBridge::loadCatProfile(const QString& rawName)
     }
 
     halt();
-    if (m_nativeCat) m_nativeCat->disconnectRig();
     if (m_cat4OmCat) m_cat4OmCat->disconnectRig();
     if (m_omniRigCat) m_omniRigCat->disconnectRig();
     if (m_hamlibCat) m_hamlibCat->disconnectRig();
@@ -30520,8 +30488,7 @@ QVariantList DecodiumBridge::detectConnectedRigs() const
 void DecodiumBridge::setCatBackend(const QString& v)
 {
     QString normalized = v.trimmed().toLower();
-    if (normalized != QStringLiteral("native")
-        && normalized != QStringLiteral("hamlib")
+    if (normalized != QStringLiteral("hamlib")
         && normalized != QStringLiteral("tci")
         && normalized != QStringLiteral("cat4om")
         && normalized != QStringLiteral("omnirig")) {
@@ -30539,7 +30506,6 @@ void DecodiumBridge::setCatBackend(const QString& v)
     // "connected" possono tenere risorse (es. QAxObject di OmniRig o porta
     // seriale QSerialPort del backend nativo). Evita conflitti "serial port
     // already open" quando si alterna fra omnirig, hamlib e native.
-    if (m_nativeCat)  m_nativeCat->disconnectRig();
     if (m_cat4OmCat)  m_cat4OmCat->disconnectRig();
     if (m_omniRigCat) m_omniRigCat->disconnectRig();
     if (m_hamlibCat)  m_hamlibCat->disconnectRig();
@@ -30669,14 +30635,6 @@ void DecodiumBridge::applyRttyRigMode(const QString& reason)
         return;   // gia' nel modo giusto
     }
 
-    if (m_catBackend == QStringLiteral("native")) {
-        if (m_nativeCat && m_nativeCat->connected()) {
-            bridgeLog(QStringLiteral("RTTY: modo radio (%1): native -> %2").arg(reason, rigMode));
-            m_rttyRigModeState.overrideRequested(rttyCatContext(), rigMode);
-            m_nativeCat->setRigMode(rigMode);
-        }
-        return;
-    }
     if (m_catBackend == QStringLiteral("cat4om")) {
         if (m_cat4OmCat && m_cat4OmCat->connected()) {
             bridgeLog(QStringLiteral("RTTY: modo radio (%1): cat4om -> %2").arg(reason, rigMode));
@@ -30724,14 +30682,6 @@ void DecodiumBridge::applyConfiguredCatRigMode(const QString& reason)
 
     if (!m_catMode.trimmed().isEmpty()
         && m_catMode.compare(rigMode, Qt::CaseInsensitive) == 0) {
-        return;
-    }
-
-    if (m_catBackend == QStringLiteral("native")) {
-        if (m_nativeCat && m_nativeCat->connected()) {
-            bridgeLog(QStringLiteral("CAT rig mode sync (%1): native -> %2").arg(reason, rigMode));
-            m_nativeCat->setRigMode(rigMode);
-        }
         return;
     }
 
@@ -35254,7 +35204,6 @@ void DecodiumBridge::saveSettingsInternal(bool asynchronous)
     // DX Cluster
     if (!asynchronous && m_dxCluster) m_dxCluster->saveSettings();
     // CAT managers — persist serial port, baud rate, rig name etc.
-    if (!asynchronous && m_nativeCat)   m_nativeCat->saveSettings();
     if (!asynchronous && m_cat4OmCat)   m_cat4OmCat->saveSettings();
     if (!asynchronous && m_hamlibCat)   m_hamlibCat->saveSettings();
     if (!asynchronous && m_omniRigCat)  m_omniRigCat->saveSettings();
@@ -35319,9 +35268,7 @@ void DecodiumBridge::shutdown()
     shutdownSstvTx();
     stopRx();
     teardownAudioCapture();
-    if (m_catBackend == "native" && m_nativeCat->connected())
-        m_nativeCat->disconnectRig();
-    else if (m_catBackend == "cat4om" && m_cat4OmCat->connected())
+    if (m_catBackend == "cat4om" && m_cat4OmCat->connected())
         m_cat4OmCat->disconnectRig();
     else if (m_catBackend == "omnirig" && m_omniRigCat->connected())
         m_omniRigCat->disconnectRig();
@@ -35395,15 +35342,12 @@ void DecodiumBridge::retryRigConnection()
     // altri due backend abbiano rilasciato la porta seriale. Questo evita
     // errori "serial port already open / Access denied" quando l'utente
     // passa da OmniRig a Hamlib (OmniRig.exe tiene la COM via COM object).
-    if (m_catBackend != "native"  && m_nativeCat)  m_nativeCat->disconnectRig();
     if (m_catBackend != "cat4om"  && m_cat4OmCat)  m_cat4OmCat->disconnectRig();
     if (m_catBackend != "omnirig" && m_omniRigCat) m_omniRigCat->disconnectRig();
     if (!isHamlibFamilyBackend(m_catBackend) && m_hamlibCat)  m_hamlibCat->disconnectRig();
     QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
 
-    if (m_catBackend == "native" && m_nativeCat) {
-        m_nativeCat->connectRig();
-    } else if (m_catBackend == "cat4om" && m_cat4OmCat) {
+    if (m_catBackend == "cat4om" && m_cat4OmCat) {
         m_cat4OmCat->connectRig();
     } else if (m_catBackend == "omnirig" && m_omniRigCat) {
         m_omniRigCat->connectRig();
@@ -41662,8 +41606,7 @@ void DecodiumBridge::loadSettings()
     // nativo che supporta solo comandi ASCII Kenwood/Yaesu. Gli utenti esistenti
     // mantengono il proprio backend salvato.
     m_catBackend        =s.value("catBackend",        "hamlib").toString().trimmed().toLower();
-    if (m_catBackend != QStringLiteral("native")
-        && m_catBackend != QStringLiteral("hamlib")
+    if (m_catBackend != QStringLiteral("hamlib")
         && m_catBackend != QStringLiteral("tci")
         && m_catBackend != QStringLiteral("cat4om")
         && m_catBackend != QStringLiteral("omnirig")) {
@@ -41840,9 +41783,6 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
 
     scheduleAudioDeviceRefresh(250, false);
 
-    if (m_nativeCat) {
-        m_nativeCat->loadSettings();
-    }
     if (m_cat4OmCat) {
         m_cat4OmCat->loadSettings();
     }
@@ -41881,9 +41821,7 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
     }
 
     if (previousCatBackend != m_catBackend) {
-        if (previousCatBackend == QStringLiteral("native") && m_nativeCat->connected()) {
-            m_nativeCat->disconnectRig();
-        } else if (previousCatBackend == QStringLiteral("cat4om") && m_cat4OmCat->connected()) {
+        if (previousCatBackend == QStringLiteral("cat4om") && m_cat4OmCat->connected()) {
             m_cat4OmCat->disconnectRig();
         } else if (previousCatBackend == QStringLiteral("omnirig") && m_omniRigCat->connected()) {
             m_omniRigCat->disconnectRig();
@@ -43770,9 +43708,7 @@ void DecodiumBridge::impostaModoRadioRtty(const QString& modo)
         applyRttyRigMode(QStringLiteral("scelta-operatore"));
         return;
     }
-    if (m_catBackend == QStringLiteral("native") && m_nativeCat && m_nativeCat->connected())
-        m_nativeCat->setRigMode(scelto);
-    else if (m_catBackend == QStringLiteral("cat4om") && m_cat4OmCat && m_cat4OmCat->connected())
+    if (m_catBackend == QStringLiteral("cat4om") && m_cat4OmCat && m_cat4OmCat->connected())
         m_cat4OmCat->setRigMode(scelto);
     else if (isHamlibFamilyBackend(m_catBackend) && m_hamlibCat && m_hamlibCat->connected())
         m_hamlibCat->setRigMode(scelto);
