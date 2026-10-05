@@ -35,6 +35,13 @@ target_link_libraries (test_qt_helpers wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
 add_test (NAME test_qt_helpers COMMAND $<TARGET_FILE:test_qt_helpers>)
 set_tests_properties (test_qt_helpers PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# H04: TransceiverBase::set() must send the TX/split command when only the
+# TX frequency changes and the RX frequency is already on target.
+add_executable (test_transceiver_base_split test_transceiver_base_split.cpp)
+target_include_directories (test_transceiver_base_split PRIVATE ${CMAKE_SOURCE_DIR} ${PROJECT_BINARY_DIR})
+target_link_libraries (test_transceiver_base_split wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
+add_test (NAME test_transceiver_base_split COMMAND $<TARGET_FILE:test_transceiver_base_split>)
+
 add_executable (test_ft8_mycall_ap
   test_ft8_mycall_ap.cpp
   ../Detector/FT8DecodeWorker.cpp
@@ -610,6 +617,7 @@ endif ()
 add_custom_target (decodium_regression_test_binaries)
 set (_decodium_regression_test_targets
   test_qt_helpers
+  test_transceiver_base_split
   test_qso_sequencer_rules
   test_tx_pipeline
   test_ptt_transition_policy

@@ -192,6 +192,18 @@ void TransceiverBase::set (TransceiverState const& s,
               s.mode () != UNK
               && s.mode () != requested_.mode ()
               && s.mode () != actual_.mode ();
+          // The rig already sits on the requested RX frequency: only align the
+          // bookkeeping.  This must not end the if/else chain below, otherwise a
+          // TX (split) request with an unchanged RX frequency is never sent while
+          // the PTT request that follows it still is.
+          if (s.frequency () && frequency_matches (s.frequency (), actual_.frequency ()))
+            {
+              requested_.frequency (actual_.frequency ());
+              if (s.mode () != UNK && s.mode () == actual_.mode ())
+                {
+                  requested_.mode (actual_.mode ());
+                }
+            }
           if (s.frequency ()    // ignore bogus zero frequencies
               && rx_frequency_requested) // QSY, possibly with mode change
             {
@@ -210,14 +222,6 @@ void TransceiverBase::set (TransceiverState const& s,
               do_mode (s.mode ());
               do_post_mode (s.mode ());
               requested_.mode (actual_.mode ());
-            }
-            else if (s.frequency () && frequency_matches (s.frequency (), actual_.frequency ()))
-            {
-              requested_.frequency (actual_.frequency ());
-              if (s.mode () != UNK && s.mode () == actual_.mode ())
-                {
-                  requested_.mode (actual_.mode ());
-                }
             }
             else if (!s.tx_frequency ()
               || (s.tx_frequency () > 10000 // ignore bogus startup values
