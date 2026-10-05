@@ -25592,7 +25592,10 @@ bool DecodiumBridge::ensureTxAudioPrepared(const QString& msg, int txAudioFreque
     QString const message = msg.trimmed();
     bool const tciAudio = usingTciAudioInput();
     int const effectivePeriodMs = effectivePeriodMsForMode(mode);
-    bool const useMultiStream = multiStreamActive();
+    // La telemetria di stazione ha il suo messaggio: se lo slot MAM appena
+    // chiuso non e' ancora stato potato, il generatore multi-stream rifarebbe
+    // l'RR73 al posto della telemetria.
+    bool const useMultiStream = multiStreamActive() && !m_telemetryTxActive;
     auto logResult = [&](bool cacheHit,
                          qint64 waveMs,
                          qint64 resolveMs,
@@ -26948,6 +26951,25 @@ void DecodiumBridge::sendStationTelemetry()
         armStationTelemetryForNextSlot(m_transmitting ? QStringLiteral("TX in corso")
                                                       : QStringLiteral("fuori dal suo slot"));
         return;
+    }
+    // FT2 asincrono: shouldDeferManualSyncTxStart() non lo copre (usesDeferred-
+    // ManualSyncTx() e' falso con l'async acceso), quindi la telemetria partiva
+    // subito dopo il log, a meta' slot. startTx allinea l'audio allo slot e, a
+    // 3,2 s su 3,75, non ne resta niente da trasmettere: il PTT si chiude per
+    // circa 0,4 s senza audio, ed e' il ticchettio che si sente fra il log e la
+    // ripresa del TX. Stesso gate dell'avvio asincrono: oltre il punto utile
+    // dello slot si aspetta il prossimo.
+    {
+        int elapsedMs = 0;
+        int latestStartMs = 0;
+        int delayToNextSlotMs = 0;
+        if (isFt2AsyncTxStartTooLate(&elapsedMs, &latestStartMs, &delayToNextSlotMs)) {
+            armStationTelemetryForNextSlot(
+                QStringLiteral("FT2 async: troppo tardi nello slot (%1 ms, limite %2 ms)")
+                    .arg(elapsedMs).arg(latestStartMs),
+                delayToNextSlotMs);
+            return;
+        }
     }
     m_stationTelemetryPending = false;
     if (!isGridTokenStrict(m_grid.trimmed().toUpper())) {
@@ -59447,7 +59469,7 @@ void DecodiumBridge::launchFt2LogBridge(bool automatic)
     QThreadPool::globalInstance()->start(task);
 }
 
-void DecodiumBridge::armStationTelemetryForNextSlot(const QString& reason)
+void DecodiumBridge::armStationTelemetryForNextSlot(const QString& reason, qint64 forcedDelayMs)
 {
     if (!m_stationTelemetryPending) {
         m_stationTelemetryPending = true;
@@ -59456,7 +59478,9 @@ void DecodiumBridge::armStationTelemetryForNextSlot(const QString& reason)
     // Prossimo inizio di un periodo nostro, +40 ms come i TX sincroni rimandati.
     qint64 delayMs = 1000;
     int const periodMs = effectivePeriodMsForMode(m_mode);
-    if (periodMs > 0) {
+    if (forcedDelayMs >= 0) {
+        delayMs = forcedDelayMs;   // il chiamante conosce gia' il prossimo slot utile
+    } else if (periodMs > 0) {
         qint64 const msNow = correctedUtcMsecsSinceStartOfDay();
         qint64 const slotIndex = msNow / periodMs;
         qint64 const elapsedMs = msNow % periodMs;
