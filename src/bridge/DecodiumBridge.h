@@ -3750,7 +3750,7 @@ private:
     // di segnale), partita durante il 73 veniva scartata.
     bool    m_stationTelemetryPending {false};
     qint64  m_stationTelemetryPendingSinceMs {0};
-    void armStationTelemetryForNextSlot(const QString& reason);
+    void armStationTelemetryForNextSlot(const QString& reason, qint64 forcedDelayMs = -1);
     QString m_lastLoggedQsoCall;
     qint64  m_lastLoggedQsoTimestampMs {0};
     int     m_weatherTempC {decodium::telemetry::kTempUnknown};
