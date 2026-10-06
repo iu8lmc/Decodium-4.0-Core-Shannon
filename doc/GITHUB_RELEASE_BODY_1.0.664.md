@@ -1,4 +1,4 @@
-# Decodium 4 v1.0.663
+# Decodium 4 v1.0.664
 
 ## English (UK)
 
@@ -12,6 +12,7 @@ Test build: Decodium can now use a radio that sits behind a Decolink server, fro
 - The password is kept in the system secure store, never in the settings file.
 - The installer asks whether to download and install the Decolink gateway (pinned release with SHA-256 check) for the PC that sits next to the radio.
 - Same code path as DecoPort on the local network: both now sit behind one remote-radio interface.
+- Fixes the transmit audio not reaching the remote radio (1.0.663 sent only the last chunk).
 - Not yet tested on air; the Decolink v3 audio profiles (Opus, lossless, CW key) are not included.
 
 ### Downloads
@@ -32,6 +33,7 @@ Versione di prova: Decodium può usare una radio che sta dietro un server Decoli
 - La password sta nel deposito sicuro del sistema, mai nel file delle impostazioni.
 - L'installer chiede se scaricare e installare il gateway Decolink (versione fissata, con verifica SHA-256) per il PC accanto alla radio.
 - Stesso percorso di DecoPort in rete locale: ora stanno entrambi dietro un'unica interfaccia di radio remota.
+- Corregge l'audio di trasmissione che non arrivava alla radio remota (la 1.0.663 mandava solo l'ultimo pezzo).
 - Non ancora provato in aria; i profili audio v3 di Decolink (Opus, lossless, tasto CW) non sono inclusi.
 
 ### Download
