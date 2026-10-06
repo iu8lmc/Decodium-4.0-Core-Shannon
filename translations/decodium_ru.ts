@@ -2786,6 +2786,10 @@ Click Monitor to start</source>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Принят прямой вызов, но позывной не распознан</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: введите e-mail и пароль</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8504,6 +8508,10 @@ Right-click: disconnect</source>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Открыть окно JTTY...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - удалённая радиостанция через сервер...</translation>
     </message>
 </context>
 <context>
@@ -30341,6 +30349,236 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>No DX call to log.</source>
         <translation>Нет позывного DX для записи.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Доступ истёк: войдите снова</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Нет соединения</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Не указан сервер доступа</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Вход…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Непонятный ответ сервера</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Сервер недоступен: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Выберите станцию для подключения</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>В доступе отказано</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>владелец</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>оператор</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>слушатель</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 на %2, как %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Не указан адрес релея</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Разрешение имени %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Не удалось разрешить имя: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Не удалось открыть UDP-порт: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Регистрация на релее…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Подключено к %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Зарегистрировано; ожидание Decolink станции</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>Релей не отвечает</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Нет звука от станции</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Учётные данные истекли: повторный вход</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>Релей отклонил соединение: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Нет соединения со станцией</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Ваш доступ только на прослушивание: передача невозможна</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - удалённая радиостанция через сервер</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>УЧЁТНАЯ ЗАПИСЬ</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Сервер</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Пароль</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(сохранён)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Станция</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>пусто = выбрать из списка</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Релей</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>как у сервера</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Запомнить пароль (защищённое хранилище системы)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Переподключиться</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Подключиться</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Отключиться</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Забыть пароль</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>СТАНЦИИ</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>СВЯЗЬ</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Роль</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Частота</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-метр</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Задержка туда-обратно</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Передача</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>разрешена</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>только прослушивание</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>ИСПОЛЬЗОВАТЬ КАК МОЮ РАДИОСТАНЦИЮ</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium декодирует звук удалённой радиостанции и управляет её частотой, режимом и PTT вместо локальной звуковой карты и CAT. При выключении возвращаются локальные.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Перестать использовать удалённую радиостанцию</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Использовать удалённую радиостанцию</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>владелец</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>оператор</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>слушатель</translation>
     </message>
 </context>
 </TS>

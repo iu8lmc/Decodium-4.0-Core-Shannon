@@ -2799,6 +2799,10 @@ Noklikšķiniet uz Monitor, lai sāktu</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Saņemts tiešs izsaukums, taču izsaukuma signāls nav atšifrēts</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: ievadiet e-pastu un paroli</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8515,6 +8519,10 @@ Labais klikšķis: atvienot</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Atvērt JTTY logu...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - attālā radiostacija caur serveri...</translation>
     </message>
 </context>
 <context>
@@ -30321,6 +30329,236 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
     <message>
         <source>No DX call to log.</source>
         <translation>Nav DX izsaukuma signāla reģistrēšanai.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Piekļuve beigusies: pieslēdzieties vēlreiz</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Nav savienojuma</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Trūkst piekļuves servera</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Notiek pieteikšanās…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Nesaprotama servera atbilde</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Serveris nav sasniedzams: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Izvēlieties staciju, ar kuru savienoties</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Piekļuve liegta</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>īpašnieks</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operators</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>klausītājs</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 pie %2 kā %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Trūkst releja adreses</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Atrisina %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Vārdu neizdevās atrisināt: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Neizdevās atvērt UDP portu: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Reģistrējas uz releja…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Savienots ar %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Reģistrēts; gaida stacijas Decolink</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>Relejs neatbild</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Nav skaņas no stacijas</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Akreditācijas dati beigušies: atkārtota pieteikšanās</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>Relejs noraidīja savienojumu: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Nav savienojuma ar staciju</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Jūsu piekļuve ir tikai klausīšanās: pārraidīt nevar</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - attālā radiostacija caur serveri</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>KONTS</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Serveris</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-pasts</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Parole</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(saglabāta)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Stacija</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>tukšs = izvēlēties no saraksta</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relejs</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>tāpat kā serveris</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Atcerēties paroli (sistēmas drošā krātuve)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Savienoties vēlreiz</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Savienoties</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Atvienot</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Aizmirst paroli</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>STACIJAS</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>SAVIENOJUMS</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Loma</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Frekvence</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-metrs</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Turp-atpakaļ laiks</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Pārraide</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>atļauta</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>tikai klausīšanās</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>LIETOT KĀ MANU RADIO</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium dekodē attālās radiostacijas skaņu un vada tās frekvenci, režīmu un PTT vietējās skaņas kartes un CAT vietā. Izslēdzot, atgriežas vietējie.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Beigt lietot attālo radiostaciju</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Lietot attālo radiostaciju</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>īpašnieks</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operators</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>klausītājs</translation>
     </message>
 </context>
 </TS>

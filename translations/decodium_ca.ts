@@ -2787,6 +2787,10 @@ Prem Monitor per començar</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Crida directa rebuda, però l'indicatiu no està resolt</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: introdueix el correu i la contrasenya</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8503,6 +8507,10 @@ Clic dret: desconnecta</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Obre la finestra JTTY...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - ràdio remota a través del servidor...</translation>
     </message>
 </context>
 <context>
@@ -30309,6 +30317,236 @@ Les plantilles per defecte s&apos;envien com a trames natives compactes.</transl
     <message>
         <source>No DX call to log.</source>
         <translation>No hi ha indicatiu DX per registrar.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Accés caducat: torna a iniciar la sessió</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>No connectat</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Falta el servidor d'accés</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Iniciant la sessió…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Resposta del servidor il·legible</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Servidor inabastable: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Tria l'estació a la qual connectar-te</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Accés denegat</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>propietari</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operador</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>oient</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 a %2, com a %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Falta l'adreça del relé</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Resolent %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Nom no resolt: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>No s'ha pogut obrir un port UDP: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Registrant-se al relé…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Connectat a %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Registrat; esperant el Decolink de l'estació</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>El relé no respon</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Sense àudio de l'estació</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Credencials caducades: tornant a iniciar la sessió</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>El relé ha rebutjat la connexió: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>No connectat a l'estació</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>El teu accés és només d'escolta: no pots transmetre</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - ràdio remota a través del servidor</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>COMPTE</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Servidor</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>Correu electrònic</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Contrasenya</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(desada)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Estació</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>buit = tria de la llista</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relé</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>igual que el servidor</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Recorda la contrasenya (emmagatzematge segur del sistema)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Reconnecta</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Connecta</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Desconnecta</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Oblida la contrasenya</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>ESTACIONS</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>ENLLAÇ</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Rol</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Freqüència</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-meter</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Temps d'anada i tornada</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Transmissió</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>permesa</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>només escolta</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>FER SERVIR COM A LA MEVA RÀDIO</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium descodifica l'àudio de la ràdio remota i en governa la freqüència, el mode i el PTT en lloc de la targeta de so i el CAT locals. En desactivar-ho tornen els locals.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Deixa de fer servir la ràdio remota</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Fes servir la ràdio remota</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>propietari</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operador</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>oient</translation>
     </message>
 </context>
 </TS>

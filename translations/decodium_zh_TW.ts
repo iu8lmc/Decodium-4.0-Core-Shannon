@@ -2784,6 +2784,10 @@ Click Monitor to start</source>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>收到定向呼叫，但呼號未解析</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink：請輸入電子郵件和密碼</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8500,6 +8504,10 @@ Right-click: disconnect</source>
     <message>
         <source>Open the JTTY window...</source>
         <translation>開啟 JTTY 視窗...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - 透過伺服器使用遠端電台...</translation>
     </message>
 </context>
 <context>
@@ -30299,6 +30307,236 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>No DX call to log.</source>
         <translation>沒有可記錄的 DX 呼號。</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>存取已過期：請重新登入</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>未連線</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>缺少存取伺服器</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>正在登入…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>無法理解伺服器的回覆</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>無法連線伺服器：%1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>請選擇要連線的電台</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>存取被拒絕</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>擁有者</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>操作員</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>聽眾</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 在 %2，身分：%3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>缺少中繼位址</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>正在解析 %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>無法解析名稱：%1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>無法開啟 UDP 連接埠：%1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>正在向中繼註冊…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>已連線到 %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>已註冊；正在等待電台的 Decolink</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>中繼無回應</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>電台沒有音訊</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>憑證已過期：正在重新登入</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>中繼拒絕了連線：%1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>未連線到電台</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>您的存取權限僅可收聽：無法發射</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - 透過伺服器使用遠端電台</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>帳戶</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>伺服器</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>電子郵件</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>密碼</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>（已儲存）</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>電台</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>留空 = 從清單中選擇</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>中繼</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>與伺服器相同</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>記住密碼（系統安全儲存區）</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>重新連線</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>連線</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>中斷連線</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>忘記密碼</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>電台</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>連結</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>角色</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>頻率</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S 表</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>往返延遲</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>發射</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>允許</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>僅收聽</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>用作我的電台</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium 解碼遠端電台的音訊，並取代本機音效卡與 CAT 控制其頻率、模式與 PTT。關閉後恢復本機設備。</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>停止使用遠端電台</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>使用遠端電台</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>擁有者</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>操作員</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>聽眾</translation>
     </message>
 </context>
 </TS>

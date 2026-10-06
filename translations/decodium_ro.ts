@@ -2191,6 +2191,10 @@ Apasă Monitor pentru a începe</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Apel direct recepționat, dar indicativul nu este rezolvat</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: introduceți e-mailul și parola</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -7787,6 +7791,10 @@ Clic dreapta: deconectează</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Deschide fereastra JTTY...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - radio la distanță prin server...</translation>
     </message>
 </context>
 <context>
@@ -22610,6 +22618,236 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>No DX call to log.</source>
         <translation>Niciun indicativ DX de înregistrat.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Acces expirat: autentificați-vă din nou</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Neconectat</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Lipsește serverul de acces</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Se autentifică…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Răspuns de neînțeles de la server</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Serverul nu poate fi contactat: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Alegeți stația la care vă conectați</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Acces refuzat</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>proprietar</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operator</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>ascultător</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 la %2, ca %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Lipsește adresa releului</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Se rezolvă %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Numele nu a putut fi rezolvat: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Nu s-a putut deschide un port UDP: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Se înregistrează pe releu…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Conectat la %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Înregistrat; se așteaptă Decolink-ul stației</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>Releul nu răspunde</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Niciun semnal audio de la stație</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Credențiale expirate: se autentifică din nou</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>Releul a refuzat conexiunea: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Neconectat la stație</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Accesul dvs. este doar pentru ascultare: nu puteți transmite</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - radio la distanță prin server</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>CONT</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Server</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Parolă</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(salvată)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Stație</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>gol = alegeți din listă</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Releu</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>la fel ca serverul</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Ține minte parola (stocare securizată a sistemului)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Reconectare</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Conectare</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Deconectare</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Uită parola</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>STAȚII</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>LEGĂTURĂ</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Rol</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Frecvență</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-metru</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Dus-întors</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Transmisie</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>permisă</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>doar ascultare</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>FOLOSEȘTE CA RADIO PROPRIE</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium decodează audio al radioului la distanță și îi comandă frecvența, modul și PTT în locul plăcii de sunet și al CAT locale. Dezactivarea le readuce pe cele locale.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Nu mai folosi radioul la distanță</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Folosește radioul la distanță</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>proprietar</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operator</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>ascultător</translation>
     </message>
 </context>
 </TS>

@@ -2791,6 +2791,10 @@ Cliquez sur Monitor pour démarrer</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Appel direct reçu, mais l'indicatif n'est pas résolu</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink : saisissez l'e-mail et le mot de passe</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8504,6 +8508,10 @@ Clic droit : se déconnecter</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Ouvrir la fenêtre JTTY...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - radio distante via le serveur...</translation>
     </message>
 </context>
 <context>
@@ -30307,6 +30315,236 @@ Les modèles par défaut sont envoyés en trames natives compactes.</translation
     <message>
         <source>No DX call to log.</source>
         <translation>Aucun indicatif DX à journaliser.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Accès expiré : reconnectez-vous</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Le serveur d'accès est manquant</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Connexion en cours…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Réponse illisible du serveur</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Serveur injoignable : %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Choisissez la station à laquelle vous connecter</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Accès refusé</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>propriétaire</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>opérateur</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>auditeur</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 sur %2, en tant que %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>L'adresse du relais est manquante</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Résolution de %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Nom non résolu : %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Impossible d'ouvrir un port UDP : %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Enregistrement sur le relais…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Connecté à %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Enregistré ; en attente du Decolink de la station</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>Le relais ne répond pas</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Pas d'audio de la station</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Identifiants expirés : nouvelle connexion</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>Le relais a refusé la connexion : %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Non connecté à la station</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Votre accès est en écoute seule : vous ne pouvez pas émettre</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - radio distante via le serveur</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>COMPTE</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Serveur</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(enregistré)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Station</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>vide = choisir dans la liste</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relais</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>comme le serveur</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Mémoriser le mot de passe (coffre sécurisé du système)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Reconnecter</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Connecter</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Oublier le mot de passe</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>STATIONS</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>LIAISON</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Rôle</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Fréquence</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-mètre</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Aller-retour</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Émission</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>autorisée</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>écoute seule</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>UTILISER COMME MA RADIO</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium décode l'audio de la radio distante et pilote sa fréquence, son mode et son PTT à la place de la carte son et du CAT locaux. En désactivant, les locaux reviennent.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Cesser d'utiliser la radio distante</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Utiliser la radio distante</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>propriétaire</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>opérateur</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>auditeur</translation>
     </message>
 </context>
 </TS>

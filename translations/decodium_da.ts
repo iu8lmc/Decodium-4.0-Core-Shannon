@@ -2786,6 +2786,10 @@ Klik på Monitor for at starte</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Direkte kald modtaget, men kaldesignalet er ikke opløst</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: indtast e-mail og adgangskode</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8503,6 +8507,10 @@ Højreklik: afbryd</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Åbn JTTY-vinduet...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - fjernradio via serveren...</translation>
     </message>
 </context>
 <context>
@@ -30307,6 +30315,236 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
     <message>
         <source>No DX call to log.</source>
         <translation>Intet DX-kaldesignal at logge.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Adgangen er udløbet: log ind igen</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Ikke forbundet</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Adgangsserveren mangler</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Logger ind…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Uforståeligt svar fra serveren</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Serveren kan ikke nås: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Vælg den station, du vil oprette forbindelse til</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Adgang nægtet</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>ejer</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operatør</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>lytter</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 på %2, som %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Relæets adresse mangler</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Slår %1 op…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Navnet kunne ikke slås op: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Kunne ikke åbne en UDP-port: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Registrerer på relæet…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Forbundet til %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Registreret; venter på stationens Decolink</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>Relæet svarer ikke</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Ingen lyd fra stationen</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Legitimationsoplysninger udløbet: logger ind igen</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>Relæet afviste forbindelsen: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Ikke forbundet til stationen</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Din adgang er kun til lytning: du kan ikke sende</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - fjernradio via serveren</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>KONTO</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Server</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Adgangskode</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(gemt)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Station</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>tom = vælg fra listen</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relæ</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>samme som serveren</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Husk adgangskoden (systemets sikre lager)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Opret forbindelse igen</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Opret forbindelse</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Afbryd</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Glem adgangskode</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>STATIONER</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>FORBINDELSE</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Rolle</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Frekvens</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-meter</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Rundturstid</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Send</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>tilladt</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>kun lytning</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>BRUG SOM MIN RADIO</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium afkoder lyden fra fjernradioen og styrer dens frekvens, mode og PTT i stedet for det lokale lydkort og CAT. Slås det fra, vender de lokale tilbage.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Stop med at bruge fjernradioen</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Brug fjernradioen</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>ejer</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operatør</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>lytter</translation>
     </message>
 </context>
 </TS>

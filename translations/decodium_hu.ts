@@ -2789,6 +2789,10 @@ A kezdéshez kattintson a Monitor gombra</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Közvetlen hívás érkezett, de a hívójel nincs feloldva</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: adja meg az e-mail-címet és a jelszót</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8501,6 +8505,10 @@ Jobb kattintás: lecsatlakozás</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>JTTY ablak megnyitása...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - távoli rádió a kiszolgálón át...</translation>
     </message>
 </context>
 <context>
@@ -30172,6 +30180,236 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
     <message>
         <source>No DX call to log.</source>
         <translation>Nincs naplózandó DX hívójel.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>A hozzáférés lejárt: jelentkezzen be újra</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Nincs kapcsolat</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>Hiányzik a hozzáférési kiszolgáló</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Bejelentkezés…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Értelmezhetetlen válasz a kiszolgálótól</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>A kiszolgáló nem érhető el: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Válassza ki a csatlakozni kívánt állomást</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>A hozzáférés megtagadva</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>tulajdonos</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operátor</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>hallgató</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 – %2, mint %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Hiányzik a relé címe</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>%1 feloldása…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>A név nem oldható fel: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Nem sikerült UDP-portot nyitni: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Regisztráció a relén…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Csatlakozva: %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Regisztrálva; várakozás az állomás Decolinkjére</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>A relé nem válaszol</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Nincs hang az állomástól</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>A hitelesítés lejárt: újrabejelentkezés</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>A relé elutasította a kapcsolatot: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Nincs kapcsolat az állomással</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>A hozzáférése csak hallgatásra szól: nem adhat</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - távoli rádió a kiszolgálón át</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>FIÓK</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Kiszolgáló</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Jelszó</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(mentve)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Állomás</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>üres = választás a listából</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relé</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>ugyanaz, mint a kiszolgáló</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Jelszó megjegyzése (a rendszer biztonságos tárolója)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Újracsatlakozás</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Csatlakozás</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Leválasztás</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Jelszó törlése</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>ÁLLOMÁSOK</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>KAPCSOLAT</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Szerepkör</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Frekvencia</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-méter</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Körülfordulási idő</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Adás</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>engedélyezve</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>csak hallgatás</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>HASZNÁLAT SAJÁT RÁDIÓKÉNT</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>A Decodium a távoli rádió hangját dekódolja, és annak frekvenciáját, üzemmódját és PTT-jét vezérli a helyi hangkártya és CAT helyett. Kikapcsolva a helyiek térnek vissza.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>A távoli rádió használatának befejezése</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>A távoli rádió használata</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>tulajdonos</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operátor</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>hallgató</translation>
     </message>
 </context>
 </TS>

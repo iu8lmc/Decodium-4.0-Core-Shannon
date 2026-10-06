@@ -2784,6 +2784,10 @@ Monitor を押すと開始します</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>直接呼び出しを受信しましたが、コールサインを解決できません</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: メールとパスワードを入力してください</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8501,6 +8505,10 @@ Right-click: disconnect</source>
     <message>
         <source>Open the JTTY window...</source>
         <translation>JTTY ウィンドウを開く...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - サーバー経由のリモート無線機...</translation>
     </message>
 </context>
 <context>
@@ -30302,6 +30310,236 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>No DX call to log.</source>
         <translation>記録する DX コールがありません。</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>アクセスの期限が切れました。再度ログインしてください</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>未接続</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>アクセスサーバーが指定されていません</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>ログイン中…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>サーバーの応答を解釈できません</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>サーバーに接続できません: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>接続する局を選んでください</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>アクセスが拒否されました</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>オーナー</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>オペレーター</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>リスナー</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 / %2(%3 として)</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>リレーのアドレスが指定されていません</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>%1 を解決中…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>名前を解決できません: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>UDP ポートを開けませんでした: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>リレーに登録中…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>%1 に接続しました</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>登録済み。局の Decolink を待っています</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>リレーが応答しません</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>局からの音声がありません</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>認証情報の期限切れ: 再ログイン中</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>リレーが接続を拒否しました: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>局に接続されていません</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>アクセスは受信専用です。送信できません</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - サーバー経由のリモート無線機</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>アカウント</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>サーバー</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>メール</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>パスワード</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(保存済み)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>局</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>空欄 = リストから選択</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>リレー</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>サーバーと同じ</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>パスワードを記憶する (システムの安全な保管庫)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>再接続</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>接続</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>切断</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>パスワードを忘れる</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>局</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>リンク</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>役割</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>周波数</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>Sメーター</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>往復遅延</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>送信</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>許可</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>受信専用</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>自分の無線機として使う</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium はリモート無線機の音声をデコードし、ローカルのサウンドカードと CAT の代わりにその周波数・モード・PTT を制御します。オフにするとローカルに戻ります。</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>リモート無線機の使用をやめる</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>リモート無線機を使う</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>オーナー</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>オペレーター</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>リスナー</translation>
     </message>
 </context>
 </TS>

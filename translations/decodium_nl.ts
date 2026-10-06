@@ -2795,6 +2795,10 @@ Klik op Monitor om te starten</translation>
         <source>Direct call received, but the callsign is not resolved</source>
         <translation>Directe oproep ontvangen, maar de roepnaam is niet herleid</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: voer e-mail en wachtwoord in</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8511,6 +8515,10 @@ Rechtermuisklik: verbinding verbreken</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>JTTY-venster openen...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - radio op afstand via de server...</translation>
     </message>
 </context>
 <context>
@@ -30318,6 +30326,236 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
     <message>
         <source>No DX call to log.</source>
         <translation>Geen DX-roepnaam om te loggen.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Toegang verlopen: log opnieuw in</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Niet verbonden</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>De toegangsserver ontbreekt</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Inloggen…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Onleesbaar antwoord van de server</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Server niet bereikbaar: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Kies het station waarmee je verbinding wilt maken</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Toegang geweigerd</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>eigenaar</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operator</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>luisteraar</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 op %2, als %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>Het relay-adres ontbreekt</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>%1 wordt opgezocht…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Naam niet gevonden: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Kon geen UDP-poort openen: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Registreren op het relay…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Verbonden met %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Geregistreerd; wachten op de Decolink van het station</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>Het relay antwoordt niet</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>Geen audio van het station</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Inloggegevens verlopen: opnieuw inloggen</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>Het relay weigerde de verbinding: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Niet verbonden met het station</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Je toegang is alleen luisteren: je kunt niet zenden</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - radio op afstand via de server</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>ACCOUNT</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Server</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Wachtwoord</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(opgeslagen)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Station</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>leeg = kies uit de lijst</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relay</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>zelfde als de server</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Wachtwoord onthouden (veilige opslag van het systeem)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Opnieuw verbinden</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Verbinden</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Verbreken</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Wachtwoord vergeten</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>STATIONS</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>VERBINDING</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Rol</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Frequentie</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-meter</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Heen en terug</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Zenden</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>toegestaan</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>alleen luisteren</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>GEBRUIKEN ALS MIJN RADIO</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium decodeert de audio van de radio op afstand en bestuurt de frequentie, mode en PTT ervan in plaats van de lokale geluidskaart en CAT. Uitschakelen brengt de lokale terug.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Stoppen met de radio op afstand</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Radio op afstand gebruiken</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>eigenaar</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operator</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>luisteraar</translation>
     </message>
 </context>
 </TS>

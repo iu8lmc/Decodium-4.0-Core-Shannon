@@ -2727,6 +2727,10 @@ Click Monitor to start</translation>
         <source>Could not start %1</source>
         <translation>Could not start %1</translation>
     </message>
+    <message>
+        <source>Decolink: enter e-mail and password</source>
+        <translation>Decolink: enter e-mail and password</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8415,6 +8419,10 @@ Right-click: disconnect</translation>
     <message>
         <source>Open the JTTY window...</source>
         <translation>Open the JTTY window...</translation>
+    </message>
+    <message>
+        <source>Decolink - remote radio through the server...</source>
+        <translation>Decolink - remote radio through the server...</translation>
     </message>
 </context>
 <context>
@@ -29749,6 +29757,236 @@ The default templates are sent as compact native frames.</translation>
     <message>
         <source>No DX call to log.</source>
         <translation>No DX call to log.</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkLink</name>
+    <message>
+        <source>Access expired: log in again</source>
+        <translation>Access expired: log in again</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Not connected</translation>
+    </message>
+    <message>
+        <source>The access server is missing</source>
+        <translation>The access server is missing</translation>
+    </message>
+    <message>
+        <source>Logging in…</source>
+        <translation>Logging in…</translation>
+    </message>
+    <message>
+        <source>Unintelligible reply from the server</source>
+        <translation>Unintelligible reply from the server</translation>
+    </message>
+    <message>
+        <source>Server not reachable: %1</source>
+        <translation>Server not reachable: %1</translation>
+    </message>
+    <message>
+        <source>Choose the station to connect to</source>
+        <translation>Choose the station to connect to</translation>
+    </message>
+    <message>
+        <source>Access refused</source>
+        <translation>Access refused</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>owner</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operator</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>listener</translation>
+    </message>
+    <message>
+        <source>%1 on %2, as %3</source>
+        <translation>%1 on %2, as %3</translation>
+    </message>
+    <message>
+        <source>The relay address is missing</source>
+        <translation>The relay address is missing</translation>
+    </message>
+    <message>
+        <source>Resolving %1…</source>
+        <translation>Resolving %1…</translation>
+    </message>
+    <message>
+        <source>Name not resolved: %1</source>
+        <translation>Name not resolved: %1</translation>
+    </message>
+    <message>
+        <source>Could not open a UDP port: %1</source>
+        <translation>Could not open a UDP port: %1</translation>
+    </message>
+    <message>
+        <source>Registering on the relay…</source>
+        <translation>Registering on the relay…</translation>
+    </message>
+    <message>
+        <source>Connected to %1</source>
+        <translation>Connected to %1</translation>
+    </message>
+    <message>
+        <source>Registered; waiting for the station's Decolink</source>
+        <translation>Registered; waiting for the station's Decolink</translation>
+    </message>
+    <message>
+        <source>The relay is not answering</source>
+        <translation>The relay is not answering</translation>
+    </message>
+    <message>
+        <source>No audio from the station</source>
+        <translation>No audio from the station</translation>
+    </message>
+    <message>
+        <source>Credentials expired: logging in again</source>
+        <translation>Credentials expired: logging in again</translation>
+    </message>
+    <message>
+        <source>The relay refused the connection: %1</source>
+        <translation>The relay refused the connection: %1</translation>
+    </message>
+    <message>
+        <source>Not connected to the station</source>
+        <translation>Not connected to the station</translation>
+    </message>
+    <message>
+        <source>Your access is listen-only: you cannot transmit</source>
+        <translation>Your access is listen-only: you cannot transmit</translation>
+    </message>
+</context>
+<context>
+    <name>DecolinkWindow</name>
+    <message>
+        <source>Decolink - remote radio through the server</source>
+        <translation>Decolink - remote radio through the server</translation>
+    </message>
+    <message>
+        <source>ACCOUNT</source>
+        <translation>ACCOUNT</translation>
+    </message>
+    <message>
+        <source>Server</source>
+        <translation>Server</translation>
+    </message>
+    <message>
+        <source>E-mail</source>
+        <translation>E-mail</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Password</translation>
+    </message>
+    <message>
+        <source>(saved)</source>
+        <translation>(saved)</translation>
+    </message>
+    <message>
+        <source>Station</source>
+        <translation>Station</translation>
+    </message>
+    <message>
+        <source>empty = choose from the list</source>
+        <translation>empty = choose from the list</translation>
+    </message>
+    <message>
+        <source>Relay</source>
+        <translation>Relay</translation>
+    </message>
+    <message>
+        <source>same as server</source>
+        <translation>same as server</translation>
+    </message>
+    <message>
+        <source>Remember the password (system secure store)</source>
+        <translation>Remember the password (system secure store)</translation>
+    </message>
+    <message>
+        <source>Reconnect</source>
+        <translation>Reconnect</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Connect</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Disconnect</translation>
+    </message>
+    <message>
+        <source>Forget password</source>
+        <translation>Forget password</translation>
+    </message>
+    <message>
+        <source>STATIONS</source>
+        <translation>STATIONS</translation>
+    </message>
+    <message>
+        <source>LINK</source>
+        <translation>LINK</translation>
+    </message>
+    <message>
+        <source>Role</source>
+        <translation>Role</translation>
+    </message>
+    <message>
+        <source>Frequency</source>
+        <translation>Frequency</translation>
+    </message>
+    <message>
+        <source>S-meter</source>
+        <translation>S-meter</translation>
+    </message>
+    <message>
+        <source>Round trip</source>
+        <translation>Round trip</translation>
+    </message>
+    <message>
+        <source>Transmit</source>
+        <translation>Transmit</translation>
+    </message>
+    <message>
+        <source>allowed</source>
+        <translation>allowed</translation>
+    </message>
+    <message>
+        <source>listen only</source>
+        <translation>listen only</translation>
+    </message>
+    <message>
+        <source>USE AS MY RADIO</source>
+        <translation>USE AS MY RADIO</translation>
+    </message>
+    <message>
+        <source>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</source>
+        <translation>Decodium decodes the audio of the remote radio and drives its frequency, mode and PTT instead of the local sound card and CAT. Turning it off brings the local ones back.</translation>
+    </message>
+    <message>
+        <source>Stop using the remote radio</source>
+        <translation>Stop using the remote radio</translation>
+    </message>
+    <message>
+        <source>Use the remote radio</source>
+        <translation>Use the remote radio</translation>
+    </message>
+    <message>
+        <source>owner</source>
+        <translation>owner</translation>
+    </message>
+    <message>
+        <source>operator</source>
+        <translation>operator</translation>
+    </message>
+    <message>
+        <source>listener</source>
+        <translation>listener</translation>
     </message>
 </context>
 </TS>
