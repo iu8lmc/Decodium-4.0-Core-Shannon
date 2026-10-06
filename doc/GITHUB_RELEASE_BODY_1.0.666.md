@@ -1,4 +1,4 @@
-# Decodium 4 v1.0.665
+# Decodium 4 v1.0.666
 
 ## English (UK)
 
@@ -11,6 +11,7 @@ Test build: Decodium can now use a radio that sits behind a Decolink server, fro
 - An account with the listener role can only receive; transmit is refused before the PTT is raised.
 - The password is kept in the system secure store, never in the settings file.
 - The installer asks whether to download and install the Decolink gateway (pinned release with SHA-256 check) for the PC that sits next to the radio.
+- Fixes the transmit being refused with "Audio TX: prepared PCM not valid" when the remote radio is in use: no local sound card is needed to transmit through it.
 - Same code path as DecoPort on the local network: both now sit behind one remote-radio interface.
 - Fixes the transmit audio not reaching the remote radio (1.0.663 sent only the last chunk).
 - New audio profile "Digital, lossless (12 kHz)": the Decolink v3 profile for digital modes. Bit-exact audio at about a third of the PCM bandwidth, lost blocks are requested again and recovered, and the transmit audio is sent the same way. The selector in the Decolink window offers: follow the station (default), PCM 48 kHz, digital lossless. Set the PCM profile if another app on the station needs it.
@@ -33,6 +34,7 @@ Versione di prova: Decodium può usare una radio che sta dietro un server Decoli
 - Un account con ruolo di ascoltatore può solo ricevere; la trasmissione viene rifiutata prima di alzare il PTT.
 - La password sta nel deposito sicuro del sistema, mai nel file delle impostazioni.
 - L'installer chiede se scaricare e installare il gateway Decolink (versione fissata, con verifica SHA-256) per il PC accanto alla radio.
+- Corregge il rifiuto della trasmissione con "Audio TX: PCM preparato non valido" quando si usa la radio remota: per trasmettere attraverso di lei non serve nessuna scheda audio locale.
 - Stesso percorso di DecoPort in rete locale: ora stanno entrambi dietro un'unica interfaccia di radio remota.
 - Corregge l'audio di trasmissione che non arrivava alla radio remota (la 1.0.663 mandava solo l'ultimo pezzo).
 - Nuovo profilo audio "Digitale, senza perdite (12 kHz)": il profilo v3 di Decolink per i modi digitali. Audio identico campione per campione con circa un terzo della banda del PCM; i blocchi persi vengono richiesti di nuovo e recuperati, e anche l'audio da trasmettere viaggia così. Il selettore nella finestra Decolink offre: segui la stazione (predefinito), PCM 48 kHz, digitale senza perdite. Imposta il profilo PCM se un'altra app della stazione lo richiede.
