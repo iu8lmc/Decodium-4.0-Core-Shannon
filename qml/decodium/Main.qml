@@ -1778,6 +1778,15 @@ ApplicationWindow {
     }
 
     // 1.0.571 - finestra DecoPort, creata alla prima apertura.
+    function openDecolinkWindow() {
+        decolinkWindowLoader.active = true
+        if (decolinkWindowLoader.item) {
+            decolinkWindowLoader.item.show()
+            decolinkWindowLoader.item.raise()
+            decolinkWindowLoader.item.requestActivate()
+        }
+    }
+
     function openDecoPortWindow() {
         decoPortWindowLoader.active = true
         if (decoPortWindowLoader.item) {
@@ -1862,6 +1871,18 @@ ApplicationWindow {
         active: false
         asynchronous: true
         source: "rtty/RttyMain.qml"
+        onLoaded: {
+            item.show()
+            item.raise()
+            item.requestActivate()
+        }
+    }
+
+    Loader {
+        id: decolinkWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/DecolinkWindow.qml"
         onLoaded: {
             item.show()
             item.raise()
@@ -12711,6 +12732,24 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
             text: qsTr("DecoPort - radio on the network...")
             icon.source: ""
             onTriggered: mainWindow.openDecoPortWindow()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: textPrimary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            // Decolink: una radio lontana tramite il server con accesso controllato.
+            text: qsTr("Decolink - remote radio through the server...")
+            icon.source: ""
+            onTriggered: mainWindow.openDecolinkWindow()
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"

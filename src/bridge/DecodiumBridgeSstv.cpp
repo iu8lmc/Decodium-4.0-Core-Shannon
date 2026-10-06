@@ -8,6 +8,7 @@
 #include "DecodiumAudioSink.h"
 #include "DecodiumLegacyBackend.h"
 #include "DecoPortLink.h"
+#include "DecolinkLink.h"
 #include "src/rtl/RtlSdrInput.h"
 #include "src/sstv/core/SstvModeRegistry.h"
 #include "src/sstv/diagnostics/SstvDiagnosticLogging.h"
@@ -4531,9 +4532,9 @@ void DecodiumBridge::refreshSstvProducerTaps()
         }
         break;
     case SstvAudioSourceKind::DecoPort:
-        if (m_decoPortLink) {
+        if (auto* remote = remoteLinkIfAny()) {
             m_sstvDecoPortAudioTap = connect(
-                m_decoPortLink, &DecoPortLink::rxAudioProduced,
+                remote, &RemoteRadioLink::rxAudioProduced,
                 this, [relay, token, selectedStreamId](const QVector<short>& samples,
                                       quint64, quint32 streamId) {
                     if (streamId != selectedStreamId) {
@@ -4735,11 +4736,11 @@ quint32 DecodiumBridge::currentSstvAudioStreamId(
                                       : QStringView(identity));
     }
     case SstvAudioSourceKind::DecoPort:
-        if (m_decoPortLink && m_decoPortLink->streamId() != 0U) {
-            return m_decoPortLink->streamId();
+        if (remoteLinkIfAny() && remoteLinkIfAny()->streamId() != 0U) {
+            return remoteLinkIfAny()->streamId();
         }
-        if (m_decoPortLink && !m_decoPortLink->peerAddress().isEmpty()) {
-            return stableSstvStreamId(QStringView(m_decoPortLink->peerAddress()));
+        if (remoteLinkIfAny() && !remoteLinkIfAny()->peerAddress().isEmpty()) {
+            return stableSstvStreamId(QStringView(remoteLinkIfAny()->peerAddress()));
         }
         return stableSstvStreamId(QStringView(u"decodium-decoport-rx"));
     case SstvAudioSourceKind::Tci:
@@ -4856,7 +4857,7 @@ void DecodiumBridge::selectSstvRxSource(
         selectedTapMissing = m_hamlibCat && !m_sstvTciAudioTap;
         break;
     case SstvAudioSourceKind::DecoPort:
-        selectedTapMissing = m_decoPortLink && !m_sstvDecoPortAudioTap;
+        selectedTapMissing = remoteLinkIfAny() && !m_sstvDecoPortAudioTap;
         break;
     case SstvAudioSourceKind::RtlSdr:
         selectedTapMissing = m_rtlSdrInput

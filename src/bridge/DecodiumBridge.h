@@ -49,6 +49,8 @@ class DecodiumAlertManager;
 class DecodiumDecoPortGateway;
 class DecoPortDiscovery;
 class DecoPortLink;
+class DecolinkLink;
+class RemoteRadioLink;
 class DecoPortRigDriver;
 #include "DecodiumDxCluster.h"
 #include "DecodiumSpotShare.h"
@@ -370,6 +372,8 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QObject* decoPortGateway READ decoPortGatewayObject CONSTANT)
     Q_PROPERTY(QObject* decoPortDiscovery READ decoPortDiscoveryObject CONSTANT)
     Q_PROPERTY(QObject* decoPortLink READ decoPortLinkObject CONSTANT)
+    Q_PROPERTY(QObject* decolinkLink READ decolinkLinkObject CONSTANT)
+    Q_PROPERTY(bool decolinkUseRemote READ decolinkUseRemote NOTIFY decoPortUseRemoteChanged)
     // Quando e' acceso, l'audio del decoder viene dalla radio remota invece che
     // dalla scheda locale, e la frequenza mostrata e' la sua.
     Q_PROPERTY(bool decoPortUseRemote READ decoPortUseRemote WRITE setDecoPortUseRemote NOTIFY decoPortUseRemoteChanged)
@@ -1071,6 +1075,21 @@ public:
     QObject* decoPortGatewayObject() const;
     QObject* decoPortDiscoveryObject() const;
     QObject* decoPortLinkObject() const;
+    QObject* decolinkLinkObject() const;
+    // La radio remota in uso: Decolink se acceso, altrimenti DecoPort. Crea il
+    // collegamento se manca; la variante IfAny non crea niente.
+    RemoteRadioLink* remoteLink() const;
+    RemoteRadioLink* remoteLinkIfAny() const;
+    bool decolinkUseRemote() const { return m_decoPortUseRemote && m_remoteIsDecolink; }
+    Q_INVOKABLE void setDecolinkUseRemote(bool on);
+    // Accesso Decolink: i dati dell'ultimo collegamento (la password non esce
+    // mai da qui, solo il fatto che sia salvata) e il collegamento stesso.
+    Q_INVOKABLE QVariantMap decolinkSavedLogin() const;
+    Q_INVOKABLE void decolinkConnect(const QString& authHost, const QString& relayHost,
+                                     int relayPort, const QString& email,
+                                     const QString& password, const QString& station,
+                                     bool remember);
+    Q_INVOKABLE void decolinkForgetPassword();
     Q_INVOKABLE bool startDecoPortGateway(int port = 5559);
     // Cosa il gateway e' riuscito ad aprire da solo, da mostrare nella finestra.
     Q_INVOKABLE QVariantMap decoPortRigDriverState() const;
@@ -3324,6 +3343,8 @@ private:
     mutable DecodiumDecoPortGateway* m_decoPortGateway {nullptr};
     mutable DecoPortDiscovery*       m_decoPortDiscovery {nullptr};
     mutable DecoPortLink*            m_decoPortLink {nullptr};
+    mutable DecolinkLink*            m_decolinkLink {nullptr};
+    bool                             m_remoteIsDecolink {false};
     DecodiumSpotShare*            m_spotShare     {nullptr};
     DecodiumAmplifier*            m_amplifier     {nullptr};
     QString                       m_catBackend    {"hamlib"};

@@ -10,6 +10,7 @@
 #endif
 
 #include "DecoPortLink.h"
+#include "DecolinkLink.h"
 #include "DecoPortRigDriver.h"
 #include "DecodiumDecoPortGateway.h"
 #include "DecodeUiFilterPolicy.h"
@@ -6203,7 +6204,7 @@ static inline bool catSignalMatchesBackend(QString const& activeBackend, QString
 // funzioni libere di file, chiamate da decine di posti: passare il collegamento
 // a ognuna vorrebbe dire toccarle tutte. Il bridge e' uno solo, e questo
 // puntatore vive quanto la modalita' che lo accende.
-static DecoPortLink* g_decoPortCatLink = nullptr;
+static RemoteRadioLink* g_decoPortCatLink = nullptr;
 
 static inline bool decoPortIsCat(const QString& backend)
 {
@@ -16907,7 +16908,7 @@ void DecodiumBridge::setFrequency(double v) {
     // che l'operatore cambia qui deve arrivare li'. Il flag evita il rimbalzo,
     // perche' la stessa frequenza torna indietro nel contesto successivo.
     if (m_decoPortUseRemote && !m_decoPortApplyingRemote && v > 0.0) {
-        if (auto* link = qobject_cast<DecoPortLink*>(decoPortLinkObject())) {
+        if (auto* link = remoteLink()) {
             if (link->isLinked() && std::abs(link->frequencyHz() - v) > 1.0)
                 link->tune(v);
         }
@@ -18682,8 +18683,8 @@ bool DecodiumBridge::sstvTxPttActive() const
 {
 #if DECODIUM_HAS_SSTV
     if (decoPortIsCat(m_catBackend)) {
-        return m_decoPortLink && m_decoPortLink->isLinked()
-            && m_decoPortLink->ptt();
+        return remoteLinkIfAny() && remoteLinkIfAny()->isLinked()
+            && remoteLinkIfAny()->ptt();
     }
     return activeCatReportsPttActive();
 #else
@@ -21323,7 +21324,7 @@ QObject* DecodiumBridge::decoPortLinkObject() const
         // accorgersi che la radio remota non c'e' piu'.
         auto* self = const_cast<DecodiumBridge*>(this);
         connect(m_decoPortLink, &DecoPortLink::linkedChanged, self, [self]() {
-            if (self->m_decoPortUseRemote && self->m_decoPortLink
+            if (self->m_decoPortUseRemote && !self->m_remoteIsDecolink && self->m_decoPortLink
                 && !self->m_decoPortLink->isLinked())
                 self->setDecoPortUseRemote(false);
         });
@@ -21341,6 +21342,147 @@ QObject* DecodiumBridge::decoPortLinkObject() const
 #endif
     }
     return m_decoPortLink;
+}
+
+QObject* DecodiumBridge::decolinkLinkObject() const
+{
+    if (!m_decolinkLink) {
+        m_decolinkLink = new DecolinkLink(const_cast<DecodiumBridge*>(this));
+        auto* self = const_cast<DecodiumBridge*>(this);
+        // Come per DecoPort: se il relay o il gateway spariscono, torna la
+        // scheda audio locale invece di decodificare silenzio.
+        connect(m_decolinkLink, &DecolinkLink::linkedChanged, self, [self]() {
+            if (self->m_decoPortUseRemote && self->m_remoteIsDecolink
+                && self->m_decolinkLink && !self->m_decolinkLink->isLinked())
+                self->setDecolinkUseRemote(false);
+        });
+#if DECODIUM_HAS_SSTV
+        connect(m_decolinkLink, &RemoteRadioLink::remoteStreamChanged,
+                self, [self](quint32 streamId) {
+            if (!self->m_decoPortUseRemote || !self->m_remoteIsDecolink
+                || !self->m_sstvRxRequested || streamId == 0U) {
+                return;
+            }
+            self->selectSstvRxSource(
+                decodium::sstv::SstvAudioSourceKind::DecoPort,
+                streamId);
+        }, Qt::DirectConnection);
+#endif
+    }
+    return m_decolinkLink;
+}
+
+RemoteRadioLink* DecodiumBridge::remoteLink() const
+{
+    if (m_remoteIsDecolink) {
+        decolinkLinkObject();
+        return m_decolinkLink;
+    }
+    decoPortLinkObject();
+    return m_decoPortLink;
+}
+
+RemoteRadioLink* DecodiumBridge::remoteLinkIfAny() const
+{
+    if (m_remoteIsDecolink)
+        return m_decolinkLink;
+    return m_decoPortLink;
+}
+
+// Decolink prende il posto della scheda audio e del CAT locali con lo stesso
+// meccanismo di DecoPort: cambia solo il collegamento che sta dietro.
+void DecodiumBridge::setDecolinkUseRemote(bool on)
+{
+    if (on) {
+        if (m_decoPortUseRemote && !m_remoteIsDecolink)
+            setDecoPortUseRemote(false);
+        m_remoteIsDecolink = true;
+        setDecoPortUseRemote(true);
+        if (!m_decoPortUseRemote)
+            m_remoteIsDecolink = false;
+    } else if (m_remoteIsDecolink) {
+        setDecoPortUseRemote(false);
+        m_remoteIsDecolink = false;
+    }
+    emit decoPortUseRemoteChanged();
+}
+
+static QString decolinkSecretService() { return QStringLiteral("Decodium/Decolink"); }
+
+QVariantMap DecodiumBridge::decolinkSavedLogin() const
+{
+    auto const get = [](const char* key, const QVariant& def) {
+        return decodium::profiledSettingsValue(QString(), QString::fromLatin1(key), def);
+    };
+    QVariantMap m;
+    QString const email = get("DecolinkEmail", QString()).toString();
+    m.insert(QStringLiteral("authHost"),
+             get("DecolinkAuthHost", QStringLiteral("decolink.ft2.it")).toString());
+    m.insert(QStringLiteral("relayHost"), get("DecolinkRelayHost", QString()).toString());
+    m.insert(QStringLiteral("relayPort"), get("DecolinkRelayPort", 5555).toInt());
+    m.insert(QStringLiteral("email"), email);
+    m.insert(QStringLiteral("station"), get("DecolinkStation", QString()).toString());
+    bool saved = false;
+    if (!email.isEmpty()) {
+        auto const r = secure_settings::default_backend().lookup(decolinkSecretService(), email);
+        saved = r.found && !r.value.isEmpty();
+    }
+    m.insert(QStringLiteral("hasPassword"), saved);
+    return m;
+}
+
+void DecodiumBridge::decolinkConnect(const QString& authHost, const QString& relayHost,
+                                     int relayPort, const QString& email,
+                                     const QString& password, const QString& station,
+                                     bool remember)
+{
+    QString const mail = email.trimmed();
+    QString pw = password;
+    if (pw.isEmpty() && !mail.isEmpty()) {
+        auto const r = secure_settings::default_backend().lookup(decolinkSecretService(), mail);
+        if (r.found)
+            pw = r.value;
+    }
+    if (mail.isEmpty() || pw.isEmpty()) {
+        emit errorMessage(tr("Decolink: enter e-mail and password"));
+        return;
+    }
+
+    QSettings s(QSettings::IniFormat, QSettings::UserScope,
+                QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    bool const inProfile = decodium::beginActiveSettingsProfile(s);
+    s.setValue(QStringLiteral("DecolinkAuthHost"), authHost.trimmed());
+    s.setValue(QStringLiteral("DecolinkRelayHost"), relayHost.trimmed());
+    s.setValue(QStringLiteral("DecolinkRelayPort"), relayPort);
+    s.setValue(QStringLiteral("DecolinkEmail"), mail);
+    s.setValue(QStringLiteral("DecolinkStation"), station.trimmed());
+    if (inProfile) {
+        s.endGroup();
+        s.endGroup();
+    }
+    s.sync();
+
+    // La password sta nel deposito sicuro del sistema, mai nel file INI.
+    if (remember && !password.isEmpty()) {
+        QString err;
+        if (!secure_settings::default_backend().store(decolinkSecretService(), mail, password, &err))
+            bridgeLog(QStringLiteral("Decolink: password not stored (%1)").arg(err));
+    } else if (!remember) {
+        secure_settings::default_backend().remove(decolinkSecretService(), mail);
+    }
+
+    decolinkLinkObject();
+    m_decolinkLink->connectTo(authHost.trimmed(), relayHost.trimmed(), relayPort, mail, pw,
+                              station.trimmed());
+    bridgeLog(QStringLiteral("Decolink: connecting as %1 to %2").arg(mail, authHost.trimmed()));
+}
+
+void DecodiumBridge::decolinkForgetPassword()
+{
+    QString const mail = decodium::profiledSettingsValue(
+        QString(), QStringLiteral("DecolinkEmail"), QString()).toString();
+    if (!mail.isEmpty())
+        secure_settings::default_backend().remove(decolinkSecretService(), mail);
 }
 
 QString DecodiumBridge::catBackendForPersistence() const
@@ -21604,12 +21746,13 @@ void DecodiumBridge::setDecoPortMonitor(bool on)
 // buffer invece che sul confine di slot.
 bool DecodiumBridge::decoPortSendTxWave(const QVector<float>& wave, double* durationSeconds)
 {
-    auto* link = qobject_cast<DecoPortLink*>(decoPortLinkObject());
+    auto* link = remoteLink();
     if (!link || !link->isLinked()) {
         emit errorMessage(tr("Transmit refused: no remote radio connected"));
         return false;
     }
-    if (!(link->state().stateFlags & decoport::StateCanTransmit)) {
+    if (!link->canTransmit()
+        || (!m_remoteIsDecolink && !(link->state().stateFlags & decoport::StateCanTransmit))) {
         emit errorMessage(tr("Transmit refused: the remote radio does not accept transmission "
                              "(no CAT for its PTT, or it is already transmitting)"));
         return false;
@@ -21666,7 +21809,7 @@ bool DecodiumBridge::decoPortSendTxWave(const QVector<float>& wave, double* dura
 
 void DecodiumBridge::decoPortPumpTxFrames()
 {
-    auto* link = qobject_cast<DecoPortLink*>(decoPortLinkObject());
+    auto* link = remoteLink();
     if (!link || !link->isLinked()) {
         decoPortStopTx(QStringLiteral("link lost"));
         return;
@@ -21693,7 +21836,7 @@ void DecodiumBridge::decoPortStopTx(const QString& reason)
         m_decoPortTxPacer->stop();
     m_decoPortTxFrames.clear();
     m_decoPortTxNextFrame = 0;
-    if (auto* link = qobject_cast<DecoPortLink*>(decoPortLinkObject())) {
+    if (auto* link = remoteLink()) {
         if (link->isLinked())
             link->setPtt(false, 0);
     }
@@ -21874,7 +22017,7 @@ void DecodiumBridge::onDecoPortRemoteState()
 {
     if (!m_decoPortUseRemote)
         return;
-    auto* link = qobject_cast<DecoPortLink*>(decoPortLinkObject());
+    auto* link = remoteLink();
     if (!link || !link->isLinked())
         return;
 
@@ -21923,7 +22066,7 @@ void DecodiumBridge::setDecoPortUseRemote(bool on)
     if (m_decoPortUseRemote == on)
         return;
 
-    auto* link = qobject_cast<DecoPortLink*>(decoPortLinkObject());
+    auto* link = remoteLink();
     if (on && (!link || !link->isLinked())) {
         bridgeLog(QStringLiteral("DecoPort remote source refused: not linked to a radio"));
         return;
@@ -21944,10 +22087,10 @@ void DecodiumBridge::setDecoPortUseRemote(bool on)
                                decodium::sstv::SstvAudioSourceKind::DecoPort),
                            true);
 #endif
-        connect(link, &DecoPortLink::rxAudio,
+        connect(link, &RemoteRadioLink::rxAudio,
                 this, &DecodiumBridge::onDecoPortRxAudio,
                 static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
-        connect(link, &DecoPortLink::stateChanged,
+        connect(link, &RemoteRadioLink::stateChanged,
                 this, &DecodiumBridge::onDecoPortRemoteState,
                 static_cast<Qt::ConnectionType>(Qt::UniqueConnection));
         // Da qui in avanti la radio dell'applicazione e' quella remota, a tutti
@@ -21991,8 +22134,8 @@ void DecodiumBridge::setDecoPortUseRemote(bool on)
                                  "audio now comes from %1").arg(link->rigLabel()));
     } else {
         if (link) {
-            disconnect(link, &DecoPortLink::rxAudio, this, &DecodiumBridge::onDecoPortRxAudio);
-            disconnect(link, &DecoPortLink::stateChanged, this, &DecodiumBridge::onDecoPortRemoteState);
+            disconnect(link, &RemoteRadioLink::rxAudio, this, &DecodiumBridge::onDecoPortRxAudio);
+            disconnect(link, &RemoteRadioLink::stateChanged, this, &DecodiumBridge::onDecoPortRemoteState);
         }
         g_decoPortCatLink = nullptr;
         if (!m_catBackendBeforeDecoPort.isEmpty()) {
@@ -22015,6 +22158,8 @@ void DecodiumBridge::setDecoPortUseRemote(bool on)
         if (m_monitoring)
             startAudioCapture(false);
     }
+    if (!on)
+        m_remoteIsDecolink = false;
     emit decoPortUseRemoteChanged();
 }
 
@@ -27521,7 +27666,7 @@ void DecodiumBridge::startTx()
     bridgeLog("startTx: msg=[" + msg + "]"
               + " decoPortRemote=" + QString::number(m_decoPortUseRemote ? 1 : 0)
               + " remoteLinked=" + QString::number(
-                    (m_decoPortLink && m_decoPortLink->isLinked()) ? 1 : 0));
+                    (remoteLinkIfAny() && remoteLinkIfAny()->isLinked()) ? 1 : 0));
     if (msg.trimmed().isEmpty()) {
         // "Nessun messaggio selezionato" manda a cercare nel posto sbagliato
         // quando il messaggio non c'e' perche' non puo' esserci: senza
@@ -28116,7 +28261,7 @@ void DecodiumBridge::startTx()
         quint64 const serial = m_txPlaybackSerial;
         int const holdMs = static_cast<int>(waveSeconds * 1000.0)
                            + qMax(200, static_cast<int>(
-                                 qobject_cast<DecoPortLink*>(decoPortLinkObject())->txAudioLeadMs()))
+                                 remoteLink()->txAudioLeadMs()))
                            + 250;
         QTimer::singleShot(holdMs, this, [this, serial]() {
             if (serial != m_txPlaybackSerial || !m_transmitting)
