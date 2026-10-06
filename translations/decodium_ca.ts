@@ -2791,6 +2791,10 @@ Prem Monitor per començar</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: introdueix el correu i la contrasenya</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Transmissió rebutjada: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30441,6 +30445,14 @@ Les plantilles per defecte s&apos;envien com a trames natives compactes.</transl
         <source>Compressed (not supported)</source>
         <translation>Comprimit (no compatible)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Un altre operador està transmetent</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 està transmetent en aquesta estació</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30591,6 +30603,10 @@ Les plantilles per defecte s&apos;envien com a trames natives compactes.</transl
     <message>
         <source>lost</source>
         <translation>perduts</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>ocupat: %1 està transmetent</translation>
     </message>
 </context>
 </TS>

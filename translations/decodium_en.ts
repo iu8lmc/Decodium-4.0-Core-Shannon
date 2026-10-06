@@ -2731,6 +2731,10 @@ Click Monitor to start</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: enter e-mail and password</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Transmit refused: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -29881,6 +29885,14 @@ The default templates are sent as compact native frames.</translation>
         <source>Compressed (not supported)</source>
         <translation>Compressed (not supported)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Another operator is transmitting</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 is transmitting on this station</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30031,6 +30043,10 @@ The default templates are sent as compact native frames.</translation>
     <message>
         <source>lost</source>
         <translation>lost</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>busy: %1 is transmitting</translation>
     </message>
 </context>
 </TS>

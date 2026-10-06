@@ -42,6 +42,7 @@ enum Flag : quint8 {
     CatRsp   = 6,   // risposta: gateway -> chi ha chiesto
     TxAudio  = 7,   // audio da trasmettere: operatore -> gateway
     Denied   = 8,   // il relay spiega perche' non si entra
+    TxState  = 9,   // chi ha il PTT della stazione: "tx free" / "tx you" / "tx busy <nominativo>"
 };
 
 struct Header {

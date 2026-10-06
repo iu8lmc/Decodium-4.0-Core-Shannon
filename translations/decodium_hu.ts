@@ -2793,6 +2793,10 @@ A kezdéshez kattintson a Monitor gombra</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: adja meg az e-mail-címet és a jelszót</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Az adás megtagadva: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30304,6 +30308,14 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
         <source>Compressed (not supported)</source>
         <translation>Tömörített (nem támogatott)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Egy másik operátor adásban van</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 adásban van ezen az állomáson</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30454,6 +30466,10 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
     <message>
         <source>lost</source>
         <translation>elveszett</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>foglalt: %1 adásban van</translation>
     </message>
 </context>
 </TS>

@@ -112,7 +112,8 @@ public:
                     cat << line;
                     if (!answerCat) break;
                     QByteArray rsp = "RPRT 0\n";
-                    if (line == "f") rsp = "14074000\n";
+                    if (denyPtt && line.startsWith("T 1")) rsp = "RPRT -8\n";
+                    else if (line == "f") rsp = "14074000\n";
                     else if (line == "m") rsp = "PKTUSB\n3000\n";
                     else if (line == "t") rsp = pttState ? "1\n" : "0\n";
                     else if (line == "l STRENGTH") rsp = "-12\n";
@@ -159,6 +160,7 @@ public:
     }
 
     bool answerChoose {true};
+    bool denyPtt {false};
     QVector<QByteArray> v3Ctrl;
     QVector<QPair<v3::Header, QByteArray>> v3Tx;
     QVector<QByteArray> v3Nack;
@@ -747,6 +749,71 @@ private slots:
         r.link.sendTxAudio(tone(1500, 12000, 1200), 0);
         QTRY_VERIFY_WITH_TIMEOUT(r.relay.txPackets.size() >= 10, 3000);
         QCOMPARE(r.relay.v3Tx.size(), 0);
+    }
+
+    // ── piu' operatori sulla stessa radio ──────────────────────────────────
+
+    void anotherOperatorTransmittingBlocksPttAndAudio()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.relay.send(TxState, 0, "tx busy K1ABC");
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.txHolder(), QStringLiteral("K1ABC"), 2000);
+        QVERIFY(r.link.txBlockedReason().contains(QStringLiteral("K1ABC")));
+        QVERIFY(r.link.status().contains(QStringLiteral("K1ABC")));
+        r.relay.cat.clear();
+        r.link.setPtt(true);
+        r.link.sendTxAudio(tone(1500, 12000, 1200), 0);
+        QTest::qWait(400);
+        QVERIFY(!r.relay.cat.contains(QStringLiteral("T 1")));      // il PTT non parte neanche
+        QCOMPARE(r.relay.txPackets.size(), 0);                      // e l'audio non viene mandato
+        QVERIFY(!r.link.ptt());
+
+        r.relay.send(TxState, 0, "tx free");                        // ha finito
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.txHolder().isEmpty(), 2000);
+        QVERIFY(r.link.txBlockedReason().isEmpty());
+        r.link.setPtt(true);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.cat.contains(QStringLiteral("T 1")), 3000);
+    }
+
+    void losingTheTurnStopsOurTransmission()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.link.setPtt(true);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.cat.contains(QStringLiteral("T 1")), 3000);
+        r.link.sendTxAudio(tone(1500, 12000, 12000), 0);            // un secondo
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.txPackets.size() >= 10, 3000);
+        r.relay.send(TxState, 0, "tx busy DL1XYZ");                 // il relay da' il PTT a un altro
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.txHolder(), QStringLiteral("DL1XYZ"), 2000);
+        const int at = r.relay.txPackets.size();
+        QTest::qWait(500);
+        QVERIFY2(r.relay.txPackets.size() <= at + 2, "il flusso doveva fermarsi");
+        QVERIFY(!r.link.ptt());
+    }
+
+    void rejectedPttIsUndone()
+    {
+        Rig r;
+        r.relay.denyPtt = true;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.link.setPtt(true);
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.status().contains(QStringLiteral("Another operator")), 3000);
+        QVERIFY(!r.link.ptt());
+    }
+
+    void yourOwnTurnIsNotABlock()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.relay.send(TxState, 0, "tx you");
+        QTest::qWait(200);
+        QVERIFY(r.link.txHolder().isEmpty());
+        QVERIFY(r.link.txBlockedReason().isEmpty());
     }
 
     void listenerCannotTransmitOrPoll()

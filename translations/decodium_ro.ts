@@ -2195,6 +2195,10 @@ Apasă Monitor pentru a începe</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: introduceți e-mailul și parola</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Transmisie refuzată: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -22742,6 +22746,14 @@ The default templates are sent as compact native frames.</source>
         <source>Compressed (not supported)</source>
         <translation>Comprimat (neacceptat)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Un alt operator transmite</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 transmite pe această stație</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -22892,6 +22904,10 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>lost</source>
         <translation>pierdute</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>ocupat: %1 transmite</translation>
     </message>
 </context>
 </TS>

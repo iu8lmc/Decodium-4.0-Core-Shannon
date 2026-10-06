@@ -2795,6 +2795,10 @@ Zum Starten auf Monitor klicken</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: E-Mail und Passwort eingeben</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Senden abgelehnt: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30439,6 +30443,14 @@ Die Standardvorlagen werden als kompakte native Frames gesendet.</translation>
         <source>Compressed (not supported)</source>
         <translation>Komprimiert (nicht unterstützt)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Ein anderer Operator sendet gerade</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 sendet gerade auf dieser Station</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30589,6 +30601,10 @@ Die Standardvorlagen werden als kompakte native Frames gesendet.</translation>
     <message>
         <source>lost</source>
         <translation>verloren</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>belegt: %1 sendet</translation>
     </message>
 </context>
 </TS>

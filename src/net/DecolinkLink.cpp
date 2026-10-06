@@ -331,6 +331,7 @@ void DecolinkLink::closeRelay(bool releasePtt)
     m_registered = false;
     m_gatewayUp = false;
     m_haveRxSeq = false;
+    m_txHolder.clear();
     m_activeProfile = -1;
     m_state.ptt = false;
     recomputeLinked();
@@ -430,6 +431,9 @@ void DecolinkLink::onDatagrams()
             m_state.setTxAudioLeadMs(quint16(m_txLeadMs));
             break;
         }
+        case TxState:
+            handleTxState(QString::fromUtf8(body));
+            break;
         case Audio:
             setActiveProfile(v3::Pcm48);
             handleAudio(h, body);
@@ -554,6 +558,14 @@ void DecolinkLink::handleCatResponse(quint32 seq, const QByteArray& body)
 
     const QString text = QString::fromLatin1(body);
     const QStringList lines = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    if (!lines.isEmpty() && lines.first().startsWith(QLatin1String("RPRT -8"))) {
+        // Il relay ha rifiutato il comando: un altro operatore ha il PTT della
+        // stazione e finche' parla la radio si puo' solo guardare.
+        if (kind == Kind::Ptt)
+            loseTurn();
+        setStatus(tr("Another operator is transmitting"));
+        return;
+    }
     if (lines.isEmpty() || lines.first().startsWith(QLatin1String("RPRT")))
         return;                 // "RPRT 0" e' un si', "RPRT -1" un no: niente da leggere
 
@@ -598,6 +610,42 @@ void DecolinkLink::handleCatResponse(quint32 seq, const QByteArray& body)
     }
     if (changed)
         emit stateChanged();
+}
+
+QString DecolinkLink::txBlockedReason() const
+{
+    return m_txHolder.isEmpty() ? QString()
+                                : tr("%1 is transmitting on this station").arg(m_txHolder);
+}
+
+// Il PTT che si era chiesto non c'e' piu': si smette di mandare audio e di
+// considerarsi in trasmissione. La radio e' di chi parla, non si tocca.
+void DecolinkLink::loseTurn()
+{
+    m_pttRequested = false;
+    m_txTimer->stop();
+    m_txSamples.clear();
+    m_txPos = 0;
+    m_v3TxWindow.clear();
+    m_state.setPtt(false);
+    emit stateChanged();
+}
+
+void DecolinkLink::handleTxState(const QString& text)
+{
+    const QString s = text.trimmed();
+    QString holder;
+    if (s.startsWith(QLatin1String("tx busy ")))
+        holder = s.mid(8).trimmed();
+    if (holder == m_txHolder)
+        return;
+    m_txHolder = holder;
+    if (!holder.isEmpty()) {
+        if (m_pttRequested || !m_txSamples.isEmpty())
+            loseTurn();
+        setStatus(tr("%1 is transmitting on this station").arg(holder));
+    }
+    emit stateChanged();
 }
 
 void DecolinkLink::onPoll()
@@ -717,6 +765,10 @@ void DecolinkLink::setPtt(bool on, quint64 whenNs)
                           : tr("Your access is listen-only: you cannot transmit"));
         return;
     }
+    if (on && !m_txHolder.isEmpty()) {
+        setStatus(txBlockedReason());
+        return;
+    }
     if (!m_socket)
         return;
     if (whenNs > 0) {
@@ -757,6 +809,8 @@ void DecolinkLink::sendTxAudio(const QVector<short>& samples, quint64 playAtNs)
         setStatus(tr("Your access is listen-only: you cannot transmit"));
         return;
     }
+    if (!m_txHolder.isEmpty())
+        return;                 // un altro operatore ha il PTT: l'audio sarebbe scartato
     // Chi trasmette un segnale lungo lo consegna a pezzi, ognuno col suo istante:
     // se il flusso e' gia' in corso i pezzi si accodano uno dopo l'altro, senza
     // buttare via quelli non ancora partiti e senza riagganciare il tempo.

@@ -2803,6 +2803,10 @@ Noklikšķiniet uz Monitor, lai sāktu</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: ievadiet e-pastu un paroli</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Pārraide noraidīta: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30453,6 +30457,14 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
         <source>Compressed (not supported)</source>
         <translation>Saspiests (neatbalstīts)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Cits operators pārraida</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 pārraida šajā stacijā</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30603,6 +30615,10 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
     <message>
         <source>lost</source>
         <translation>zaudēti</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>aizņemts: %1 pārraida</translation>
     </message>
 </context>
 </TS>

@@ -2799,6 +2799,10 @@ Klik op Monitor om te starten</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: voer e-mail en wachtwoord in</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Zenden geweigerd: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30450,6 +30454,14 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
         <source>Compressed (not supported)</source>
         <translation>Gecomprimeerd (niet ondersteund)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Een andere operator zendt uit</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 zendt uit op dit station</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30600,6 +30612,10 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
     <message>
         <source>lost</source>
         <translation>verloren</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>bezet: %1 zendt uit</translation>
     </message>
 </context>
 </TS>

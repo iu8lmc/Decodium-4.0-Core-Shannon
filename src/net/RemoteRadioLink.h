@@ -45,6 +45,10 @@ public:
     // che il relay scarterebbe in silenzio.
     virtual bool canTransmit() const { return true; }
 
+    // Non vuota se adesso non si puo' trasmettere per un motivo passeggero
+    // (un altro operatore ha il PTT della stazione): il testo dice perche'.
+    virtual QString txBlockedReason() const { return QString(); }
+
 signals:
     void statusChanged();
     void remoteStreamChanged(quint32 streamId);

@@ -21777,6 +21777,10 @@ bool DecodiumBridge::decoPortSendTxWave(const QVector<float>& wave, double* dura
                              "(no CAT for its PTT, or it is already transmitting)"));
         return false;
     }
+    if (const QString blocked = link->txBlockedReason(); !blocked.isEmpty()) {
+        emit errorMessage(tr("Transmit refused: %1").arg(blocked));
+        return false;
+    }
     if (wave.isEmpty())
         return false;
 

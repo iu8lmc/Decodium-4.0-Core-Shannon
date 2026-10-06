@@ -44,6 +44,7 @@ class DecolinkLink : public RemoteRadioLink {
     Q_PROPERTY(QString stationName READ stationName NOTIFY authChanged)
     Q_PROPERTY(QString role READ role NOTIFY authChanged)
     Q_PROPERTY(bool canTransmit READ canTransmit NOTIFY authChanged)
+    Q_PROPERTY(QString txHolder READ txHolder NOTIFY stateChanged)
     Q_PROPERTY(QVariantList stationList READ stationList NOTIFY authChanged)
     Q_PROPERTY(QString rigLabel READ rigLabel NOTIFY stateChanged)
     Q_PROPERTY(double frequencyHz READ frequencyHz NOTIFY stateChanged)
@@ -87,6 +88,9 @@ public:
     int     txAudioLeadMs() const override { return m_txLeadMs; }
     QString peerAddress() const override;
     bool    canTransmit() const override { return m_canTx; }
+    // Nominativo dell'altro operatore che ha il PTT, o vuoto se e' libero o e' nostro.
+    QString txHolder() const { return m_txHolder; }
+    QString txBlockedReason() const override;
 
     void tune(double hz) override { setFrequency(qint64(hz)); }
     void setModeName(const QString& name) override;
@@ -151,6 +155,8 @@ private:
     void sendCat(const QString& line, Kind kind);
     void handleAudio(const decolink::Header& h, const QByteArray& body);
     void handleCatResponse(quint32 seq, const QByteArray& body);
+    void handleTxState(const QString& text);
+    void loseTurn();
     void handleV3(const QByteArray& dg);
     void handleV3Audio(const decolink::v3::Header& h, const QByteArray& body);
     void handleV3Ctrl(const QByteArray& body);
@@ -227,6 +233,9 @@ private:
     QString m_status;
     int     m_rttMs {0};
     int     m_txLeadMs {120};
+
+    // il PTT della stazione, come lo annuncia il relay
+    QString m_txHolder;
 
     // profilo audio v3
     int     m_wantProfile {-1};

@@ -2795,6 +2795,10 @@ Cliquez sur Monitor pour démarrer</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink : saisissez l'e-mail et le mot de passe</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Émission refusée : %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30439,6 +30443,14 @@ Les modèles par défaut sont envoyés en trames natives compactes.</translation
         <source>Compressed (not supported)</source>
         <translation>Compressé (non pris en charge)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Un autre opérateur émet</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 émet sur cette station</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30589,6 +30601,10 @@ Les modèles par défaut sont envoyés en trames natives compactes.</translation
     <message>
         <source>lost</source>
         <translation>perdus</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>occupé : %1 émet</translation>
     </message>
 </context>
 </TS>

@@ -298,8 +298,11 @@ Window {
                     Lbl { text: qsTr("Transmit") }
                     Text {
                         font.pixelSize: 12
-                        color: win.lnk && win.lnk.canTransmit ? win.cOk : win.cDim
-                        text: win.lnk && win.lnk.canTransmit ? qsTr("allowed") : qsTr("listen only")
+                        readonly property bool busy: !!(win.lnk && win.lnk.txHolder !== "")
+                        color: busy ? win.cWarn : (win.lnk && win.lnk.canTransmit ? win.cOk : win.cDim)
+                        text: !win.lnk ? ""
+                              : (busy ? qsTr("busy: %1 is transmitting").arg(win.lnk.txHolder)
+                                      : (win.lnk.canTransmit ? qsTr("allowed") : qsTr("listen only")))
                     }
                 }
             }

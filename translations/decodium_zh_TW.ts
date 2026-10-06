@@ -2788,6 +2788,10 @@ Click Monitor to start</source>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink：請輸入電子郵件和密碼</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>發射被拒絕：%1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30431,6 +30435,14 @@ The default templates are sent as compact native frames.</source>
         <source>Compressed (not supported)</source>
         <translation>壓縮（不支援）</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>另一位操作員正在發射</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 正在此電台發射</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30581,6 +30593,10 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>lost</source>
         <translation>遺失</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>佔用：%1 正在發射</translation>
     </message>
 </context>
 </TS>

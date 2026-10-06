@@ -2788,6 +2788,10 @@ Monitor を押すと開始します</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: メールとパスワードを入力してください</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>送信を拒否しました: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30434,6 +30438,14 @@ The default templates are sent as compact native frames.</source>
         <source>Compressed (not supported)</source>
         <translation>圧縮(非対応)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>別のオペレーターが送信中です</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 がこの局で送信中です</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30584,6 +30596,10 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>lost</source>
         <translation>欠落</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>使用中: %1 が送信中</translation>
     </message>
 </context>
 </TS>

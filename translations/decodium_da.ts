@@ -2790,6 +2790,10 @@ Klik på Monitor for at starte</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: indtast e-mail og adgangskode</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Afsendelse afvist: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -30439,6 +30443,14 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
         <source>Compressed (not supported)</source>
         <translation>Komprimeret (ikke understøttet)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>En anden operatør sender</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 sender på denne station</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30589,6 +30601,10 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
     <message>
         <source>lost</source>
         <translation>tabt</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>optaget: %1 sender</translation>
     </message>
 </context>
 </TS>

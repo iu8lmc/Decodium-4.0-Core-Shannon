@@ -3376,6 +3376,10 @@ Premi Monitor per iniziare</translation>
         <source>Decolink: enter e-mail and password</source>
         <translation>Decolink: inserisci e-mail e password</translation>
     </message>
+    <message>
+        <source>Transmit refused: %1</source>
+        <translation>Trasmissione rifiutata: %1</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -36745,6 +36749,14 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
         <source>Compressed (not supported)</source>
         <translation>Compresso (non supportato)</translation>
     </message>
+    <message>
+        <source>Another operator is transmitting</source>
+        <translation>Un altro operatore sta trasmettendo</translation>
+    </message>
+    <message>
+        <source>%1 is transmitting on this station</source>
+        <translation>%1 sta trasmettendo su questa stazione</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -36895,6 +36907,10 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
     <message>
         <source>lost</source>
         <translation>persi</translation>
+    </message>
+    <message>
+        <source>busy: %1 is transmitting</source>
+        <translation>occupato: %1 sta trasmettendo</translation>
     </message>
 </context>
 </TS>
