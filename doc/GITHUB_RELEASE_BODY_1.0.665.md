@@ -1,4 +1,4 @@
-# Decodium 4 v1.0.664
+# Decodium 4 v1.0.665
 
 ## English (UK)
 
@@ -13,7 +13,8 @@ Test build: Decodium can now use a radio that sits behind a Decolink server, fro
 - The installer asks whether to download and install the Decolink gateway (pinned release with SHA-256 check) for the PC that sits next to the radio.
 - Same code path as DecoPort on the local network: both now sit behind one remote-radio interface.
 - Fixes the transmit audio not reaching the remote radio (1.0.663 sent only the last chunk).
-- Not yet tested on air; the Decolink v3 audio profiles (Opus, lossless, CW key) are not included.
+- New audio profile "Digital, lossless (12 kHz)": the Decolink v3 profile for digital modes. Bit-exact audio at about a third of the PCM bandwidth, lost blocks are requested again and recovered, and the transmit audio is sent the same way. The selector in the Decolink window offers: follow the station (default), PCM 48 kHz, digital lossless. Set the PCM profile if another app on the station needs it.
+- Not yet tested on air; the Opus voice and CW profiles and the CW key are not included.
 
 ### Downloads
 
@@ -34,7 +35,8 @@ Versione di prova: Decodium può usare una radio che sta dietro un server Decoli
 - L'installer chiede se scaricare e installare il gateway Decolink (versione fissata, con verifica SHA-256) per il PC accanto alla radio.
 - Stesso percorso di DecoPort in rete locale: ora stanno entrambi dietro un'unica interfaccia di radio remota.
 - Corregge l'audio di trasmissione che non arrivava alla radio remota (la 1.0.663 mandava solo l'ultimo pezzo).
-- Non ancora provato in aria; i profili audio v3 di Decolink (Opus, lossless, tasto CW) non sono inclusi.
+- Nuovo profilo audio "Digitale, senza perdite (12 kHz)": il profilo v3 di Decolink per i modi digitali. Audio identico campione per campione con circa un terzo della banda del PCM; i blocchi persi vengono richiesti di nuovo e recuperati, e anche l'audio da trasmettere viaggia così. Il selettore nella finestra Decolink offre: segui la stazione (predefinito), PCM 48 kHz, digitale senza perdite. Imposta il profilo PCM se un'altra app della stazione lo richiede.
+- Non ancora provato in aria; i profili Opus per voce e CW e il tasto CW non sono inclusi.
 
 ### Download
 

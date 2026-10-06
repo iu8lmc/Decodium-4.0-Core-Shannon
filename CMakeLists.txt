@@ -583,6 +583,8 @@ set (wsjtx_CXXSRCS
   src/net/DecoPortLink.cpp
   src/net/DecoPortLink.h
   src/net/DecolinkPacket.h
+  src/net/DecolinkV3.h
+  src/net/DecolinkLossless.h
   src/net/DecolinkLink.cpp
   src/net/DecolinkLink.h
   src/net/DecodiumDecoPortGateway.cpp
@@ -2040,6 +2042,8 @@ add_executable (decodium_qml
   src/net/DecoPortLink.cpp
   src/net/DecoPortLink.h
   src/net/DecolinkPacket.h
+  src/net/DecolinkV3.h
+  src/net/DecolinkLossless.h
   src/net/DecolinkLink.cpp
   src/net/DecolinkLink.h
   src/net/DecodiumDecoPortGateway.cpp
