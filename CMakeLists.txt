@@ -579,8 +579,12 @@ set (wsjtx_CXXSRCS
   src/net/DecoPortPacket.cpp
   src/net/DecoPortPacket.h
   src/net/RadioLink.h
+  src/net/RemoteRadioLink.h
   src/net/DecoPortLink.cpp
   src/net/DecoPortLink.h
+  src/net/DecolinkPacket.h
+  src/net/DecolinkLink.cpp
+  src/net/DecolinkLink.h
   src/net/DecodiumDecoPortGateway.cpp
   src/net/DecoPortRigDriver.cpp
   src/net/DecodiumDecoPortGateway.h
@@ -2032,8 +2036,12 @@ add_executable (decodium_qml
   src/net/DecoPortPacket.cpp
   src/net/DecoPortPacket.h
   src/net/RadioLink.h
+  src/net/RemoteRadioLink.h
   src/net/DecoPortLink.cpp
   src/net/DecoPortLink.h
+  src/net/DecolinkPacket.h
+  src/net/DecolinkLink.cpp
+  src/net/DecolinkLink.h
   src/net/DecodiumDecoPortGateway.cpp
   src/net/DecoPortRigDriver.cpp
   src/net/DecodiumDecoPortGateway.h

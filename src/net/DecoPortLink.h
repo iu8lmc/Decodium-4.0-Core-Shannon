@@ -7,7 +7,7 @@
 #pragma once
 
 #include "DecoPortPacket.h"
-#include "RadioLink.h"
+#include "RemoteRadioLink.h"
 
 #include <QHostAddress>
 #include <QObject>
@@ -67,7 +67,7 @@ private:
 
 // ── collegamento ────────────────────────────────────────────────────────────
 
-class DecoPortLink : public RadioLink {
+class DecoPortLink : public RemoteRadioLink {
     Q_OBJECT
     Q_PROPERTY(bool linked READ isLinked NOTIFY linkedChanged)
     Q_PROPERTY(QString rigLabel READ rigLabel NOTIFY stateChanged)
@@ -96,14 +96,14 @@ public:
     void setPtt(bool on, quint64 whenNs = 0) override;
     void sendTxAudio(const QVector<short>& samples, quint64 playAtNs) override;
 
-    double  frequencyHz() const { return static_cast<double>(m_state.frequencyHz); }
-    QString modeName() const { return decoport::modeToString(m_state.mode); }
-    bool    ptt() const { return m_state.ptt; }
-    double  sMeterDbm() const { return m_state.sMeterDbm(); }
-    QString status() const { return m_status; }
-    int     txAudioLeadMs() const { return m_state.txAudioLeadMs; }
-    quint32 streamId() const { return m_remoteStreamId; }
-    QString peerAddress() const {
+    double  frequencyHz() const override { return static_cast<double>(m_state.frequencyHz); }
+    QString modeName() const override { return decoport::modeToString(m_state.mode); }
+    bool    ptt() const override { return m_state.ptt; }
+    double  sMeterDbm() const override { return m_state.sMeterDbm(); }
+    QString status() const override { return m_status; }
+    int     txAudioLeadMs() const override { return m_state.txAudioLeadMs; }
+    quint32 streamId() const override { return m_remoteStreamId; }
+    QString peerAddress() const override {
         return m_peer.isNull() ? QString()
                                : (m_peer.toString() + QLatin1Char(':') + QString::number(m_peerPort));
     }
@@ -111,19 +111,9 @@ public:
     // Comodita' per QML: stesse cose con tipi che il QML maneggia bene.
     Q_INVOKABLE bool connectTo(const QString& host, int port = decoport::kSessionPort);
     Q_INVOKABLE void disconnectFromGateway();
-    Q_INVOKABLE void tune(double hz);
-    Q_INVOKABLE void setModeName(const QString& name);
-    Q_INVOKABLE void key(bool on);
-
-signals:
-    void statusChanged();
-    void remoteStreamChanged(quint32 streamId);
-    // Emitted synchronously at authenticated packet decode, before the
-    // ordinary RadioLink::rxAudio delivery. Only bounded DirectConnection
-    // consumers may attach here.
-    void rxAudioProduced(const QVector<short>& samples,
-                         quint64 captureTsNs,
-                         quint32 streamId);
+    Q_INVOKABLE void tune(double hz) override;
+    Q_INVOKABLE void setModeName(const QString& name) override;
+    Q_INVOKABLE void key(bool on) override;
 
 private slots:
     void onDatagrams();

@@ -372,6 +372,20 @@ target_link_libraries (test_decoport_rig_driver_thread
 add_test (NAME test_decoport_rig_driver_thread
   COMMAND $<TARGET_FILE:test_decoport_rig_driver_thread>)
 
+# Decolink: pacchetti HFGW v2, login, relay finto in locale, audio a 12 kHz, CAT, TX.
+add_executable (test_decolink_link
+  test_decolink_link.cpp
+  ../src/net/DecolinkLink.cpp
+  ../src/net/DecolinkLink.h
+  ../src/net/DecolinkPacket.h
+  ../src/net/DecoPortPacket.cpp
+  ../src/net/DecoPortPacket.h
+  ../src/net/RadioLink.h
+  ../src/net/RemoteRadioLink.h)
+target_include_directories (test_decolink_link PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_decolink_link Qt6::Test Qt6::Core Qt6::Network)
+add_test (NAME test_decolink_link COMMAND $<TARGET_FILE:test_decolink_link>)
+
 add_executable (test_udp_client_id test_udp_client_id.cpp)
 target_link_libraries (test_udp_client_id wsjt_qt Qt6::Test Qt6::Network Qt6::Core)
 add_test (NAME test_udp_client_id COMMAND $<TARGET_FILE:test_udp_client_id>)
@@ -639,6 +653,7 @@ set (_decodium_regression_test_targets
   test_cat4om_manager
   test_cat_native_migration
   test_decoport_rig_driver_thread
+  test_decolink_link
   test_udp_client_id
   test_ftx_weak_decode
   test_q65_doppler
