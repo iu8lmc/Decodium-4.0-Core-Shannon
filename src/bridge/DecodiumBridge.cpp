@@ -28076,7 +28076,10 @@ void DecodiumBridge::startTx()
 
     QAudioDevice outDev;
     QAudioFormat outFmt;
-    if (!tciAudioTx) {
+    // Con la radio remota in uso la scheda audio locale non serve: il segnale
+    // parte dalla forma d'onda, e un'uscita locale non configurata non deve
+    // bloccare la trasmissione.
+    if (!tciAudioTx && !m_decoPortUseRemote) {
         outDev = preparedDev;
         outFmt = preparedFmt;
         m_txPcmData = preparedPcm;
@@ -28101,7 +28104,9 @@ void DecodiumBridge::startTx()
         }
     } else {
         m_txPcmData.clear();
-        bridgeLog(QStringLiteral("startTx: TCI audio path selected, skipping local TX audio device"));
+        bridgeLog(tciAudioTx
+                      ? QStringLiteral("startTx: TCI audio path selected, skipping local TX audio device")
+                      : QStringLiteral("startTx: remote radio selected, skipping local TX audio device"));
     }
     if (m_recordTxEnabled) {
         QString const txRecordPath = buildTxRecordingPath(txMode, false);
