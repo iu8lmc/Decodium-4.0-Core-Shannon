@@ -415,6 +415,26 @@ private slots:
         QVERIFY(t.elapsed() >= 900);
     }
 
+    // Il bridge consegna il segnale a pezzi da 40 ms, tutti insieme e in anticipo,
+    // ognuno col suo istante: nessun pezzo deve cancellare i precedenti.
+    void txAudioChunksAreQueuedNotReplaced()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.link.setPtt(true);
+        const QVector<short> wave = tone(1500, 12000, 12000);      // un secondo
+        const quint64 t0 = quint64(QDateTime::currentMSecsSinceEpoch()) * 1000000ull + 200000000ull;
+        for (int off = 0, i = 0; off < wave.size(); off += 480, ++i)
+            r.link.sendTxAudio(wave.mid(off, 480), t0 + quint64(i) * 40000000ull);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.txPackets.size() >= 100, 5000);
+        QCOMPARE(r.relay.txPackets.size(), 100);
+        QVector<short> back;
+        for (const auto& p : r.relay.txPackets)
+            back += pcmToSamples(p.second);
+        QCOMPARE(back, wave);
+    }
+
     void listenerCannotTransmitOrPoll()
     {
         Rig r("lst", false);

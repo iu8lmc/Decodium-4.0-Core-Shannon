@@ -738,6 +738,13 @@ void DecolinkLink::sendTxAudio(const QVector<short>& samples, quint64 playAtNs)
         setStatus(tr("Your access is listen-only: you cannot transmit"));
         return;
     }
+    // Chi trasmette un segnale lungo lo consegna a pezzi, ognuno col suo istante:
+    // se il flusso e' gia' in corso i pezzi si accodano uno dopo l'altro, senza
+    // buttare via quelli non ancora partiti e senza riagganciare il tempo.
+    if (!m_txSamples.isEmpty()) {
+        m_txSamples += samples;
+        return;
+    }
     m_txSamples = samples;
     m_txPos = 0;
     const qint64 now = nowMs();
