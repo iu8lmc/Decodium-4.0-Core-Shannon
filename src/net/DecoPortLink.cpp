@@ -147,7 +147,7 @@ QVariantList DecoPortDiscovery::radios() const
 // ── collegamento ────────────────────────────────────────────────────────────
 
 DecoPortLink::DecoPortLink(QObject* parent)
-    : RadioLink(parent)
+    : RemoteRadioLink(parent)
 {
     m_status = tr("not connected");
 }
