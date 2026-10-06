@@ -20,6 +20,10 @@ namespace {
 constexpr double kS9Dbm = -73.0;
 constexpr int    kTxFrameSamples = 120;        // 10 ms a 12 kHz
 constexpr int    kTxFrameMs = 10;
+constexpr int    kDigiBlockSamples = 480;      // 40 ms a 12 kHz: un blocco dei digitali
+constexpr int    kDigiBlockMs = 40;
+constexpr int    kV3MaxGapBlocks = 25;         // fino a un secondo si riempie di silenzio
+constexpr qint64 kV3TxWindowMs = 3000;         // quanto si tiene un blocco per rimandarlo
 constexpr qint64 kRegisterEveryMs = 5000;      // il relay scarta chi tace da 15 s
 constexpr qint64 kRelaySilentMs = 12000;
 constexpr qint64 kPttIdleMs = 3000;            // PTT su senza audio: lo si molla
@@ -40,6 +44,7 @@ DecolinkLink::DecolinkLink(QObject* parent)
     m_pollTimer = mkTimer(1000, &DecolinkLink::onPoll);
     m_watchTimer = mkTimer(1000, &DecolinkLink::onWatch);
     m_txTimer = mkTimer(kTxFrameMs, &DecolinkLink::onTxTick);
+    m_v3Timer = mkTimer(20, &DecolinkLink::onV3Tick);
     m_renewTimer = new QTimer(this);
     m_renewTimer->setSingleShot(true);
     connect(m_renewTimer, &QTimer::timeout, this, [this]() {
@@ -300,8 +305,12 @@ void DecolinkLink::closeRelay(bool releasePtt)
     }
     m_pttRequested = false;
     m_txTimer->stop();
+    m_v3Timer->stop();
     m_txSamples.clear();
     m_txPos = 0;
+    m_v3TxWindow.clear();
+    m_helloSent = false;
+    resetV3Rx();
     m_keepAlive->stop();
     m_pingTimer->stop();
     m_pollTimer->stop();
@@ -322,8 +331,10 @@ void DecolinkLink::closeRelay(bool releasePtt)
     m_registered = false;
     m_gatewayUp = false;
     m_haveRxSeq = false;
+    m_activeProfile = -1;
     m_state.ptt = false;
     recomputeLinked();
+    emit profileChanged();
 }
 
 void DecolinkLink::disconnectFromRelay()
@@ -358,6 +369,7 @@ void DecolinkLink::onKeepAlive()
     // Lo stesso REGISTER tiene aperto il buco nel NAT e rinnova la sessione sul
     // relay. Dopo un riavvio del relay e' anche quello che ci riporta dentro.
     sendRegister();
+    ensureProfile();
 }
 
 void DecolinkLink::onPing()
@@ -381,6 +393,11 @@ void DecolinkLink::onDatagrams()
         // farci credere che la radio sia qui.
         if (from != m_relayAddr && !from.isEqual(m_relayAddr, QHostAddress::ConvertV4MappedToIPv4))
             continue;
+        if (v3::looksLikeV3(dg)) {
+            m_lastPacketMs = nowMs();
+            handleV3(dg);
+            continue;
+        }
         Header h;
         QByteArray body;
         if (!parsePacket(dg, &h, &body))
@@ -402,6 +419,7 @@ void DecolinkLink::onDatagrams()
                 setStatus(tr("Connected to %1").arg(m_stationName));
                 recomputeLinked();
             }
+            ensureProfile();
             break;
         case Pong: {
             const int rtt = int(qMax<qint64>(0, nowMs() - qint64(h.tMs)));
@@ -413,6 +431,7 @@ void DecolinkLink::onDatagrams()
             break;
         }
         case Audio:
+            setActiveProfile(v3::Pcm48);
             handleAudio(h, body);
             break;
         case CatRsp:
@@ -745,6 +764,7 @@ void DecolinkLink::sendTxAudio(const QVector<short>& samples, quint64 playAtNs)
         m_txSamples += samples;
         return;
     }
+    m_txDigi = (m_activeProfile == v3::Digi);
     m_txSamples = samples;
     m_txPos = 0;
     const qint64 now = nowMs();
@@ -771,22 +791,295 @@ void DecolinkLink::onTxTick()
     const qint64 now = nowMs();
     if (now < m_txStartMs)
         return;
+    const int frameSamples = m_txDigi ? kDigiBlockSamples : kTxFrameSamples;
+    const int frameMs = m_txDigi ? kDigiBlockMs : kTxFrameMs;
     // Si mandano i pezzi che a quest'ora dovrebbero gia' essere partiti: un
     // ritardo del timer non accumula scarto e l'audio resta agganciato al suo
     // istante.
-    const qint64 due = (now - m_txStartMs) / kTxFrameMs + 1;
-    while (m_txPos < m_txSamples.size() && m_txPos / kTxFrameSamples < due) {
-        const int n = qMin(kTxFrameSamples, m_txSamples.size() - m_txPos);
-        QByteArray body = samplesToPcm(m_txSamples.constData() + m_txPos, n);
-        if (n < kTxFrameSamples)
-            body.append(QByteArray((kTxFrameSamples - n) * 2, '\0'));
-        sendPacket(TxAudio, ++m_txSeq, body, quint32(kDecoderRate));
+    const qint64 due = (now - m_txStartMs) / frameMs + 1;
+    while (m_txPos < m_txSamples.size() && m_txPos / frameSamples < due) {
+        const int n = qMin(frameSamples, m_txSamples.size() - m_txPos);
+        if (m_txDigi) {
+            // Blocco senza perdite, indipendente dagli altri: se un datagramma
+            // si perde il gateway lo chiede indietro e noi lo teniamo a portata.
+            const QByteArray block = lossless::comprimi(m_txSamples.constData() + m_txPos, n);
+            if (!block.isEmpty()) {
+                const quint16 seq = m_v3TxSeq++;
+                const QByteArray pkt = v3::makePacket(v3::AudioTx, v3::Digi, 0, 0, seq,
+                                                      m_v3TxTime, block);
+                m_v3TxTime += quint32(n);
+                m_v3TxWindow.insert(seq, qMakePair(pkt, now));
+                if (m_socket && !m_relayAddr.isNull())
+                    m_socket->writeDatagram(pkt, m_relayAddr, quint16(m_relayPort));
+            }
+        } else {
+            QByteArray body = samplesToPcm(m_txSamples.constData() + m_txPos, n);
+            if (n < kTxFrameSamples)
+                body.append(QByteArray((kTxFrameSamples - n) * 2, '\0'));
+            sendPacket(TxAudio, ++m_txSeq, body, quint32(kDecoderRate));
+        }
         m_lastTxPacketMs = now;
-        m_txPos += kTxFrameSamples;
+        m_txPos += frameSamples;
     }
+    // Quel che e' piu' vecchio della finestra non serve piu' a nessuno.
+    for (auto it = m_v3TxWindow.begin(); it != m_v3TxWindow.end();)
+        it = (now - it->second > kV3TxWindowMs) ? m_v3TxWindow.erase(it) : ++it;
     if (m_txPos >= m_txSamples.size()) {
         m_txTimer->stop();
         m_txSamples.clear();
         m_txPos = 0;
     }
+}
+
+// ── profilo audio v3 ───────────────────────────────────────────────────────
+
+QString DecolinkLink::activeProfileName() const
+{
+    if (m_activeProfile < 0)
+        return tr("unknown");
+    switch (m_activeProfile) {
+    case v3::Pcm48: return tr("PCM 48 kHz");
+    case v3::Digi:  return tr("Digital, lossless");
+    default:        return tr("Compressed (not supported)");
+    }
+}
+
+void DecolinkLink::setAudioProfile(int profile)
+{
+    if (profile != -1 && profile != v3::Pcm48 && profile != v3::Digi)
+        profile = -1;
+    if (m_wantProfile == profile)
+        return;
+    m_wantProfile = profile;
+    emit profileChanged();
+    ensureProfile();
+}
+
+void DecolinkLink::setActiveProfile(int profile)
+{
+    if (m_activeProfile == profile)
+        return;
+    m_activeProfile = profile;
+    if (profile != v3::Digi)
+        resetV3Rx();
+    emit profileChanged();
+}
+
+void DecolinkLink::sendV3(quint8 type, quint8 profile, quint16 seq, quint32 time, const QByteArray& body)
+{
+    if (!m_socket || m_relayAddr.isNull())
+        return;
+    m_socket->writeDatagram(v3::makePacket(type, profile, 0, 0, seq, time, body),
+                            m_relayAddr, quint16(m_relayPort));
+}
+
+// Il profilo lo sceglie chi ascolta. Si chiede quello voluto; in automatico si
+// resta a guardare, e solo se il gateway manda un formato che qui non si sa
+// leggere (Opus, Codec2, tasto CW) si passa ai digitali: meglio quelli che il
+// silenzio. La richiesta si ripete a ogni giro del keepalive finche' il
+// gateway non conferma, perche' un datagramma puo' perdersi.
+void DecolinkLink::ensureProfile()
+{
+    if (!m_socket || !isLinked())
+        return;
+    int target = m_wantProfile;
+    const bool unsupported = m_activeProfile >= 0 && m_activeProfile != v3::Pcm48
+                             && m_activeProfile != v3::Digi;
+    if (target < 0 && unsupported)
+        target = v3::Digi;
+    if (target < 0 || target == m_activeProfile)
+        return;
+    if (!m_helloSent) {
+        // Dice al gateway che da questa parte c'e' un client v3. Niente
+        // capacita' dichiarate: non si leggono i pacchetti raggruppati di Opus.
+        QByteArray hello;
+        hello.append(char(v3::Hello));
+        hello.append(char(0));
+        sendV3(v3::Ctrl, v3::Pcm48, 0, 0, hello);
+        m_helloSent = true;
+    }
+    QByteArray choose;
+    choose.append(char(v3::Choose));
+    choose.append(char(target));
+    sendV3(v3::Ctrl, quint8(target), 0, 0, choose);
+    m_chooseSentMs = nowMs();
+}
+
+void DecolinkLink::handleV3(const QByteArray& dg)
+{
+    v3::Header h;
+    QByteArray body;
+    if (!v3::parsePacket(dg, &h, &body))
+        return;
+    switch (h.type) {
+    case v3::AudioRx:
+        handleV3Audio(h, body);
+        break;
+    case v3::Ctrl:
+        handleV3Ctrl(body);
+        break;
+    case v3::Nack:
+        handleV3Nack(body);
+        break;
+    default:
+        break;
+    }
+}
+
+void DecolinkLink::handleV3Ctrl(const QByteArray& body)
+{
+    if (body.size() >= 2 && uchar(body.at(0)) == v3::Active)
+        setActiveProfile(uchar(body.at(1)));
+}
+
+// Il gateway chiede indietro dei blocchi che non gli sono arrivati: [Report]
+// [quanti] [seq u16]*. Si rimandano quelli ancora in finestra.
+void DecolinkLink::handleV3Nack(const QByteArray& body)
+{
+    if (body.size() < 2 || !m_socket || m_relayAddr.isNull())
+        return;
+    const int count = uchar(body.at(1));
+    for (int i = 0; i < count && 2 + 2 * i + 1 < body.size(); ++i) {
+        const quint16 seq = quint16((uchar(body.at(2 + 2 * i)) << 8) | uchar(body.at(3 + 2 * i)));
+        const auto it = m_v3TxWindow.constFind(seq);
+        if (it != m_v3TxWindow.constEnd())
+            m_socket->writeDatagram(it->first, m_relayAddr, quint16(m_relayPort));
+    }
+}
+
+void DecolinkLink::resetV3Rx()
+{
+    m_v3Have = false;
+    m_v3Hold.clear();
+    m_v3GapSinceMs = 0;
+    m_v3NackMs = 0;
+    m_v3NackTries = 0;
+    if (m_v3Timer)
+        m_v3Timer->stop();
+}
+
+void DecolinkLink::handleV3Audio(const v3::Header& h, const QByteArray& body)
+{
+    if (h.profile != v3::Digi) {
+        // Opus, Codec2, tasto CW: non si sanno leggere. Lo si dice, e in
+        // automatico si chiedono i digitali.
+        setActiveProfile(h.profile);
+        setStatus(tr("The station sends a compressed audio profile this version cannot decode"));
+        ensureProfile();
+        return;
+    }
+    setActiveProfile(v3::Digi);
+    const QVector<short> samples = lossless::decomprimi(body);
+    if (samples.isEmpty())
+        return;                          // blocco tagliato o incoerente
+
+    if (!m_v3Have) {
+        m_v3Have = true;
+        m_v3Expected = h.seq;
+    }
+    const qint16 diff = qint16(h.seq - m_v3Expected);
+    if (diff < 0)
+        return;                          // vecchio o duplicato
+    if (diff > 200) {
+        // Troppo avanti per essere un buco: la sequenza e' ripartita.
+        m_v3Hold.clear();
+        m_v3Expected = h.seq;
+    }
+    if (m_v3Hold.contains(h.seq))
+        return;
+    if (h.seq != m_v3Expected) {
+        // arrivato fuori ordine, o dopo un buco: si tiene e si aspetta
+        if (m_v3Hold.isEmpty())
+            m_v3GapSinceMs = nowMs();
+        m_v3Hold.insert(h.seq, samples);
+        flushV3(false);
+        if (!m_v3Hold.isEmpty() && !m_v3Timer->isActive())
+            m_v3Timer->start();
+        return;
+    }
+    m_v3Hold.insert(h.seq, samples);
+    flushV3(false);
+    if (m_v3Hold.isEmpty())
+        m_v3Timer->stop();
+}
+
+void DecolinkLink::deliverV3(const QVector<short>& samples)
+{
+    if (samples.isEmpty())
+        return;
+    m_lastAudioMs = nowMs();
+    m_rxSamples += samples.size();
+    const quint64 ts = quint64(m_lastAudioMs) * 1000000ULL;
+    emit rxAudioProduced(samples, ts, streamId());
+    emit rxAudio(samples, ts);
+}
+
+// Consegna i blocchi in ordine. Un buco si aspetta un po': il tempo che i
+// blocchi richiesti indietro tornino. Passato quel tempo si riempie di
+// silenzio, perche' il decoder lavora sul tempo e un blocco saltato senza
+// sostituto accorcerebbe il periodo e sfaserebbe tutto.
+void DecolinkLink::flushV3(bool force)
+{
+    const qint64 now = nowMs();
+    const qint64 waitMs = qBound<qint64>(200, qint64(m_rttMs) * 3 + 120, qint64(800));
+    while (!m_v3Hold.isEmpty()) {
+        auto it = m_v3Hold.find(m_v3Expected);
+        if (it != m_v3Hold.end()) {
+            if (m_v3NackTries > 0)
+                ++m_v3Recovered;
+            deliverV3(it.value());
+            m_v3Hold.erase(it);
+            ++m_v3Expected;
+            m_v3NackTries = 0;
+            m_v3GapSinceMs = now;
+            continue;
+        }
+        // c'e' un buco davanti al primo blocco tenuto
+        const quint16 first = m_v3Hold.firstKey();
+        const int gap = qint16(first - m_v3Expected);
+        if (gap <= 0) {
+            m_v3Hold.erase(m_v3Hold.begin());      // anteriore a quel che si aspetta
+            continue;
+        }
+        const qint64 waited = now - m_v3GapSinceMs;
+        if (!force && waited < waitMs) {
+            // si chiede indietro dopo un attimo e poi ogni tanto: un blocco
+            // fuori ordine arriva da solo, uno perso va rimandato
+            const qint64 every = qMax<qint64>(120, qint64(m_rttMs) + 40);
+            if (waited >= 30 && now - m_v3NackMs >= every && m_v3NackTries < 4) {
+                sendV3Nack(m_v3Expected, first);
+                m_v3NackMs = now;
+                ++m_v3NackTries;
+            }
+            return;
+        }
+        const int fill = qMin(gap, kV3MaxGapBlocks);
+        m_v3Lost += quint64(gap);
+        deliverV3(QVector<short>(fill * kDigiBlockSamples, 0));
+        m_v3Expected = first;
+        m_v3NackTries = 0;
+        m_v3GapSinceMs = now;
+    }
+}
+
+void DecolinkLink::sendV3Nack(quint16 from, quint16 until)
+{
+    QByteArray body;
+    body.append(char(v3::Report));      // lo spazio dei sottotipi e' lo stesso del CTRL
+    QByteArray list;
+    int n = 0;
+    for (quint16 s = from; s != until && n < 32; ++s, ++n) {
+        list.append(char(s >> 8));
+        list.append(char(s));
+    }
+    body.append(char(n));
+    body.append(list);
+    sendV3(v3::Nack, v3::Digi, until, 0, body);
+}
+
+void DecolinkLink::onV3Tick()
+{
+    flushV3(false);
+    if (m_v3Hold.isEmpty())
+        m_v3Timer->stop();
 }

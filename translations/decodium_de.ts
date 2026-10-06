@@ -30419,6 +30419,26 @@ Die Standardvorlagen werden als kompakte native Frames gesendet.</translation>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Ihr Zugang ist nur zum Mithören: Senden ist nicht möglich</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Die Station sendet ein komprimiertes Audioprofil, das diese Version nicht dekodieren kann</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>unbekannt</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digital, verlustfrei</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Komprimiert (nicht unterstützt)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30545,6 +30565,30 @@ Die Standardvorlagen werden als kompakte native Frames gesendet.</translation>
     <message>
         <source>listener</source>
         <translation>Zuhörer</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Der Station folgen</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (kompatibel)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digital, verlustfrei (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>wiederhergestellt</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>verloren</translation>
     </message>
 </context>
 </TS>

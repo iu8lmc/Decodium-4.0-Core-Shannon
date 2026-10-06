@@ -30433,6 +30433,26 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Jūsu piekļuve ir tikai klausīšanās: pārraidīt nevar</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Stacija sūta saspiestu audio profilu, ko šī versija nevar atšifrēt</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>nezināms</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digitāls, bez zudumiem</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Saspiests (neatbalstīts)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30559,6 +30579,30 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
     <message>
         <source>listener</source>
         <translation>klausītājs</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Sekot stacijai</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (saderīgs)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digitāls, bez zudumiem (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>atgūti</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>zaudēti</translation>
     </message>
 </context>
 </TS>

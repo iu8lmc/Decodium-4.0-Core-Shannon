@@ -22722,6 +22722,26 @@ The default templates are sent as compact native frames.</source>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Accesul dvs. este doar pentru ascultare: nu puteți transmite</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Stația trimite un profil audio comprimat pe care această versiune nu îl poate decoda</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>necunoscut</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digital, fără pierderi</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Comprimat (neacceptat)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -22848,6 +22868,30 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>listener</source>
         <translation>ascultător</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Urmărește stația</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (compatibil)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digital, fără pierderi (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>recuperate</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>pierdute</translation>
     </message>
 </context>
 </TS>

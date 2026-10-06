@@ -48,6 +48,8 @@ Window {
         mailField.text = s.email
         stationField.text = s.station
         hasSavedPassword = s.hasPassword
+        var idx = s.audioProfile === 0 ? 1 : (s.audioProfile === 3 ? 2 : 0)
+        profileBox.currentIndex = idx
         rememberBox.checked = s.hasPassword
         pwField.text = ""
     }
@@ -179,6 +181,19 @@ Window {
                         Field { id: portField; Layout.maximumWidth: 70; placeholderText: "5555" }
                     }
                 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Lbl { text: qsTr("Audio") }
+                    ComboBox {
+                        id: profileBox
+                        Layout.fillWidth: true
+                        model: [qsTr("Follow the station"), qsTr("PCM 48 kHz (compatible)"), qsTr("Digital, lossless (12 kHz)")]
+                        onActivated: function (i) {
+                            win.eng.setDecolinkAudioProfile(i === 1 ? 0 : (i === 2 ? 3 : -1))
+                        }
+                    }
+                }
                 CheckBox {
                     id: rememberBox
                     text: qsTr("Remember the password (system secure store)")
@@ -270,6 +285,14 @@ Window {
                     }
                     Lbl { text: qsTr("S-meter") }
                     Text { color: win.cText; font.pixelSize: 12; text: win.lnk ? Math.round(win.lnk.sMeterDbm) + " dBm" : "" }
+                    Lbl { text: qsTr("Audio") }
+                    Text {
+                        color: win.cText; font.pixelSize: 12
+                        text: win.lnk ? win.lnk.activeProfileName
+                                        + (win.lnk.activeProfile === 3
+                                           ? "  (" + win.lnk.recoveredBlocks + " " + qsTr("recovered") + ", "
+                                             + win.lnk.lostBlocks + " " + qsTr("lost") + ")" : "") : ""
+                    }
                     Lbl { text: qsTr("Round trip") }
                     Text { color: win.cText; font.pixelSize: 12; text: win.lnk ? win.lnk.latencyMs + " ms" : "" }
                     Lbl { text: qsTr("Transmit") }

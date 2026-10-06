@@ -30419,6 +30419,26 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Din adgang er kun til lytning: du kan ikke sende</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Stationen sender en komprimeret lydprofil, som denne version ikke kan afkode</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>ukendt</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digital, tabsfri</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Komprimeret (ikke understøttet)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30545,6 +30565,30 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
     <message>
         <source>listener</source>
         <translation>lytter</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Lyd</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Følg stationen</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (kompatibel)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digital, tabsfri (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>genoprettet</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>tabt</translation>
     </message>
 </context>
 </TS>

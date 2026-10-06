@@ -30430,6 +30430,26 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Je toegang is alleen luisteren: je kunt niet zenden</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Het station stuurt een gecomprimeerd audioprofiel dat deze versie niet kan decoderen</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>onbekend</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digitaal, verliesvrij</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Gecomprimeerd (niet ondersteund)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30556,6 +30576,30 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
     <message>
         <source>listener</source>
         <translation>luisteraar</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Het station volgen</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (compatibel)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digitaal, verliesvrij (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>hersteld</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>verloren</translation>
     </message>
 </context>
 </TS>

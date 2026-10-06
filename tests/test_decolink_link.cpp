@@ -8,7 +8,9 @@
 #include <QUdpSocket>
 
 #include "src/net/DecolinkLink.h"
+#include "src/net/DecolinkLossless.h"
 #include "src/net/DecolinkPacket.h"
+#include "src/net/DecolinkV3.h"
 
 using namespace decolink;
 
@@ -75,6 +77,23 @@ public:
             while (m_sock.hasPendingDatagrams()) {
                 QByteArray dg(int(m_sock.pendingDatagramSize()), Qt::Uninitialized);
                 m_sock.readDatagram(dg.data(), dg.size(), &m_client, &m_clientPort);
+                if (v3::looksLikeV3(dg)) {
+                    v3::Header vh; QByteArray vbody;
+                    v3::parsePacket(dg, &vh, &vbody);
+                    switch (vh.type) {
+                    case v3::Ctrl:
+                        v3Ctrl << vbody;
+                        if (answerChoose && vbody.size() >= 2 && uchar(vbody.at(0)) == v3::Choose) {
+                            QByteArray act; act.append(char(v3::Active)); act.append(vbody.at(1));
+                            sendV3(v3::Ctrl, quint8(vbody.at(1)), 0, act);
+                        }
+                        break;
+                    case v3::AudioTx: v3Tx << qMakePair(vh, vbody); break;
+                    case v3::Nack:    v3Nack << vbody; break;
+                    default: break;
+                    }
+                    continue;
+                }
                 Header h; QByteArray body;
                 if (!parsePacket(dg, &h, &body)) continue;
                 switch (h.flag) {
@@ -128,6 +147,21 @@ public:
         send(Audio, seq, samplesToPcm(s.constData(), n), 0, quint32(rate));
     }
 
+    void sendV3(quint8 type, quint8 profile, quint16 seq, const QByteArray& body)
+    {
+        if (!hasClient()) return;
+        m_sock.writeDatagram(v3::makePacket(type, profile, 0, 0, seq, 0, body), m_client, m_clientPort);
+    }
+    // Un blocco dei digitali: 40 ms a 12 kHz compressi senza perdite.
+    void sendDigi(quint16 seq, const QVector<short>& s)
+    {
+        sendV3(v3::AudioRx, v3::Digi, seq, lossless::comprimi(s.constData(), s.size()));
+    }
+
+    bool answerChoose {true};
+    QVector<QByteArray> v3Ctrl;
+    QVector<QPair<v3::Header, QByteArray>> v3Tx;
+    QVector<QByteArray> v3Nack;
     bool silent {false};
     bool announcePeer {true};
     bool answerCat {true};
@@ -154,6 +188,32 @@ double rms(const QVector<short>& s, int from = 0)
     double a = 0; int n = 0;
     for (int i = from; i < s.size(); ++i) { a += double(s[i]) * s[i]; ++n; }
     return n ? std::sqrt(a / n) : 0.0;
+}
+
+const char* kGoldenBlockHex =
+    "01e088d9ff390ecf187c111cfef7ee37e982edcd1693fa1bf418f9700059fedd0378feb1bdf57cfb73a02f9fe27bc7b302d0963cfb831d1b43ff69b55192315c25b76cea91465f12112f58092dab6fe28ae0cd2c518b863349309c18a4676e2b5144f035a06a870ec20b7f2ae21e4ae05e2c9a826a0e1ca61992707b7dc1af19ab002d52147d32fb1e62b6392c28d67a21c239f8197e46d149abf3d8dae24c56e508db692207f1342a9ddb8c22de86d5256c875db50ca08f57314b554246e7fd3a85b8620a57b2fbba75d8ea844ae73a1212b6648c244fd3ff3fc34a8c54f1ba15f6bed335993a41bef71a6e0f25e02208c2726036a204479c5a812b8401077b499118e27e49091b8bde6eb8d4eb7239f3ee113d4e6f8ea553f7ac6914e62f5b755d2be2e97a8cff9ea8140458a839ff765723ae012caa8fe1288e7a9954f4961c84b89ab12663fd8724bb59332388a578faf4b8111c84ecf7346062fc535ff23264834ef665d0b077520859ab8bf342332ca318f7ee75115b0a65f310598476f2bbefad930e68f2cbfa7069a8d8ceacb98681a41714a67fe902c0a4e089b77076a75480e70a8e776a8c361f6ec2c5d8728f6097f42c11f8b9c605839511039f12dd40e8022b3cf91d7a53e9ad6d600aa7023b29db58beb50541815726856ba5cf28a8dae20ef284926292945eb272a95be8f257ce2c961f7c2333a8b2fcabe7a67b917264cd468abc49490e1a4ab8dba27dfa522faea73f277fa323559313bfa3073d634d42b34c528786ce67090508d11a7496888bfce9bcbd7c9895b5f29438916114ef83b0d6776a67a6a26d2c9d3fff0c53101d07e855d615bc4bcc9fff8e726a149d7fed69e08978b0c8b39e251f938c44e953a9536418a4d0093f7a2be174cb6b9374355d8386a0e6be3afa4637cda1b028e417ba7e90f2e7";
+const char* kGoldenSilenceHex = "00280000ffffffffff";
+
+// 480 campioni: un tono a 1500 Hz piu' rumore da un generatore congruenziale.
+QVector<short> goldenSignal()
+{
+    QVector<short> s(480);
+    quint32 st = 12345;
+    for (int i = 0; i < 480; ++i) {
+        st = st * 1664525u + 1013904223u;
+        const double n = double(int((st >> 16) & 0x3FF) - 512);
+        s[i] = short(std::llround(6000.0 * std::sin(2.0 * kPi * 1500.0 * i / 12000.0) + n));
+    }
+    return s;
+}
+
+QVector<short> digiBlock(int index)
+{
+    QVector<short> s(480);
+    for (int i = 0; i < 480; ++i)
+        s[i] = short(6000.0 * std::sin(2.0 * kPi * 1000.0 * (index * 480 + i) / 12000.0)
+                     + (index % 7) * 10);
+    return s;
 }
 
 }  // namespace
@@ -433,6 +493,260 @@ private slots:
         for (const auto& p : r.relay.txPackets)
             back += pcmToSamples(p.second);
         QCOMPARE(back, wave);
+    }
+
+    // ── v3: digitali senza perdite ─────────────────────────────────────────
+
+    void losslessRoundTrip()
+    {
+        QVector<QVector<short>> cases;
+        cases << tone(1500, 12000, 480) << tone(300, 12000, 480, 30000.0)
+              << QVector<short>(480, 0) << QVector<short>(480, 32767) << QVector<short>(480, -32768)
+              << tone(1000, 12000, 1) << tone(1000, 12000, 2) << tone(1000, 12000, 7)
+              << tone(1000, 12000, 40000) << goldenSignal();
+        QVector<short> noise(480);
+        quint32 st = 99;
+        for (short& v : noise) { st = st * 1664525u + 1013904223u; v = short(st >> 16); }
+        cases << noise;
+        QVector<short> alt(480);                       // alternanza di estremi: il caso peggiore per il predittore
+        for (int i = 0; i < alt.size(); ++i) alt[i] = (i & 1) ? 32767 : -32768;
+        cases << alt;
+        for (const auto& c : cases) {
+            const QByteArray z = lossless::comprimi(c.constData(), c.size());
+            QVERIFY(!z.isEmpty());
+            QCOMPARE(lossless::decomprimi(z), c);      // identico, campione per campione
+        }
+    }
+
+    void losslessRefusesBrokenBlocks()
+    {
+        const QByteArray z = lossless::comprimi(goldenSignal().constData(), 480);
+        QVERIFY(lossless::decomprimi(QByteArray()).isEmpty());
+        QVERIFY(lossless::decomprimi(z.left(3)).isEmpty());
+        QVERIFY(lossless::decomprimi(z.left(z.size() / 2)).isEmpty());     // tagliato
+        for (int i = 0; i < 300; ++i) {                // spazzatura: nessun crash, nessuna lettura fuori
+            QByteArray g(40 + i % 50, 0);
+            for (int k = 0; k < g.size(); ++k) g[k] = char((i * 37 + k * 11) & 0xFF);
+            lossless::decomprimi(g);
+        }
+    }
+
+    // Il formato del blocco e' quello del gateway Decolink: questi byte vengono
+    // dal suo codificatore, e se cambiassero per qualunque motivo client e
+    // gateway smetterebbero di capirsi in silenzio.
+    void losslessMatchesTheGatewayFormat()
+    {
+        const QByteArray golden = QByteArray::fromHex(kGoldenBlockHex);
+        QCOMPARE(golden.size(), 668);
+        QCOMPARE(lossless::comprimi(goldenSignal().constData(), 480), golden);
+        QCOMPARE(lossless::decomprimi(golden), goldenSignal());
+        const QByteArray silence = QByteArray::fromHex(kGoldenSilenceHex);
+        QCOMPARE(lossless::comprimi(QVector<short>(40, 0).constData(), 40), silence);
+    }
+
+    void v3PacketRoundTrip()
+    {
+        const QByteArray pkt = v3::makePacket(v3::AudioTx, v3::Digi, 0x5, 0, 0xFFFE, 0x01020304u, "ab");
+        QCOMPARE(pkt.size(), v3::kHdr + 2);
+        QCOMPARE(int(pkt.at(0)), int('D'));
+        v3::Header h; QByteArray body;
+        QVERIFY(v3::parsePacket(pkt, &h, &body));
+        QCOMPARE(int(h.type), int(v3::AudioTx));
+        QCOMPARE(int(h.profile), int(v3::Digi));
+        QCOMPARE(int(h.flags), 5);
+        QCOMPARE(h.seq, quint16(0xFFFE));
+        QCOMPARE(h.time, 0x01020304u);
+        QCOMPARE(body, QByteArray("ab"));
+        QVERIFY(!v3::looksLikeV3(QByteArray("HFGW1234567890")));
+        QVERIFY(!v3::looksLikeV3(pkt.left(9)));
+        QByteArray v2 = pkt; v2[1] = char((2 << 4) | 1);
+        QVERIFY(!v3::looksLikeV3(v2));
+    }
+
+    void digiProfileIsRequestedAndRetried()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Digi);
+        r.relay.answerChoose = false;                  // il gateway non risponde: si ripete
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.v3Ctrl.size() >= 2, 5000);
+        QCOMPARE(int(uchar(r.relay.v3Ctrl.at(0).at(0))), int(v3::Hello));
+        QCOMPARE(int(uchar(r.relay.v3Ctrl.at(1).at(0))), int(v3::Choose));
+        QCOMPARE(int(uchar(r.relay.v3Ctrl.at(1).at(1))), int(v3::Digi));
+        QCOMPARE(r.link.activeProfile(), -1);
+        const int before = r.relay.v3Ctrl.size();
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.v3Ctrl.size() > before, 8000);   // al giro del keepalive
+        r.relay.answerChoose = true;
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 8000);
+        QVERIFY(r.link.activeProfileName().contains(QStringLiteral("lossless"), Qt::CaseInsensitive)
+                || !r.link.activeProfileName().isEmpty());
+    }
+
+    void digiRxInOrder()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Digi);
+        r.go();
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 5000);
+        QVector<short> all;
+        for (int i = 0; i < 12; ++i) {
+            r.relay.sendDigi(quint16(65530 + i), digiBlock(i));     // attraversa il giro del contatore
+            all += digiBlock(i);
+        }
+        QTRY_COMPARE_WITH_TIMEOUT(r.rx.size(), all.size(), 3000);
+        QCOMPARE(r.rx, all);                                        // esattamente i campioni del rig
+        QCOMPARE(r.link.lostBlocks(), 0);
+    }
+
+    void digiRxReorderedBlockNeedsNoRetransmission()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Digi);
+        r.go();
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 5000);
+        r.relay.sendDigi(10, digiBlock(0));
+        r.relay.sendDigi(12, digiBlock(2));
+        QTest::qWait(5);
+        r.relay.sendDigi(11, digiBlock(1));                         // arriva subito dopo
+        r.relay.sendDigi(13, digiBlock(3));
+        QVector<short> all;
+        for (int i = 0; i < 4; ++i) all += digiBlock(i);
+        QTRY_COMPARE_WITH_TIMEOUT(r.rx.size(), all.size(), 3000);
+        QCOMPARE(r.rx, all);
+        QCOMPARE(r.link.lostBlocks(), 0);
+    }
+
+    void digiRxLostBlockIsRequestedAndRecovered()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Digi);
+        r.go();
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 5000);
+        r.relay.sendDigi(20, digiBlock(0));
+        r.relay.sendDigi(21, digiBlock(1));
+        r.relay.sendDigi(23, digiBlock(3));                         // il 22 si e' perso
+        r.relay.sendDigi(24, digiBlock(4));
+        QTRY_VERIFY_WITH_TIMEOUT(!r.relay.v3Nack.isEmpty(), 2000);
+        const QByteArray n = r.relay.v3Nack.first();
+        QCOMPARE(int(uchar(n.at(1))), 1);                           // chiede un blocco solo
+        QCOMPARE(quint16((uchar(n.at(2)) << 8) | uchar(n.at(3))), quint16(22));
+        QVERIFY(r.rx.size() == 2 * 480);                            // il resto aspetta il buco
+        r.relay.sendDigi(22, digiBlock(2));                         // il gateway lo rimanda
+        QVector<short> all;
+        for (int i = 0; i < 5; ++i) all += digiBlock(i);
+        QTRY_COMPARE_WITH_TIMEOUT(r.rx.size(), all.size(), 3000);
+        QCOMPARE(r.rx, all);
+        QCOMPARE(r.link.lostBlocks(), 0);
+        QCOMPARE(r.link.recoveredBlocks(), 1);
+    }
+
+    void digiRxBlockThatNeverComesIsFilledWithSilence()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Digi);
+        r.go();
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 5000);
+        r.relay.sendDigi(30, digiBlock(0));
+        r.relay.sendDigi(32, digiBlock(2));                         // il 31 non tornera'
+        QVector<short> all = digiBlock(0);
+        all += QVector<short>(480, 0);
+        all += digiBlock(2);
+        QTRY_COMPARE_WITH_TIMEOUT(r.rx.size(), all.size(), 3000);
+        QCOMPARE(r.rx, all);                                        // il tempo non si accorcia
+        QCOMPARE(r.link.lostBlocks(), 1);
+        r.relay.sendDigi(33, digiBlock(3));                         // e poi si riparte
+        QTRY_COMPARE_WITH_TIMEOUT(r.rx.size(), all.size() + 480, 2000);
+    }
+
+    void digiRxIsDecodedEvenWhenNothingWasRequested()
+    {
+        Rig r;                                                      // profilo automatico
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.relay.sendDigi(1, digiBlock(0));
+        QTRY_COMPARE_WITH_TIMEOUT(r.rx.size(), 480, 2000);
+        QCOMPARE(r.rx, digiBlock(0));
+        QCOMPARE(r.link.activeProfile(), int(v3::Digi));
+        QVERIFY(r.relay.v3Ctrl.isEmpty());                          // seguire non e' chiedere
+    }
+
+    void unsupportedProfileInAutoMovesToDigi()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.relay.sendV3(v3::AudioRx, v3::Voice, 1, QByteArray(60, 'x'));      // Opus: non si legge
+        QTRY_VERIFY_WITH_TIMEOUT(!r.relay.v3Ctrl.isEmpty(), 3000);
+        QCOMPARE(int(uchar(r.relay.v3Ctrl.last().at(0))), int(v3::Choose));
+        QCOMPARE(int(uchar(r.relay.v3Ctrl.last().at(1))), int(v3::Digi));
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 3000);
+        QCOMPARE(r.rx.size(), 0);                                   // e dell'Opus non e' uscito rumore
+    }
+
+    void pcmProfileCanBeForcedBack()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Pcm48);
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!r.relay.v3Ctrl.isEmpty(), 3000);
+        QCOMPARE(int(uchar(r.relay.v3Ctrl.last().at(1))), int(v3::Pcm48));
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Pcm48), 3000);
+    }
+
+    void digiTxSendsLosslessBlocksAndResendsOnRequest()
+    {
+        Rig r;
+        r.link.setAudioProfile(v3::Digi);
+        r.go();
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Digi), 5000);
+        r.link.setPtt(true);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.cat.contains(QStringLiteral("T 1")), 5000);
+
+        const QVector<short> wave = tone(1500, 12000, 12000);       // un secondo
+        const quint64 t0 = quint64(QDateTime::currentMSecsSinceEpoch()) * 1000000ull + 200000000ull;
+        for (int off = 0, i = 0; off < wave.size(); off += 480, ++i)
+            r.link.sendTxAudio(wave.mid(off, 480), t0 + quint64(i) * 40000000ull);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.v3Tx.size() >= 25, 5000);
+        QCOMPARE(r.relay.v3Tx.size(), 25);
+        QVector<short> back;
+        quint16 prev = 0;
+        for (int i = 0; i < r.relay.v3Tx.size(); ++i) {
+            const auto& p = r.relay.v3Tx.at(i);
+            QCOMPARE(int(p.first.profile), int(v3::Digi));
+            if (i) QCOMPARE(p.first.seq, quint16(prev + 1));
+            prev = p.first.seq;
+            back += lossless::decomprimi(p.second);
+        }
+        QCOMPARE(back, wave);                                       // nessuna alterazione
+
+        // il gateway chiede indietro il blocco 5 e il 9
+        QByteArray nack;
+        nack.append(char(v3::Report)); nack.append(char(2));
+        for (int i : {5, 9}) {
+            const quint16 s = quint16(r.relay.v3Tx.at(0).first.seq + i);
+            nack.append(char(s >> 8)); nack.append(char(s));
+        }
+        const int before = r.relay.v3Tx.size();
+        r.relay.sendV3(v3::Nack, v3::Digi, 0, nack);
+        QTRY_COMPARE_WITH_TIMEOUT(r.relay.v3Tx.size(), before + 2, 2000);
+        QCOMPARE(r.relay.v3Tx.at(before).first.seq, quint16(r.relay.v3Tx.at(0).first.seq + 5));
+        QCOMPARE(r.relay.v3Tx.at(before).second, r.relay.v3Tx.at(5).second);
+        QCOMPARE(r.relay.v3Tx.at(before + 1).second, r.relay.v3Tx.at(9).second);
+    }
+
+    void txStaysPcmWhenTheStationIsPcm()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.relay.sendAudio(1);                                       // il gateway parla PCM v2
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.activeProfile(), int(v3::Pcm48), 2000);
+        r.link.setPtt(true);
+        r.link.sendTxAudio(tone(1500, 12000, 1200), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(r.relay.txPackets.size() >= 10, 3000);
+        QCOMPARE(r.relay.v3Tx.size(), 0);
     }
 
     void listenerCannotTransmitOrPoll()

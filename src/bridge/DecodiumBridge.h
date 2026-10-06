@@ -1090,6 +1090,8 @@ public:
                                      const QString& password, const QString& station,
                                      bool remember);
     Q_INVOKABLE void decolinkForgetPassword();
+    // -1 segue il gateway, 0 PCM 48 kHz (v2), 3 digitali senza perdite (v3)
+    Q_INVOKABLE void setDecolinkAudioProfile(int profile);
     Q_INVOKABLE bool startDecoPortGateway(int port = 5559);
     // Cosa il gateway e' riuscito ad aprire da solo, da mostrare nella finestra.
     Q_INVOKABLE QVariantMap decoPortRigDriverState() const;

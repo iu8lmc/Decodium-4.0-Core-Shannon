@@ -21422,6 +21422,7 @@ QVariantMap DecodiumBridge::decolinkSavedLogin() const
     m.insert(QStringLiteral("relayPort"), get("DecolinkRelayPort", 5555).toInt());
     m.insert(QStringLiteral("email"), email);
     m.insert(QStringLiteral("station"), get("DecolinkStation", QString()).toString());
+    m.insert(QStringLiteral("audioProfile"), get("DecolinkAudioProfile", -1).toInt());
     bool saved = false;
     if (!email.isEmpty()) {
         auto const r = secure_settings::default_backend().lookup(decolinkSecretService(), email);
@@ -21472,9 +21473,28 @@ void DecodiumBridge::decolinkConnect(const QString& authHost, const QString& rel
     }
 
     decolinkLinkObject();
+    m_decolinkLink->setAudioProfile(decodium::profiledSettingsValue(
+        QString(), QStringLiteral("DecolinkAudioProfile"), -1).toInt());
     m_decolinkLink->connectTo(authHost.trimmed(), relayHost.trimmed(), relayPort, mail, pw,
                               station.trimmed());
     bridgeLog(QStringLiteral("Decolink: connecting as %1 to %2").arg(mail, authHost.trimmed()));
+}
+
+void DecodiumBridge::setDecolinkAudioProfile(int profile)
+{
+    if (profile != -1 && profile != 0 && profile != 3)
+        profile = -1;
+    QSettings s(QSettings::IniFormat, QSettings::UserScope,
+                QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    bool const inProfile = decodium::beginActiveSettingsProfile(s);
+    s.setValue(QStringLiteral("DecolinkAudioProfile"), profile);
+    if (inProfile) {
+        s.endGroup();
+        s.endGroup();
+    }
+    s.sync();
+    decolinkLinkObject();
+    m_decolinkLink->setAudioProfile(profile);
 }
 
 void DecodiumBridge::decolinkForgetPassword()

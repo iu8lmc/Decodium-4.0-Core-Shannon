@@ -30284,6 +30284,26 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>A hozzáférése csak hallgatásra szól: nem adhat</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Az állomás tömörített hangprofilt küld, amelyet ez a verzió nem tud dekódolni</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>ismeretlen</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digitális, veszteségmentes</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Tömörített (nem támogatott)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30410,6 +30430,30 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
     <message>
         <source>listener</source>
         <translation>hallgató</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Hang</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Az állomást követi</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (kompatibilis)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digitális, veszteségmentes (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>helyreállítva</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>elveszett</translation>
     </message>
 </context>
 </TS>

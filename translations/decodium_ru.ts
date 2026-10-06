@@ -30453,6 +30453,26 @@ The default templates are sent as compact native frames.</source>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Ваш доступ только на прослушивание: передача невозможна</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>Станция передаёт сжатый звуковой профиль, который эта версия не может декодировать</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>неизвестно</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 кГц</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Цифровой, без потерь</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Сжатый (не поддерживается)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30579,6 +30599,30 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>listener</source>
         <translation>слушатель</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Звук</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Как у станции</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 кГц (совместимый)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Цифровой, без потерь (12 кГц)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>восстановлено</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>потеряно</translation>
     </message>
 </context>
 </TS>

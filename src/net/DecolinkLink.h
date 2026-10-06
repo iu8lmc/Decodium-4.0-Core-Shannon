@@ -14,13 +14,17 @@
 // serve a rinnovarlo e non viene mai scritta qui (se la conserva chi chiama).
 #pragma once
 
+#include "DecolinkLossless.h"
 #include "DecolinkPacket.h"
+#include "DecolinkV3.h"
 #include "DecoPortPacket.h"
 #include "RemoteRadioLink.h"
 
 #include <QElapsedTimer>
 #include <QHash>
 #include <QHostAddress>
+#include <QMap>
+#include <QPair>
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
@@ -50,6 +54,13 @@ class DecolinkLink : public RemoteRadioLink {
     Q_PROPERTY(int latencyMs READ latencyMs NOTIFY stateChanged)
     Q_PROPERTY(int txAudioLeadMs READ txAudioLeadMs NOTIFY stateChanged)
     Q_PROPERTY(QString peerAddress READ peerAddress NOTIFY linkedChanged)
+    // Profilo audio: -1 segue quello che il gateway manda, 0 chiede il PCM
+    // (v2), 3 chiede i digitali senza perdite (v3).
+    Q_PROPERTY(int audioProfile READ audioProfile WRITE setAudioProfile NOTIFY profileChanged)
+    Q_PROPERTY(int activeProfile READ activeProfile NOTIFY profileChanged)
+    Q_PROPERTY(QString activeProfileName READ activeProfileName NOTIFY profileChanged)
+    Q_PROPERTY(int lostBlocks READ lostBlocks NOTIFY stateChanged)
+    Q_PROPERTY(int recoveredBlocks READ recoveredBlocks NOTIFY stateChanged)
 
 public:
     explicit DecolinkLink(QObject* parent = nullptr);
@@ -90,6 +101,14 @@ public:
     QVariantList stationList() const { return m_stations; }
     int         latencyMs() const { return m_rttMs; }
 
+    // ── profilo audio ──────────────────────────────────────────────────────
+    int     audioProfile() const { return m_wantProfile; }
+    void    setAudioProfile(int profile);
+    int     activeProfile() const { return m_activeProfile; }
+    QString activeProfileName() const;
+    int     lostBlocks() const { return int(m_v3Lost); }
+    int     recoveredBlocks() const { return int(m_v3Recovered); }
+
     // Solo il login: utile per elencare le stazioni prima di sceglierne una.
     Q_INVOKABLE void login(const QString& authHost, const QString& email,
                            const QString& password, const QString& station = QString());
@@ -103,6 +122,7 @@ public:
 
 signals:
     void authChanged();
+    void profileChanged();
 
 private slots:
     void onDatagrams();
@@ -111,6 +131,7 @@ private slots:
     void onPoll();
     void onWatch();
     void onTxTick();
+    void onV3Tick();
 
 private:
     enum class Kind { Freq, Mode, Ptt, Strength, Swr, Alc, Power, Other };
@@ -130,6 +151,17 @@ private:
     void sendCat(const QString& line, Kind kind);
     void handleAudio(const decolink::Header& h, const QByteArray& body);
     void handleCatResponse(quint32 seq, const QByteArray& body);
+    void handleV3(const QByteArray& dg);
+    void handleV3Audio(const decolink::v3::Header& h, const QByteArray& body);
+    void handleV3Ctrl(const QByteArray& body);
+    void handleV3Nack(const QByteArray& body);
+    void sendV3(quint8 type, quint8 profile, quint16 seq, quint32 time, const QByteArray& body);
+    void ensureProfile();
+    void setActiveProfile(int profile);
+    void deliverV3(const QVector<short>& samples);
+    void flushV3(bool force);
+    void sendV3Nack(quint16 from, quint16 until);
+    void resetV3Rx();
     void handleDenied(const QString& reason);
     void releasePttNow();
     static decoport::Mode modeFromRigctl(const QString& name);
@@ -143,6 +175,7 @@ private:
     QTimer*                m_pollTimer {nullptr};
     QTimer*                m_watchTimer {nullptr};
     QTimer*                m_txTimer {nullptr};
+    QTimer*                m_v3Timer {nullptr};
     QTimer*                m_renewTimer {nullptr};
 
     // credenziali: la password serve solo a rinnovare il token
@@ -194,6 +227,26 @@ private:
     QString m_status;
     int     m_rttMs {0};
     int     m_txLeadMs {120};
+
+    // profilo audio v3
+    int     m_wantProfile {-1};
+    int     m_activeProfile {-1};
+    bool    m_helloSent {false};
+    qint64  m_chooseSentMs {0};
+    // ricezione dei digitali: blocchi da 40 ms, riordinati e richiesti indietro
+    bool    m_v3Have {false};
+    quint16 m_v3Expected {0};
+    QMap<quint16, QVector<short>> m_v3Hold;
+    qint64  m_v3GapSinceMs {0};
+    qint64  m_v3NackMs {0};
+    int     m_v3NackTries {0};
+    quint64 m_v3Lost {0};
+    quint64 m_v3Recovered {0};
+    // trasmissione dei digitali
+    bool    m_txDigi {false};
+    quint16 m_v3TxSeq {0};
+    quint32 m_v3TxTime {0};
+    QMap<quint16, QPair<QByteArray, qint64>> m_v3TxWindow;
 
     // trasmissione
     QVector<short> m_txSamples;

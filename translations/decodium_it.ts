@@ -36725,6 +36725,26 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Il tuo accesso è solo ascolto: non puoi trasmettere</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>La stazione manda un profilo audio compresso che questa versione non sa decodificare</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>sconosciuto</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digitale, senza perdite</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Compresso (non supportato)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -36851,6 +36871,30 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
     <message>
         <source>listener</source>
         <translation>ascoltatore</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Segui la stazione</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (compatibile)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digitale, senza perdite (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>recuperati</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>persi</translation>
     </message>
 </context>
 </TS>

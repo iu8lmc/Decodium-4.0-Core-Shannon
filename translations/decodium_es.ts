@@ -30928,6 +30928,26 @@ Las plantillas por defecto se envían como tramas nativas compactas.</translatio
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Tu acceso es solo de escucha: no puedes transmitir</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>La estación envía un perfil de audio comprimido que esta versión no puede decodificar</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>desconocido</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digital, sin pérdidas</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Comprimido (no compatible)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -31054,6 +31074,30 @@ Las plantillas por defecto se envían como tramas nativas compactas.</translatio
     <message>
         <source>listener</source>
         <translation>oyente</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Seguir a la estación</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (compatible)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digital, sin pérdidas (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>recuperados</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>perdidos</translation>
     </message>
 </context>
 </TS>

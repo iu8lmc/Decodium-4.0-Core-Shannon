@@ -30414,6 +30414,26 @@ The default templates are sent as compact native frames.</source>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>アクセスは受信専用です。送信できません</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>局が、このバージョンでは復号できない圧縮音声プロファイルを送っています</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>不明</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>デジタル(可逆)</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>圧縮(非対応)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30540,6 +30560,30 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>listener</source>
         <translation>リスナー</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>音声</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>局に合わせる</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz(互換)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>デジタル(可逆、12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>回復</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>欠落</translation>
     </message>
 </context>
 </TS>

@@ -29861,6 +29861,26 @@ The default templates are sent as compact native frames.</translation>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>Your access is listen-only: you cannot transmit</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>The station sends a compressed audio profile this version cannot decode</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>unknown</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>Digital, lossless</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>Compressed (not supported)</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -29987,6 +30007,30 @@ The default templates are sent as compact native frames.</translation>
     <message>
         <source>listener</source>
         <translation>listener</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>Follow the station</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz (compatible)</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>Digital, lossless (12 kHz)</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>recovered</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>lost</translation>
     </message>
 </context>
 </TS>

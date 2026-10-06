@@ -30411,6 +30411,26 @@ The default templates are sent as compact native frames.</source>
         <source>Your access is listen-only: you cannot transmit</source>
         <translation>您的存取權限僅可收聽：無法發射</translation>
     </message>
+    <message>
+        <source>The station sends a compressed audio profile this version cannot decode</source>
+        <translation>電台傳送的壓縮音訊設定檔，此版本無法解碼</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>未知</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz</source>
+        <translation>PCM 48 kHz</translation>
+    </message>
+    <message>
+        <source>Digital, lossless</source>
+        <translation>數位，無損</translation>
+    </message>
+    <message>
+        <source>Compressed (not supported)</source>
+        <translation>壓縮（不支援）</translation>
+    </message>
 </context>
 <context>
     <name>DecolinkWindow</name>
@@ -30537,6 +30557,30 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>listener</source>
         <translation>聽眾</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>音訊</translation>
+    </message>
+    <message>
+        <source>Follow the station</source>
+        <translation>跟隨電台</translation>
+    </message>
+    <message>
+        <source>PCM 48 kHz (compatible)</source>
+        <translation>PCM 48 kHz（相容）</translation>
+    </message>
+    <message>
+        <source>Digital, lossless (12 kHz)</source>
+        <translation>數位，無損（12 kHz）</translation>
+    </message>
+    <message>
+        <source>recovered</source>
+        <translation>已恢復</translation>
+    </message>
+    <message>
+        <source>lost</source>
+        <translation>遺失</translation>
     </message>
 </context>
 </TS>
