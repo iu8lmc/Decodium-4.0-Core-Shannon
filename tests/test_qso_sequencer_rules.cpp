@@ -402,6 +402,35 @@ private slots:
     QCOMPARE (sink.diagCount, 1);
     QCOMPARE (sink.lastScheduleMs, 250);
   }
+
+  // L'eco della propria trasmissione, decodificata dalla radio, contiene il
+  // proprio nominativo ma e' DA noi: non deve valere come risposta.
+  void ownTransmissionEchoIsSentByMe ()
+  {
+    using decodium::seq::messageIsSentByCall;
+    QVERIFY (messageIsSentByCall ("IW8AOF IQ8DO -06", "IQ8DO", "IQ8DO"));
+    QVERIFY (messageIsSentByCall ("IW8AOF IQ8DO R+24 TU", "IQ8DO", "IQ8DO"));
+    QVERIFY (messageIsSentByCall ("IW8AOF IQ8DO RR73", "IQ8DO", "IQ8DO"));
+    QVERIFY (messageIsSentByCall ("IW8AOF IQ8DO 73", "IQ8DO", "IQ8DO"));
+    QVERIFY (messageIsSentByCall ("CQ IQ8DO JN71", "IQ8DO", "IQ8DO"));
+    QVERIFY (messageIsSentByCall ("IW8AOF IQ8DO/P -06", "IQ8DO/P", "IQ8DO"));
+  }
+
+  // Quello che la controparte ci manda deve continuare a passare.
+  void messagesAddressedToMeAreNotSentByMe ()
+  {
+    using decodium::seq::messageIsSentByCall;
+    QVERIFY (!messageIsSentByCall ("IQ8DO IW8AOF JN70", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("IQ8DO IW8AOF -06", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("IQ8DO IW8AOF R-06", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("IQ8DO IW8AOF RR73", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("IQ8DO IW8AOF 73", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("IQ8DO/P IW8AOF RR73", "IQ8DO/P", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("<IQ8DO> II8IHBC", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("CQ IW8AOF JN70", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall ("IQ8DO", "IQ8DO", "IQ8DO"));
+    QVERIFY (!messageIsSentByCall (QString {}, "IQ8DO", "IQ8DO"));
+  }
 };
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)

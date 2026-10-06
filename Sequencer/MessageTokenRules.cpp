@@ -808,6 +808,26 @@ bool messageContainsCallToken(QString const& message,
 }
 
 
+bool messageIsSentByCall(QString const& message,
+
+                         QString const& fullCall,
+
+                         QString const& baseCall)
+
+{
+
+    QStringList const tokens = normalizedMessageTokens(message);
+
+    return tokens.size() >= 2
+
+        && !tokenMatchesCall(tokens.at(0), fullCall, baseCall)
+
+        && tokenMatchesCall(tokens.at(1), fullCall, baseCall);
+
+}
+
+
+
 QString directedPeerTokenFromMessage(QString const& message,
 
                                             QString const& myFullCall,

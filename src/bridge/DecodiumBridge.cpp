@@ -3616,6 +3616,7 @@ using decodium::seq::normalizedBaseCall;
 using decodium::seq::tokenMatchesCall;
 using decodium::seq::normalizedMessageTokens;
 using decodium::seq::messageContainsCallToken;
+using decodium::seq::messageIsSentByCall;
 using decodium::seq::directedPeerTokenFromMessage;
 using decodium::seq::messageCarries73Payload;
 using decodium::seq::messageCarries73PayloadForCall;
@@ -24934,6 +24935,14 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
     QString const message = f.at(4);
     // Solo i decode diretti al mio call alimentano il sequencer.
     if (!messageContainsCallToken(message, myCallUpper, myBaseUpper)) {
+        return;
+    }
+    // L'eco della nostra stessa trasmissione (la radio la risente a +20/+28 dB e
+    // il decoder la legge) contiene il nostro nominativo ma e' DA noi, non per
+    // noi. Passando di qui faceva avanzare lo slot come se il corrispondente
+    // avesse risposto: il report dell'eco diventava il suo, e il QSO si
+    // chiudeva e si loggava con un corrispondente che aveva mandato solo il grid.
+    if (messageIsSentByCall(message, myCallUpper, myBaseUpper)) {
         return;
     }
     QString const partner = inferPartnerFromDirectedMessage(message, myCallUpper, myBaseUpper);

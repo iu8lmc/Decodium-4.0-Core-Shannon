@@ -73,6 +73,16 @@ bool messageContainsCallToken(QString const& message,
 
                                      QString const& baseCall);
 
+// Il messaggio e' stato trasmesso da questo nominativo: nella forma standard
+// "<destinatario> <mittente> <info>" il mittente e' il secondo elemento. Serve a
+// scartare l'eco della propria trasmissione, che contiene il proprio nominativo
+// ma non e' diretta a se' stessi (il destinatario e' l'altra stazione).
+bool messageIsSentByCall(QString const& message,
+
+                         QString const& fullCall,
+
+                         QString const& baseCall);
+
 QString directedPeerTokenFromMessage(QString const& message,
 
                                             QString const& myFullCall,
