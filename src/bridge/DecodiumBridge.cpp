@@ -40008,6 +40008,19 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     bool const directedToMe = tokenIsMine(0) || tokenIsMine(1);
     bool const directedToLocalHash = !directedToMe && directedToLocalHashPrecheck;
     bool const directedToMeEffective = directedToMe || directedToLocalHash;
+    // FT2/FT4/FT8: i decoder scrivono sempre "destinatario mittente". Un messaggio
+    // col nostro nominativo al SECONDO posto e' quindi DA noi: l'eco della nostra
+    // trasmissione, o una sua rilettura tardiva (a7/a8) che il confronto esatto
+    // con l'ultimo TX qui sotto non riconosce. Contato come messaggio della
+    // controparte puo' avanzare o chiudere il QSO. L'ordine invertito resta
+    // ammesso solo per gli altri modi.
+    if ((m_mode == QStringLiteral("FT2") || m_mode == QStringLiteral("FT4")
+         || m_mode == QStringLiteral("FT8"))
+        && messageIsSentByCall(msg, myCallUpper, myBaseUpper)) {
+        bridgeLog(QStringLiteral("autoSequenceStep: ignore echo of own transmission: %1")
+                      .arg(msg));
+        return;
+    }
     if (directedToMe
         && shouldSuppressDirectedGhostDecode(f, QStringLiteral("auto-seq"))) {
         return;
