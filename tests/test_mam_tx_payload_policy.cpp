@@ -163,7 +163,7 @@ void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()
         cpp,
         QStringLiteral("bool DecodiumBridge::ensureTxAudioPrepared("),
         QStringLiteral("void DecodiumBridge::saveTxRecordingAsync"));
-    QVERIFY(ensure.contains(QStringLiteral("bool const useMultiStream = multiStreamActive();")));
+    QVERIFY(ensure.contains(QStringLiteral("bool const useMultiStream = multiStreamActive() && !m_telemetryTxActive;")));
     QVERIFY(ensure.contains(QStringLiteral("m_txAudioCache.multiStream")));
 }
 
