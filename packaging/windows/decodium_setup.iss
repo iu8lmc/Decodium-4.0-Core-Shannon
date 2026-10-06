@@ -106,6 +106,23 @@ italian.DecoPortPasswordShort=La password e' troppo corta: usane almeno 8 caratt
 english.DecoPortPasswordMismatch=The two passwords do not match. Retype them: the password is not shown as you type, so a typo would leave the radio unreachable.
 italian.DecoPortPasswordMismatch=Le due password non coincidono. Riscrivile: la password non si vede mentre la digiti, quindi un errore di battitura renderebbe la radio irraggiungibile.
 
+; 1.0.663 - Decolink: radio in rete tramite il server Decolink, scaricabile dal
+; repository iu8lmc/Decolink. Le lingue non elencate ricadono sull'inglese.
+english.DecolinkPageTitle=Decolink - your radio over the internet
+italian.DecolinkPageTitle=Decolink - la tua radio via internet
+english.DecolinkPageSubtitle=Optional: work your station remotely through the Decolink server
+italian.DecolinkPageSubtitle=Facoltativo: usa la tua stazione da remoto tramite il server Decolink
+english.DecolinkPageText=Decolink connects the radio of this computer to the Decolink server, so that you, and the people you authorise, can listen to it and tune it from another computer or from Decodium Mobile.%n%nDecolink is a separate program by the same author. It is downloaded from github.com/iu8lmc/Decolink (about 60 MB), checked against its published checksum, and installed with its own installer once Decodium is in place. You can also get it later from that address.
+italian.DecolinkPageText=Decolink collega la radio di questo computer al server Decolink, cosi' che tu, e le persone che autorizzi, possiate ascoltarla e sintonizzarla da un altro computer o da Decodium Mobile.%n%nDecolink e' un programma a parte dello stesso autore. Viene scaricato da github.com/iu8lmc/Decolink (circa 60 MB), controllato contro il suo checksum pubblicato, e installato col suo installer dopo Decodium. Puoi anche prenderlo piu' tardi da quell'indirizzo.
+english.DecolinkYes=Download and install Decolink after Decodium
+italian.DecolinkYes=Scarica e installa Decolink dopo Decodium
+english.DecolinkNo=Not now
+italian.DecolinkNo=Non adesso
+english.DecolinkDownloadFailed=Decolink could not be downloaded:%n%n%1%n%nDecodium is installed anyway. You can get Decolink later from https://github.com/iu8lmc/Decolink/releases
+italian.DecolinkDownloadFailed=Non sono riuscito a scaricare Decolink:%n%n%1%n%nDecodium viene installato comunque. Puoi prendere Decolink piu' tardi da https://github.com/iu8lmc/Decolink/releases
+english.DecolinkInstallFailed=The Decolink installer could not be started. You can run it later from https://github.com/iu8lmc/Decolink/releases
+italian.DecolinkInstallFailed=Non sono riuscito ad avviare l'installer di Decolink. Puoi lanciarlo piu' tardi da https://github.com/iu8lmc/Decolink/releases
+
 ; 1.0.430 — messaggi del riavvio post-installazione, tradotti in tutte le lingue
 ; dell'app. RebootPrompt = avviso/domanda (MsgBox); RebootCountdown = testo mostrato
 ; da Windows durante il conto alla rovescia di shutdown.exe. Vedi [Code]/CurStepChanged.
@@ -353,6 +370,18 @@ Name: "{autodesktop}\{#AppName}";        Filename: "{app}\{#AppExeName}"; IconFi
 [Code]
 var
   DecoPortPage: TInputQueryWizardPage;
+  DecolinkPage: TInputOptionWizardPage;
+  DecolinkDownload: TDownloadWizardPage;
+  DecolinkSetupFile: String;
+
+const
+  { Decolink: versione fissata, con il suo SHA-256 pubblicato nella release. Si
+    aggiorna a mano a ogni nuova release di Decolink: un indirizzo "ultima
+    versione" non si puo' controllare contro un checksum. }
+  DecolinkUrl =
+    'https://github.com/iu8lmc/Decolink/releases/download/v2.5.3/Decolink-2.5.3-installa.exe';
+  DecolinkFileName = 'Decolink-2.5.3-installa.exe';
+  DecolinkSha256 = 'f683c450bb58cc61d9c2b6c292bda7ad9ac26f05e60959d3dc1607c9a0a5b16c';
 
 const
   AppUninstallKey =
@@ -467,6 +496,44 @@ begin
     ExpandConstant('{cm:DecoPortPageText}'));
   DecoPortPage.Add(ExpandConstant('{cm:DecoPortPasswordLabel}'), True);
   DecoPortPage.Add(ExpandConstant('{cm:DecoPortPasswordConfirmLabel}'), True);
+
+  { 1.0.663 - Decolink e' facoltativo: la risposta predefinita e' "non adesso", e
+    in installazione silenziosa le pagine non compaiono, quindi non si scarica
+    niente. }
+  DecolinkPage := CreateInputOptionPage(DecoPortPage.ID,
+    ExpandConstant('{cm:DecolinkPageTitle}'),
+    ExpandConstant('{cm:DecolinkPageSubtitle}'),
+    ExpandConstant('{cm:DecolinkPageText}'),
+    True, False);
+  DecolinkPage.Add(ExpandConstant('{cm:DecolinkYes}'));
+  DecolinkPage.Add(ExpandConstant('{cm:DecolinkNo}'));
+  DecolinkPage.SelectedValueIndex := 1;
+  DecolinkDownload := CreateDownloadPage(SetupMessage(msgWizardPreparing),
+    SetupMessage(msgPreparingDesc), nil);
+  DecolinkSetupFile := '';
+end;
+
+{ Scarica Decolink se l'utente l'ha chiesto. Un fallimento NON blocca
+  l'installazione di Decodium: si avvisa e si va avanti. }
+procedure DownloadDecolink;
+begin
+  DecolinkSetupFile := '';
+  DecolinkDownload.Clear;
+  DecolinkDownload.Add(DecolinkUrl, DecolinkFileName, DecolinkSha256);
+  DecolinkDownload.Show;
+  try
+    try
+      DecolinkDownload.Download;
+      DecolinkSetupFile := AddBackslash(ExpandConstant('{tmp}')) + DecolinkFileName;
+    except
+      DecolinkSetupFile := '';
+      if not DecolinkDownload.AbortedByUser then
+        MsgBox(FmtMessage(ExpandConstant('{cm:DecolinkDownloadFailed}'), [GetExceptionMessage]),
+               mbInformation, MB_OK);
+    end;
+  finally
+    DecolinkDownload.Hide;
+  end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -489,6 +556,10 @@ begin
       Result := False;
     end;
   end;
+
+  if (DecolinkPage <> nil) and (CurPageID = DecolinkPage.ID)
+     and (DecolinkPage.SelectedValueIndex = 0) then
+    DownloadDecolink;
 end;
 
 { Scrive la password nella radice di Decodium3.ini. Decodium al primo avvio la
@@ -525,6 +596,16 @@ begin
     (sessione interattiva = SeShutdownPrivilege). I testi (RebootPrompt/RebootCountdown)
     sono localizzati in tutte le 13 lingue via [CustomMessages] e seguono la lingua
     scelta nell'installer. }
+  if (CurStep = ssDone) and (not WizardSilent) and (DecolinkSetupFile <> '') then
+  begin
+    { L'installer di Decolink ha le sue due scelte: lo si lascia parlare. Si
+      aspetta che finisca, cosi' la proposta di riavvio viene dopo. }
+    if (not FileExists(DecolinkSetupFile))
+       or (not Exec(DecolinkSetupFile, '', '', SW_SHOWNORMAL,
+                    ewWaitUntilTerminated, ResultCode)) then
+      MsgBox(ExpandConstant('{cm:DecolinkInstallFailed}'), mbInformation, MB_OK);
+  end;
+
   if (CurStep = ssDone) and (not WizardSilent) then
   begin
     if MsgBox(ExpandConstant('{cm:RebootPrompt}'),
