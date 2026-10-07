@@ -89,6 +89,7 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #include "DecodiumBridge.h"
 #include "JttyController.h"
 #include "CwController.h"
+#include "RotorModule.h"
 #include "DecodiumDiagnostics.h"
 #include "DecodiumDxCluster.h"
 #include "DecodiumLogging.hpp"
@@ -2803,6 +2804,8 @@ int main(int argc, char* argv[])
     decodium::jtty::JttyController jtty;
     // CW: decodificatore, manipolatori e macro (vengono da DecoDXLog).
     decodium::cw::CwController cwModule;
+    // Rotore d'antenna PRO.SIS.TEL (viene da DecoRotor): spento finche' l'operatore non lo accende.
+    decodium::rotor::RotorModule rotorModule;
     auto labDialOverrideActive = std::make_shared<bool>(labDialHz > 0);
     auto applyLabRuntimeOverrides =
         [&bridge,
@@ -4398,8 +4401,32 @@ int main(int argc, char* argv[])
                 cwModule.clearDecoder ();
             }
         });
+        QObject::connect (&bridge, &DecodiumBridge::cwModeLeaving,
+                          &cwModule, &decodium::cw::CwController::stop);
         engine.rootContext ()->setContextProperty ("cwModule", &cwModule);
         L("CW: modulo avviato");
+    }
+    {
+        // Rotore: nominativo e locatore sono quelli di Decodium; ogni stazione
+        // sentita finisce sulla mappa con la sua rotta.
+        static QSettings rotorSettings {QSettings::IniFormat, QSettings::UserScope,
+                                        QStringLiteral ("Decodium"), QStringLiteral ("Decodium")};
+        auto syncStation = [&bridge, &rotorModule] {
+            rotorModule.setStation (bridge.callsign (), bridge.grid ());
+        };
+        QObject::connect (&bridge, &DecodiumBridge::callsignChanged, &rotorModule, syncStation);
+        QObject::connect (&bridge, &DecodiumBridge::gridChanged, &rotorModule, syncStation);
+        QObject::connect (&bridge, &DecodiumBridge::dxCallChanged, &rotorModule, [&bridge, &rotorModule] {
+            rotorModule.setWorkingCall (bridge.dxCall ());
+        });
+        QObject::connect (&bridge, &DecodiumBridge::rotorDecodeHeard, &rotorModule,
+                          [&bridge, &rotorModule] (QString const& message, int snr, bool hasSnr, QString const& mode) {
+            rotorModule.noteDecode (message, snr, hasSnr, mode, static_cast<qint64> (bridge.frequency ()));
+        });
+        syncStation ();
+        rotorModule.start (&rotorSettings);
+        engine.rootContext ()->setContextProperty ("rotor", &rotorModule);
+        L("Rotore: modulo avviato");
     }
     // IU8LMC: aggiornamento automatico con avviso e conferma. Il checker
     // storico (DecodiumBridge::checkForUpdates) e' spento dalla 1.0.62 e non ha

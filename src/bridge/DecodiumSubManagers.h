@@ -398,6 +398,10 @@ public:
             double const jtty = jttyFreq(b);
             if (jtty > 0.0) return jtty;
         }
+        if (normalized == "CW") {
+            double const cw = cwFreq(b);
+            if (cw > 0.0) return cw;
+        }
         return firstAvailableFreq(b);
     }
 
@@ -415,6 +419,25 @@ public:
         if (b.lambda == QLatin1String("15M"))  return 21090000.0;
         if (b.lambda == QLatin1String("12M"))  return 24920000.0;
         if (b.lambda == QLatin1String("10M"))  return 28090000.0;
+        return 0.0;
+    }
+
+    // Le frequenze di chiamata CW: quelle QRP, che sono dove si trova qualcuno
+    // in ogni banda. Chi vuole un'altra frequenza la sceglie dalla radio: il
+    // modo CW non la cambia se si e' gia' nella banda.
+    static double cwFreq(const Band& b)
+    {
+        if (b.lambda == QLatin1String("160M")) return 1836000.0;
+        if (b.lambda == QLatin1String("80M"))  return 3560000.0;
+        if (b.lambda == QLatin1String("60M"))  return 5351500.0;
+        if (b.lambda == QLatin1String("40M"))  return 7030000.0;
+        if (b.lambda == QLatin1String("30M"))  return 10116000.0;
+        if (b.lambda == QLatin1String("20M"))  return 14060000.0;
+        if (b.lambda == QLatin1String("17M"))  return 18096000.0;
+        if (b.lambda == QLatin1String("15M"))  return 21060000.0;
+        if (b.lambda == QLatin1String("12M"))  return 24906000.0;
+        if (b.lambda == QLatin1String("10M"))  return 28060000.0;
+        if (b.lambda == QLatin1String("6M"))   return 50090000.0;
         return 0.0;
     }
 

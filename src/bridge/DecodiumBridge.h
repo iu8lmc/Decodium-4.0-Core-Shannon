@@ -2261,6 +2261,9 @@ signals:
     // scheda. Emesso solo con la finestra RTTY aperta.
     void campioniRxRtty(QVector<short> const& campioni12k);
     void cwInAscoltoChanged();
+    void cwModeLeaving();
+    // Una stazione sentita (testo del messaggio, rapporto, modo): il rotore la mette sulla mappa.
+    void rotorDecodeHeard(const QString& message, int snr, bool hasSnr, const QString& mode);
     void campioniRxCw(QVector<short> const& campioni12k);
     // L'audio ricevuto a 12 kHz per il ricevitore JTTY, quando JTTY e' il modo
     // attivo e il monitor e' acceso.

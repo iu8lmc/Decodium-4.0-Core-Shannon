@@ -4261,6 +4261,11 @@ static QString canonicalApplicationDecodeMode(QString mode)
     if (upperMode == QStringLiteral("JTTY")) {
         return QStringLiteral("JTTY");
     }
+    // CW: il modulo CW (decodificatore, macro, manipolatore) e' un modo
+    // dell'applicazione come JTTY, non solo un nome di modo della radio.
+    if (upperMode == QStringLiteral("CW")) {
+        return QStringLiteral("CW");
+    }
     return {};
 }
 
@@ -4281,7 +4286,17 @@ static bool isStreamingKeyboardMode(QString const& mode)
 {
     QString const m = mode.trimmed();
     return m.compare(QStringLiteral("RTTY"), Qt::CaseInsensitive) == 0
-        || m.compare(QStringLiteral("JTTY"), Qt::CaseInsensitive) == 0;
+        || m.compare(QStringLiteral("JTTY"), Qt::CaseInsensitive) == 0
+        || m.compare(QStringLiteral("CW"), Qt::CaseInsensitive) == 0;
+}
+
+// JTTY e CW tengono la cattura PCM nativa mentre sono attivi: uscendone verso
+// un modo che usa il backend legacy serve lo stesso passaggio di consegne.
+static bool isNativePcmKeyboardMode(QString const& mode)
+{
+    QString const m = mode.trimmed();
+    return m.compare(QStringLiteral("JTTY"), Qt::CaseInsensitive) == 0
+        || m.compare(QStringLiteral("CW"), Qt::CaseInsensitive) == 0;
 }
 
 static bool isRadioOnlyModeLabel(QString mode)
@@ -15702,6 +15717,13 @@ void DecodiumBridge::appendRxDecodeEntry(const QVariantMap& entry)
         }
     }
 
+    if (!isTx) {
+        bool snrOk = false;
+        int const snrDb = rxEntry.value(QStringLiteral("snr")).toString().trimmed().toInt(&snrOk);
+        emit rotorDecodeHeard(rxEntry.value(QStringLiteral("message")).toString(), snrDb, snrOk,
+                              rxEntry.value(QStringLiteral("mode")).toString().isEmpty()
+                                  ? m_mode : rxEntry.value(QStringLiteral("mode")).toString());
+    }
     m_rxDecodeList.append(rxEntry);
     if (!key.isEmpty()) {
         m_rxDecodeMirrorKeys.insert(key);
@@ -18334,7 +18356,7 @@ void DecodiumBridge::setMode(const QString& v) {
         // as entering RTTY; otherwise the old SoundInput remains attached
         // while the legacy backend starts its period monitor, freezing the
         // panadapter/waterfall on the first slot after the mode change.
-        bool const leavingJtty = previousMode == QStringLiteral("JTTY");
+        bool const leavingJtty = isNativePcmKeyboardMode(previousMode);
         bool const rearmModernMonitor = monitorWasActive
             && (!usingLegacyBackendForRx() || enteringRtty || leavingJtty);
         quint64 const monitorSessionId = monitorShouldStayActive ? ++m_periodTimerSessionId : m_periodTimerSessionId;
@@ -18375,9 +18397,14 @@ void DecodiumBridge::setMode(const QString& v) {
             m_decoPortTxOutRate = 0;
             bridgeLog(QStringLiteral("Leaving JTTY: producer stopped, PTT release requested, USB TX output closing"));
         }
-        if (normalizedMode == QStringLiteral("JTTY")) {
+        if (previousMode == QStringLiteral("CW")) {
+            // Il CW in corso si ferma: manipolatore, audio e PTT remoto.
+            emit cwModeLeaving();
+            bridgeLog(QStringLiteral("Leaving CW: transmission stopped"));
+        }
+        if (normalizedMode == QStringLiteral("JTTY") || normalizedMode == QStringLiteral("CW")) {
             // JTTY ha il suo ricevitore nativo sul PCM: il decodificatore
-            // legacy si ferma come per RTTY. La radio resta nel modo dati
+            // legacy si ferma come per RTTY. Lo stesso vale per il CW. La radio resta nel modo dati
             // configurato (e' la stessa strada di FT8) e la frequenza la
             // sceglie il piano di banda di JTTY.
             if (m_legacyBackend && m_legacyBackend->monitoring()) {
@@ -52811,7 +52838,7 @@ void DecodiumBridge::restartAudioCaptureForModeChange(const QString& previousMod
     }
 
     qint64 const now = QDateTime::currentMSecsSinceEpoch();
-    bool const keepExistingQtCapture = (previousMode != QStringLiteral("JTTY")
+    bool const keepExistingQtCapture = (!isNativePcmKeyboardMode(previousMode)
                                         && !m_tciAudioCaptureActive && m_soundInput)
         || (m_rtlSdrInput && m_rtlSdrInput->isActive());
 
@@ -52826,7 +52853,7 @@ void DecodiumBridge::restartAudioCaptureForModeChange(const QString& previousMod
     // JTTY tears down and recreates its native PCM path on exit. Give the
     // replacement capture and scene graph time to settle before recovery.
     m_audioWatchdogIgnoreUntilMs = now
-        + (previousMode == QStringLiteral("JTTY") ? 15000 : 5000);
+        + (isNativePcmKeyboardMode(previousMode) ? 15000 : 5000);
     m_audioUnhealthyStartMs = 0;
     resetRxPeriodAccumulation(true);
     resetTimeSyncDecodeMetrics();
@@ -54797,7 +54824,7 @@ QStringList DecodiumBridge::availableModes() const
 {
     // RTTY in fondo: e' l'unico che non passa dai decodificatori a slot, e
     // sceglierlo ferma la decodifica dei modi digitali invece di affiancarsi.
-    return {"FT8", "FT2", "FT2-Link", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR", "RTTY", "JTTY"};
+    return {"FT8", "FT2", "FT2-Link", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR", "RTTY", "JTTY", "CW"};
 }
 
 // Simple radix-2 in-place FFT (Cooley-Tukey)

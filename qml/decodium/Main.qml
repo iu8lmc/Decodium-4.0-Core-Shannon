@@ -1778,12 +1778,31 @@ ApplicationWindow {
     }
 
     // 1.0.571 - finestra DecoPort, creata alla prima apertura.
-    function openCwWindow() {
+    function showCwWindow() {
         cwWindowLoader.active = true
         if (cwWindowLoader.item) {
             cwWindowLoader.item.show()
             cwWindowLoader.item.raise()
             cwWindowLoader.item.requestActivate()
+        }
+    }
+
+    // Come per RTTY e JTTY: aprire il CW dal menu equivale a sceglierlo dal
+    // selettore dei modi, e sceglierlo dal selettore apre la finestra.
+    function openCwWindow() {
+        if (bridge.mode !== "CW")
+            bridge.mode = "CW"
+        if (bridge.mode === "CW")
+            mainWindow.showCwWindow()
+    }
+
+    // Il rotore d'antenna (da DecoRotor). Non e' un modo: si apre dal menu.
+    function openRotorWindow() {
+        rotorWindowLoader.active = true
+        if (rotorWindowLoader.item) {
+            rotorWindowLoader.item.show()
+            rotorWindowLoader.item.raise()
+            rotorWindowLoader.item.requestActivate()
         }
     }
 
@@ -1839,6 +1858,8 @@ ApplicationWindow {
                 mainWindow.showRttyWindow()
             if (bridge.mode === "JTTY")
                 mainWindow.showJttyWindow()
+            if (bridge.mode === "CW")
+                mainWindow.showCwWindow()
         }
     }
 
@@ -1892,6 +1913,20 @@ ApplicationWindow {
         active: false
         asynchronous: true
         source: "components/CwWindow.qml"
+        // Riaprendo Decodium gia' in modo CW la finestra torna da sola.
+        Component.onCompleted: if (bridge && bridge.mode === "CW") active = true
+        onLoaded: {
+            item.show()
+            item.raise()
+            item.requestActivate()
+        }
+    }
+
+    Loader {
+        id: rotorWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/RotorWindow.qml"
         onLoaded: {
             item.show()
             item.raise()
@@ -12789,6 +12824,24 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
             text: qsTr("CW - decoder, keyer and macros...")
             icon.source: ""
             onTriggered: mainWindow.openCwWindow()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: textPrimary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            // Rotore d'antenna PRO.SIS.TEL (dal progetto DecoRotor).
+            text: qsTr("Rotator - antenna control...")
+            icon.source: ""
+            onTriggered: mainWindow.openRotorWindow()
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
