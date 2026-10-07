@@ -116,5 +116,30 @@ inline bool parsePacket(const QByteArray& dg, Header* h, QByteArray* body)
     return true;
 }
 
+// Il corpo del profilo CW a tasto: la nota e gli istanti in cui il tasto si apre
+// e si chiude, e il tono lo rigenera il gateway.
+//   byte 0     nota in decine di Hz (70 = 700 Hz)
+//   byte 1     numero di eventi (al massimo 255)
+//   poi        u16 per evento: bit 15 = tasto giu', bit 0-14 = ms dal precedente
+constexpr int kCwKeyMaxEvents = 255;
+
+// Il corpo: intestazione (nota e numero di eventi) e poi due byte per evento.
+inline QByteArray cwKeyHeader(int toneHz, int count)
+{
+    QByteArray h;
+    h.append(char(qBound(0, toneHz / 10, 255)));
+    h.append(char(qBound(0, count, kCwKeyMaxEvents)));
+    return h;
+}
+
+inline QByteArray cwKeyEvent(quint16 deltaMs, bool down)
+{
+    const quint16 v = quint16((down ? 0x8000 : 0) | (deltaMs & 0x7FFF));
+    QByteArray e;
+    e.append(char((v >> 8) & 0xFF));
+    e.append(char(v & 0xFF));
+    return e;
+}
+
 }  // namespace v3
 }  // namespace decolink

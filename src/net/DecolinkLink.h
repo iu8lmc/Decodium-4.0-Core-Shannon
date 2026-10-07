@@ -91,6 +91,8 @@ public:
     // Nominativo dell'altro operatore che ha il PTT, o vuoto se e' libero o e' nostro.
     QString txHolder() const { return m_txHolder; }
     QString txBlockedReason() const override;
+    bool    supportsCwKey() const override;
+    bool    sendCwKey(const QVector<CwKeyEvent>& events, int toneHz) override;
 
     void tune(double hz) override { setFrequency(qint64(hz)); }
     void setModeName(const QString& name) override;

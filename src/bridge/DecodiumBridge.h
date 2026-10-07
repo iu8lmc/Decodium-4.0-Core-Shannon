@@ -569,6 +569,9 @@ class DecodiumBridge : public QObject
     // girare, perche' nessuno ne leggerebbe il risultato e il costo lo
     // pagherebbe la decodifica dei modi digitali, che gira sullo stesso PC.
     Q_PROPERTY(bool  rttyInAscolto       READ rttyInAscolto       WRITE setRttyInAscolto       NOTIFY rttyInAscoltoChanged)
+    // CW: la finestra del modulo CW la accende mentre e' aperta; il bridge le consegna l'audio
+    // della radio (locale o remota) a 12 kHz.
+    Q_PROPERTY(bool  cwInAscolto         READ cwInAscolto         WRITE setCwInAscolto         NOTIFY cwInAscoltoChanged)
 
     // === B6 — cty.dat AUTO-UPDATE ===
     Q_PROPERTY(bool    ctyDatUpdating  READ ctyDatUpdating  NOTIFY ctyDatUpdatingChanged)
@@ -1344,6 +1347,13 @@ public:
     // niente PTT mentre il sequencer dei modi digitali trasmette o accorda.
     void   rttyAlzaPtt(bool on);
     bool   rttyCanTransmit();
+    // Modulo CW: i ganci che il controllo CW usa per trasmettere come audio
+    // (sidetone sul percorso TX, locale o verso la radio remota) e per fermarsi.
+    bool   cwInAscolto() const { return m_cwInAscolto; }
+    void   setCwInAscolto(bool v);
+    bool   cwCanTransmit();
+    bool   cwSendAudio(const QString& text, int wpm);
+    void   cwAbortAudio();
     bool   rttyTxActive() const { return m_rttyTxActive; }
     void   rttyMandaAudioTx(const QVector<short>& campioni12k);
     void   setSpectrumVisible(bool v);
@@ -2239,6 +2249,8 @@ signals:
     // radio ascolta, senza aprire una seconda sorgente audio sulla stessa
     // scheda. Emesso solo con la finestra RTTY aperta.
     void campioniRxRtty(QVector<short> const& campioni12k);
+    void cwInAscoltoChanged();
+    void campioniRxCw(QVector<short> const& campioni12k);
     // L'audio ricevuto a 12 kHz per il ricevitore JTTY, quando JTTY e' il modo
     // attivo e il monitor e' acceso.
     void campioniRxJtty(QVector<short> const& campioni12k);
@@ -3290,6 +3302,7 @@ private:
     double m_spectrumDynRange {70.0};
     bool   m_spectrumVisible {true};
     bool   m_rttyInAscolto {false};
+    bool   m_cwInAscolto {false};
 
     DecodiumThemeManager* m_themeManager  {nullptr};
     DecodiumPropagationManager* m_propagationManager {nullptr};

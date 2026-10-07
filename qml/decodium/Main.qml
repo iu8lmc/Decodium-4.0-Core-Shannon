@@ -1778,6 +1778,15 @@ ApplicationWindow {
     }
 
     // 1.0.571 - finestra DecoPort, creata alla prima apertura.
+    function openCwWindow() {
+        cwWindowLoader.active = true
+        if (cwWindowLoader.item) {
+            cwWindowLoader.item.show()
+            cwWindowLoader.item.raise()
+            cwWindowLoader.item.requestActivate()
+        }
+    }
+
     function openDecolinkWindow() {
         decolinkWindowLoader.active = true
         if (decolinkWindowLoader.item) {
@@ -1871,6 +1880,18 @@ ApplicationWindow {
         active: false
         asynchronous: true
         source: "rtty/RttyMain.qml"
+        onLoaded: {
+            item.show()
+            item.raise()
+            item.requestActivate()
+        }
+    }
+
+    Loader {
+        id: cwWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/CwWindow.qml"
         onLoaded: {
             item.show()
             item.raise()
@@ -12750,6 +12771,24 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
             text: qsTr("Decolink - remote radio through the server...")
             icon.source: ""
             onTriggered: mainWindow.openDecolinkWindow()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: textPrimary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            // CW: decodificatore, macro e manipolatore (dal modulo CW di DecoDXLog).
+            text: qsTr("CW - decoder, keyer and macros...")
+            icon.source: ""
+            onTriggered: mainWindow.openCwWindow()
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"

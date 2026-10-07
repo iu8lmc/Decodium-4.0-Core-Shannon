@@ -88,6 +88,7 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 
 #include "DecodiumBridge.h"
 #include "JttyController.h"
+#include "CwController.h"
 #include "DecodiumDiagnostics.h"
 #include "DecodiumDxCluster.h"
 #include "DecodiumLogging.hpp"
@@ -2800,6 +2801,8 @@ int main(int argc, char* argv[])
     // JTTY (WSJT-X 3.2) in C++ nativo: ricevitore su un thread suo, TX sulla
     // stessa uscita audio condivisa dei modi da tastiera.
     decodium::jtty::JttyController jtty;
+    // CW: decodificatore, manipolatori e macro (vengono da DecoDXLog).
+    decodium::cw::CwController cwModule;
     auto labDialOverrideActive = std::make_shared<bool>(labDialHz > 0);
     auto applyLabRuntimeOverrides =
         [&bridge,
@@ -4353,6 +4356,40 @@ int main(int argc, char* argv[])
         jtty.setActive (bridge.mode () == QStringLiteral ("JTTY"));
         engine.rootContext ()->setContextProperty ("jtty", &jtty);
         L("JTTY: controller avviato");
+    }
+    {
+        // CW: nominativi e macro sono quelli dell'applicazione; il testo parte
+        // come audio (sidetone) dal percorso TX di Decodium, locale o verso
+        // la radio remota, oppure da un manipolatore seriale / WinKeyer.
+        static QSettings cwSettings {QSettings::IniFormat, QSettings::UserScope,
+                                     QStringLiteral ("Decodium"), QStringLiteral ("Decodium")};
+        decodium::cw::CwController::Hooks h;
+        h.myCall      = [&bridge] { return bridge.callsign (); };
+        h.hisCall     = [&bridge] { return bridge.dxCall (); };
+        h.canTransmit = [&bridge] { return bridge.cwCanTransmit (); };
+        h.remoteRadio = [&bridge] { return bridge.decoPortUseRemote (); };
+        h.sendAudio   = [&bridge] (QString const& t, int wpm) { return bridge.cwSendAudio (t, wpm); };
+        h.abortAudio  = [&bridge] { bridge.cwAbortAudio (); };
+        cwModule.setHooks (std::move (h));
+        cwModule.start (&cwSettings);
+        // L'audio della radio, gia' a 12 kHz, dallo stesso rubinetto di RTTY e
+        // JTTY: vale anche con la radio remota.
+        QObject::connect (&bridge, &DecodiumBridge::campioniRxCw,
+                          &cwModule, [&cwModule] (QVector<short> const& campioni) {
+            cwModule.feedRxAudio (campioni, 12000);
+        });
+        // Cambiando la banda il decodificatore dimentica quello che ha letto:
+        // il testo di un'altra banda non e' il seguito del nuovo.
+        QObject::connect (&bridge, &DecodiumBridge::frequencyChanged,
+                          &cwModule, [&bridge, &cwModule] {
+            static double last = 0.0;
+            if (std::abs (bridge.frequency () - last) > 100000.0) {
+                last = bridge.frequency ();
+                cwModule.clearDecoder ();
+            }
+        });
+        engine.rootContext ()->setContextProperty ("cwModule", &cwModule);
+        L("CW: modulo avviato");
     }
     // IU8LMC: aggiornamento automatico con avviso e conferma. Il checker
     // storico (DecodiumBridge::checkForUpdates) e' spento dalla 1.0.62 e non ha

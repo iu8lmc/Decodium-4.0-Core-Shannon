@@ -2262,6 +2262,7 @@ endif ()
 
 
 target_link_libraries (decodium_qml decodium_jtty)
+target_link_libraries (decodium_qml decodium_cw)
 
 # DecoRTTY: la libreria di aggancio porta con se' tutte le altre.
 if (DECODIUM_ENABLE_RTTY)

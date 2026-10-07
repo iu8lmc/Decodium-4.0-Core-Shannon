@@ -43,6 +43,41 @@ QVector<short> morseAudio(const QString& text, int wpm, int toneHz, int rate, do
     return out;
 }
 
+struct KeyRig {
+    bool remote {true};
+    bool supported {true};
+    bool failSend {false};
+    QVector<bool> ptt;
+    QVector<QVector<KeyEvent>> pieces;
+    QVector<int> tones;
+    int audioCalls {0};
+    QVector<QString> order;     // "ptt1", "key", "ptt0"
+
+    CwController::Hooks hooks()
+    {
+        CwController::Hooks h;
+        h.canTransmit = [] { return true; };
+        h.remoteRadio = [this] { return remote; };
+        h.remoteKeySupported = [this] { return supported; };
+        h.remoteLeadMs = [] { return 10; };
+        h.remotePtt = [this](bool on) { ptt.append(on); order.append(on ? "ptt1" : "ptt0"); };
+        h.sendKey = [this](const QVector<KeyEvent>& ev, int tone) {
+            if (failSend) return false;
+            pieces.append(ev); tones.append(tone); order.append("key");
+            return true;
+        };
+        h.sendAudio = [this](const QString&, int) { ++audioCalls; return true; };
+        return h;
+    }
+    QVector<KeyEvent> all() const
+    {
+        QVector<KeyEvent> out;
+        for (const auto& p : pieces) out += p;
+        return out;
+    }
+};
+
+
 }  // namespace
 
 class TestCwController : public QObject {
@@ -150,6 +185,143 @@ private slots:
         QVERIFY(!c.canSend());
         c.setTxBackend("qualcosa");                            // sconosciuto: torna all'audio
         QCOMPARE(c.txBackend(), QString("audio"));
+    }
+
+    void aRemoteRadioAlwaysUsesTheAudioPath()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        bool remote = false;
+        QString sent;
+        CwController::Hooks h;
+        h.canTransmit = [] { return true; };
+        h.remoteRadio = [&] { return remote; };
+        h.sendAudio = [&](const QString& t, int) { sent = t; return true; };
+        c.setHooks(h);
+        c.start(&s);
+        c.setTxBackend("serial");                              // un keyer su questo computer...
+        QVERIFY(!c.canSend());                                 // ...senza porta aperta: non puo'
+        remote = true;                                         // ma con la radio lontana conta l'audio
+        QCOMPARE(c.effectiveBackend(), QString("audio"));
+        QVERIFY(c.remoteRadio());
+        QVERIFY(c.canSend());
+        c.sendText("CQ", {});
+        QCOMPARE(sent, QString("CQ"));
+        QCOMPARE(c.txBackend(), QString("serial"));            // la scelta dell'operatore non si perde
+    }
+
+    // ── CW a tasto verso la radio remota ───────────────────────────────────
+
+    void remoteKeyIsPreferredOnARemoteRadio()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        KeyRig rig;
+        c.setHooks(rig.hooks());
+        c.start(&s);
+        QCOMPARE(c.effectiveBackend(), QString("remotekey"));
+        QVERIFY(c.canSend());
+        c.setRemoteKey(false);                                  // l'operatore preferisce il tono audio
+        QCOMPARE(c.effectiveBackend(), QString("audio"));
+        c.setRemoteKey(true);
+        rig.supported = false;                                  // gateway che non sa farlo
+        QCOMPARE(c.effectiveBackend(), QString("audio"));
+        rig.supported = true;
+        rig.remote = false;                                     // radio locale: la scelta e' del tipo di keyer
+        QCOMPARE(c.effectiveBackend(), QString("audio"));
+    }
+
+    void remoteKeySendsThePttThenTheWholeTraceThenReleasesIt()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        KeyRig rig;
+        c.setHooks(rig.hooks());
+        c.start(&s);
+        c.setWpm(60);
+        c.setToneHz(650);
+        c.sendText("CQ CQ", {});
+        QVERIFY(c.sending());
+        QTRY_VERIFY_WITH_TIMEOUT(!c.sending(), 8000);
+        QCOMPARE(rig.audioCalls, 0);                            // il tono audio non e' stato toccato
+        QCOMPARE(rig.order.first(), QString("ptt1"));           // il PTT prima del primo evento
+        QCOMPARE(rig.order.last(), QString("ptt0"));            // e abbassato alla fine
+        QCOMPARE(rig.ptt, (QVector<bool>{true, false}));
+        QCOMPARE(rig.tones.first(), 650);
+        const QVector<KeyEvent> sent = rig.all();
+        const QVector<KeyEvent> wanted = timelineFor("CQ CQ", 60);
+        QCOMPARE(sent.size(), wanted.size());                   // tutta la traccia, uguale, nell'ordine
+        for (int i = 0; i < wanted.size(); ++i) {
+            QCOMPARE(sent[i].deltaMs, wanted[i].deltaMs);
+            QCOMPARE(sent[i].down, wanted[i].down);
+        }
+        QVERIFY(!sent.last().down);                             // finisce a tasto su
+    }
+
+    void remoteKeyDeliversALongMessageInPiecesAheadOfPlayback()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        KeyRig rig;
+        c.setHooks(rig.hooks());
+        c.start(&s);
+        c.setWpm(60);
+        c.sendText("CQ CQ CQ DE IU8LMC IU8LMC K", {});
+        QTRY_VERIFY_WITH_TIMEOUT(rig.pieces.size() >= 2, 3000);
+        for (const auto& piece : rig.pieces) {
+            QVERIFY(piece.first().down);
+            QVERIFY(!piece.last().down);                        // mai un pezzo a tasto giu'
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!c.sending(), 15000);
+        QCOMPARE(rig.all().size(), timelineFor("CQ CQ CQ DE IU8LMC IU8LMC K", 60).size());
+    }
+
+    void stopReleasesThePttAndTheKeyAtOnce()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        KeyRig rig;
+        c.setHooks(rig.hooks());
+        c.start(&s);
+        c.setWpm(5);                                            // lento: il messaggio e' ancora in corso
+        c.sendText("CQ CQ CQ DE IU8LMC", {});
+        QTRY_VERIFY_WITH_TIMEOUT(!rig.pieces.isEmpty(), 2000);
+        const int before = rig.pieces.size();
+        c.stop();
+        QVERIFY(!c.sending());
+        QCOMPARE(rig.ptt.last(), false);                        // PTT giu' subito
+        QVERIFY(rig.pieces.size() > before);                    // e un "su" mandato per spegnere la nota
+        QCOMPARE(rig.pieces.last().size(), 1);
+        QVERIFY(!rig.pieces.last().first().down);
+        const int after = rig.pieces.size();
+        QTest::qWait(1500);
+        QCOMPARE(rig.pieces.size(), after);                     // e non parte nient'altro
+    }
+
+    void aFailedSendDropsThePttAndTellsWhy()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        KeyRig rig;
+        rig.failSend = true;
+        c.setHooks(rig.hooks());
+        c.start(&s);
+        QSignalSpy msg(&c, &CwController::message);
+        c.sendText("TEST", {});
+        QTRY_VERIFY_WITH_TIMEOUT(!c.sending(), 3000);
+        QCOMPARE(rig.ptt, (QVector<bool>{true, false}));
+        QCOMPARE(msg.size(), 1);
+    }
+
+    void toneIsClamped()
+    {
+        QSettings s(iniPath(), QSettings::IniFormat);
+        CwController c;
+        c.start(&s);
+        c.setToneHz(50);
+        QCOMPARE(c.toneHz(), 400);
+        c.setToneHz(5000);
+        QCOMPARE(c.toneHz(), 1000);
     }
 
     void settingsPersist()

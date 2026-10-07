@@ -12,7 +12,11 @@
 //   - "winkeyer"  un K1EL WinKeyer, che fa da se' i tempi;
 //   - "audio"     un tono (sidetone) trasmesso come audio TX in USB/DATA-U: e' la
 //                 strada che funziona anche con una radio remota, perche'
-//                 attraversa lo stesso percorso audio di qualunque altro modo.
+//                 attraversa lo stesso percorso audio di qualunque altro modo;
+//   - "remotekey" solo con una radio remota Decolink: invece dell'audio si mandano
+//                 gli istanti del tasto (pochi byte) e il tono lo rigenera il
+//                 gateway accanto alla radio. Non dipende dalla rete per il ritmo e
+//                 costa un centesimo del tono audio.
 // Il decodificatore ascolta l'audio che esce dalla radio, locale o remota che
 // sia: il bridge consegna i campioni a 12 kHz.
 #pragma once
@@ -20,6 +24,7 @@
 #include "CwDecoder.h"
 #include "CwKeyer.h"
 #include "CwMacros.h"
+#include "CwTiming.h"
 #include "WinKeyer.h"
 
 #include <QElapsedTimer>
@@ -50,6 +55,14 @@ class CwController : public QObject {
     // ── trasmissione ─────────────────────────────────────────────────────
     // "audio", "serial" o "winkeyer".
     Q_PROPERTY(QString txBackend READ txBackend WRITE setTxBackend NOTIFY txChanged)
+    // La strada davvero in uso: con una radio remota e' sempre "audio", perche' un
+    // manipolatore su una porta di questo computer non comanda la radio lontana.
+    Q_PROPERTY(QString effectiveBackend READ effectiveBackend NOTIFY txChanged)
+    Q_PROPERTY(bool remoteRadio READ remoteRadio NOTIFY txChanged)
+    // Con una radio Decolink: mandare gli istanti del tasto (vero, predefinito) o il tono audio.
+    Q_PROPERTY(bool remoteKey READ remoteKey WRITE setRemoteKey NOTIFY txChanged)
+    // La nota del CW a tasto, in hertz.
+    Q_PROPERTY(int toneHz READ toneHz WRITE setToneHz NOTIFY txChanged)
     Q_PROPERTY(QString keyerPort READ keyerPort WRITE setKeyerPort NOTIFY txChanged)
     Q_PROPERTY(QString keyerLine READ keyerLine WRITE setKeyerLine NOTIFY txChanged)
     Q_PROPERTY(QString winKeyerPort READ winKeyerPort WRITE setWinKeyerPort NOTIFY txChanged)
@@ -79,6 +92,16 @@ public:
         // Vero se adesso si puo' trasmettere (radio collegata, nessun altro
         // modo che usa l'uscita).
         std::function<bool()> canTransmit;
+        // Vero se la radio in uso e' remota (DecoPort, Decolink).
+        std::function<bool()> remoteRadio;
+        // Il CW a tasto verso una radio remota: vero se la strada sa farlo...
+        std::function<bool()> remoteKeySupported;
+        // ...manda un pezzo di traccia (false se non e' partito)...
+        std::function<bool(const QVector<KeyEvent>& events, int toneHz)> sendKey;
+        // ...alza e abbassa il PTT della radio remota...
+        std::function<void(bool on)> remotePtt;
+        // ...e dice quanto tempo ci mette un comando ad arrivare (ms).
+        std::function<int()> remoteLeadMs;
     };
 
     explicit CwController(QObject* parent = nullptr);
@@ -107,6 +130,12 @@ public:
 
     // ── trasmissione ──
     QString txBackend() const { return m_backend; }
+    bool remoteRadio() const { return m_hooks.remoteRadio && m_hooks.remoteRadio(); }
+    QString effectiveBackend() const;
+    bool remoteKey() const { return m_remoteKey; }
+    void setRemoteKey(bool on);
+    int toneHz() const { return m_toneHz; }
+    void setToneHz(int hz);
     void setTxBackend(const QString& backend);
     QString keyerPort() const { return m_keyerPort; }
     void setKeyerPort(const QString& port);
@@ -152,6 +181,9 @@ signals:
 private:
     void applyBackend();
     void sendExpanded(const QString& ready);
+    void startRemoteKey(const QString& text);
+    void pumpRemoteKey();
+    void finishRemoteKey(bool immediate);
     void setSending(bool on, int macroIndex);
     void publishScope(bool force = false);
     void save();
@@ -175,6 +207,17 @@ private:
     QString m_keyerLine {QStringLiteral("DTR")};
     QString m_winKeyerPort;
     int m_wpm {20};
+
+    // CW a tasto verso la radio remota
+    bool m_remoteKey {true};
+    int m_toneHz {700};
+    QVector<KeyEvent> m_keyQueue;
+    int m_keySentMs {0};
+    bool m_keyActive {false};
+    bool m_keyPlayheadStarted {false};
+    bool m_keyAllSent {false};
+    QElapsedTimer m_keyClock;
+    QTimer m_keyTimer;
 
     QList<Macro> m_macros;
     bool m_sending {false};

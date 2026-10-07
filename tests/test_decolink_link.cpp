@@ -816,6 +816,74 @@ private slots:
         QVERIFY(r.link.txBlockedReason().isEmpty());
     }
 
+    // ── CW a tasto: gli istanti del tasto al posto dell'audio ──────────────
+
+    void cwKeyEventsReachTheGatewayInTheDocumentedFormat()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        QVERIFY(r.link.supportsCwKey());
+        const QVector<CwKeyEvent> ev {{0, true}, {60, false}, {180, true}, {180, false}};
+        QVERIFY(r.link.sendCwKey(ev, 700));
+        QTRY_COMPARE_WITH_TIMEOUT(r.relay.v3Tx.size(), 1, 2000);
+        const auto& p = r.relay.v3Tx.first();
+        QCOMPARE(int(p.first.profile), int(v3::CwKey));
+        QCOMPARE(int(p.first.type), int(v3::AudioTx));
+        const QByteArray body = p.second;
+        QCOMPARE(body.size(), 2 + 2 * 4);
+        QCOMPARE(int(uchar(body.at(0))), 70);                       // 700 Hz in decine di Hz
+        QCOMPARE(int(uchar(body.at(1))), 4);
+        for (int i = 0; i < 4; ++i) {
+            const quint16 v = quint16((uchar(body.at(2 + 2 * i)) << 8) | uchar(body.at(3 + 2 * i)));
+            QCOMPARE(bool(v & 0x8000), ev[i].down);
+            QCOMPARE(int(v & 0x7FFF), int(ev[i].deltaMs));
+        }
+    }
+
+    void longKeyTracesAreSplitInPacketsOfAtMost255Events()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        QVector<CwKeyEvent> ev;
+        for (int i = 0; i < 300; ++i)
+            ev.append({quint16(10 + i % 7), i % 2 == 0});
+        QVERIFY(r.link.sendCwKey(ev, 650));
+        QTRY_COMPARE_WITH_TIMEOUT(r.relay.v3Tx.size(), 2, 2000);
+        QCOMPARE(int(uchar(r.relay.v3Tx.at(0).second.at(1))), 255);
+        QCOMPARE(int(uchar(r.relay.v3Tx.at(1).second.at(1))), 45);
+        QCOMPARE(quint16(r.relay.v3Tx.at(1).first.seq), quint16(r.relay.v3Tx.at(0).first.seq + 1));
+    }
+
+    void cwKeyIsRefusedToListenersAndWhileAnotherOperatorTransmits()
+    {
+        {
+            Rig r("lst", false);
+            r.go();
+            QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+            QVERIFY(!r.link.supportsCwKey());
+            QVERIFY(!r.link.sendCwKey({{0, true}, {60, false}}, 700));
+            QTest::qWait(300);
+            QCOMPARE(r.relay.v3Tx.size(), 0);
+        }
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        r.relay.send(TxState, 0, "tx busy K1ABC");
+        QTRY_COMPARE_WITH_TIMEOUT(r.link.txHolder(), QStringLiteral("K1ABC"), 2000);
+        QVERIFY(!r.link.sendCwKey({{0, true}, {60, false}}, 700));
+        QCOMPARE(r.relay.v3Tx.size(), 0);
+    }
+
+    void emptyKeyTracesAreNotSent()
+    {
+        Rig r;
+        r.go();
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.isLinked(), 5000);
+        QVERIFY(!r.link.sendCwKey({}, 700));
+    }
+
     void listenerCannotTransmitOrPoll()
     {
         Rig r("lst", false);

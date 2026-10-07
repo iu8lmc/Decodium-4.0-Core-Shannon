@@ -618,6 +618,32 @@ QString DecolinkLink::txBlockedReason() const
                                 : tr("%1 is transmitting on this station").arg(m_txHolder);
 }
 
+// Il CW a tasto: gli istanti del tasto invece dell'audio. Si manda a pezzi da
+// 255 eventi, il massimo di un pacchetto; il gateway li mette in coda e
+// rigenera il tono, quindi il ritmo e' quello degli eventi e non quello della
+// rete.
+bool DecolinkLink::supportsCwKey() const
+{
+    return isLinked() && m_canTx && m_txHolder.isEmpty();
+}
+
+bool DecolinkLink::sendCwKey(const QVector<CwKeyEvent>& events, int toneHz)
+{
+    if (!supportsCwKey() || !m_socket || m_relayAddr.isNull() || events.isEmpty())
+        return false;
+    int offset = 0;
+    while (offset < events.size()) {
+        const int n = qMin(v3::kCwKeyMaxEvents, int(events.size()) - offset);
+        QByteArray body = v3::cwKeyHeader(toneHz, n);
+        for (int i = 0; i < n; ++i)
+            body.append(v3::cwKeyEvent(events.at(offset + i).deltaMs, events.at(offset + i).down));
+        sendV3(v3::AudioTx, v3::CwKey, m_v3TxSeq++, 0, body);
+        offset += n;
+    }
+    m_lastTxPacketMs = nowMs();
+    return true;
+}
+
 // Il PTT che si era chiesto non c'e' piu': si smette di mandare audio e di
 // considerarsi in trasmissione. La radio e' di chi parla, non si tocca.
 void DecolinkLink::loseTurn()

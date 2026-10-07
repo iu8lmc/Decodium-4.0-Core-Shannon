@@ -15,6 +15,13 @@ CwController::CwController(QObject* parent)
     , m_macros(defaultMacros())
 {
     m_audioDone.setSingleShot(true);
+    m_keyTimer.setSingleShot(true);
+    connect(&m_keyTimer, &QTimer::timeout, this, [this] {
+        if (m_keyAllSent)
+            finishRemoteKey(false);
+        else
+            pumpRemoteKey();
+    });
     connect(&m_audioDone, &QTimer::timeout, this, [this] { setSending(false, -1); });
 
     connect(&m_keyer, &CwKeyer::finished, this, [this] { setSending(false, -1); });
@@ -56,6 +63,8 @@ void CwController::start(QSettings* settings)
         m_decoderToneLock = m_settings->value(QStringLiteral("toneLock"), 0).toInt();
         m_decoderSpeedLock = m_settings->value(QStringLiteral("speedLock"), 0).toInt();
         m_decoderOn = m_settings->value(QStringLiteral("decoderOn"), true).toBool();
+        m_remoteKey = m_settings->value(QStringLiteral("remoteKey"), true).toBool();
+        m_toneHz = std::clamp(m_settings->value(QStringLiteral("toneHz"), 700).toInt(), 400, 1000);
         m_macros = macrosFromJson(m_settings->value(QStringLiteral("macros")).toString());
         m_settings->endGroup();
     }
@@ -82,6 +91,8 @@ void CwController::save()
     m_settings->setValue(QStringLiteral("toneLock"), m_decoderToneLock);
     m_settings->setValue(QStringLiteral("speedLock"), m_decoderSpeedLock);
     m_settings->setValue(QStringLiteral("decoderOn"), m_decoderOn);
+    m_settings->setValue(QStringLiteral("remoteKey"), m_remoteKey);
+    m_settings->setValue(QStringLiteral("toneHz"), m_toneHz);
     m_settings->setValue(QStringLiteral("macros"), macrosToJson(m_macros));
     m_settings->endGroup();
 }
@@ -243,6 +254,34 @@ void CwController::setWinKeyerPort(const QString& port)
     emit txChanged();
 }
 
+QString CwController::effectiveBackend() const
+{
+    if (!remoteRadio())
+        return m_backend;
+    if (m_remoteKey && m_hooks.remoteKeySupported && m_hooks.remoteKeySupported())
+        return QStringLiteral("remotekey");
+    return QStringLiteral("audio");
+}
+
+void CwController::setRemoteKey(bool on)
+{
+    if (m_remoteKey == on)
+        return;
+    m_remoteKey = on;
+    save();
+    emit txChanged();
+}
+
+void CwController::setToneHz(int hz)
+{
+    const int clean = std::clamp(hz, 400, 1000);
+    if (m_toneHz == clean)
+        return;
+    m_toneHz = clean;
+    save();
+    emit txChanged();
+}
+
 void CwController::setWpm(int wpm)
 {
     const int clean = std::clamp(wpm, kMinWpm, kMaxWpm);
@@ -274,10 +313,13 @@ void CwController::applyBackend()
 
 bool CwController::canSend() const
 {
-    if (m_backend == QLatin1String("serial"))
+    const QString backend = effectiveBackend();
+    if (backend == QLatin1String("serial"))
         return m_keyer.isOpen();
-    if (m_backend == QLatin1String("winkeyer"))
+    if (backend == QLatin1String("winkeyer"))
         return m_winKeyer.isOpen();
+    if (backend == QLatin1String("remotekey"))
+        return true;     // effectiveBackend() l'ha scelto perche' la strada c'e'
     return m_hooks.sendAudio && (!m_hooks.canTransmit || m_hooks.canTransmit());
 }
 
@@ -342,11 +384,16 @@ void CwController::sendExpanded(const QString& ready)
     // Il tempo che il messaggio ci mette: serve a sapere quando l'audio finisce
     // (non lo dice nessuno) e a non lasciare un tasto acceso per sempre.
     const int ms = CwKeyer::millisFor(ready, m_wpm);
-    if (m_backend == QLatin1String("winkeyer")) {
+    const QString backend = effectiveBackend();
+    if (backend == QLatin1String("remotekey")) {
+        startRemoteKey(ready);
+        return;
+    }
+    if (backend == QLatin1String("winkeyer")) {
         m_winKeyer.send(ready, m_wpm);
         return;
     }
-    if (m_backend == QLatin1String("serial")) {
+    if (backend == QLatin1String("serial")) {
         m_keyer.send(ready, m_wpm);
         return;
     }
@@ -358,8 +405,81 @@ void CwController::sendExpanded(const QString& ready)
     m_audioDone.start(ms + 800);
 }
 
+// ── CW a tasto verso la radio remota ───────────────────────────────────────
+//
+// Si alza il PTT, si aspetta che arrivi, e poi la traccia del messaggio parte
+// a pezzi. Il gateway mette in coda gli eventi e li suona al ritmo che portano:
+// per questo ogni pezzo deve arrivare prima che finisca il precedente, e per
+// questo si tiene davanti mezzo secondo di traccia gia' consegnata. Il prezzo
+// e' che un Stop non ferma subito: smette di mandare e abbassa il tasto, ma
+// quel mezzo secondo gia' in coda il gateway lo suona.
+
+void CwController::startRemoteKey(const QString& text)
+{
+    m_keyQueue = timelineFor(text, m_wpm);
+    if (m_keyQueue.isEmpty()) {
+        setSending(false, -1);
+        return;
+    }
+    m_keyActive = true;
+    m_keyAllSent = false;
+    m_keyPlayheadStarted = false;
+    m_keySentMs = 0;
+    if (m_hooks.remotePtt)
+        m_hooks.remotePtt(true);
+    // Il PTT viaggia come comando: gli si da' il tempo di arrivare.
+    const int lead = m_hooks.remoteLeadMs ? m_hooks.remoteLeadMs() : 250;
+    m_keyTimer.start(qMax(0, lead));
+}
+
+void CwController::pumpRemoteKey()
+{
+    if (!m_keyActive)
+        return;
+    if (!m_keyPlayheadStarted) {
+        m_keyPlayheadStarted = true;
+        m_keyClock.restart();
+    }
+    const int lead = m_hooks.remoteLeadMs ? m_hooks.remoteLeadMs() : 250;
+    const int lookahead = qMax(500, lead * 2);
+    const int elapsed = static_cast<int>(m_keyClock.elapsed());
+    while (!m_keyQueue.isEmpty() && m_keySentMs - elapsed < lookahead) {
+        const QVector<KeyEvent> piece = takeWindow(m_keyQueue, lookahead);
+        if (piece.isEmpty() || !m_hooks.sendKey || !m_hooks.sendKey(piece, m_toneHz)) {
+            emit message(tr("The CW key did not reach the remote radio"), QStringLiteral("warning"));
+            finishRemoteKey(true);
+            return;
+        }
+        m_keySentMs += totalMs(piece);
+    }
+    if (m_keyQueue.isEmpty()) {
+        // Tutto consegnato: si aspetta che il gateway finisca di suonarlo, piu'
+        // una coda perche' l'ultimo "su" sia davvero arrivato prima del PTT.
+        m_keyAllSent = true;
+        m_keyTimer.start(qMax(0, m_keySentMs - elapsed) + 300);
+    } else {
+        m_keyTimer.start(qMax(10, m_keySentMs - elapsed - lookahead / 2));
+    }
+}
+
+void CwController::finishRemoteKey(bool immediate)
+{
+    if (!m_keyActive)
+        return;
+    m_keyActive = false;
+    m_keyAllSent = false;
+    m_keyTimer.stop();
+    if (immediate && m_hooks.sendKey)
+        m_hooks.sendKey({{0, false}}, m_toneHz);        // il tasto su, per non lasciare la nota accesa
+    m_keyQueue.clear();
+    if (m_hooks.remotePtt)
+        m_hooks.remotePtt(false);
+    setSending(false, -1);
+}
+
 void CwController::stop()
 {
+    finishRemoteKey(true);
     m_audioDone.stop();
     m_keyer.stop();
     m_winKeyer.stop();

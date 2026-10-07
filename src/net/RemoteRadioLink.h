@@ -15,6 +15,13 @@
 #include <QString>
 #include <QVector>
 
+// Un istante del tasto CW: il tasto si apre o si chiude `deltaMs` millisecondi
+// dopo l'evento precedente.
+struct CwKeyEvent {
+    quint16 deltaMs {0};
+    bool down {false};
+};
+
 class RemoteRadioLink : public RadioLink {
     Q_OBJECT
 
@@ -48,6 +55,16 @@ public:
     // Non vuota se adesso non si puo' trasmettere per un motivo passeggero
     // (un altro operatore ha il PTT della stazione): il testo dice perche'.
     virtual QString txBlockedReason() const { return QString(); }
+
+    // Il CW a tasto: invece dell'audio si mandano gli istanti del tasto e il
+    // tono lo rigenera chi sta accanto alla radio. Solo Decolink lo sa fare.
+    virtual bool supportsCwKey() const { return false; }
+    virtual bool sendCwKey(const QVector<CwKeyEvent>& events, int toneHz)
+    {
+        Q_UNUSED(events)
+        Q_UNUSED(toneHz)
+        return false;
+    }
 
 signals:
     void statusChanged();

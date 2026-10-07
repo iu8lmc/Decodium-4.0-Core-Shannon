@@ -42962,6 +42962,46 @@ void DecodiumBridge::setRttyInAscolto(bool v)
     emit rttyInAscoltoChanged();
 }
 
+void DecodiumBridge::setCwInAscolto(bool v)
+{
+    if (m_cwInAscolto == v)
+        return;
+    m_cwInAscolto = v;
+    emit cwInAscoltoChanged();
+}
+
+// Il CW come audio parte dallo stesso percorso di ogni altra trasmissione:
+// con una radio locale esce dalla scheda audio, con una radio remota
+// (DecoPort o Decolink) passa dal collegamento. Per questo qui si guarda la
+// strada che c'e' adesso, non soltanto la scheda locale.
+bool DecodiumBridge::cwCanTransmit()
+{
+    if (m_transmitting || m_tuning || sstvTxActive() || m_rttyTxActive)
+        return false;
+    if (m_decoPortUseRemote) {
+        RemoteRadioLink* link = remoteLinkIfAny();
+        return link && link->isLinked() && link->canTransmit()
+               && link->txBlockedReason().isEmpty();
+    }
+    bool found = false;
+    const QAudioDevice device = resolveTxOutputDevice(&found);
+    return found && !device.isNull();
+}
+
+bool DecodiumBridge::cwSendAudio(const QString& text, int wpm)
+{
+    if (!cwCanTransmit())
+        return false;
+    sendCwAudio(text, 0, wpm);
+    return m_transmitting;
+}
+
+void DecodiumBridge::cwAbortAudio()
+{
+    if (m_cwTxActive && (m_transmitting || m_tuning))
+        stopTx();
+}
+
 void DecodiumBridge::setSpectrumVisible(bool v)
 {
     if (m_spectrumVisible == v) {
@@ -51921,6 +51961,10 @@ void DecodiumBridge::ensureAudioSink()
                 this, [this](QVector<short> samples) {
             if (samples.isEmpty())
                 return;
+            // CW: lo stesso rubinetto, aperto solo mentre la finestra CW e' aperta
+            // e mai in trasmissione (si decodificherebbe il proprio sidetone).
+            if (m_cwInAscolto && !m_transmitting && !m_tuning)
+                emit campioniRxCw(samples);
             // JTTY: il ricevitore ascolta sempre quando il modo e' attivo e
             // il monitor e' acceso, anche a finestra chiusa (le righe
             // complete vanno comunque nella lista dei decodificati).
