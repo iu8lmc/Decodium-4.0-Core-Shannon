@@ -7808,6 +7808,10 @@ Clic dreapta: deconectează</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - decodor, manipulator și macrouri...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotor - comandă antenă...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -23186,6 +23190,559 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>Portul manipulatorului %1 nu s-a deschis</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>spre %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>poziție stabilă</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>fără citire</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>MEMORII…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>hartă azimutală de la QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box lipsă</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>se rotește spre %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>se rotește</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>oprit</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>DIRECȚIE LIBERĂ</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUT</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVAȚIE</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>EVOLUȚIA POZIȚIEI</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>se așteaptă eșantioane…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Locator, ex. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>SCURT</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>LUNG</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>scurt %1° · lung %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>QTH de referință: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>LEGĂTURI DE REȚEA</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Adrese de folosit pe telefon și în software-ul de stație:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Acces protejat prin token: clienții trebuie să îl prezinte.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Acces deschis în rețeaua locală. Pentru utilizare în afara casei folosește un VPN; nu deschide porturi pe router.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimut °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevație °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>ORIENTEAZĂ</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>N</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>NE</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>E</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>SE</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>S</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>SV</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>V</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>NV</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>MEMORII</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>MERGI</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Nicio memorie: dă un nume direcției curente și salveaz-o.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Numele memoriei</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>SALVEAZĂ AICI</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>pornit</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>oprit</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>ASCULTARE OPRITĂ</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n stație</numerusform><numerusform>%n stații</numerusform><numerusform>%n de stații</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>ORIENTEAZĂ</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>MEMORIE</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>CONEXIUNE LA CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotor</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>pornit</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>oprit</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Simulator</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>rotor simulat</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>control box real</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Port serial</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>alege…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Viteză</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Stare</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>conectat</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>lipsă</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Acces la rețea</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>telefon, web și software de stație</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>închis</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Token</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>gol = acces deschis</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>Portul, modelul și rețeaua se aplică imediat. Rotorul rămâne oprit până îl pornești.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>STAȚIE ȘI SIGURANȚĂ</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Indicativ</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>Locator QTH</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Deschiderea fasciculului: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Limite de azimut</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Poziție de park</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Oprește dacă legătura cade</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>pornit</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>oprit</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Stații auzite de Decodium</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>Indicativul și locatorul sunt cele setate în Decodium. Modificările se salvează imediat.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>FUNCȚIONARE</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Cadre trimise</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Cadre primite</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Răspunsuri pierdute</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Reconectări</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Activ de</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Clienți conectați</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>gata</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX LIPSĂ</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>SE ROTEȘTE</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>OPRIT</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n client</numerusform><numerusform>%n clienți</numerusform><numerusform>%n de clienți</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Treci la cadranul deschis</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Treci la cadranul de noapte</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>TRAFIC SERIAL</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 cadru</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotor - comandă PRO.SIS.TEL</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>COMANDĂ</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNOSTIC</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>SETĂRI</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>port rotctld %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>port WebSocket %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>port HTTP %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Detectare automată</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>Rotorul este oprit: activează-l în fila Setări.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Introdu cel puțin un unghi.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop trimis către control box.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>Spre %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Stația nu mai este în listă.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>Spre %1: %2° la %3 km</translation>
     </message>
 </context>
 </TS>

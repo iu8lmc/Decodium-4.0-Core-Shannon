@@ -8436,6 +8436,10 @@ Right-click: disconnect</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - decoder, keyer and macros...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotator - antenna control...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30325,6 +30329,559 @@ The default templates are sent as compact native frames.</translation>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>The keyer port %1 did not open</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>towards %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>stable position</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>no reading</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>MEMORIES…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>azimuthal map from the QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box missing</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>rotating towards %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>rotating</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>stopped</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>FREE DIRECTION</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUTH</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVATION</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>POSITION TREND</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>waiting for samples…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Locator, e.g. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>SHORT</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>LONG</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>short %1° · long %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>Reference QTH: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>NETWORK LINKS</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Addresses to use on the phone and station software:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Token-protected access: clients must present it.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimuth °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevation °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>AIM</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>N</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>NE</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>E</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>SE</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>S</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>SW</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>W</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>NW</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>MEMORIES</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>GO</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>No memories: name the current heading and save it.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Memory name</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>SAVE HERE</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>on</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>off</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>LISTENING OFF</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n station(s)</numerusform><numerusform>%n station(s)</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>AIM</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>MEMORY</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>CONTROL BOX CONNECTION</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotator</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>on</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>off</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Simulator</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>simulated rotator</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>real control box</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Serial port</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>choose…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Speed</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Status</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>connected</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>missing</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Network access</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>phone, web and station software</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>closed</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Token</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>empty = open access</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>Port, model and network apply immediately. The rotator stays off until you turn it on.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>STATION AND SAFETY</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Callsign</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>QTH locator</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Beamwidth: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Azimuth limits</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Park position</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Stop if the link drops</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>on</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>off</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Stations heard by Decodium</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>Callsign and locator are those set in Decodium. Changes are saved immediately.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>OPERATION</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Frames sent</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Frames received</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Lost replies</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Reconnections</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Up for</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Connected clients</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>ready</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX MISSING</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>ROTATING</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>STOPPED</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n client</numerusform><numerusform>%n client</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Switch to the light dial</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Switch to the night dial</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>SERIAL TRAFFIC</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 frame</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotator - PRO.SIS.TEL control</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>CONTROL</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNOSTICS</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>SETTINGS</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>rotctld port %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>WebSocket port %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>HTTP port %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Auto-detect</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>Rotator is off: enable it in the Settings tab.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Enter at least one angle.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop sent to the control box.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>Towards %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Station no longer in the list.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>Towards %1: %2° at %3 km</translation>
     </message>
 </context>
 </TS>

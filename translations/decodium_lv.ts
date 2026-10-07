@@ -8536,6 +8536,10 @@ Labais klikšķis: atvienot</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - dekodētājs, taustiņš un makrosi...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotors - antenas vadība...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30897,6 +30901,559 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>Taustiņa ports %1 neatvērās</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>virzienā %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>stabila pozīcija</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>nav rādījuma</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>ATMIŅAS…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>azimuta karte no QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box nav pieejams</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>griežas uz %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>griežas</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>apturēts</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>BRĪVS VIRZIENS</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUTS</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVĀCIJA</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>POZĪCIJAS TENDENCE</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>gaida paraugus…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Lokators, piem. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>ĪSAIS</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>GARAIS</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>īsais %1° · garais %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>Atsauces QTH: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>TĪKLA SAVIENOJUMI</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Adreses, ko lietot tālrunī un stacijas programmatūrā:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Ar tokenu aizsargāta piekļuve: klientiem tas jāuzrāda.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Atvērta piekļuve vietējā tīklā. Lietošanai ārpus mājas izmanto VPN; neatver portus maršrutētājā.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimuts °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevācija °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>CELT</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>Z</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>ZA</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>A</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>DA</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>D</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>DR</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>R</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>ZR</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>ATMIŅAS</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>GO</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Nav atmiņu: nosauc pašreizējo virzienu un saglabā to.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Atmiņas nosaukums</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>SAGLABĀT ŠEIT</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>ieslēgts</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>izslēgts</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>KLAUSĪŠANĀS IZSLĒGTA</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n stacija</numerusform><numerusform>%n stacijas</numerusform><numerusform>%n staciju</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>CELT</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>ATMIŅA</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>SAVIENOJUMS AR CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotors</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>ieslēgts</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>izslēgts</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Simulators</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>simulēts rotors</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>īsts control box</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Seriālais ports</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>izvēlēties…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modelis</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Ātrums</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Statuss</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>savienots</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>nav</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Tīkla piekļuve</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>tālrunis, tīmeklis un stacijas programmatūra</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>slēgts</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Tokens</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>tukšs = atvērta piekļuve</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>Ports, modelis un tīkls stājas spēkā uzreiz. Rotors paliek izslēgts, kamēr to neieslēdz.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>STACIJA UN DROŠĪBA</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Zvana signāls</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>QTH lokators</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Stara platums: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Azimuta robežas</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Park pozīcija</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Apturēt, ja savienojums pazūd</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>ieslēgts</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>izslēgts</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Decodium dzirdētās stacijas</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>Zvana signāls un lokators ir tie, kas iestatīti Decodium. Izmaiņas tiek saglabātas uzreiz.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>DARBĪBA</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Nosūtītie kadri</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Saņemtie kadri</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Zaudētās atbildes</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Atkārtotie savienojumi</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Darbības laiks</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Savienotie klienti</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>gatavs</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX NAV</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>GRIEŽAS</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>APTURĒTS</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n klients</numerusform><numerusform>%n klienti</numerusform><numerusform>%n klientu</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Pārslēgt uz gaišo ciparnīcu</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Pārslēgt uz nakts ciparnīcu</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>SERIĀLĀ SATIKSME</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 kadrs</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotors - PRO.SIS.TEL vadība</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>VADĪBA</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNOSTIKA</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>IESTATĪJUMI</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>rotctld ports %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>WebSocket ports %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>HTTP ports %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Automātiska noteikšana</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>Rotors ir izslēgts: ieslēdz to cilnē Iestatījumi.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Ievadi vismaz vienu leņķi.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop nosūtīts uz control box.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>Virzienā %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Stacijas vairs nav sarakstā.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>Virzienā %1: %2° %3 km attālumā</translation>
     </message>
 </context>
 </TS>

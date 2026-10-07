@@ -8524,6 +8524,10 @@ Højreklik: afbryd</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - dekoder, nøgle og makroer...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotor - antennestyring...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30883,6 +30887,559 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>Nøgleporten %1 blev ikke åbnet</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>mod %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>stabil position</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>ingen aflæsning</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>HUKOMMELSER…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>azimutkort fra QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box mangler</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>drejer mod %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>drejer</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>stoppet</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>FRI RETNING</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUT</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVATION</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>POSITIONSTENDENS</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>venter på målinger…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Locator, f.eks. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>KORT</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>LANG</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>kort %1° · lang %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>Reference-QTH: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>NETVÆRKSFORBINDELSER</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Adresser til brug på telefon og stationssoftware:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Token-beskyttet adgang: klienter skal fremvise den.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Åben adgang på det lokale netværk. Til brug hjemmefra gå via en VPN; åbn ikke porte på routeren.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimut °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevation °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>PEJL</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>N</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>NØ</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>Ø</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>SØ</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>S</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>SV</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>V</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>NV</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>HUKOMMELSER</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>KØR</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Ingen hukommelser: giv den aktuelle retning et navn og gem den.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Navn på hukommelse</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>GEM HER</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>til</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>fra</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>LYTTER FRA</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n station</numerusform><numerusform>%n stationer</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>PEJL</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>HUKOMMELSE</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>FORBINDELSE TIL CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotor</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>til</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>fra</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Simulator</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>simuleret rotor</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>rigtig control box</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Seriel port</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>vælg…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Hastighed</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Status</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>forbundet</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>mangler</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Netværksadgang</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>telefon, web og stationssoftware</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>lukket</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Token</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>tom = åben adgang</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>Port, model og netværk træder i kraft med det samme. Rotoren forbliver slukket, til du tænder den.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>STATION OG SIKKERHED</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Kaldesignal</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>QTH-locator</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Strålebredde: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Azimutgrænser</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Parkeringsposition</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Stop hvis forbindelsen falder ud</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>til</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>fra</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Stationer hørt af Decodium</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>Kaldesignal og locator er dem, der er indstillet i Decodium. Ændringer gemmes med det samme.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>DRIFT</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Sendte frames</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Modtagne frames</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Tabte svar</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Genforbindelser</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Oppetid</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Forbundne klienter</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>klar</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX MANGLER</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>DREJER</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>STOPPET</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n klient</numerusform><numerusform>%n klienter</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Skift til lyst urskive</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Skift til natlig urskive</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>SERIEL TRAFIK</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 frame</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotor - PRO.SIS.TEL-styring</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>STYRING</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNOSTIK</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>INDSTILLINGER</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>rotctld-port %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>WebSocket-port %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>HTTP-port %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Find automatisk</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>Rotoren er slukket: slå den til under fanen Indstillinger.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Indtast mindst én vinkel.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop sendt til control box.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>Mod %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Stationen er ikke længere på listen.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>Mod %1: %2° ved %3 km</translation>
     </message>
 </context>
 </TS>

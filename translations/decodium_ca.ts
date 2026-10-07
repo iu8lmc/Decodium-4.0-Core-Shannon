@@ -8524,6 +8524,10 @@ Clic dret: desconnecta</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - descodificador, manipulador i macros...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotor - control d'antena...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30885,6 +30889,559 @@ Les plantilles per defecte s&apos;envien com a trames natives compactes.</transl
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>El port del manipulador %1 no s'ha obert</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>cap a %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>posició estable</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>sense lectura</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>MEMÒRIES…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>mapa azimutal des del QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box absent</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>girant cap a %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>girant</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>aturat</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>DIRECCIÓ LLIURE</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUT</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVACIÓ</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>TENDÈNCIA DE POSICIÓ</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>esperant mostres…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Locador, p. ex. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>CURT</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>LLARG</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>curt %1° · llarg %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>QTH de referència: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>ENLLAÇOS DE XARXA</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Adreces que cal usar al telèfon i al programari d'estació:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Accés protegit amb token: els clients l'han de presentar.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Accés obert a la xarxa local. Per a l'ús fora de casa passa per una VPN; no obris ports al router.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimut °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevació °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>APUNTA</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>N</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>NE</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>E</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>SE</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>S</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>SO</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>O</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>NO</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>MEMÒRIES</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>VES-HI</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Cap memòria: posa nom al rumb actual i desa'l.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Nom de la memòria</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>DESA AQUÍ</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>activat</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>desactivat</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>ESCOLTA DESACTIVADA</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n estació</numerusform><numerusform>%n estacions</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>APUNTA</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>MEMÒRIA</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>CONNEXIÓ AL CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotor</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>activat</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>desactivat</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Simulador</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>rotor simulat</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>control box real</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Port sèrie</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>tria…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Velocitat</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Estat</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>connectat</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>absent</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Accés de xarxa</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>telèfon, web i programari d'estació</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>tancat</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Token</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>buit = accés obert</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>El port, el model i la xarxa s'apliquen immediatament. El rotor continua apagat fins que l'encenguis.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>ESTACIÓ I SEGURETAT</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Indicatiu</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>Locador QTH</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Amplada de feix: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Límits d'azimut</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Posició de park</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Atura si cau l'enllaç</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>activat</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>desactivat</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Estacions sentides per Decodium</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>L'indicatiu i el locador són els configurats a Decodium. Els canvis es desen immediatament.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>FUNCIONAMENT</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Trames enviades</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Trames rebudes</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Respostes perdudes</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Reconnexions</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Actiu des de fa</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Clients connectats</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>a punt</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX ABSENT</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>GIRANT</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>ATURAT</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n client</numerusform><numerusform>%n clients</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Canvia al dial clar</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Canvia al dial nocturn</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>TRÀNSIT SÈRIE</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 trama</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotor - control PRO.SIS.TEL</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>CONTROL</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNÒSTIC</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>CONFIGURACIÓ</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>port rotctld %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>port WebSocket %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>port HTTP %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Detecció automàtica</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>El rotor està apagat: activa'l a la pestanya Configuració.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Introdueix almenys un angle.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop enviat al control box.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>Cap a %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>L'estació ja no és a la llista.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>Cap a %1: %2° a %3 km</translation>
     </message>
 </context>
 </TS>

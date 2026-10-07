@@ -8521,6 +8521,10 @@ Right-click: disconnect</source>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - 解码器、键控器和宏...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>旋转器 - 天线控制...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30876,6 +30880,559 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>键控器端口 %1 未能打开</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>朝向 %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>位置稳定</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>无读数</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>驻留 %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>存储…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>以QTH为中心的方位图</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>控制盒缺失</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>正在转向 %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>正在旋转</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>已停止</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>自由方向</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>方位角</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>仰角</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>位置趋势</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>等待采样…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>定位符，例如 FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>短径</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>长径</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>短径 %1° · 长径 %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>参考QTH：%1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>网络链接</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>手机和电台软件使用的地址：</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>令牌保护访问：客户端必须出示令牌。</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>本地网络开放访问。在外使用请通过VPN；不要在路由器上开放端口。</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>方位角 °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>仰角 °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>对准</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>北</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>东北</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>东</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>东南</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>南</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>西南</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>西</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>西北</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>存储</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>执行</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>没有存储：为当前方向命名并保存。</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>存储名称</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>保存于此</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>开</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>关</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>监听关闭</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n 个电台</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>对准</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>存储</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>控制盒连接</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>旋转器</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>开</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>关</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>模拟器</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>模拟旋转器</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>真实控制盒</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>串口</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>选择…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>型号</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>速度</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 波特, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>已连接</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>缺失</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>网络访问</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>手机、网页和电台软件</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>已关闭</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>令牌</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>空 = 开放访问</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>端口、型号和网络立即生效。旋转器保持关闭，直到你将其打开。</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>电台与安全</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>呼号</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>QTH定位符</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>波束宽度：%1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>方位角限制</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>驻留位置</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>链路中断时停止</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>开</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>关</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Decodium听到的电台</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>呼号和定位符为Decodium中设置的值。更改会立即保存。</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>运行</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>已发送帧</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>已接收帧</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>丢失的应答</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>重新连接</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>运行时间</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>已连接客户端</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>控制盒</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>就绪</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>控制盒 %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>控制盒缺失</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>正在旋转</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>已停止</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n 个客户端</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>切换到浅色表盘</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>切换到夜间表盘</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>串口通信</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 帧</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>旋转器 - PRO.SIS.TEL 控制</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>控制</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>诊断</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>设置</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>rotctld 端口 %1：%2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>WebSocket 端口 %1：%2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>HTTP 端口 %1：%2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>自动检测</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>旋转器已关闭：请在“设置”选项卡中启用。</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>请至少输入一个角度。</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>已向控制盒发送停止。</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>朝向 %1：%2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>电台已不在列表中。</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>朝向 %1：%2°，%3 km</translation>
     </message>
 </context>
 </TS>

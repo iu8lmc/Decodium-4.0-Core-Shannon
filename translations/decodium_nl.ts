@@ -8532,6 +8532,10 @@ Rechtermuisklik: verbinding verbreken</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - decoder, keyer en macro's...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotor - antennebesturing...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30894,6 +30898,559 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>De keyerpoort %1 is niet geopend</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>richting %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>stabiele positie</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>geen meting</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>GEHEUGENS…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>azimutkaart vanaf de QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box ontbreekt</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>draait naar %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>draait</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>gestopt</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>VRIJE RICHTING</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUT</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVATIE</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>POSITIETREND</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>wachten op metingen…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Locator, bijv. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>KORT</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>LANG</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>kort %1° · lang %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>Referentie-QTH: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>NETWERKVERBINDINGEN</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Te gebruiken adressen op telefoon en stationssoftware:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Toegang met token: clients moeten het tonen.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Open toegang op het lokale netwerk. Gebruik buitenshuis een VPN; open geen poorten op de router.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimut °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevatie °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>RICHTEN</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>N</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>NO</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>O</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>ZO</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>Z</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>ZW</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>W</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>NW</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>GEHEUGENS</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>GA</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Geen geheugens: geef de huidige richting een naam en bewaar hem.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Naam van het geheugen</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>HIER OPSLAAN</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>aan</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>uit</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>LUISTEREN UIT</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n station</numerusform><numerusform>%n stations</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>RICHTEN</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>GEHEUGEN</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>VERBINDING MET CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotor</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>aan</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>uit</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Simulator</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>gesimuleerde rotor</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>echte control box</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Seriële poort</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>kies…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Snelheid</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Status</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>verbonden</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>ontbreekt</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Netwerktoegang</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>telefoon, web en stationssoftware</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>gesloten</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Token</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>leeg = open toegang</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>Poort, model en netwerk worden direct toegepast. De rotor blijft uit tot je hem inschakelt.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>STATION EN VEILIGHEID</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Roepletters</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>QTH-locator</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Bundelbreedte: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Azimutgrenzen</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Parkeerpositie</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Stoppen als de verbinding wegvalt</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>aan</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>uit</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Door Decodium gehoorde stations</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>Roepletters en locator zijn die uit Decodium. Wijzigingen worden direct opgeslagen.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>WERKING</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Verzonden frames</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Ontvangen frames</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Verloren antwoorden</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Heraansluitingen</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Actief sinds</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Verbonden clients</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>gereed</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX ONTBREEKT</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>DRAAIT</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>GESTOPT</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n client</numerusform><numerusform>%n clients</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Naar de lichte wijzerplaat</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Naar de nachtwijzerplaat</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>SERIEEL VERKEER</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 frame</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotor - PRO.SIS.TEL-besturing</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>BESTURING</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNOSE</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>INSTELLINGEN</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>rotctld-poort %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>WebSocket-poort %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>HTTP-poort %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Automatisch detecteren</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>De rotor is uit: schakel hem in op het tabblad Instellingen.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Voer minstens één hoek in.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop naar de control box gestuurd.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>Naar %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Station staat niet meer in de lijst.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>Naar %1: %2° op %3 km</translation>
     </message>
 </context>
 </TS>

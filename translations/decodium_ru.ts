@@ -8525,6 +8525,10 @@ Right-click: disconnect</source>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - декодер, манипулятор и макросы...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Поворотное устройство - управление антенной...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30917,6 +30921,559 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>Порт манипулятора %1 не открылся</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>в сторону %1°</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>положение стабильно</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>нет показаний</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>ПАРК %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>ПАМЯТЬ…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>азимутальная карта от QTH</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>control box отсутствует</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>поворот к %1°</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>вращается</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>остановлен</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>СВОБОДНОЕ НАПРАВЛЕНИЕ</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>АЗИМУТ</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>УГОЛ МЕСТА</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>ТРЕНД ПОЛОЖЕНИЯ</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>ожидание отсчётов…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Локатор, напр. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>КОРОТКИЙ</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>ДЛИННЫЙ</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>короткий %1° · длинный %2° · %3 км</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>Опорный QTH: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>СЕТЕВЫЕ СОЕДИНЕНИЯ</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Адреса для телефона и станционного ПО:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Доступ защищён токеном: клиенты должны его предъявить.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Открытый доступ в локальной сети. Для работы вне дома используйте VPN; не открывайте порты на роутере.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Азимут °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Угол места °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>НАВЕСТИ</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>С</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>СВ</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>В</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>ЮВ</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>Ю</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>ЮЗ</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>З</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>СЗ</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>ПАМЯТЬ</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>ПУСК</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Нет записей: назовите текущее направление и сохраните его.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Название записи</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>СОХРАНИТЬ ЗДЕСЬ</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>вкл</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>выкл</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>ПРОСЛУШИВАНИЕ ВЫКЛ</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n станция</numerusform><numerusform>%n станции</numerusform><numerusform>%n станций</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>НАВЕСТИ</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>ЗАПИСЬ</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>ПОДКЛЮЧЕНИЕ К CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Поворотное устройство</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>вкл</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>выкл</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Симулятор</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>имитация поворотного устройства</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>реальный control box</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Последовательный порт</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>выбрать…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Модель</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Скорость</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 бод, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Состояние</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>подключён</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>отсутствует</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Сетевой доступ</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>телефон, веб и станционное ПО</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>закрыт</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Токен</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>пусто = открытый доступ</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>Порт, модель и сеть применяются сразу. Поворотное устройство остаётся выключенным, пока вы его не включите.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>СТАНЦИЯ И БЕЗОПАСНОСТЬ</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Позывной</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>Локатор QTH</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Ширина луча: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Пределы азимута</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Парковочная позиция</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Остановить при обрыве связи</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>вкл</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>выкл</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>Станции, услышанные Decodium</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>Позывной и локатор берутся из настроек Decodium. Изменения сохраняются сразу.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>РАБОТА</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Отправлено кадров</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Принято кадров</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Потерянные ответы</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Переподключения</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Время работы</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Подключённые клиенты</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>готов</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>CONTROL BOX ОТСУТСТВУЕТ</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>ВРАЩАЕТСЯ</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>ОСТАНОВЛЕН</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n клиент</numerusform><numerusform>%n клиента</numerusform><numerusform>%n клиентов</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Светлый циферблат</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Ночной циферблат</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>ПОСЛЕДОВАТЕЛЬНЫЙ ТРАФИК</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 кадр</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Поворотное устройство - управление PRO.SIS.TEL</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>УПРАВЛЕНИЕ</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>ДИАГНОСТИКА</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>НАСТРОЙКИ</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>порт rotctld %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>порт WebSocket %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>порт HTTP %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Автоопределение</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>Поворотное устройство выключено: включите его на вкладке «Настройки».</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Введите хотя бы один угол.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Команда стоп отправлена на control box.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>К %1: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Станции больше нет в списке.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>К %1: %2° на %3 км</translation>
     </message>
 </context>
 </TS>

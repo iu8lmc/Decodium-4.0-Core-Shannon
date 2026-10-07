@@ -8522,6 +8522,10 @@ Jobb kattintás: lecsatlakozás</translation>
         <source>CW - decoder, keyer and macros...</source>
         <translation>CW - dekóder, kulcs és makrók...</translation>
     </message>
+    <message>
+        <source>Rotator - antenna control...</source>
+        <translation>Rotor - antennavezérlés...</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -30748,6 +30752,559 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
     <message>
         <source>The keyer port %1 did not open</source>
         <translation>A(z) %1 kulcsport nem nyílt meg</translation>
+    </message>
+</context>
+<context>
+    <name>BigReadout</name>
+    <message>
+        <source>towards %1°</source>
+        <translation>%1° felé</translation>
+    </message>
+    <message>
+        <source>stable position</source>
+        <translation>stabil pozíció</translation>
+    </message>
+    <message>
+        <source>no reading</source>
+        <translation>nincs leolvasás</translation>
+    </message>
+</context>
+<context>
+    <name>CommandBar</name>
+    <message>
+        <source>STOP</source>
+        <translation>STOP</translation>
+    </message>
+    <message>
+        <source>PARK %1°</source>
+        <translation>PARK %1°</translation>
+    </message>
+    <message>
+        <source>MEMORIES…</source>
+        <translation>MEMÓRIÁK…</translation>
+    </message>
+</context>
+<context>
+    <name>ControlPage</name>
+    <message>
+        <source>azimuthal map from the QTH</source>
+        <translation>azimutális térkép a QTH-ról</translation>
+    </message>
+</context>
+<context>
+    <name>DisplayPanel</name>
+    <message>
+        <source>control box missing</source>
+        <translation>a control box hiányzik</translation>
+    </message>
+    <message>
+        <source>rotating towards %1°</source>
+        <translation>forog %1° felé</translation>
+    </message>
+    <message>
+        <source>rotating</source>
+        <translation>forog</translation>
+    </message>
+    <message>
+        <source>stopped</source>
+        <translation>leállt</translation>
+    </message>
+    <message>
+        <source>FREE DIRECTION</source>
+        <translation>SZABAD IRÁNY</translation>
+    </message>
+    <message>
+        <source>AZIMUTH</source>
+        <translation>AZIMUT</translation>
+    </message>
+    <message>
+        <source>ELEVATION</source>
+        <translation>ELEVÁCIÓ</translation>
+    </message>
+</context>
+<context>
+    <name>HistoryStrip</name>
+    <message>
+        <source>POSITION TREND</source>
+        <translation>POZÍCIÓ TRENDJE</translation>
+    </message>
+    <message>
+        <source>waiting for samples…</source>
+        <translation>mintákra várakozás…</translation>
+    </message>
+</context>
+<context>
+    <name>LocatorBar</name>
+    <message>
+        <source>Locator, e.g. FN31pr</source>
+        <translation>Lokátor, pl. FN31pr</translation>
+    </message>
+    <message>
+        <source>SHORT</source>
+        <translation>RÖVID</translation>
+    </message>
+    <message>
+        <source>LONG</source>
+        <translation>HOSSZÚ</translation>
+    </message>
+    <message>
+        <source>short %1° · long %2° · %3 km</source>
+        <translation>rövid %1° · hosszú %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>Reference QTH: %1</source>
+        <translation>Referencia QTH: %1</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkPanel</name>
+    <message>
+        <source>NETWORK LINKS</source>
+        <translation>HÁLÓZATI KAPCSOLATOK</translation>
+    </message>
+    <message>
+        <source>Addresses to use on the phone and station software:</source>
+        <translation>Telefonon és az állomásszoftverben használandó címek:</translation>
+    </message>
+    <message>
+        <source>Token-protected access: clients must present it.</source>
+        <translation>Tokennel védett hozzáférés: a klienseknek be kell mutatniuk.</translation>
+    </message>
+    <message>
+        <source>Open access on the local network. For use away from home go through a VPN; do not open ports on the router.</source>
+        <translation>Nyílt hozzáférés a helyi hálózaton. Otthonon kívüli használathoz VPN-t használj; ne nyiss portokat a routeren.</translation>
+    </message>
+</context>
+<context>
+    <name>PointingPanel</name>
+    <message>
+        <source>Azimuth °</source>
+        <translation>Azimut °</translation>
+    </message>
+    <message>
+        <source>Elevation °</source>
+        <translation>Elevációs szög °</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>CÉLZÁS</translation>
+    </message>
+    <message>
+        <source>N</source>
+        <translation>É</translation>
+    </message>
+    <message>
+        <source>NE</source>
+        <translation>ÉK</translation>
+    </message>
+    <message>
+        <source>E</source>
+        <translation>K</translation>
+    </message>
+    <message>
+        <source>SE</source>
+        <translation>DK</translation>
+    </message>
+    <message>
+        <source>S</source>
+        <translation>D</translation>
+    </message>
+    <message>
+        <source>SW</source>
+        <translation>DNY</translation>
+    </message>
+    <message>
+        <source>W</source>
+        <translation>NY</translation>
+    </message>
+    <message>
+        <source>NW</source>
+        <translation>ÉNY</translation>
+    </message>
+</context>
+<context>
+    <name>PresetPanel</name>
+    <message>
+        <source>MEMORIES</source>
+        <translation>MEMÓRIÁK</translation>
+    </message>
+    <message>
+        <source>%1° / %2°</source>
+        <translation>%1° / %2°</translation>
+    </message>
+    <message>
+        <source>GO</source>
+        <translation>MEHET</translation>
+    </message>
+    <message>
+        <source>No memories: name the current heading and save it.</source>
+        <translation>Nincs memória: nevezd el az aktuális irányt, és mentsd el.</translation>
+    </message>
+    <message>
+        <source>Memory name</source>
+        <translation>Memória neve</translation>
+    </message>
+    <message>
+        <source>SAVE HERE</source>
+        <translation>MENTÉS ITT</translation>
+    </message>
+</context>
+<context>
+    <name>RotorSwitch</name>
+    <message>
+        <source>on</source>
+        <translation>be</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>ki</translation>
+    </message>
+</context>
+<context>
+    <name>SatelliteMap</name>
+    <message>
+        <source>DECODIUM %1</source>
+        <translation>DECODIUM %1</translation>
+    </message>
+    <message>
+        <source>LISTENING OFF</source>
+        <translation>HALLGATÁS KI</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n station(s)</source>
+        <translation><numerusform>%n állomás</numerusform></translation>
+    </message>
+    <message>
+        <source>%1 · %2° · %3 km</source>
+        <translation>%1 · %2° · %3 km</translation>
+    </message>
+    <message>
+        <source>AIM</source>
+        <translation>CÉLZÁS</translation>
+    </message>
+    <message>
+        <source>MEMORY</source>
+        <translation>MEMÓRIA</translation>
+    </message>
+    <message>
+        <source>© OpenStreetMap contributors</source>
+        <translation>© OpenStreetMap contributors</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>CONTROL BOX CONNECTION</source>
+        <translation>KAPCSOLAT A CONTROL BOXSZAL</translation>
+    </message>
+    <message>
+        <source>Rotator</source>
+        <translation>Rotor</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>be</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>ki</translation>
+    </message>
+    <message>
+        <source>Simulator</source>
+        <translation>Szimulátor</translation>
+    </message>
+    <message>
+        <source>simulated rotator</source>
+        <translation>szimulált rotor</translation>
+    </message>
+    <message>
+        <source>real control box</source>
+        <translation>valódi control box</translation>
+    </message>
+    <message>
+        <source>Serial port</source>
+        <translation>Soros port</translation>
+    </message>
+    <message>
+        <source>choose…</source>
+        <translation>válassz…</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modell</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Sebesség</translation>
+    </message>
+    <message>
+        <source>%1 baud, 8N1</source>
+        <translation>%1 baud, 8N1</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Állapot</translation>
+    </message>
+    <message>
+        <source>connected</source>
+        <translation>csatlakozva</translation>
+    </message>
+    <message>
+        <source>missing</source>
+        <translation>hiányzik</translation>
+    </message>
+    <message>
+        <source>Network access</source>
+        <translation>Hálózati hozzáférés</translation>
+    </message>
+    <message>
+        <source>phone, web and station software</source>
+        <translation>telefon, web és állomásszoftver</translation>
+    </message>
+    <message>
+        <source>closed</source>
+        <translation>zárva</translation>
+    </message>
+    <message>
+        <source>Token</source>
+        <translation>Token</translation>
+    </message>
+    <message>
+        <source>empty = open access</source>
+        <translation>üres = nyílt hozzáférés</translation>
+    </message>
+    <message>
+        <source>Port, model and network apply immediately. The rotator stays off until you turn it on.</source>
+        <translation>A port, a modell és a hálózat azonnal érvénybe lép. A rotor kikapcsolva marad, amíg be nem kapcsolod.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPanel</name>
+    <message>
+        <source>STATION AND SAFETY</source>
+        <translation>ÁLLOMÁS ÉS BIZTONSÁG</translation>
+    </message>
+    <message>
+        <source>Callsign</source>
+        <translation>Hívójel</translation>
+    </message>
+    <message>
+        <source>QTH locator</source>
+        <translation>QTH lokátor</translation>
+    </message>
+    <message>
+        <source>Beamwidth: %1°</source>
+        <translation>Nyalábszélesség: %1°</translation>
+    </message>
+    <message>
+        <source>Azimuth limits</source>
+        <translation>Azimut határok</translation>
+    </message>
+    <message>
+        <source>Park position</source>
+        <translation>Park pozíció</translation>
+    </message>
+    <message>
+        <source>Stop if the link drops</source>
+        <translation>Leállítás kapcsolatszakadáskor</translation>
+    </message>
+    <message>
+        <source>on</source>
+        <translation>be</translation>
+    </message>
+    <message>
+        <source>off</source>
+        <translation>ki</translation>
+    </message>
+    <message>
+        <source>Stations heard by Decodium</source>
+        <translation>A Decodium által hallott állomások</translation>
+    </message>
+    <message>
+        <source>Callsign and locator are those set in Decodium. Changes are saved immediately.</source>
+        <translation>A hívójel és a lokátor a Decodiumban beállítottak. A módosítások azonnal mentésre kerülnek.</translation>
+    </message>
+</context>
+<context>
+    <name>StatsPanel</name>
+    <message>
+        <source>OPERATION</source>
+        <translation>MŰKÖDÉS</translation>
+    </message>
+    <message>
+        <source>Frames sent</source>
+        <translation>Elküldött keretek</translation>
+    </message>
+    <message>
+        <source>Frames received</source>
+        <translation>Fogadott keretek</translation>
+    </message>
+    <message>
+        <source>Lost replies</source>
+        <translation>Elveszett válaszok</translation>
+    </message>
+    <message>
+        <source>Reconnections</source>
+        <translation>Újracsatlakozások</translation>
+    </message>
+    <message>
+        <source>Up for</source>
+        <translation>Üzemidő</translation>
+    </message>
+    <message>
+        <source>Connected clients</source>
+        <translation>Csatlakozott kliensek</translation>
+    </message>
+    <message>
+        <source>Control box</source>
+        <translation>Control box</translation>
+    </message>
+</context>
+<context>
+    <name>StatusStrip</name>
+    <message>
+        <source>ready</source>
+        <translation>kész</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation>%1 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TopBar</name>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX %1</source>
+        <translation>CONTROL BOX %1</translation>
+    </message>
+    <message>
+        <source>CONTROL BOX MISSING</source>
+        <translation>HIÁNYZIK A CONTROL BOX</translation>
+    </message>
+    <message>
+        <source>ROTATING</source>
+        <translation>FOROG</translation>
+    </message>
+    <message>
+        <source>STOPPED</source>
+        <translation>LEÁLLT</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n client</source>
+        <translation><numerusform>%n kliens</numerusform></translation>
+    </message>
+    <message>
+        <source>Switch to the light dial</source>
+        <translation>Váltás világos számlapra</translation>
+    </message>
+    <message>
+        <source>Switch to the night dial</source>
+        <translation>Váltás éjszakai számlapra</translation>
+    </message>
+</context>
+<context>
+    <name>TrafficPanel</name>
+    <message>
+        <source>SERIAL TRAFFIC</source>
+        <translation>SOROS FORGALOM</translation>
+    </message>
+    <message>
+        <source>%1 @ %2 8N1</source>
+        <translation>%1 @ %2 8N1</translation>
+    </message>
+    <message>
+        <source>%1 frame</source>
+        <translation>%1 keret</translation>
+    </message>
+</context>
+<context>
+    <name>RotorWindow</name>
+    <message>
+        <source>Rotator - PRO.SIS.TEL control</source>
+        <translation>Rotor - PRO.SIS.TEL vezérlés</translation>
+    </message>
+    <message>
+        <source>CONTROL</source>
+        <translation>VEZÉRLÉS</translation>
+    </message>
+    <message>
+        <source>DIAGNOSTICS</source>
+        <translation>DIAGNOSZTIKA</translation>
+    </message>
+    <message>
+        <source>SETTINGS</source>
+        <translation>BEÁLLÍTÁSOK</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::rotor::RotorModule</name>
+    <message>
+        <source>rotctld port %1: %2</source>
+        <translation>rotctld port %1: %2</translation>
+    </message>
+    <message>
+        <source>WebSocket port %1: %2</source>
+        <translation>WebSocket port %1: %2</translation>
+    </message>
+    <message>
+        <source>HTTP port %1: %2</source>
+        <translation>HTTP port %1: %2</translation>
+    </message>
+    <message>
+        <source>app</source>
+        <translation>app</translation>
+    </message>
+    <message>
+        <source>web</source>
+        <translation>web</translation>
+    </message>
+    <message>
+        <source>rotctld</source>
+        <translation>rotctld</translation>
+    </message>
+    <message>
+        <source>Auto-detect</source>
+        <translation>Automatikus felismerés</translation>
+    </message>
+    <message>
+        <source>Rotator is off: enable it in the Settings tab.</source>
+        <translation>A rotor ki van kapcsolva: kapcsold be a Beállítások lapon.</translation>
+    </message>
+    <message>
+        <source>Enter at least one angle.</source>
+        <translation>Adj meg legalább egy szöget.</translation>
+    </message>
+    <message>
+        <source>Stop sent to the control box.</source>
+        <translation>Stop elküldve a control boxnak.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2°</source>
+        <translation>%1 felé: %2°</translation>
+    </message>
+    <message>
+        <source>Station no longer in the list.</source>
+        <translation>Az állomás már nincs a listában.</translation>
+    </message>
+    <message>
+        <source>Towards %1: %2° at %3 km</source>
+        <translation>%1 felé: %2° %3 km-re</translation>
     </message>
 </context>
 </TS>
