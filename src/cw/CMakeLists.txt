@@ -25,6 +25,7 @@ add_library (decodium_cw STATIC
   WinKeyer.cpp        WinKeyer.h
   CwSerialPorts.cpp   CwSerialPorts.h
   CwMacros.cpp        CwMacros.h
+  CwController.cpp    CwController.h
   )
 target_include_directories (decodium_cw PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries (decodium_cw PUBLIC Qt6::Core Qt6::SerialPort PRIVATE decodium_ggmorse)
@@ -33,7 +34,7 @@ set_target_properties (decodium_cw PROPERTIES
   CXX_STANDARD_REQUIRED ON)
 
 if (BUILD_TESTING)
-  foreach (name test_cw_decoder test_cw_keyer test_winkeyer test_cw_macros)
+  foreach (name test_cw_decoder test_cw_keyer test_winkeyer test_cw_macros test_cw_controller)
     add_executable (${name} tests/${name}.cpp)
     target_link_libraries (${name} PRIVATE decodium_cw Qt6::Test)
     set_target_properties (${name} PROPERTIES
