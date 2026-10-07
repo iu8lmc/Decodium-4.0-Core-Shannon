@@ -1386,6 +1386,7 @@ endif ()
 
 # JTTY: il modo nuovo di WSJT-X 3.2, portato in C++ (niente Fortran).
 add_subdirectory (src/jtty)
+add_subdirectory (src/cw)
 
 if (BUILD_TESTING AND EXISTS ${CMAKE_SOURCE_DIR}/tests AND IS_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
   add_subdirectory (tests)
