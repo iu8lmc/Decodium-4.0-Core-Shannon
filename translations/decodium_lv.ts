@@ -2807,6 +2807,10 @@ Noklikšķiniet uz Monitor, lai sāktu</translation>
         <source>Transmit refused: %1</source>
         <translation>Pārraide noraidīta: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>Notiek CW pārraide</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8527,6 +8531,10 @@ Labais klikšķis: atvienot</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - attālā radiostacija caur serveri...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - dekodētājs, taustiņš un makrosi...</translation>
     </message>
 </context>
 <context>
@@ -30619,6 +30627,276 @@ Noklusējuma veidnes tiek sūtītas kā kompakti vietējie kadri.</translation>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>aizņemts: %1 pārraida</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MAKROSI</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>Vietturi tiek aizpildīti sūtot: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Kas paliek tukšs, tiek izlaists.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Pievienot taustiņu</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Atjaunot noklusējumus</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Aizvērt</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW PĀRRAIDE</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>Sūtīt CW kā</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Audio tonis (darbojas ar attālo radiostaciju)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Seriālais taustiņš (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Ports</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Atsvaidzināt</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Taustiņa līnija</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Sūtīt taustiņa signālu, nevis audio (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Tonis</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Tiek izmantota attālā radiostacija: pa savienojumu iet tikai taustiņa laiki, un toni veido vārteja pie radiostacijas.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Tiek izmantota attālā radiostacija: CW iet kā audio tonis pa savienojumu neatkarīgi no izvēles augstāk.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>Audio tonim radiostacijai jābūt USB vai DATA-U režīmā. Seriālais taustiņš vai WinKeyer vada radiostacijas taustiņa ieeju, un tai jābūt CW režīmā.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Tests (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer versija %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>nav CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>audio tonis</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>attālais taustiņš</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>seriālais taustiņš</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>attālā radiostacija</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Apturēt</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Makrosi…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Iestatījumi…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>CW pārraide nav gatava: nepieciešama pieslēgta radiostacija un pārraides audio izeja. Dekodētājs tāpat darbojas, tam vajag tikai radiostacijas audio.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>Taustiņš nav atvērts: izvēlieties tā portu iestatījumos. Dekodētājs tāpat darbojas.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Zvanīšanas signāls</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Saņ.</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Nr.</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Apmaiņa</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Vārds</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>Reģistrēt QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO reģistrēts</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Nav ko reģistrēt: ievadiet zvanīšanas signālu</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Labais klikšķis: mainīt</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Ātrums</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>rakstiet šeit un nospiediet Enter: tiks nosūtīts CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Sūtīt</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Dekodētājs</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Dekodētāja tonis</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Dekodētāja ātrums</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>fiksēts %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>fiksēts %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>fiksēts %1 Hz · troksnis</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>klausās…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Notīrīt</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>gaida audio…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>lasa</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>troksnis</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>CW pārraide nav gatava</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>CW audio neuzsāka</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>CW taustiņš nenonāca līdz attālajai radiostacijai</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>WinKeyer uz %1 neatvērās</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>Taustiņa ports %1 neatvērās</translation>
     </message>
 </context>
 </TS>

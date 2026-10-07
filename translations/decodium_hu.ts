@@ -2797,6 +2797,10 @@ A kezdéshez kattintson a Monitor gombra</translation>
         <source>Transmit refused: %1</source>
         <translation>Az adás megtagadva: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>CW adás folyamatban</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8513,6 +8517,10 @@ Jobb kattintás: lecsatlakozás</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - távoli rádió a kiszolgálón át...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - dekóder, kulcs és makrók...</translation>
     </message>
 </context>
 <context>
@@ -30470,6 +30478,276 @@ Az alapértelmezett sablonok tömör natív keretekként mennek ki.</translation
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>foglalt: %1 adásban van</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MAKRÓK</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>A helyőrzők küldéskor kitöltődnek: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Ami üres marad, kimarad.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Billentyű hozzáadása</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Alapértékek visszaállítása</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Bezárás</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW ADÁS</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>A CW küldése mint</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Hangjel (távoli rádióval is működik)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Soros kulcs (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Port</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Frissítés</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Kulcsvonal</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>A kulcsjelet küldje, ne a hangot (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Hang</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Távoli rádió van használatban: csak a kulcsolás időzítése megy át a kapcsolaton, a hangot a rádió melletti átjáró állítja elő.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Távoli rádió van használatban: a CW hangjelként megy át a kapcsolaton, bármit is választott fent.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>A hangjelhez a rádiót USB vagy DATA-U módba kell állítani. A soros kulcs vagy a WinKeyer a rádió saját kulcsbemenetét vezérli, és CW módot igényel.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Teszt (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer verzió: %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>nincs CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>hangjel</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>távoli kulcs</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>soros kulcs</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>távoli rádió</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Leállítás</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Makrók…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Beállítások…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>A CW adás nem áll készen: csatlakoztatott rádió és adás hangkimenet kell hozzá. A dekóder így is működik, csak a rádió hangja kell neki.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>A kulcs nincs megnyitva: válassza ki a portját a beállításokban. A dekóder így is működik.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Hívójel</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Vett</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Sz.</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Csere</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Név</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>QSO naplózása</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO naplózva</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Nincs mit naplózni: adja meg a hívójelet</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Jobb kattintás: módosítás</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Sebesség</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>írja ide és nyomjon Entert: CW-ben megy ki</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Küldés</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Dekóder</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Dekóder hangja</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Dekóder sebessége</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>fix %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>fix %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>fix %1 Hz · zaj</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>hallgatás…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Törlés</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>várakozás hangra…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>olvas</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>zaj</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>A CW adás nem áll készen</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>A CW hang nem indult el</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>A CW kulcs nem jutott el a távoli rádióhoz</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>A(z) %1 porton lévő WinKeyer nem nyílt meg</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>A(z) %1 kulcsport nem nyílt meg</translation>
     </message>
 </context>
 </TS>

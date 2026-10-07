@@ -4,6 +4,7 @@ namespace decodium::audio { class RttyRxRecovery; }
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+#include "RemoteRadioLink.h"
 #include "DecodeUiFilterPolicy.h"
 #include "NativeDecodeSecondaryWork.h"
 #include "RttyRigModeState.h"
@@ -1354,6 +1355,16 @@ public:
     bool   cwCanTransmit();
     bool   cwSendAudio(const QString& text, int wpm);
     void   cwAbortAudio();
+    // CW a tasto verso la radio remota (Decolink): invece dell'audio si mandano gli
+    // istanti del tasto, e il tono lo rigenera il gateway.
+    bool   cwRemoteKeySupported();
+    bool   cwRemoteSendKey(const QVector<CwKeyEvent>& events, int toneHz);
+    void   cwRemotePtt(bool on);
+    int    cwRemoteLeadMs();
+    // Registra un QSO fatto in CW: il modo nell'ADIF e' CW, non quello dell'applicazione.
+    Q_INVOKABLE bool registraQsoCw(const QString& nominativo, const QString& rstInviato,
+                                   const QString& rstRicevuto, const QString& nome,
+                                   const QString& qth, const QString& locatore);
     bool   rttyTxActive() const { return m_rttyTxActive; }
     void   rttyMandaAudioTx(const QVector<short>& campioni12k);
     void   setSpectrumVisible(bool v);
@@ -3303,6 +3314,8 @@ private:
     bool   m_spectrumVisible {true};
     bool   m_rttyInAscolto {false};
     bool   m_cwInAscolto {false};
+    bool   m_cwRemoteKeying {false};
+    QString m_logModeOverride;
 
     DecodiumThemeManager* m_themeManager  {nullptr};
     DecodiumPropagationManager* m_propagationManager {nullptr};

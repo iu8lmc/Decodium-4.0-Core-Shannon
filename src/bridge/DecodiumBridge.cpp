@@ -27608,6 +27608,13 @@ bool DecodiumBridge::transmitFt2LinkAudio(const QString& text,
 
 void DecodiumBridge::startTx()
 {
+    // Il CW a tasto verso la radio remota tiene il PTT: un altro modo che
+    // partisse adesso trasmetterebbe sopra.
+    if (m_cwRemoteKeying) {
+        bridgeLog(QStringLiteral("startTx: refused, CW remote keying in progress"));
+        emit errorMessage(tr("CW transmission in progress"));
+        return;
+    }
     // Refresh before waveform/audio-offset selection, not only at PTT time.
     if (m_q65Doppler && (m_q65Doppler->enabled() || m_q65Doppler->applied()))
         refreshQ65Doppler();
@@ -42996,6 +43003,48 @@ bool DecodiumBridge::cwSendAudio(const QString& text, int wpm)
     return m_transmitting;
 }
 
+bool DecodiumBridge::cwRemoteKeySupported()
+{
+    if (!m_decoPortUseRemote || m_transmitting || m_tuning || sstvTxActive() || m_rttyTxActive)
+        return false;
+    RemoteRadioLink* link = remoteLinkIfAny();
+    return link && link->supportsCwKey();
+}
+
+bool DecodiumBridge::cwRemoteSendKey(const QVector<CwKeyEvent>& events, int toneHz)
+{
+    RemoteRadioLink* link = remoteLinkIfAny();
+    return m_decoPortUseRemote && link && link->sendCwKey(events, toneHz);
+}
+
+// Il PTT della radio remota per il CW a tasto. Mentre e' alzato nessun altro
+// modo puo' partire: startTx() lo rifiuta.
+void DecodiumBridge::cwRemotePtt(bool on)
+{
+    RemoteRadioLink* link = remoteLinkIfAny();
+    m_cwRemoteKeying = on;
+    if (link)
+        link->setPtt(on, 0);
+    bridgeLog(QStringLiteral("CW remote key: PTT %1").arg(on ? QStringLiteral("on") : QStringLiteral("off")));
+}
+
+int DecodiumBridge::cwRemoteLeadMs()
+{
+    RemoteRadioLink* link = remoteLinkIfAny();
+    return link ? link->txAudioLeadMs() : 250;
+}
+
+bool DecodiumBridge::registraQsoCw(const QString& nominativo, const QString& rstInviato,
+                                   const QString& rstRicevuto, const QString& nome,
+                                   const QString& qth, const QString& locatore)
+{
+    m_logModeOverride = QStringLiteral("CW");
+    const bool ok = registraQsoRtty(nominativo, rstInviato, rstRicevuto, nome, qth, locatore);
+    if (!ok)
+        m_logModeOverride.clear();
+    return ok;
+}
+
 void DecodiumBridge::cwAbortAudio()
 {
     if (m_cwTxActive && (m_transmitting || m_tuning))
@@ -43808,7 +43857,8 @@ QVariantMap DecodiumBridge::pendingLogQsoPreview() const
         preview.insert(QStringLiteral("sent"), m_promptLogRptSent);
         preview.insert(QStringLiteral("rcvd"), m_promptLogRptRcvd);
         preview.insert(QStringLiteral("freq"), m_promptLogDialFreq);
-        preview.insert(QStringLiteral("mode"), m_promptLogMode.isEmpty() ? m_mode : m_promptLogMode);
+        preview.insert(QStringLiteral("mode"), !m_logModeOverride.isEmpty() ? m_logModeOverride
+                                               : (m_promptLogMode.isEmpty() ? m_mode : m_promptLogMode));
         preview.insert(QStringLiteral("timeOn"), logPromptDateTimeText(m_promptLogOn));
         preview.insert(QStringLiteral("timeOff"), logPromptDateTimeText(m_promptLogOff.isValid() ? m_promptLogOff : m_promptLogOn));
         preview.insert(QStringLiteral("comment"),
@@ -44013,8 +44063,9 @@ bool DecodiumBridge::registraQsoRtty(const QString& nominativo,
     // azzerarlo il primo registrato sarebbe anche l'ultimo.
     m_qsoLogged = false;
 
-    bridgeLog(QStringLiteral("RTTY: registro il collegamento con %1 (%2/%3)")
-                  .arg(call, rstInviato, rstRicevuto));
+    bridgeLog(QStringLiteral("%1: registro il collegamento con %2 (%3/%4)")
+                  .arg(m_logModeOverride.isEmpty() ? QStringLiteral("RTTY") : m_logModeOverride,
+                       call, rstInviato, rstRicevuto));
     logQso();
     return true;
 }
@@ -44044,6 +44095,7 @@ void DecodiumBridge::confirmLogQso()
 
 void DecodiumBridge::rejectPromptedLogQso()
 {
+    m_logModeOverride.clear();
     if (!m_logPromptOpen) {
         return;
     }
@@ -44785,6 +44837,11 @@ void DecodiumBridge::logQsoNow()
     QString logRptSent = m_reportSent.trimmed();
     QString logRptRcvd = m_reportReceived.trimmed();
     QString logMode = m_mode.trimmed();
+    // Un QSO registrato dal modulo CW porta il suo modo, una volta sola.
+    if (!m_logModeOverride.isEmpty()) {
+        logMode = m_logModeOverride;
+        m_logModeOverride.clear();
+    }
     double  logFreqHz = m_frequency;
     QDateTime utcOn = effectiveQsoLogTimeOnUtc();
     if (!utcOn.isValid()) {

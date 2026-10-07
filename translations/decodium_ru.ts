@@ -2794,6 +2794,10 @@ Click Monitor to start</source>
         <source>Transmit refused: %1</source>
         <translation>Передача отклонена: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>Идёт передача CW</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8516,6 +8520,10 @@ Right-click: disconnect</source>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - удалённая радиостанция через сервер...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - декодер, манипулятор и макросы...</translation>
     </message>
 </context>
 <context>
@@ -30639,6 +30647,276 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>занято: передаёт %1</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>МАКРОСЫ</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>Поля заполняются при отправке: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Что осталось пустым, отбрасывается.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Добавить клавишу</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Восстановить по умолчанию</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Закрыть</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>ПЕРЕДАЧА CW</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>Передавать CW как</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Звуковой тон (работает с удалённой радиостанцией)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Последовательный манипулятор (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Порт</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Обновить</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Линия манипуляции</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Передавать ключ, а не звук (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Тон</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Используется удалённая радиостанция: по каналу идут только тайминги манипуляции, а тон формирует шлюз рядом с радиостанцией.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Используется удалённая радиостанция: CW уходит звуковым тоном по каналу, что бы ни было выбрано выше.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>Для звукового тона радиостанция должна быть в USB или DATA-U. Последовательный манипулятор или WinKeyer управляет собственным входом манипуляции и требует режима CW.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Тест (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>Версия WinKeyer %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>нет CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>звуковой тон</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>удалённый ключ</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>последовательный манипулятор</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>удалённая радиостанция</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Стоп</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Макросы…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Настройка…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>Передача CW не готова: нужны подключённая радиостанция и звуковой выход для передачи. Декодер работает в любом случае, ему нужен только звук радиостанции.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>Манипулятор не открыт: выберите его порт в настройке. Декодер работает в любом случае.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Позывной</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Принят</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>№</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Обмен</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Имя</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>Записать QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO записан</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Нечего записывать: введите позывной</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Правый щелчок: изменить</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Скорость</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>пишите здесь и нажмите Enter: уйдёт в эфир в CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Отправить</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Декодер</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Тон декодера</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Авто</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Скорость декодера</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>фикс. %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>фикс. %1 Гц · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>фикс. %1 Гц · шум</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>авто · %1 · %2 Гц</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>прослушивание…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Очистить</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>ожидание звука…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>чтение</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>шум</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>Передача CW не готова</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>Звук CW не запустился</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>Ключ CW не дошёл до удалённой радиостанции</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>WinKeyer на %1 не открылся</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>Порт манипулятора %1 не открылся</translation>
     </message>
 </context>
 </TS>

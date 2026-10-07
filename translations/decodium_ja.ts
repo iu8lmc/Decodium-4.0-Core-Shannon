@@ -2792,6 +2792,10 @@ Monitor を押すと開始します</translation>
         <source>Transmit refused: %1</source>
         <translation>送信を拒否しました: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>CW 送信中です</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8513,6 +8517,10 @@ Right-click: disconnect</source>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - サーバー経由のリモート無線機...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - デコーダー、キーヤー、マクロ...</translation>
     </message>
 </context>
 <context>
@@ -30600,6 +30608,276 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>使用中: %1 が送信中</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>マクロ</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>送信時に埋められる項目: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}。空のままの項目は送られません。</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>キーを追加</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>初期値に戻す</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>閉じる</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW 送信</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>CW の送信方法</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>音声トーン(リモート無線機でも動作)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>シリアルキーヤー(DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>ポート</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>更新</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>キー線</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>音声ではなくキー操作を送る(Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>トーン</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>リモート無線機を使用中: 回線にはキー操作のタイミングだけが流れ、トーンは無線機の隣のゲートウェイが作ります。</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>リモート無線機を使用中: 上の選択にかかわらず、CW は音声トーンとして回線を通って送られます。</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>音声トーンは無線機を USB または DATA-U にする必要があります。シリアルキーヤーや WinKeyer は無線機のキー入力を操作するため、無線機を CW にしてください。</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>テスト (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer バージョン %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>CAT なし</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>音声トーン</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>リモートキー</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>シリアルキーヤー</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>リモート無線機</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>停止</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>マクロ…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>設定…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>CW 送信の準備ができていません。無線機の接続と送信用の音声出力が必要です。デコーダーは無線機の音声だけで動作します。</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>キーヤーが開いていません。設定でポートを選んでください。デコーダーは動作します。</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>コールサイン</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>受信</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>番号</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>交換</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名前</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>QSO を記録</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO を記録しました</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>記録するものがありません。コールサインを入力してください</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>右クリックで変更</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>速度</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>ここに入力して Enter: CW で送信されます</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>送信</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>デコーダー</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>デコーダートーン</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>自動</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>デコーダー速度</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>固定 %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>固定 %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>固定 %1 Hz · ノイズ</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>自動 · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>受信待機中…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>クリア</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>音声を待っています…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>読み取り中</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>ノイズ</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>CW 送信の準備ができていません</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>CW 音声が開始されませんでした</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>CW キーがリモート無線機に届きませんでした</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>%1 の WinKeyer を開けませんでした</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>キーヤーのポート %1 を開けませんでした</translation>
     </message>
 </context>
 </TS>

@@ -267,13 +267,44 @@ Window {
                     onActivated: (i) => win.cw.keyerLine = model[i]
                 }
             }
+            // Con una radio remota la scelta di sopra non conta: si decide qui
+            // come arriva il CW alla radio lontana.
+            RowLayout {
+                visible: win.remote
+                Layout.fillWidth: true
+                spacing: 10
+                CheckBox {
+                    text: qsTr("Send the key, not audio (Decolink)")
+                    checked: win.cw ? win.cw.remoteKey : true
+                    onToggled: win.cw.remoteKey = checked
+                }
+                Lbl { text: qsTr("Tone"); visible: !!win.cw && win.cw.remoteKey }
+                Slider {
+                    visible: !!win.cw && win.cw.remoteKey
+                    Layout.preferredWidth: 140
+                    from: 400
+                    to: 1000
+                    stepSize: 10
+                    value: win.cw ? win.cw.toneHz : 700
+                    onMoved: win.cw.toneHz = Math.round(value)
+                }
+                Text {
+                    visible: !!win.cw && win.cw.remoteKey
+                    color: win.cText
+                    font.family: win.mono
+                    font.pixelSize: 11
+                    text: qsTr("%1 Hz").arg(win.cw ? win.cw.toneHz : 700)
+                }
+            }
             Text {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: win.remote ? win.cWarn : win.cDim
                 font.pixelSize: 11
                 text: win.remote
-                      ? qsTr("A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen here.")
+                      ? (win.cw && win.cw.effectiveBackend === "remotekey"
+                         ? qsTr("A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.")
+                         : qsTr("A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above."))
                       : qsTr("The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.")
             }
             RowLayout {
@@ -314,6 +345,7 @@ Window {
                        ? (win.eng.frequency / 1e6).toFixed(6) + " MHz  " + win.eng.catMode
                        : qsTr("no CAT")) + "   ·   "
                       + (win.cw ? (win.cw.effectiveBackend === "audio" ? qsTr("audio tone")
+                                   : win.cw.effectiveBackend === "remotekey" ? qsTr("remote key")
                                    : win.cw.effectiveBackend === "serial" ? qsTr("serial keyer") : "WinKeyer") : "")
                       + (win.remote ? "   ·   " + qsTr("remote radio") : "")
             }

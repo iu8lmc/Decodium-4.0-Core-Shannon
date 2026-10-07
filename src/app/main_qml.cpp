@@ -4368,6 +4368,16 @@ int main(int argc, char* argv[])
         h.hisCall     = [&bridge] { return bridge.dxCall (); };
         h.canTransmit = [&bridge] { return bridge.cwCanTransmit (); };
         h.remoteRadio = [&bridge] { return bridge.decoPortUseRemote (); };
+        h.remoteKeySupported = [&bridge] { return bridge.cwRemoteKeySupported (); };
+        h.sendKey = [&bridge] (QVector<decodium::cw::KeyEvent> const& events, int toneHz) {
+            QVector<CwKeyEvent> out;
+            out.reserve (events.size ());
+            for (auto const& e : events)
+                out.append ({e.deltaMs, e.down});
+            return bridge.cwRemoteSendKey (out, toneHz);
+        };
+        h.remotePtt = [&bridge] (bool on) { bridge.cwRemotePtt (on); };
+        h.remoteLeadMs = [&bridge] { return bridge.cwRemoteLeadMs (); };
         h.sendAudio   = [&bridge] (QString const& t, int wpm) { return bridge.cwSendAudio (t, wpm); };
         h.abortAudio  = [&bridge] { bridge.cwAbortAudio (); };
         cwModule.setHooks (std::move (h));

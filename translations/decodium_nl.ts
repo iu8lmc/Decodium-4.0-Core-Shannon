@@ -2803,6 +2803,10 @@ Klik op Monitor om te starten</translation>
         <source>Transmit refused: %1</source>
         <translation>Zenden geweigerd: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>CW-zending bezig</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8523,6 +8527,10 @@ Rechtermuisklik: verbinding verbreken</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - radio op afstand via de server...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - decoder, keyer en macro's...</translation>
     </message>
 </context>
 <context>
@@ -30616,6 +30624,276 @@ De standaardsjablonen gaan als compacte native frames de lucht in.</translation>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>bezet: %1 zendt uit</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MACRO'S</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>De velden worden bij het verzenden ingevuld: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Wat leeg blijft, valt weg.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Toets toevoegen</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Standaardwaarden herstellen</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Sluiten</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW ZENDEN</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>CW verzenden als</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Audiotoon (werkt met een radio op afstand)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Seriële keyer (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Poort</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Vernieuwen</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Keylijn</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Stuur de toets, niet de audio (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Toon</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Er wordt een radio op afstand gebruikt: alleen de keytiming gaat over de verbinding, de toon maakt de gateway naast de radio.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Er wordt een radio op afstand gebruikt: de CW gaat als audiotoon over de verbinding, wat hierboven ook is gekozen.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>De audiotoon vraagt de radio in USB of DATA-U. Een seriële keyer of een WinKeyer bedient de eigen keyingang van de radio en vraagt de radio in CW.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Test (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer-versie %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>geen CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>audiotoon</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>key op afstand</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>seriële keyer</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>radio op afstand</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Stop</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Macro's…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Instellingen…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>CW-zenden is niet klaar: er is een verbonden radio en een audio-uitgang voor zenden nodig. De decoder werkt toch, die heeft alleen de audio van de radio nodig.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>De keyer is niet geopend: kies de poort in de instellingen. De decoder werkt toch.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Roepletters</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Ontv.</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Nr.</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Uitwisseling</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Naam</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>QSO loggen</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO gelogd</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Niets om te loggen: voer de roepletters in</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Rechtsklik: wijzigen</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Snelheid</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>typ hier en druk op Enter: het gaat uit in CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Verzenden</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Decoder</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Decodertoon</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Decodersnelheid</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>vast %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>vast %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>vast %1 Hz · ruis</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>luistert…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Wissen</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>wacht op audio…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>leest</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>ruis</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>CW-zenden is niet klaar</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>De CW-audio is niet gestart</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>De CW-toets bereikte de radio op afstand niet</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>De WinKeyer op %1 is niet geopend</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>De keyerpoort %1 is niet geopend</translation>
     </message>
 </context>
 </TS>

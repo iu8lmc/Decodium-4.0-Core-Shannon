@@ -2199,6 +2199,10 @@ Apasă Monitor pentru a începe</translation>
         <source>Transmit refused: %1</source>
         <translation>Transmisie refuzată: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>Transmisie CW în curs</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -7799,6 +7803,10 @@ Clic dreapta: deconectează</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - radio la distanță prin server...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - decodor, manipulator și macrouri...</translation>
     </message>
 </context>
 <context>
@@ -22908,6 +22916,276 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>ocupat: %1 transmite</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MACROURI</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>Câmpurile se completează la trimitere: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Ce rămâne gol se omite.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Adaugă o tastă</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Restabilește valorile implicite</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Închide</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>TRANSMISIE CW</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>Trimite CW ca</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Ton audio (funcționează cu un radio la distanță)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Manipulator serial (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Port</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Reîmprospătează</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Linie de manipulare</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Trimite manipularea, nu audio (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Ton</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Se folosește un radio la distanță: pe legătură merg doar timpii de manipulare, iar tonul îl produce gateway-ul de lângă radio.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Se folosește un radio la distanță: CW pleacă ca ton audio pe legătură, indiferent ce s-a ales mai sus.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>Tonul audio cere radioul în USB sau DATA-U. Un manipulator serial sau un WinKeyer acționează intrarea de manipulare a radioului și cere radioul în CW.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Test (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>Versiune WinKeyer %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>fără CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>ton audio</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>manipulare la distanță</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>manipulator serial</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>radio la distanță</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Oprește</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Macrouri…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Setări…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>Transmisia CW nu este gata: are nevoie de radioul conectat și de o ieșire audio de transmisie. Decodorul funcționează oricum, are nevoie doar de audio de la radio.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>Manipulatorul nu este deschis: alegeți portul în setări. Decodorul funcționează oricum.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Indicativ</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Primit</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Nr.</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Schimb</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nume</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>Înregistrează QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO înregistrat</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Nimic de înregistrat: introduceți indicativul</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Clic dreapta: modifică</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Viteză</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>scrieți aici și apăsați Enter: pleacă în CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Trimite</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Decodor</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Ton decodor</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Viteza decodorului</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>fix %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>fix %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>fix %1 Hz · zgomot</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>ascultă…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Șterge</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>se așteaptă audio…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>citește</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>zgomot</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>Transmisia CW nu este gata</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>Audio CW nu a pornit</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>Manipularea CW nu a ajuns la radioul la distanță</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>WinKeyer de pe %1 nu s-a deschis</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>Portul manipulatorului %1 nu s-a deschis</translation>
     </message>
 </context>
 </TS>

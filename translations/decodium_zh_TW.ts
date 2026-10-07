@@ -2792,6 +2792,10 @@ Click Monitor to start</source>
         <source>Transmit refused: %1</source>
         <translation>發射被拒絕：%1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>CW 正在發射</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8512,6 +8516,10 @@ Right-click: disconnect</source>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - 透過伺服器使用遠端電台...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - 解碼器、鍵控器和巨集...</translation>
     </message>
 </context>
 <context>
@@ -30597,6 +30605,276 @@ The default templates are sent as compact native frames.</source>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>佔用：%1 正在發射</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>巨集</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>傳送時填入的預留位置：{MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}。留空的內容會被捨棄。</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>新增按鍵</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>還原預設值</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>關閉</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW 發射</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>CW 傳送方式</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>音訊音調（適用於遠端電台）</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>序列埠鍵控器（DTR / RTS）</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>連接埠</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>重新整理</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>鍵控線</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>傳送鍵控而不是音訊（Decolink）</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>音調</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>正在使用遠端電台：連結上只傳送鍵控時序，音調由電台旁的閘道產生。</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>正在使用遠端電台：無論上面如何選擇，CW 都以音訊音調經連結傳送。</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>音訊音調需要電台處於 USB 或 DATA-U。序列埠鍵控器或 WinKeyer 操作電台自身的鍵控輸入，需要電台處於 CW。</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>測試 (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer 版本 %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>無 CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>音訊音調</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>遠端鍵控</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>序列埠鍵控器</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>遠端電台</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>停止</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>巨集…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>設定…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>CW 發射未就緒：需要已連線的電台和發射音訊輸出。解碼器仍可運作，它只需要電台的音訊。</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>鍵控器未開啟：請在設定中選擇其連接埠。解碼器仍可運作。</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>呼號</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>收到</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>序號</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>交換</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>姓名</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>記錄 QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO 已記錄</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>沒有可記錄的內容：請輸入呼號</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>按右鍵：修改</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>速度</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>在此輸入並按 Enter：以 CW 發出</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>傳送</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>解碼器</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>解碼音調</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>自動</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>解碼速度</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>固定 %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>固定 %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>固定 %1 Hz · 雜訊</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>自動 · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>正在監聽…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>正在等待音訊…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>正在讀取</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>雜訊</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>CW 發射未就緒</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>CW 音訊未啟動</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>CW 鍵控未到達遠端電台</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>%1 上的 WinKeyer 無法開啟</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>鍵控器連接埠 %1 無法開啟</translation>
     </message>
 </context>
 </TS>

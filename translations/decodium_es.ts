@@ -2867,6 +2867,10 @@ Pulsa Monitor para empezar</translation>
         <source>Transmit refused: %1</source>
         <translation>Transmisión rechazada: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>Transmisión CW en curso</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8680,6 +8684,10 @@ Clic derecho: desconectar</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - radio remota a través del servidor...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - decodificador, manipulador y macros...</translation>
     </message>
 </context>
 <context>
@@ -31114,6 +31122,276 @@ Las plantillas por defecto se envían como tramas nativas compactas.</translatio
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>ocupado: %1 está transmitiendo</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MACROS</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>Los huecos se rellenan al enviar: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Lo que queda vacío se omite.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Añadir una tecla</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Restaurar los valores predeterminados</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Cerrar</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>TRANSMISIÓN CW</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>Enviar el CW como</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Tono de audio (funciona con una radio remota)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Manipulador serie (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Puerto</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Actualizar</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Línea de manipulación</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Enviar la manipulación, no el audio (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Tono</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Se usa una radio remota: por el enlace solo van los tiempos de la manipulación, y el gateway junto a la radio genera el tono.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Se usa una radio remota: el CW sale como tono de audio por el enlace, sea lo que sea lo elegido arriba.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>El tono de audio necesita la radio en USB o DATA-U. Un manipulador serie o un WinKeyer actúa sobre la entrada de manipulador de la radio y necesita la radio en CW.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Prueba (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>Versión del WinKeyer %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>sin CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>tono de audio</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>manipulación remota</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>manipulador serie</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>radio remota</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Detener</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Macros…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Configuración…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>La transmisión CW no está lista: necesita la radio conectada y una salida de audio de transmisión. El decodificador funciona igualmente, solo necesita el audio de la radio.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>El manipulador no está abierto: elige su puerto en la configuración. El decodificador funciona igualmente.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Indicativo</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Recib.</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Nº</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Intercambio</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nombre</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>Registrar el QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO registrado</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Nada que registrar: introduce el indicativo</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Clic derecho: cambiarla</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Velocidad</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>escribe aquí y pulsa Intro: sale en CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Enviar</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Decodificador</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Tono del decodificador</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Velocidad del decodificador</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>fija %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>fija %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>fija %1 Hz · ruido</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>escuchando…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Borrar</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>esperando audio…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>leyendo</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>ruido</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>La transmisión CW no está lista</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>El audio CW no se inició</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>La manipulación CW no llegó a la radio remota</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>El WinKeyer en %1 no se abrió</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>El puerto del manipulador %1 no se abrió</translation>
     </message>
 </context>
 </TS>

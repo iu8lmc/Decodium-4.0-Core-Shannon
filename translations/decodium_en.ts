@@ -2735,6 +2735,10 @@ Click Monitor to start</translation>
         <source>Transmit refused: %1</source>
         <translation>Transmit refused: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>CW transmission in progress</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8427,6 +8431,10 @@ Right-click: disconnect</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - remote radio through the server...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - decoder, keyer and macros...</translation>
     </message>
 </context>
 <context>
@@ -30047,6 +30055,276 @@ The default templates are sent as compact native frames.</translation>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>busy: %1 is transmitting</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MACROS</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Add a key</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Restore the defaults</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Close</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW TRANSMIT</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>Send CW as</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Audio tone (works with a remote radio)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Serial keyer (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Port</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Refresh</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Key line</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Send the key, not audio (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Tone</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Test (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer version %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>no CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>audio tone</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>remote key</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>serial keyer</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>remote radio</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Stop</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Macros…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Setup…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>The keyer is not open: choose its port in Setup. The decoder works anyway.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Call</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Rcvd</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Nr</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Exch</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Name</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>Log QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO logged</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Nothing to log: enter the call</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Right click: change it</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Speed</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>write here and press Enter: it goes out in CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Send</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Decoder</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Decoder tone</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Decoder speed</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>fixed %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>fixed %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>fixed %1 Hz · noise</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>listening…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Clear</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>waiting for audio…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>reading</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>noise</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>CW transmit is not ready</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>The CW audio did not start</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>The CW key did not reach the remote radio</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>The WinKeyer on %1 did not open</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>The keyer port %1 did not open</translation>
     </message>
 </context>
 </TS>

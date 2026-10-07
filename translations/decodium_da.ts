@@ -2794,6 +2794,10 @@ Klik på Monitor for at starte</translation>
         <source>Transmit refused: %1</source>
         <translation>Afsendelse afvist: %1</translation>
     </message>
+    <message>
+        <source>CW transmission in progress</source>
+        <translation>CW-sending i gang</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -8515,6 +8519,10 @@ Højreklik: afbryd</translation>
     <message>
         <source>Decolink - remote radio through the server...</source>
         <translation>Decolink - fjernradio via serveren...</translation>
+    </message>
+    <message>
+        <source>CW - decoder, keyer and macros...</source>
+        <translation>CW - dekoder, nøgle og makroer...</translation>
     </message>
 </context>
 <context>
@@ -30605,6 +30613,276 @@ Standardskabelonerne sendes som kompakte native rammer.</translation>
     <message>
         <source>busy: %1 is transmitting</source>
         <translation>optaget: %1 sender</translation>
+    </message>
+</context>
+<context>
+    <name>CwWindow</name>
+    <message>
+        <source>CW</source>
+        <translation>CW</translation>
+    </message>
+    <message>
+        <source>MACROS</source>
+        <translation>MAKROER</translation>
+    </message>
+    <message>
+        <source>Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.</source>
+        <translation>Felterne udfyldes ved afsendelse: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Hvad der er tomt udelades.</translation>
+    </message>
+    <message>
+        <source>Add a key</source>
+        <translation>Tilføj en tast</translation>
+    </message>
+    <message>
+        <source>Restore the defaults</source>
+        <translation>Gendan standardværdier</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Luk</translation>
+    </message>
+    <message>
+        <source>CW TRANSMIT</source>
+        <translation>CW-SENDING</translation>
+    </message>
+    <message>
+        <source>Send CW as</source>
+        <translation>Send CW som</translation>
+    </message>
+    <message>
+        <source>Audio tone (works with a remote radio)</source>
+        <translation>Lydtone (virker med en fjernradio)</translation>
+    </message>
+    <message>
+        <source>Serial keyer (DTR / RTS)</source>
+        <translation>Seriel nøgle (DTR / RTS)</translation>
+    </message>
+    <message>
+        <source>K1EL WinKeyer</source>
+        <translation>K1EL WinKeyer</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>Port</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Opdater</translation>
+    </message>
+    <message>
+        <source>Key line</source>
+        <translation>Nøgle-linje</translation>
+    </message>
+    <message>
+        <source>Send the key, not audio (Decolink)</source>
+        <translation>Send nøglen, ikke lyd (Decolink)</translation>
+    </message>
+    <message>
+        <source>Tone</source>
+        <translation>Tone</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1 Hz</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.</source>
+        <translation>Der bruges en fjernradio: kun nøgletiderne sendes over forbindelsen, og gatewayen ved radioen laver tonen.</translation>
+    </message>
+    <message>
+        <source>A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above.</source>
+        <translation>Der bruges en fjernradio: CW sendes som lydtone over forbindelsen, uanset hvad der er valgt ovenfor.</translation>
+    </message>
+    <message>
+        <source>The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW.</source>
+        <translation>Lydtonen kræver radioen i USB eller DATA-U. En seriel nøgle eller en WinKeyer styrer radioens egen nøgleindgang og kræver radioen i CW.</translation>
+    </message>
+    <message>
+        <source>Test (V)</source>
+        <translation>Test (V)</translation>
+    </message>
+    <message>
+        <source>WinKeyer version %1</source>
+        <translation>WinKeyer-version %1</translation>
+    </message>
+    <message>
+        <source>no CAT</source>
+        <translation>ingen CAT</translation>
+    </message>
+    <message>
+        <source>audio tone</source>
+        <translation>lydtone</translation>
+    </message>
+    <message>
+        <source>remote key</source>
+        <translation>fjernnøgle</translation>
+    </message>
+    <message>
+        <source>serial keyer</source>
+        <translation>seriel nøgle</translation>
+    </message>
+    <message>
+        <source>remote radio</source>
+        <translation>fjernradio</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Stop</translation>
+    </message>
+    <message>
+        <source>Macros…</source>
+        <translation>Makroer…</translation>
+    </message>
+    <message>
+        <source>Setup…</source>
+        <translation>Opsætning…</translation>
+    </message>
+    <message>
+        <source>CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.</source>
+        <translation>CW-sending er ikke klar: den kræver forbundet radio og en lydudgang til sending. Dekoderen virker alligevel, den bruger kun radioens lyd.</translation>
+    </message>
+    <message>
+        <source>The keyer is not open: choose its port in Setup. The decoder works anyway.</source>
+        <translation>Nøglen er ikke åben: vælg dens port i opsætningen. Dekoderen virker alligevel.</translation>
+    </message>
+    <message>
+        <source>Call</source>
+        <translation>Kaldesignal</translation>
+    </message>
+    <message>
+        <source>RST</source>
+        <translation>RST</translation>
+    </message>
+    <message>
+        <source>Rcvd</source>
+        <translation>Modt.</translation>
+    </message>
+    <message>
+        <source>Nr</source>
+        <translation>Nr.</translation>
+    </message>
+    <message>
+        <source>Exch</source>
+        <translation>Udveksl.</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Navn</translation>
+    </message>
+    <message>
+        <source>Log QSO</source>
+        <translation>Log QSO</translation>
+    </message>
+    <message>
+        <source>QSO logged</source>
+        <translation>QSO logget</translation>
+    </message>
+    <message>
+        <source>Nothing to log: enter the call</source>
+        <translation>Intet at logge: indtast kaldesignalet</translation>
+    </message>
+    <message>
+        <source>Right click: change it</source>
+        <translation>Højreklik: ændr den</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Hastighed</translation>
+    </message>
+    <message>
+        <source>%1 wpm</source>
+        <translation>%1 wpm</translation>
+    </message>
+    <message>
+        <source>write here and press Enter: it goes out in CW</source>
+        <translation>skriv her og tryk Enter: det sendes i CW</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Send</translation>
+    </message>
+    <message>
+        <source>Decoder</source>
+        <translation>Dekoder</translation>
+    </message>
+    <message>
+        <source>Decoder tone</source>
+        <translation>Dekodertone</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Auto</translation>
+    </message>
+    <message>
+        <source>Decoder speed</source>
+        <translation>Dekoderhastighed</translation>
+    </message>
+    <message>
+        <source>fixed %1 WPM</source>
+        <translation>fast %1 WPM</translation>
+    </message>
+    <message>
+        <source>%1 WPM</source>
+        <translation>%1 WPM</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · %2</source>
+        <translation>fast %1 Hz · %2</translation>
+    </message>
+    <message>
+        <source>fixed %1 Hz · noise</source>
+        <translation>fast %1 Hz · støj</translation>
+    </message>
+    <message>
+        <source>auto · %1 · %2 Hz</source>
+        <translation>auto · %1 · %2 Hz</translation>
+    </message>
+    <message>
+        <source>listening…</source>
+        <translation>lytter…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Ryd</translation>
+    </message>
+    <message>
+        <source>waiting for audio…</source>
+        <translation>venter på lyd…</translation>
+    </message>
+    <message>
+        <source>F: %1 Hz · S: %2 WPM · C: %3</source>
+        <translation>F: %1 Hz · S: %2 WPM · C: %3</translation>
+    </message>
+    <message>
+        <source>reading</source>
+        <translation>læser</translation>
+    </message>
+    <message>
+        <source>noise</source>
+        <translation>støj</translation>
+    </message>
+</context>
+<context>
+    <name>decodium::cw::CwController</name>
+    <message>
+        <source>CW transmit is not ready</source>
+        <translation>CW-sending er ikke klar</translation>
+    </message>
+    <message>
+        <source>The CW audio did not start</source>
+        <translation>CW-lyden startede ikke</translation>
+    </message>
+    <message>
+        <source>The CW key did not reach the remote radio</source>
+        <translation>CW-nøglen nåede ikke fjernradioen</translation>
+    </message>
+    <message>
+        <source>The WinKeyer on %1 did not open</source>
+        <translation>WinKeyer på %1 blev ikke åbnet</translation>
+    </message>
+    <message>
+        <source>The keyer port %1 did not open</source>
+        <translation>Nøgleporten %1 blev ikke åbnet</translation>
     </message>
 </context>
 </TS>
