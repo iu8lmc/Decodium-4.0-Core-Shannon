@@ -1,6 +1,7 @@
 #pragma once
 namespace decodium::audio { class RttyRxRecovery; }
 #include <QObject>
+#include "CwSidetone.h"
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
@@ -3318,6 +3319,8 @@ private:
     bool   m_rttyInAscolto {false};
     bool   m_cwInAscolto {false};
     bool   m_cwRemoteKeying {false};
+    // Il tono del CW a tasto remoto, sentito sulla scheda audio locale.
+    decodium::cw::CwSidetone* m_cwSidetone {nullptr};
     QString m_logModeOverride;
 
     DecodiumThemeManager* m_themeManager  {nullptr};

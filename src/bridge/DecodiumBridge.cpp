@@ -161,6 +161,7 @@
 #include <QAudioDevice>
 #include <QAudioFormat>
 #include <QAudioSink>
+#include "CwSidetone.h"
 #include <QBuffer>
 #include <algorithm>
 #include <QMediaDevices>
@@ -43041,7 +43042,21 @@ bool DecodiumBridge::cwRemoteKeySupported()
 bool DecodiumBridge::cwRemoteSendKey(const QVector<CwKeyEvent>& events, int toneHz)
 {
     RemoteRadioLink* link = remoteLinkIfAny();
-    return m_decoPortUseRemote && link && link->sendCwKey(events, toneHz);
+    const bool sent = m_decoPortUseRemote && link && link->sendCwKey(events, toneHz);
+    if (sent) {
+        // Il tono lo fa il gateway accanto alla radio: qui lo stesso ritmo
+        // diventa il tono che sente chi sta davanti a Decodium.
+        if (!m_cwSidetone)
+            m_cwSidetone = new decodium::cw::CwSidetone(this);
+        QList<int> deltas;
+        QList<bool> down;
+        for (const CwKeyEvent& ev : events) {
+            deltas.append(ev.deltaMs);
+            down.append(ev.down);
+        }
+        m_cwSidetone->enqueue(deltas, down, toneHz);
+    }
+    return sent;
 }
 
 // Il PTT della radio remota per il CW a tasto. Mentre e' alzato nessun altro
@@ -43050,6 +43065,8 @@ void DecodiumBridge::cwRemotePtt(bool on)
 {
     RemoteRadioLink* link = remoteLinkIfAny();
     m_cwRemoteKeying = on;
+    if (!on && m_cwSidetone)
+        m_cwSidetone->clear();
     if (link)
         link->setPtt(on, 0);
     bridgeLog(QStringLiteral("CW remote key: PTT %1").arg(on ? QStringLiteral("on") : QStringLiteral("off")));

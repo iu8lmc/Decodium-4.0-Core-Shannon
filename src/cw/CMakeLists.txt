@@ -27,9 +27,10 @@ add_library (decodium_cw STATIC
   CwMacros.cpp        CwMacros.h
   CwTiming.cpp        CwTiming.h
   CwController.cpp    CwController.h
+  CwSidetone.cpp      CwSidetone.h
   )
 target_include_directories (decodium_cw PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries (decodium_cw PUBLIC Qt6::Core Qt6::SerialPort PRIVATE decodium_ggmorse)
+target_link_libraries (decodium_cw PUBLIC Qt6::Core Qt6::SerialPort Qt6::Multimedia PRIVATE decodium_ggmorse)
 set_target_properties (decodium_cw PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED ON)
