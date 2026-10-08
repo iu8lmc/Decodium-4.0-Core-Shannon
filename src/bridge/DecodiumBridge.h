@@ -381,6 +381,8 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool decoPortUseRemote READ decoPortUseRemote WRITE setDecoPortUseRemote NOTIFY decoPortUseRemoteChanged)
     // L'ascolto in altoparlante e' un'altra cosa dal decodificare: si puo'
     // volere l'uno senza l'altro.
+    Q_PROPERTY(int remoteRxVolume READ remoteRxVolume WRITE setRemoteRxVolume NOTIFY remoteRxAudioChanged)
+    Q_PROPERTY(QString remoteRxDevice READ remoteRxDevice WRITE setRemoteRxDevice NOTIFY remoteRxAudioChanged)
     Q_PROPERTY(bool decoPortMonitor READ decoPortMonitor WRITE setDecoPortMonitor NOTIFY decoPortMonitorChanged)
     // Spot condivisi: il gemello della CAT condivisa, per gli spot del
     // cluster invece che per la radio.
@@ -573,6 +575,9 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool  rttyInAscolto       READ rttyInAscolto       WRITE setRttyInAscolto       NOTIFY rttyInAscoltoChanged)
     // CW: la finestra del modulo CW la accende mentre e' aperta; il bridge le consegna l'audio
     // della radio (locale o remota) a 12 kHz.
+    Q_PROPERTY(bool cwMonitorEnabled READ cwMonitorEnabled WRITE setCwMonitorEnabled NOTIFY cwMonitorChanged)
+    Q_PROPERTY(int cwMonitorVolume READ cwMonitorVolume WRITE setCwMonitorVolume NOTIFY cwMonitorChanged)
+    Q_PROPERTY(QString cwMonitorDevice READ cwMonitorDevice WRITE setCwMonitorDevice NOTIFY cwMonitorChanged)
     Q_PROPERTY(bool  cwInAscolto         READ cwInAscolto         WRITE setCwInAscolto         NOTIFY cwInAscoltoChanged)
 
     // === B6 — cty.dat AUTO-UPDATE ===
@@ -1110,6 +1115,11 @@ public:
     Q_INVOKABLE void setDecoPortUseRemote(bool on);
     bool decoPortMonitor() const { return m_decoPortMonitor; }
     Q_INVOKABLE void setDecoPortMonitor(bool on);
+    int remoteRxVolume() const;
+    QString remoteRxDevice() const;
+    void setRemoteRxVolume(int volume);
+    void setRemoteRxDevice(const QString& device);
+    Q_SIGNAL void remoteRxAudioChanged();
     Q_INVOKABLE bool hasDecoPortPassword() const;
     Q_INVOKABLE bool setDecoPortPassword(const QString& password);
     Q_INVOKABLE void clearDecoPortPassword();
@@ -1358,6 +1368,16 @@ public:
     void   cwAbortAudio();
     // CW a tasto verso la radio remota (Decolink): invece dell'audio si mandano gli
     // istanti del tasto, e il tono lo rigenera il gateway.
+    bool cwMonitorEnabled() const;
+    int cwMonitorVolume() const;
+    QString cwMonitorDevice() const;
+    void setCwMonitorEnabled(bool enabled);
+    void setCwMonitorVolume(int volume);
+    void setCwMonitorDevice(const QString& device);
+    Q_INVOKABLE QVariantList cwMonitorOutputs() const;
+    Q_INVOKABLE void testCwMonitor();
+    void playCwMonitor(const QVector<CwKeyEvent>& events, int toneHz);
+    Q_SIGNAL void cwMonitorChanged();
     bool   cwRemoteKeySupported();
     bool   cwRemoteSendKey(const QVector<CwKeyEvent>& events, int toneHz);
     void   cwRemotePtt(bool on);
@@ -3368,6 +3388,7 @@ private:
     QString    m_catRigNameBeforeDecoPort;
     QString    m_catModeBeforeDecoPort;
     bool       m_decoPortMonitor {false};
+    double     m_remoteRxGain {0.7};
     QThread*            m_decoPortMonitorThread {nullptr};
     RtlSdrAudioOutput*  m_decoPortMonitorOut {nullptr};
     int                 m_decoPortMonitorRate {0};

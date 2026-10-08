@@ -322,6 +322,12 @@ Window {
                     live: win.useRemote || win.linked
                     onClicked: win.eng.setDecolinkUseRemote(!win.useRemote)
                 }
+                CheckBox {
+                    text: qsTr("Listen to the remote radio (RX audio)")
+                    enabled: win.useRemote
+                    checked: !!(win.eng && win.eng.decoPortMonitor)
+                    onToggled: win.eng.setDecoPortMonitor(checked)
+                }
             }
 
             Item { Layout.preferredHeight: 10 }

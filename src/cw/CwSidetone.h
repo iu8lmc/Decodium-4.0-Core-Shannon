@@ -31,10 +31,16 @@ public:
     // stato dopo l'istante (lo stesso modello degli eventi del tasto remoto).
     void enqueue(const QList<int>& deltasMs, const QList<bool>& down, int toneHz);
     void clear();
+    void setDeviceId(const QByteArray& id);
+signals:
+    void failed(const QString& message);
+private:
+    QByteArray m_deviceId;
+public:
     void setVolume(double volume);   // 0..1
 
 private:
-    void ensureSink();
+    bool ensureSink();
     void idleCheck();
 
     std::unique_ptr<SidetoneSource> m_source;

@@ -3384,6 +3384,18 @@ Premi Monitor per iniziare</translation>
         <source>CW transmission in progress</source>
         <translation>Trasmissione CW in corso</translation>
     </message>
+    <message>
+        <source>System default output</source>
+        <translation>Uscita predefinita del sistema</translation>
+    </message>
+    <message>
+        <source>Remote RX audio output is unavailable. Choose headphones or speakers.</source>
+        <translation>Uscita audio RX remoto non disponibile. Seleziona cuffie o altoparlanti.</translation>
+    </message>
+    <message>
+        <source>Remote RX audio output does not support 12 or 48 kHz.</source>
+        <translation>L’uscita audio RX remoto non supporta 12 o 48 kHz.</translation>
+    </message>
 </context>
 <context>
     <name>DecodiumCloudlogLite</name>
@@ -36924,6 +36936,10 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
         <source>busy: %1 is transmitting</source>
         <translation>occupato: %1 sta trasmettendo</translation>
     </message>
+    <message>
+        <source>Listen to the remote radio (RX audio)</source>
+        <translation>Ascolta la radio remota (audio RX)</translation>
+    </message>
 </context>
 <context>
     <name>CwWindow</name>
@@ -37170,6 +37186,26 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
     <message>
         <source>noise</source>
         <translation>rumore</translation>
+    </message>
+    <message>
+        <source>Radio RX audio</source>
+        <translation>Audio radio RX</translation>
+    </message>
+    <message>
+        <source>RX volume</source>
+        <translation>Volume RX</translation>
+    </message>
+    <message>
+        <source>TX sidetone on this computer</source>
+        <translation>Nota TX su questo computer</translation>
+    </message>
+    <message>
+        <source>TX sidetone volume</source>
+        <translation>Volume nota TX</translation>
+    </message>
+    <message>
+        <source>TX tone test</source>
+        <translation>Prova nota TX</translation>
     </message>
 </context>
 <context>

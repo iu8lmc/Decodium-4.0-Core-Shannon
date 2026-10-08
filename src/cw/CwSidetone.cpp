@@ -5,6 +5,7 @@
 #include <QMediaDevices>
 
 #include <cmath>
+#include <algorithm>
 
 namespace decodium::cw {
 
@@ -86,10 +87,10 @@ CwSidetone::~CwSidetone()
     }
 }
 
-void CwSidetone::ensureSink()
+bool CwSidetone::ensureSink()
 {
     if (m_sink && m_sink->state() != QAudio::StoppedState)
-        return;
+        return true;
     if (m_sink)
         delete m_sink;
     QAudioFormat fmt;
@@ -97,19 +98,31 @@ void CwSidetone::ensureSink()
     fmt.setChannelCount(1);
     fmt.setSampleFormat(QAudioFormat::Int16);
     QAudioDevice dev = QMediaDevices::defaultAudioOutput();
-    if (dev.isNull())
-        return;
+    if (!m_deviceId.isEmpty()) {
+        dev = QAudioDevice();
+        for (const auto& candidate : QMediaDevices::audioOutputs())
+            if (candidate.id() == m_deviceId) { dev = candidate; break; }
+    }
+    if (dev.isNull() || !dev.isFormatSupported(fmt)) {
+        emit failed(tr("CW listening output is unavailable or does not support 48 kHz mono audio."));
+        return false;
+    }
     m_sink = new QAudioSink(dev, fmt, this);
     m_sink->setBufferSize(kRate / 10 * 2);   // ~100 ms: la latenza del tono resta bassa
     m_sink->start(m_source.get());
+    if (m_sink->error() != QAudio::NoError) {
+        emit failed(tr("Cannot start the CW listening output."));
+        return false;
+    }
     m_idle.start();
+    return true;
 }
 
 void CwSidetone::enqueue(const QList<int>& deltasMs, const QList<bool>& down, int toneHz)
 {
     m_source->setTone(toneHz > 0 ? toneHz : 700);
     m_source->setGain(m_volume);
-    ensureSink();
+    if (!ensureSink()) { m_source->flush(); return; }
     for (int i = 0; i < deltasMs.size() && i < down.size(); ++i) {
         // lo stato che finisce con questo istante e' l'opposto di quello nuovo
         m_source->push(static_cast<qint64>(deltasMs.at(i)) * kRate / 1000, !down.at(i));
@@ -118,12 +131,22 @@ void CwSidetone::enqueue(const QList<int>& deltasMs, const QList<bool>& down, in
 
 void CwSidetone::clear()
 {
+    if (m_sink) m_sink->stop();
+    m_idle.stop();
     m_source->flush();
+}
+
+void CwSidetone::setDeviceId(const QByteArray& id)
+{
+    if (m_deviceId == id) return;
+    clear();
+    m_deviceId = id;
 }
 
 void CwSidetone::setVolume(double volume)
 {
     m_volume = std::clamp(volume, 0.0, 1.0);
+    m_source->setGain(m_volume);
 }
 
 void CwSidetone::idleCheck()

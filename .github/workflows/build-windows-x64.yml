@@ -319,6 +319,15 @@ jobs:
           fi
 
           "${WINDEPLOYQT}" "${WINDEPLOY_ARGS[@]}"
+          # Runtime-selected styles need private QML imports which the deploy
+          # scanner can leave empty (for example QtQuick.Controls.impl).
+          mkdir -p "${DIST}/qml"
+          for module in QML Qt QtCore QtQml QtQuick Qt5Compat QtMultimedia QtNetwork QtLocation QtPositioning QtWebSockets QtTest; do
+            if [[ -d "${QT_PREFIX}/qml/${module}" ]]; then
+              cp -R "${QT_PREFIX}/qml/${module}" "${DIST}/qml/"
+            fi
+          done
+
 
           # Qt deploy tools do not necessarily infer a runtime-selected SQL
           # driver from the executable. Copy the required SQLite driver

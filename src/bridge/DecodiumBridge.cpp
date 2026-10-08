@@ -162,6 +162,7 @@
 #include <QAudioFormat>
 #include <QAudioSink>
 #include "CwSidetone.h"
+#include "CwTiming.h"
 #include <QBuffer>
 #include <algorithm>
 #include <QMediaDevices>
@@ -21676,7 +21677,7 @@ void DecodiumBridge::onDecoPortRxAudio(const QVector<short>& samples, quint64 ca
     Q_UNUSED(captureTsNs)
     if (!m_decoPortUseRemote || samples.isEmpty() || !m_audioSink)
         return;
-    if (m_transmitting || m_tuning)
+    if (m_transmitting || m_tuning || m_cwRemoteKeying)
         return;
 
     m_audioSink->injectExternalSamples(samples);
@@ -21696,6 +21697,9 @@ void DecodiumBridge::onDecoPortRxAudio(const QVector<short>& samples, quint64 ca
                 for (int i = 0; i < factor; ++i)
                     out_samples.append(s);
         }
+        // Volume affects the local speaker copy only; decoder PCM stays untouched.
+        for (short& sample : out_samples)
+            sample = static_cast<short>(std::lround(sample * m_remoteRxGain));
         QPointer<RtlSdrAudioOutput> out(m_decoPortMonitorOut);
         int const rate = m_decoPortMonitorRate;
         QMetaObject::invokeMethod(m_decoPortMonitorOut, [out, out_samples, rate]() {
@@ -21715,6 +21719,35 @@ void DecodiumBridge::onDecoPortRxAudio(const QVector<short>& samples, quint64 ca
 // L'ascolto usa la stessa meccanica di riproduzione della ricezione RTL-SDR —
 // e' una coda verso un QAudioSink su un thread suo — ma con la propria istanza:
 // mescolare i due ascolti vorrebbe dire che spegnerne uno spegne l'altro.
+int DecodiumBridge::remoteRxVolume() const
+{
+    return qBound(0, QSettings().value("RemoteAudio/rxVolume", 70).toInt(), 100);
+}
+
+QString DecodiumBridge::remoteRxDevice() const
+{
+    return QSettings().value("RemoteAudio/rxDevice").toString();
+}
+
+void DecodiumBridge::setRemoteRxVolume(int volume)
+{
+    const int bounded = qBound(0, volume, 100);
+    m_remoteRxGain = bounded / 100.0;
+    QSettings().setValue("RemoteAudio/rxVolume", bounded);
+    emit remoteRxAudioChanged();
+}
+
+void DecodiumBridge::setRemoteRxDevice(const QString& device)
+{
+    if (remoteRxDevice() == device) return;
+    QSettings().setValue("RemoteAudio/rxDevice", device);
+    if (m_decoPortMonitor) {
+        setDecoPortMonitor(false);
+        setDecoPortMonitor(true);
+    }
+    emit remoteRxAudioChanged();
+}
+
 void DecodiumBridge::setDecoPortMonitor(bool on)
 {
     if (m_decoPortMonitor == on)
@@ -21732,15 +21765,24 @@ void DecodiumBridge::setDecoPortMonitor(bool on)
             connect(m_decoPortMonitorOut, &RtlSdrAudioOutput::error,
                     this, [this](const QString& message) {
                 bridgeLog(QStringLiteral("DecoPort monitor error: %1").arg(message));
+                setDecoPortMonitor(false);
                 emit errorMessage(message);
             }, Qt::QueuedConnection);
             m_decoPortMonitorThread->start();
         }
-        QAudioDevice const output =
-            cachedDefaultAudioOutput(QStringLiteral("DecoPort remote monitor"), false);
+        m_remoteRxGain = remoteRxVolume() / 100.0;
+        QAudioDevice output = cachedDefaultAudioOutput(QStringLiteral("DecoPort remote monitor"), false);
+        const QByteArray selected = QByteArray::fromBase64(remoteRxDevice().toLatin1());
+        if (!selected.isEmpty()) {
+            output = QAudioDevice();
+            for (const auto& device : QMediaDevices::audioOutputs()) {
+                if (device.id() == selected) { output = device; break; }
+            }
+        }
         if (output.id().isEmpty()) {
             m_decoPortMonitor = false;
             bridgeLog(QStringLiteral("DecoPort monitor refused: no audio output available"));
+            emit errorMessage(tr("Remote RX audio output is unavailable. Choose headphones or speakers."));
             emit decoPortMonitorChanged();
             return;
         }
@@ -21765,6 +21807,7 @@ void DecodiumBridge::setDecoPortMonitor(bool on)
             m_decoPortMonitor = false;
             bridgeLog(QStringLiteral("DecoPort monitor refused: [%1] takes neither 12000 nor 48000 Hz")
                           .arg(output.description()));
+            emit errorMessage(tr("Remote RX audio output does not support 12 or 48 kHz."));
             emit decoPortMonitorChanged();
             return;
         }
@@ -22180,6 +22223,7 @@ void DecodiumBridge::setDecoPortUseRemote(bool on)
         // ascolta il microfono e noi non decodifichiamo niente.
         link->setModeName(QStringLiteral("DIGU"));
         onDecoPortRemoteState();
+        setDecoPortMonitor(true);
         emit statusMessage(tr("Using the remote radio %1 — decoding its audio")
                                .arg(link->rigLabel()));
         bridgeLog(QStringLiteral("DecoPort remote source ON: local sound card released, "
@@ -26933,6 +26977,7 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     // CW-audio: PTT gia' abbassata sopra; ripristina RX e termina senza la
     // logica QSO/auto-sequence FT (signoff, re-arm, freq hop).
     if (m_cwTxActive) {
+        if (m_cwSidetone) m_cwSidetone->clear();
         m_cwTxActive = false;
         m_pendingCwText.clear();
         restoreTxAudioSchedulingBoost(reason);
@@ -29063,6 +29108,7 @@ void DecodiumBridge::stopTx()
     m_activeTxNumber = 0;
     m_activeTxMessage.clear();
     // CW-audio interrotto manualmente: disarma lo stato CW.
+    if (m_cwTxActive && m_cwSidetone) m_cwSidetone->clear();
     m_cwTxActive = false;
     m_pendingCwText.clear();
     // Telemetria stazione+meteo interrotta manualmente: idem.
@@ -43002,6 +43048,8 @@ void DecodiumBridge::setCwInAscolto(bool v)
     if (m_cwInAscolto == v)
         return;
     m_cwInAscolto = v;
+    if (v && m_decoPortUseRemote)
+        setDecoPortMonitor(true);
     emit cwInAscoltoChanged();
 }
 
@@ -43009,6 +43057,38 @@ void DecodiumBridge::setCwInAscolto(bool v)
 // con una radio locale esce dalla scheda audio, con una radio remota
 // (DecoPort o Decolink) passa dal collegamento. Per questo qui si guarda la
 // strada che c'e' adesso, non soltanto la scheda locale.
+bool DecodiumBridge::cwMonitorEnabled() const { return QSettings().value("CW/monitorEnabled", true).toBool(); }
+int DecodiumBridge::cwMonitorVolume() const { return qBound(0, QSettings().value("CW/monitorVolume", 35).toInt(), 100); }
+QString DecodiumBridge::cwMonitorDevice() const { return QSettings().value("CW/monitorDevice").toString(); }
+void DecodiumBridge::setCwMonitorEnabled(bool enabled) {
+    QSettings().setValue("CW/monitorEnabled", enabled);
+    if (!enabled && m_cwSidetone) m_cwSidetone->clear();
+    emit cwMonitorChanged();
+}
+void DecodiumBridge::setCwMonitorVolume(int volume) {
+    QSettings().setValue("CW/monitorVolume", qBound(0, volume, 100));
+    if (m_cwSidetone) m_cwSidetone->setVolume(cwMonitorVolume() / 100.0);
+    emit cwMonitorChanged();
+}
+void DecodiumBridge::setCwMonitorDevice(const QString& device) {
+    QSettings().setValue("CW/monitorDevice", device);
+    if (m_cwSidetone) m_cwSidetone->setDeviceId(QByteArray::fromBase64(device.toLatin1()));
+    emit cwMonitorChanged();
+}
+QVariantList DecodiumBridge::cwMonitorOutputs() const {
+    QVariantList outputs {QVariantMap{{"id", ""}, {"label", tr("System default output")}}};
+    for (const auto& device : QMediaDevices::audioOutputs())
+        outputs.append(QVariantMap{{"id", QString::fromLatin1(device.id().toBase64())}, {"label", device.description()}});
+    return outputs;
+}
+void DecodiumBridge::testCwMonitor() {
+    if (m_cwRemoteKeying || m_transmitting || m_tuning) return;
+    QVector<CwKeyEvent> events;
+    for (const auto& e : decodium::cw::timelineFor(QStringLiteral("V"), 20))
+        events.append({e.deltaMs, e.down});
+    playCwMonitor(events, 700);
+}
+
 bool DecodiumBridge::cwCanTransmit()
 {
     if (m_transmitting || m_tuning || sstvTxActive() || m_rttyTxActive)
@@ -43028,6 +43108,12 @@ bool DecodiumBridge::cwSendAudio(const QString& text, int wpm)
     if (!cwCanTransmit())
         return false;
     sendCwAudio(text, 0, wpm);
+    if (m_transmitting && m_decoPortUseRemote) {
+        QVector<CwKeyEvent> events;
+        for (const auto& e : decodium::cw::timelineFor(text, wpm))
+            events.append({e.deltaMs, e.down});
+        playCwMonitor(events, m_cwSidetoneHz);
+    }
     return m_transmitting;
 }
 
@@ -43043,11 +43129,22 @@ bool DecodiumBridge::cwRemoteSendKey(const QVector<CwKeyEvent>& events, int tone
 {
     RemoteRadioLink* link = remoteLinkIfAny();
     const bool sent = m_decoPortUseRemote && link && link->sendCwKey(events, toneHz);
-    if (sent) {
+    if (sent) playCwMonitor(events, toneHz);
+    return sent;
+}
+
+void DecodiumBridge::playCwMonitor(const QVector<CwKeyEvent>& events, int toneHz)
+{
+    if (cwMonitorEnabled()) {
         // Il tono lo fa il gateway accanto alla radio: qui lo stesso ritmo
         // diventa il tono che sente chi sta davanti a Decodium.
-        if (!m_cwSidetone)
+        if (!m_cwSidetone) {
             m_cwSidetone = new decodium::cw::CwSidetone(this);
+            connect(m_cwSidetone, &decodium::cw::CwSidetone::failed,
+                    this, &DecodiumBridge::errorMessage);
+        }
+        m_cwSidetone->setDeviceId(QByteArray::fromBase64(cwMonitorDevice().toLatin1()));
+        m_cwSidetone->setVolume(cwMonitorVolume() / 100.0);
         QList<int> deltas;
         QList<bool> down;
         for (const CwKeyEvent& ev : events) {
@@ -43056,7 +43153,6 @@ bool DecodiumBridge::cwRemoteSendKey(const QVector<CwKeyEvent>& events, int tone
         }
         m_cwSidetone->enqueue(deltas, down, toneHz);
     }
-    return sent;
 }
 
 // Il PTT della radio remota per il CW a tasto. Mentre e' alzato nessun altro
@@ -43091,6 +43187,7 @@ bool DecodiumBridge::registraQsoCw(const QString& nominativo, const QString& rst
 
 void DecodiumBridge::cwAbortAudio()
 {
+    if (m_cwSidetone) m_cwSidetone->clear();
     if (m_cwTxActive && (m_transmitting || m_tuning))
         stopTx();
 }

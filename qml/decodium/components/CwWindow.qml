@@ -31,7 +31,7 @@ Window {
     readonly property string mono:   (typeof decodiumMonoFontFamily !== 'undefined') ? decodiumMonoFontFamily : "monospace"
 
     readonly property bool canSend: !!(cw && cw.canSend)
-    readonly property bool remote: !!(cw && cw.remoteRadio)
+    readonly property bool remote: !!(eng && eng.decoPortUseRemote)
 
     title: qsTr("CW") + (eng && eng.catConnected ? " - " + eng.catRigName : "")
     width: 920
@@ -212,8 +212,14 @@ Window {
         padding: 16
         background: Rectangle { color: win.cPanel; border.color: win.cBorder; radius: 8 }
 
+        contentItem: ScrollView {
+            id: setupScroll
+            clip: true
+            implicitHeight: Math.min(win.height - 100, setupFields.implicitHeight)
+            contentWidth: availableWidth
         ColumnLayout {
-            width: parent.width
+            id: setupFields
+            width: setupScroll.availableWidth
             spacing: 10
             Text {
                 text: qsTr("CW TRANSMIT")
@@ -266,6 +272,37 @@ Window {
                     currentIndex: win.cw && win.cw.keyerLine === "RTS" ? 1 : 0
                     onActivated: (i) => win.cw.keyerLine = model[i]
                 }
+            }
+            CheckBox {
+                text: qsTr("TX sidetone on this computer")
+                checked: win.eng ? win.eng.cwMonitorEnabled : true
+                onToggled: win.eng.cwMonitorEnabled = checked
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Lbl { text: qsTr("TX sidetone volume") }
+                Slider {
+                    Layout.fillWidth: true
+                    from: 0; to: 100; stepSize: 1
+                    value: win.eng ? win.eng.cwMonitorVolume : 35
+                    onMoved: win.eng.cwMonitorVolume = Math.round(value)
+                }
+                Lbl { text: (win.eng ? win.eng.cwMonitorVolume : 35) + "%" }
+                Btn { label: qsTr("TX tone test"); onClicked: win.eng.testCwMonitor() }
+            }
+            ComboBox {
+                id: monitorOutput
+                Layout.fillWidth: true
+                textRole: "label"
+                valueRole: "id"
+                model: win.eng ? win.eng.cwMonitorOutputs() : []
+                function refresh() {
+                    model = win.eng ? win.eng.cwMonitorOutputs() : []
+                    currentIndex = indexOfValue(win.eng ? win.eng.cwMonitorDevice : "")
+                }
+                Component.onCompleted: refresh()
+                onPressedChanged: if (pressed) refresh()
+                onActivated: win.eng.cwMonitorDevice = currentValue
             }
             // Con una radio remota la scelta di sopra non conta: si decide qui
             // come arriva il CW alla radio lontana.
@@ -320,6 +357,7 @@ Window {
                 Btn { label: qsTr("Close"); onClicked: setup.close() }
             }
         }
+        }
     }
 
     // ── La finestra ────────────────────────────────────────────────────────
@@ -352,6 +390,38 @@ Window {
             Btn { label: qsTr("Stop"); danger: true; armed: !!win.cw && win.cw.sending; onClicked: win.cw.stop() }
             Btn { label: qsTr("Macros…"); onClicked: macroEditor.open() }
             Btn { label: qsTr("Setup…"); onClicked: setup.open() }
+        }
+
+        RowLayout {
+            visible: win.remote
+            Layout.fillWidth: true
+            CheckBox {
+                text: qsTr("Radio RX audio")
+                checked: !!(win.eng && win.eng.decoPortMonitor)
+                onToggled: win.eng.setDecoPortMonitor(checked)
+            }
+            Lbl { text: qsTr("RX volume") }
+            Slider {
+                Layout.preferredWidth: 110
+                from: 0; to: 100; stepSize: 1
+                value: win.eng ? win.eng.remoteRxVolume : 70
+                onMoved: win.eng.remoteRxVolume = Math.round(value)
+            }
+            ComboBox {
+                id: rxOutput
+                Layout.fillWidth: true
+                Layout.minimumWidth: 120
+                textRole: "label"
+                valueRole: "id"
+                model: win.eng ? win.eng.cwMonitorOutputs() : []
+                function refresh() {
+                    model = win.eng ? win.eng.cwMonitorOutputs() : []
+                    currentIndex = indexOfValue(win.eng ? win.eng.remoteRxDevice : "")
+                }
+                Component.onCompleted: refresh()
+                onPressedChanged: if (pressed) refresh()
+                onActivated: win.eng.remoteRxDevice = currentValue
+            }
         }
 
         Text {
