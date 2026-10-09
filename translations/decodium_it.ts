@@ -36943,6 +36943,12 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
 </context>
 <context>
     <name>CwWindow</name>
+    <message><source>Center CW</source><translation>Centra CW</translation></message>
+    <message><source>Center tone</source><translation>Tono centro</translation></message>
+    <message><source>Frequency in MHz. Press Enter to tune.</source><translation>Frequenza in MHz. Premi Invio per sintonizzare.</translation></message>
+    <message><source>VFO step in Hz</source><translation>Passo VFO in Hz</translation></message>
+    <message><source>Match the radio's CW pitch / sidetone.</source><translation>Imposta lo stesso tono CW della radio.</translation></message>
+    <message><source>Match the radio's receive sideband: upper or lower (also in CW-R).</source><translation>Scegli il lato CW della radio: superiore o inferiore (anche in CW-R).</translation></message>
     <message>
         <source>CW</source>
         <translation>CW</translation>
@@ -37210,6 +37216,10 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
 </context>
 <context>
     <name>decodium::cw::CwController</name>
+    <message><source>Cannot tune: check CAT connection and stop transmitting.</source><translation>Sintonia non disponibile: verifica il CAT e termina la trasmissione.</translation></message>
+    <message><source>Wait for a CW signal with Decoder tone set to Auto.</source><translation>Attendi un segnale CW con Tono del decodificatore impostato su Auto.</translation></message>
+    <message><source>CW is already centered.</source><translation>CW già centrato.</translation></message>
+    <message><source>CW centered at %1 Hz.</source><translation>CW centrato a %1 Hz.</translation></message>
     <message>
         <source>CW transmit is not ready</source>
         <translation>La trasmissione CW non è pronta</translation>

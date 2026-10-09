@@ -1364,6 +1364,7 @@ public:
     bool   cwInAscolto() const { return m_cwInAscolto; }
     void   setCwInAscolto(bool v);
     bool   cwCanTransmit();
+    bool   cwTuneFrequency(double hz);
     bool   cwSendAudio(const QString& text, int wpm);
     void   cwAbortAudio();
     // CW a tasto verso la radio remota (Decolink): invece dell'audio si mandano gli

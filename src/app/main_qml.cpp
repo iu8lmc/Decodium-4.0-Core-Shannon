@@ -4367,6 +4367,8 @@ int main(int argc, char* argv[])
         static QSettings cwSettings {QSettings::IniFormat, QSettings::UserScope,
                                      QStringLiteral ("Decodium"), QStringLiteral ("Decodium")};
         decodium::cw::CwController::Hooks h;
+        h.frequency = [&bridge] { return bridge.frequency (); };
+        h.tuneFrequency = [&bridge] (double hz) { return bridge.cwTuneFrequency (hz); };
         h.myCall      = [&bridge] { return bridge.callsign (); };
         h.hisCall     = [&bridge] { return bridge.dxCall (); };
         h.canTransmit = [&bridge] { return bridge.cwCanTransmit (); };
@@ -4385,6 +4387,12 @@ int main(int argc, char* argv[])
         h.abortAudio  = [&bridge] { bridge.cwAbortAudio (); };
         cwModule.setHooks (std::move (h));
         cwModule.start (&cwSettings);
+        QObject::connect (&bridge, &DecodiumBridge::frequencyChanged,
+                          &cwModule, &decodium::cw::CwController::invalidateTuningSignal);
+        QObject::connect (&bridge, &DecodiumBridge::catModeChanged,
+                          &cwModule, &decodium::cw::CwController::invalidateTuningSignal);
+        QObject::connect (&bridge, &DecodiumBridge::catConnectedChanged,
+                          &cwModule, &decodium::cw::CwController::invalidateTuningSignal);
         // L'audio della radio, gia' a 12 kHz, dallo stesso rubinetto di RTTY e
         // JTTY: vale anche con la radio remota.
         QObject::connect (&bridge, &DecodiumBridge::campioniRxCw,

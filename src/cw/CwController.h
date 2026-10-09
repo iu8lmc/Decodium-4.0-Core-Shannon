@@ -44,6 +44,7 @@ class CwController : public QObject {
     Q_OBJECT
 
     // ── decodificatore ───────────────────────────────────────────────────
+    Q_PROPERTY(bool tuningLowerSideband READ tuningLowerSideband WRITE setTuningLowerSideband NOTIFY txChanged)
     Q_PROPERTY(bool decoderOn READ decoderOn WRITE setDecoderOn NOTIFY decoderChanged)
     Q_PROPERTY(QString decoderText READ decoderText NOTIFY decoderChanged)
     Q_PROPERTY(int decoderWpm READ decoderWpm NOTIFY decoderChanged)
@@ -82,6 +83,8 @@ public:
     // Quello che serve dall'applicazione. Tutti opzionali: un gancio mancante
     // vuol dire "non so", e il controllo si comporta di conseguenza.
     struct Hooks {
+        std::function<double()> frequency;
+        std::function<bool(double)> tuneFrequency;
         std::function<QString()> myCall;
         std::function<QString()> hisCall;
         // Manda il testo come audio CW (sidetone) sul percorso TX
@@ -123,6 +126,13 @@ public:
     void setDecoderSpeedLock(int wpm);
     QVariantMap decoderScope() const { return m_scope; }
     Q_INVOKABLE void clearDecoder();
+    Q_INVOKABLE bool tuneTo(double hz);
+    Q_INVOKABLE bool tuneBy(int hz);
+    Q_INVOKABLE bool centerSignal();
+    void invalidateTuningSignal();
+    bool tuningLowerSideband() const { return m_tuningLowerSideband; }
+    void setTuningLowerSideband(bool lower);
+
 
     // L'audio che esce dalla radio, mono a 16 bit. 12 kHz e' quel che consegna
     // il bridge; ggmorse ricampiona da se'.
@@ -199,6 +209,9 @@ private:
     int m_decoderSpeedLock {0};
     QVariantMap m_scope;
     QElapsedTimer m_scopeClock;
+    QElapsedTimer m_lastRxClock;
+    QElapsedTimer m_retuneClock;
+    bool m_tuningLowerSideband {false};
 
     CwKeyer m_keyer;
     WinKeyer m_winKeyer;

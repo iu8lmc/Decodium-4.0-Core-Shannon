@@ -16933,7 +16933,7 @@ void DecodiumBridge::setFrequency(double v) {
     // perche' la stessa frequenza torna indietro nel contesto successivo.
     if (m_decoPortUseRemote && !m_decoPortApplyingRemote && v > 0.0) {
         if (auto* link = remoteLink()) {
-            if (link->isLinked() && std::abs(link->frequencyHz() - v) > 1.0)
+            if (link->isLinked() && std::abs(link->frequencyHz() - v) >= 0.5)
                 link->tune(v);
         }
     }
@@ -43087,6 +43087,31 @@ void DecodiumBridge::testCwMonitor() {
     for (const auto& e : decodium::cw::timelineFor(QStringLiteral("V"), 20))
         events.append({e.deltaMs, e.down});
     playCwMonitor(events, 700);
+}
+
+bool DecodiumBridge::cwTuneFrequency(double hz)
+{
+    if (!std::isfinite(hz) || hz < 1000 || hz > 1e12 || !m_catConnected
+        || m_transmitting || m_tuning || m_cwRemoteKeying || m_cwTxActive
+        || sstvTxActive() || m_rttyTxActive) return false;
+    if (m_decoPortUseRemote) {
+        auto* link = remoteLinkIfAny();
+        if (!link || !link->isLinked() || link->ptt()) return false;
+        // setFrequency routes remote QSY to the selected link, never local CAT.
+        setFrequency(hz);
+        return true;
+    }
+    const double dialHz = applyFrequencyCalibration(hz);
+    if (!std::isfinite(dialHz) || dialHz <= 0) return false;
+    if (m_q65Doppler) m_q65Doppler->setEnabled(false);
+    m_localCatFrequencyPreviousHz = m_frequency;
+    m_localCatFrequencyTargetHz = hz;
+    m_localCatFrequencyGuardUntilMs = QDateTime::currentMSecsSinceEpoch() + 8000;
+    m_localCatFrequencyGuardMaxMs = QDateTime::currentMSecsSinceEpoch() + 20000;
+    setFrequency(hz);
+    // Frequency only: generic QSY would restore a digital mode instead of CW.
+    activeCatSetFreq(this, m_hamlibCat, m_catBackend, dialHz, m_omniRigCat, m_legacyBackend);
+    return true;
 }
 
 bool DecodiumBridge::cwCanTransmit()

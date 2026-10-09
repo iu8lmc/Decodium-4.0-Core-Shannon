@@ -31,13 +31,14 @@ Window {
     readonly property string mono:   (typeof decodiumMonoFontFamily !== 'undefined') ? decodiumMonoFontFamily : "monospace"
 
     readonly property bool canSend: !!(cw && cw.canSend)
+    readonly property bool tuneReady: !!(eng && eng.catConnected && !eng.transmitting && cw && !cw.sending)
     readonly property bool remote: !!(eng && eng.decoPortUseRemote)
 
     title: qsTr("CW") + (eng && eng.catConnected ? " - " + eng.catRigName : "")
     width: 920
     height: 760
     minimumWidth: 640
-    minimumHeight: 520
+    minimumHeight: width < 820 ? 760 : 620
     color: cBg
 
     // Le proprieta' Material si attaccano all'albero di UNA finestra: questa e'
@@ -235,6 +236,7 @@ Window {
                 Layout.fillWidth: true
                 Lbl { text: qsTr("Send CW as") }
                 ComboBox {
+                implicitHeight: 36
                     id: backendBox
                     Layout.fillWidth: true
                     readonly property var keys: ["audio", "serial", "winkeyer"]
@@ -249,6 +251,7 @@ Window {
                     visible: backendBox.currentIndex > 0
                     Layout.fillWidth: true
                     ComboBox {
+                implicitHeight: 36
                         id: portBox
                         Layout.fillWidth: true
                         editable: true
@@ -267,6 +270,7 @@ Window {
                 }
                 Lbl { text: qsTr("Key line"); visible: backendBox.currentIndex === 1 }
                 ComboBox {
+                implicitHeight: 36
                     visible: backendBox.currentIndex === 1
                     model: ["DTR", "RTS"]
                     currentIndex: win.cw && win.cw.keyerLine === "RTS" ? 1 : 0
@@ -291,6 +295,7 @@ Window {
                 Btn { label: qsTr("TX tone test"); onClicked: win.eng.testCwMonitor() }
             }
             ComboBox {
+                implicitHeight: 36
                 id: monitorOutput
                 Layout.fillWidth: true
                 textRole: "label"
@@ -368,6 +373,7 @@ Window {
 
         RowLayout {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             spacing: 8
             Rectangle {
                 width: 10; height: 10; radius: 5
@@ -408,6 +414,7 @@ Window {
                 onMoved: win.eng.remoteRxVolume = Math.round(value)
             }
             ComboBox {
+                implicitHeight: 36
                 id: rxOutput
                 Layout.fillWidth: true
                 Layout.minimumWidth: 120
@@ -437,9 +444,11 @@ Window {
         }
 
         // ── Con chi si parla ────────────────────────────────────────────
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 6
+            columns: win.width < 820 ? 6 : 13
+            columnSpacing: 6
+            rowSpacing: 4
             Lbl { text: qsTr("Call") }
             Field { id: callField; Layout.preferredWidth: 120; text: win.eng ? win.eng.dxCall : ""; font.capitalization: Font.AllUppercase }
             Lbl { text: qsTr("RST") }
@@ -524,6 +533,7 @@ Window {
 
         RowLayout {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             spacing: 8
             Lbl { text: qsTr("Speed") }
             Slider {
@@ -546,6 +556,7 @@ Window {
         // ── Scrivere a mano quello che non sta in una macro ─────────────
         RowLayout {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             spacing: 6
             Field {
                 id: freeText
@@ -565,16 +576,101 @@ Window {
         // ── Il decodificatore ──────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             spacing: 8
             Switch {
                 text: qsTr("Decoder")
+                font.pixelSize: win.width < 820 ? 11 : 14
                 checked: win.cw ? win.cw.decoderOn : true
                 onToggled: win.cw.decoderOn = checked
+            }
+            Lbl { text: "VFO" }
+            Field {
+                id: cwVfo
+                objectName: "cwVfoFrequency"
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    enabled: win.tuneReady
+                    onWheel: (wheel) => {
+                        if (wheel.angleDelta.y !== 0) {
+                            win.cw.tuneBy((wheel.angleDelta.y > 0 ? 1 : -1) * Number(cwStep.currentText))
+                            wheel.accepted = true
+                        }
+                    }
+                }
+                Layout.fillWidth: true
+                Layout.minimumWidth: 125
+                Layout.preferredWidth: 170
+                font.pixelSize: 18
+                font.bold: true
+                color: win.cAccent
+                enabled: win.tuneReady
+                text: win.eng ? (win.eng.frequency / 1e6).toFixed(6) : "0.000000"
+                validator: DoubleValidator { bottom: 0.001; top: 1000000; decimals: 6; locale: "C" }
+                onAccepted: {
+                    const hz = Number(text.replace(",", ".")) * 1e6
+                    if (acceptableInput && win.cw.tuneTo(hz)) focus = false
+                }
+                Connections {
+                    target: win.eng
+                    function onFrequencyChanged() {
+                        if (!cwVfo.activeFocus) cwVfo.text = (win.eng.frequency / 1e6).toFixed(6)
+                    }
+                }
+                onActiveFocusChanged: if (!activeFocus && win.eng) text = (win.eng.frequency / 1e6).toFixed(6)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Frequency in MHz. Press Enter to tune.")
+            }
+            Lbl { text: "MHz" }
+            Btn { label: "−"; live: win.tuneReady; onClicked: win.cw.tuneBy(-Number(cwStep.currentText)) }
+            Btn { label: "+"; live: win.tuneReady; onClicked: win.cw.tuneBy(Number(cwStep.currentText)) }
+            ComboBox {
+                implicitHeight: 36
+                id: cwStep
+                implicitWidth: 82
+                model: ["1", "10", "50", "100", "1000"]
+                currentIndex: 1
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("VFO step in Hz")
+            }
+            Btn {
+                objectName: "cwAutoCenter"
+                label: qsTr("Center CW")
+                live: win.tuneReady && win.cw.decoderOn
+                onClicked: win.cw.centerSignal()
+            }
+        }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: win.width < 820 ? 4 : 7
+            columnSpacing: 8
+            rowSpacing: 4
+            Lbl { text: qsTr("Center tone") }
+            ComboBox {
+                implicitHeight: 36
+                implicitWidth: 120
+                readonly property var tones: [400, 500, 550, 600, 650, 700, 750, 800, 900, 1000]
+                model: tones.map(v => v + " Hz")
+                currentIndex: win.cw ? tones.indexOf(win.cw.toneHz) : 5
+                onActivated: (i) => win.cw.toneHz = tones[i]
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Match the radio's CW pitch / sidetone.")
+            }
+            ComboBox {
+                implicitHeight: 36
+                implicitWidth: 96
+                model: ["CW-U", "CW-L"]
+                currentIndex: win.cw && win.cw.tuningLowerSideband ? 1 : 0
+                onActivated: (i) => win.cw.tuningLowerSideband = i === 1
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Match the radio's receive sideband: upper or lower (also in CW-R).")
             }
             ColumnLayout {
                 spacing: 1
                 Lbl { text: qsTr("Decoder tone") }
                 ComboBox {
+                implicitHeight: 36
                     id: toneBox
                     implicitWidth: 120
                     readonly property var choices: [0, 400, 500, 550, 570, 575, 600, 610, 615, 620, 625, 630, 650, 700, 800, 1000]
@@ -587,6 +683,7 @@ Window {
                 spacing: 1
                 Lbl { text: qsTr("Decoder speed") }
                 ComboBox {
+                implicitHeight: 36
                     id: speedBox
                     implicitWidth: 116
                     readonly property var choices: [0, 10, 12, 15, 16, 17, 18, 19, 20, 22, 25, 27, 30, 35, 40, 45, 50]

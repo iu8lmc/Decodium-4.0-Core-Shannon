@@ -1,6 +1,7 @@
 #include "CwController.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace decodium::cw {
 
@@ -63,6 +64,7 @@ void CwController::start(QSettings* settings)
         m_decoderToneLock = m_settings->value(QStringLiteral("toneLock"), 0).toInt();
         m_decoderSpeedLock = m_settings->value(QStringLiteral("speedLock"), 0).toInt();
         m_decoderOn = m_settings->value(QStringLiteral("decoderOn"), true).toBool();
+        m_tuningLowerSideband = m_settings->value(QStringLiteral("tuningLowerSideband"), false).toBool();
         m_remoteKey = m_settings->value(QStringLiteral("remoteKey"), true).toBool();
         m_toneHz = std::clamp(m_settings->value(QStringLiteral("toneHz"), 700).toInt(), 400, 1000);
         m_macros = macrosFromJson(m_settings->value(QStringLiteral("macros")).toString());
@@ -91,6 +93,7 @@ void CwController::save()
     m_settings->setValue(QStringLiteral("toneLock"), m_decoderToneLock);
     m_settings->setValue(QStringLiteral("speedLock"), m_decoderSpeedLock);
     m_settings->setValue(QStringLiteral("decoderOn"), m_decoderOn);
+    m_settings->setValue(QStringLiteral("tuningLowerSideband"), m_tuningLowerSideband);
     m_settings->setValue(QStringLiteral("remoteKey"), m_remoteKey);
     m_settings->setValue(QStringLiteral("toneHz"), m_toneHz);
     m_settings->setValue(QStringLiteral("macros"), macrosToJson(m_macros));
@@ -142,6 +145,62 @@ void CwController::setDecoderSpeedLock(int wpm)
     emit decoderChanged();
 }
 
+void CwController::setTuningLowerSideband(bool lower)
+{
+    if (m_tuningLowerSideband == lower) return;
+    m_tuningLowerSideband = lower;
+    save();
+    emit txChanged();
+}
+
+void CwController::invalidateTuningSignal()
+{
+    m_decoder.reset();
+    m_scope.clear();
+    m_lastRxClock.invalidate();
+    m_retuneClock.restart();
+    emit decoderScopeChanged();
+}
+
+bool CwController::tuneTo(double hz)
+{
+    if (m_sending || !std::isfinite(hz) || hz < 1000 || hz > 1e12
+        || !m_hooks.tuneFrequency || !m_hooks.tuneFrequency(std::round(hz))) {
+        emit message(tr("Cannot tune: check CAT connection and stop transmitting."), QStringLiteral("warning"));
+        return false;
+    }
+    invalidateTuningSignal();
+    return true;
+}
+
+bool CwController::tuneBy(int hz)
+{
+    return m_hooks.frequency && hz >= -10000 && hz <= 10000
+        && tuneTo(m_hooks.frequency() + hz);
+}
+
+bool CwController::centerSignal()
+{
+    // Use the measured pitch, never a fixed decoder filter or the previous station.
+    const auto& scope = m_decoder.scope();
+    if (!m_decoderOn || m_decoderToneLock != 0 || !m_lastRxClock.isValid()
+        || m_lastRxClock.elapsed() > 750 || !scope.reading
+        || !std::isfinite(scope.pitch) || scope.pitch < 200 || scope.pitch > 1200
+        || (m_retuneClock.isValid() && m_retuneClock.elapsed() < 1500)) {
+        emit message(tr("Wait for a CW signal with Decoder tone set to Auto."), QStringLiteral("warning"));
+        return false;
+    }
+    const int error = qRound(scope.pitch) - m_toneHz;
+    if (std::abs(error) <= 5) {
+        emit message(tr("CW is already centered."), QStringLiteral("info"));
+        return true;
+    }
+    // CW polarity is radio-dependent: the operator selects CW-U / CW-L.
+    if (!tuneBy(m_tuningLowerSideband ? -error : error)) return false;
+    emit message(tr("CW centered at %1 Hz.").arg(m_toneHz), QStringLiteral("info"));
+    return true;
+}
+
 void CwController::clearDecoder()
 {
     m_decoderText.clear();
@@ -157,6 +216,9 @@ void CwController::feedRxAudio(const QVector<short>& samples, int sampleRate)
         m_decoder.setSampleRate(sampleRate);
         m_decoder.reset();
     }
+    // Discard queued pre-QSY audio while the CAT/remote stream settles.
+    if (m_retuneClock.isValid() && m_retuneClock.elapsed() < 1000) return;
+    m_lastRxClock.restart();
     const QString text = m_decoder.feed(reinterpret_cast<const qint16*>(samples.constData()),
                                         static_cast<int>(samples.size()));
     if (!text.isEmpty()) {

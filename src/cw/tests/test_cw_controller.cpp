@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using namespace decodium::cw;
 
@@ -89,6 +90,65 @@ private:
 
 private slots:
     void init() { QFile::remove(iniPath()); }
+
+    void vfoRejectsInvalidTargets()
+    {
+        CwController c;
+        double dial = 14025000;
+        bool connected = true;
+        CwController::Hooks h;
+        h.frequency = [&] { return dial; };
+        h.tuneFrequency = [&](double hz) { if (!connected) return false; dial = hz; return true; };
+        c.setHooks(h);
+        QVERIFY(c.tuneBy(1)); QCOMPARE(dial, 14025001.0);
+        QVERIFY(c.tuneBy(-10)); QCOMPARE(dial, 14024991.0);
+        QVERIFY(!c.tuneTo(-1));
+        QVERIFY(!c.tuneTo(std::numeric_limits<double>::quiet_NaN()));
+        connected = false;
+        QVERIFY(!c.tuneBy(100)); QCOMPARE(dial, 14024991.0);
+    }
+    void centerMeasuredTone_data()
+    {
+        QTest::addColumn<bool>("lower"); QTest::addColumn<int>("pitch");
+        QTest::newRow("upper-high") << false << 800;
+        QTest::newRow("lower-high") << true << 800;
+        QTest::newRow("upper-low") << false << 600;
+        QTest::newRow("lower-low") << true << 600;
+    }
+    void centerMeasuredTone()
+    {
+        QFETCH(bool, lower); QFETCH(int, pitch);
+        CwController c; c.setTuningLowerSideband(lower);
+        double dial = 14025000;
+        CwController::Hooks h;
+        h.frequency = [&] { return dial; };
+        h.tuneFrequency = [&](double hz) { dial = hz; return true; };
+        c.setHooks(h);
+        QVERIFY(!c.centerSignal());
+        auto audio = morseAudio("CQ CQ CQ DE IU8LMC TEST TEST", 20, pitch, 12000);
+        audio.resize(audio.size() - 12000);
+        c.feedRxAudio(audio, 12000);
+        QVERIFY(c.decoderScope().value("reading").toBool());
+        QVERIFY(c.centerSignal());
+        const double expected = 14025000 + (lower ? -1 : 1) * (pitch - 700);
+        QVERIFY2(std::abs(dial - expected) < 12, qPrintable(QString::number(dial)));
+        const double once = dial;
+        QVERIFY(!c.centerSignal()); QCOMPARE(dial, once);
+    }
+    void centerRejectsLockedDecoderAndStaleAudio()
+    {
+        CwController c; int calls = 0;
+        CwController::Hooks h;
+        h.frequency = [] { return 14025000.; };
+        h.tuneFrequency = [&](double) { ++calls; return true; };
+        c.setHooks(h);
+        auto audio = morseAudio("CQ CQ CQ DE IU8LMC TEST", 20, 800, 12000);
+        c.setDecoderToneLock(800); c.feedRxAudio(audio, 12000);
+        QVERIFY(!c.centerSignal()); QCOMPARE(calls, 0);
+        c.setDecoderToneLock(0); c.feedRxAudio(audio, 12000);
+        QTest::qWait(800);
+        QVERIFY(!c.centerSignal()); QCOMPARE(calls, 0);
+    }
 
     void audioBackendSendsTheExpandedMacroThroughTheHook()
     {
