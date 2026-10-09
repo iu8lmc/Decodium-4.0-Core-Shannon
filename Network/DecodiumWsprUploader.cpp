@@ -1,6 +1,7 @@
 #include "Network/DecodiumWsprUploader.h"
 #include "Network/wsprnet.h"
 
+#include <QCoreApplication>
 #include <QNetworkAccessManager>
 
 DecodiumWsprUploader::DecodiumWsprUploader(QObject* parent)
@@ -21,10 +22,14 @@ void DecodiumWsprUploader::uploadSpot(const QString& decodeText, double dialFreq
 
     const QString freqMhz = QString::number(dialFreqHz / 1.0e6, 'f', 6);
 
+    QString version = QCoreApplication::applicationVersion().trimmed();
+    if (version.isEmpty())
+        version = QStringLiteral("4.0");
+
     m_wsprNet->post(m_callsign, m_grid,
                     freqMhz, freqMhz,
                     "WSPR", 120.0f,
                     txPct, dbm,
-                    "Decodium/3.0",
+                    QStringLiteral("Decodium/%1").arg(version),
                     decodeText);
 }

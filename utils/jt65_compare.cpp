@@ -1,5 +1,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDataStream>
+#include <QFile>
 #include <QString>
 #include <QStringList>
 
@@ -10,6 +12,7 @@
 
 #include "Detector/LegacyDspIoHelpers.hpp"
 #include "Modulator/FtxMessageEncoder.hpp"
+#include "Modulator/FtxWaveformGenerator.hpp"
 #include "Modulator/LegacyJtEncoder.hpp"
 
 extern "C" void gen65 (char* msg, int* ichk, char msgsent[], int itone[], int* itext);
@@ -138,8 +141,8 @@ bool compare_message (QString const& message, bool check_only)
                     "  fortran state: itype=%d nc1=%d nc2=%d ng=%d k1=%d k2=%d\n"
                     "  cxx state    : itype=%d nc1=%d nc2=%d ng=%d\n",
                     input.constData (),
-                    fortran_msgsent.size (), fortran_msgsent.constData (),
-                    cpp_msgsent.size (), cpp_msgsent.constData (),
+                    static_cast<int> (fortran_msgsent.size ()), fortran_msgsent.constData (),
+                    static_cast<int> (cpp_msgsent.size ()), cpp_msgsent.constData (),
                     __packjt_MOD_jt_itype, __packjt_MOD_jt_nc1, __packjt_MOD_jt_nc2,
                     __packjt_MOD_jt_ng, __packjt_MOD_jt_k1, __packjt_MOD_jt_k2,
                     packed.itype, packed.nc1, packed.nc2, packed.ng);
@@ -168,7 +171,7 @@ bool compare_message (QString const& message, bool check_only)
     {
       std::fprintf (stderr,
                     "tone count mismatch for '%s': expected 126 got %d\n",
-                    input.constData (), encoded.tones.size ());
+                    input.constData (), static_cast<int> (encoded.tones.size ()));
       return false;
     }
 
@@ -189,6 +192,38 @@ bool compare_message (QString const& message, bool check_only)
         }
     }
 
+  return true;
+}
+
+bool write_wave (QString const& path, QVector<float> const& wave, int sample_rate)
+{
+  if (path.isEmpty () || wave.isEmpty () || sample_rate <= 0)
+    {
+      return false;
+    }
+
+  QFile file {path};
+  if (!file.open (QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+      return false;
+    }
+
+  QDataStream stream {&file};
+  stream.setByteOrder (QDataStream::LittleEndian);
+  quint32 const data_size = static_cast<quint32> (wave.size () * sizeof (qint16));
+  file.write ("RIFF", 4);
+  stream << quint32 (36u + data_size);
+  file.write ("WAVEfmt ", 8);
+  stream << quint32 (16u) << quint16 (1u) << quint16 (1u)
+         << quint32 (sample_rate)
+         << quint32 (sample_rate * static_cast<int> (sizeof (qint16)))
+         << quint16 (sizeof (qint16)) << quint16 (16u);
+  file.write ("data", 4);
+  stream << data_size;
+  for (float const sample : wave)
+    {
+      stream << static_cast<qint16> (std::clamp (sample, -1.0f, 1.0f) * 32767.0f);
+    }
   return true;
 }
 
@@ -287,6 +322,22 @@ int main (int argc, char** argv)
       return 1;
     }
 
-  std::printf ("JT65 compare passed for %d messages\n", kMessages.size ());
+  QString const dump_path = qEnvironmentVariable ("JT65_DUMP_WAVE");
+  if (!dump_path.isEmpty ())
+    {
+      auto const encoded = decodium::txmsg::encodeJt65 (QStringLiteral ("CQ TESTA JN70"));
+      auto const wave = decodium::txwave::generateJt65Wave (
+          encoded.tones.constData (), 126, 48000.0f, 1500.0f);
+      if (!encoded.ok || wave.isEmpty () || !write_wave (dump_path, wave, 48000))
+        {
+          std::fprintf (stderr, "JT65 waveform dump failed: %s\n", dump_path.toLocal8Bit ().constData ());
+          return 1;
+        }
+      std::fprintf (stderr, "JT65 waveform dump: %s samples=%d seconds=%.3f\n",
+                    dump_path.toLocal8Bit ().constData (), static_cast<int> (wave.size ()),
+                    static_cast<double> (wave.size ()) / 48000.0);
+    }
+
+  std::printf ("JT65 compare passed for %d messages\n", static_cast<int> (kMessages.size ()));
   return 0;
 }

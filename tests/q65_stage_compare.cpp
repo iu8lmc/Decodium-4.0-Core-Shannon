@@ -170,7 +170,7 @@ namespace
   DecodeLine parse_worker_row (QString const& row)
   {
     static QRegularExpression const pattern {
-        QStringLiteral (R"(^\s*\d{4,6}\s+(-?\d+)\s+(-?\d+\.\d)\s+(-?\d+)\s+:\s+(.*?)\s+q\d(?:\d)?\s*$)")
+        QStringLiteral (R"(^\s*(?:\d{4,6}\s+)?(-?\d+)\s+(-?\d+\.\d)\s+(-?\d+)\s+:\s+(.*?)\s+q\d(?:\d)?\s*$)")
     };
     auto const match = pattern.match (row);
     if (!match.hasMatch ())
@@ -189,7 +189,7 @@ namespace
   QList<DecodeLine> run_worker_decode (std::vector<short> const& samples,
                                        int nutc, int ntrperiod, int nsubmode,
                                        int nfqso, int ntol, int ndepth,
-                                       int nfa, int nfb)
+                                       int nfa, int nfb, int nqsoprogress)
   {
     decodium::q65::Q65DecodeWorker worker;
     decodium::q65::DecodeRequest request;
@@ -208,6 +208,8 @@ namespace
     request.mycall = QByteArrayLiteral ("K1ABC");
     request.hiscall = QByteArrayLiteral ("W9XYZ");
     request.hisgrid = QByteArrayLiteral ("EN37");
+    request.nqsoprogress = nqsoprogress;
+    request.emedelay = (ntrperiod == 60) ? 2.5f : 0.0f;
 
     QList<DecodeLine> lines;
     QObject::connect (&worker, &decodium::q65::Q65DecodeWorker::decodeReady,
@@ -245,11 +247,21 @@ namespace
           {
             fail (QStringLiteral ("cannot parse decoded.txt line \"%1\"").arg (line));
           }
+        bool const has_sync_snr = fields.size () >= 9 && !fields.at (2).contains (QLatin1Char {'.'});
+        int const snr_index = has_sync_snr ? 2 : 1;
+        int const dt_index = snr_index + 1;
+        int const freq_index = snr_index + 2;
+        int const message_start = snr_index + 4;
+        if (fields.size () <= message_start + 1)
+          {
+            fail (QStringLiteral ("cannot parse decoded.txt line \"%1\"").arg (line));
+          }
         DecodeLine decoded;
-        decoded.snr = fields.at (2).toInt ();
-        decoded.dt = fields.at (3).toFloat ();
-        decoded.freq = fields.at (4).toFloat ();
-        QStringList message_fields = fields.mid (6, fields.size () - 7);
+        decoded.snr = fields.at (snr_index).toInt ();
+        decoded.dt = fields.at (dt_index).toFloat ();
+        decoded.freq = fields.at (freq_index).toFloat ();
+        QStringList message_fields = fields.mid (message_start,
+                                                 fields.size () - message_start - 1);
         decoded.decoded = message_fields.join (QLatin1Char {' '}).trimmed ();
         lines.append (decoded);
       }
@@ -259,14 +271,14 @@ namespace
   QList<DecodeLine> run_native_decode (std::vector<short> const& samples,
                                        int nutc, int ntrperiod, int nsubmode,
                                        int nfqso, int ntol, int ndepth,
-                                       int nfa, int nfb)
+                                       int nfa, int nfb, int nqsoprogress)
   {
     params_block_t params {};
     params.nmode = 66;
     params.nutc = nutc;
     params.ndiskdat = true;
     params.ntrperiod = ntrperiod;
-    params.nQSOProgress = 0;
+    params.nQSOProgress = nqsoprogress;
     params.nfqso = nfqso;
     params.newdat = true;
     params.nfa = nfa;
@@ -337,6 +349,10 @@ int main (int argc, char* argv[])
                                  QStringLiteral ("High decode bound"),
                                  QStringLiteral ("HERTZ"),
                                  QStringLiteral ("4000"));
+  QCommandLineOption qsoProgressOption ({QStringLiteral ("Q"), QStringLiteral ("qso-progress")},
+                                        QStringLiteral ("QSO progress/AP state"),
+                                        QStringLiteral ("PROGRESS"),
+                                        QStringLiteral ("0"));
 
   parser.addOption (trPeriodOption);
   parser.addOption (submodeOption);
@@ -345,6 +361,7 @@ int main (int argc, char* argv[])
   parser.addOption (tolOption);
   parser.addOption (lowOption);
   parser.addOption (highOption);
+  parser.addOption (qsoProgressOption);
   parser.addPositionalArgument (QStringLiteral ("wav"), QStringLiteral ("Input 12000 Hz mono WAV file"));
   parser.process (app);
 
@@ -362,9 +379,14 @@ int main (int argc, char* argv[])
       int const ntol = parse_int_option (parser, tolOption, QStringLiteral ("tolerance"));
       int const nfa = parse_int_option (parser, lowOption, QStringLiteral ("lowest"));
       int const nfb = parse_int_option (parser, highOption, QStringLiteral ("highest"));
+      int const nqsoprogress = parse_int_option (parser, qsoProgressOption, QStringLiteral ("qso-progress"));
       if (nsubmode < 0 || nsubmode > 4)
         {
           fail (QStringLiteral ("submode must be in 0..4"));
+        }
+      if (nqsoprogress < 0 || nqsoprogress > 6)
+        {
+          fail (QStringLiteral ("qso-progress must be in 0..6"));
         }
 
       QString const wav_path = parser.positionalArguments ().constFirst ();
@@ -372,9 +394,11 @@ int main (int argc, char* argv[])
       int const nutc = QFileInfo {wav_path}.completeBaseName ().right (6).toInt ();
 
       QList<DecodeLine> const worker = run_worker_decode (wav.samples, nutc, ntrperiod, nsubmode,
-                                                          nfqso, ntol, ndepth, nfa, nfb);
+                                                          nfqso, ntol, ndepth, nfa, nfb,
+                                                          nqsoprogress);
       QList<DecodeLine> const native = run_native_decode (wav.samples, nutc, ntrperiod, nsubmode,
-                                                          nfqso, ntol, ndepth, nfa, nfb);
+                                                          nfqso, ntol, ndepth, nfa, nfb,
+                                                          nqsoprogress);
 
       QHash<QString, DecodeLine> worker_by_key;
       for (auto const& line : worker)

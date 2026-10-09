@@ -21,10 +21,22 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
     connect(m_selfCal, &DecoSyncSelfCal::offsetEstimateUpdated, this,
         [this](double offsetMs, double varianceMs2, int sampleCount) {
             Q_UNUSED(sampleCount)
+            bool const trustedTimeLocked =
+                (m_ntp && m_ntp->isSynced()) || (m_https && m_https->isSynced());
+            if (!m_enabled || !m_selfCalibrationEnabled || !trustedTimeLocked) {
+                return;
+            }
+            double const trustedOffsetMs =
+                (m_ntp && m_ntp->isSynced()) ? m_ntp->offsetMs()
+                                             : (m_https ? m_https->offsetMs() : 0.0);
+            if (!std::isfinite(offsetMs)
+                || std::abs(offsetMs - trustedOffsetMs) > 750.0) {
+                return;
+            }
             // Self-cal misura skew NETTO rispetto al correct time, NON
             // additivo al Kalman offset corrente. Convertiamo in
             // "measurement assoluto": m_kalman vede z = offsetMs.
-            m_kalman.update(offsetMs, std::max(1.0, varianceMs2));
+            m_kalman.update(offsetMs, std::max(250000.0, varianceMs2));
             recomputeCombinedOffset(QStringLiteral("selfcal"));
         });
     // Fase 2+3: NTP UDP, HTTPS Date e Kalman filter girano IN PARALLELO.
@@ -68,11 +80,11 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
     m_kalmanLastTickMs = QDateTime::currentMSecsSinceEpoch();
     m_kalmanTickTimer.start();
 
-    // Default ENABLED; il consumer (DecodiumBridge) chiama setEnabled con
-    // il valore della QSettings; default ON su nuova install.
+    // Default time sync enabled; RF decode self-calibration is a separate
+    // opt-in because decode DT is unauthenticated over-the-air input.
     m_ntp->setEnabled(true);
     m_https->setEnabled(true);
-    m_selfCal->setEnabled(true);
+    m_selfCal->setEnabled(false);
 }
 
 DecoSyncTime::~DecoSyncTime() = default;
@@ -123,14 +135,25 @@ void DecoSyncTime::setEnabled(bool on)
     m_enabled = on;
     if (m_ntp) m_ntp->setEnabled(on);
     if (m_https) m_https->setEnabled(on);
-    if (m_selfCal) m_selfCal->setEnabled(on);
+    if (m_selfCal) m_selfCal->setEnabled(on && m_selfCalibrationEnabled);
     emit enabledChanged();
     recomputeCombinedOffset(on ? QStringLiteral("enabled") : QStringLiteral("disabled"));
 }
 
 void DecoSyncTime::reportDecodeDt(double dtSec, int snrDb)
 {
-    if (m_selfCal) m_selfCal->addDecodeDt(dtSec, snrDb);
+    if (m_enabled && m_selfCalibrationEnabled && m_selfCal) {
+        m_selfCal->addDecodeDt(dtSec, snrDb);
+    }
+}
+
+void DecoSyncTime::setSelfCalibrationEnabled(bool on)
+{
+    if (m_selfCalibrationEnabled == on) return;
+    m_selfCalibrationEnabled = on;
+    if (m_selfCal) {
+        m_selfCal->setEnabled(m_enabled && m_selfCalibrationEnabled);
+    }
 }
 
 void DecoSyncTime::setSelfCalPeriodMs(int ms)
