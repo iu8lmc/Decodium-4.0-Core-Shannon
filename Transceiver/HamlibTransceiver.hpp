@@ -28,6 +28,7 @@ public:
                               QObject * parent = nullptr);
   ~HamlibTransceiver ();
 
+  QVariantMap voice_controls(QString const&, double, bool) override;
   void send_morse (QString const&, int) noexcept override;  // keying CW via Hamlib
 
 private:

@@ -72,6 +72,8 @@ public:
     QString rigLabel() const override { return m_state.rigLabel; }
     decoport::Context state() const override { return m_state; }
 
+    void requestVoiceControl(const QString& key = {}, double value = 0, bool write = false);
+    Q_SIGNAL void voiceControlsReady(QVariantMap controls);
     void setFrequency(qint64 hz) override;
     void setMode(decoport::Mode mode) override;
     void setPtt(bool on, quint64 whenNs = 0) override;
@@ -141,7 +143,8 @@ private slots:
 
 private:
     enum class Kind { Freq, Mode, Ptt, Strength, Swr, Alc, Power, Other };
-    struct Pending { Kind kind; qint64 sentMs; };
+    struct Pending { Kind kind; qint64 sentMs; QString voiceKey; bool voiceWrite=false; };
+    QVariantMap m_voiceControls;
 
     static qint64 nowMs();
     void openSocket();
@@ -154,7 +157,7 @@ private:
     void closeRelay(bool releasePtt);
     void sendRegister();
     void sendPacket(quint8 flag, quint32 seq, const QByteArray& body, quint32 rate = 48000);
-    void sendCat(const QString& line, Kind kind);
+    void sendCat(const QString& line, Kind kind, const QString& voiceKey = {}, bool voiceWrite = false);
     void handleAudio(const decolink::Header& h, const QByteArray& body);
     void handleCatResponse(quint32 seq, const QByteArray& body);
     void handleTxState(const QString& text);

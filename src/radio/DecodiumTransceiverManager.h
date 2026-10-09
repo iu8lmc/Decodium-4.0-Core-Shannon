@@ -3,6 +3,7 @@
 // Supporta Hamlib (100+ radio), OmniRig, HRD, DXLab Suite Commander, TCI.
 // Gestore CAT Hamlib: interfaccia pubblica condivisa con gli altri manager + campi aggiuntivi.
 #include <QObject>
+#include <QVariantMap>
 #include <QElapsedTimer>
 #include <QString>
 #include <QStringList>
@@ -195,6 +196,8 @@ public:
     void setRigTxFrequencyAndPttAsync(double hz, bool on);
     Q_INVOKABLE void setRigPtt(bool on);
     Q_INVOKABLE void setRigMode(const QString& mode);
+    void requestVoiceControl(const QString& key = {}, double value = 0, bool write = false);
+    Q_SIGNAL void voiceControlsReady(QVariantMap controls);
     Q_INVOKABLE void setRigAudio(bool on, double periodSeconds = 15.0, int blockSize = 6912 / 2);
     Q_INVOKABLE void setRigTune(bool on);
     Q_INVOKABLE void startRigTxAudio(const QString& mode, unsigned symbolsLength,

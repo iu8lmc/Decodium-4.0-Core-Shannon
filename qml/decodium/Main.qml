@@ -1778,6 +1778,20 @@ ApplicationWindow {
     }
 
     // 1.0.571 - finestra DecoPort, creata alla prima apertura.
+    function openSsbWindow() {
+        if (bridge.mode !== "SSB") bridge.mode = "SSB"
+        if (bridge.mode !== "SSB") return
+        ssbWindowLoader.active = true
+        if (ssbWindowLoader.item) { ssbWindowLoader.item.show(); ssbWindowLoader.item.raise(); ssbWindowLoader.item.requestActivate() }
+    }
+    Loader {
+        id: ssbWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/SsbWindow.qml"
+        Component.onCompleted: if (bridge && bridge.mode === "SSB") active = true
+        onLoaded: { item.show(); item.raise(); item.requestActivate() }
+    }
     function showCwWindow() {
         cwWindowLoader.active = true
         if (cwWindowLoader.item) {
@@ -1860,6 +1874,8 @@ ApplicationWindow {
                 mainWindow.showJttyWindow()
             if (bridge.mode === "CW")
                 mainWindow.showCwWindow()
+            if (bridge.mode === "SSB")
+                mainWindow.openSsbWindow()
         }
     }
 
@@ -12819,6 +12835,10 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
             }
         }
 
+        MenuItem {
+            text: qsTr("SSB - PC microphone and radio controls...")
+            onTriggered: mainWindow.openSsbWindow()
+        }
         MenuItem {
             // CW: decodificatore, macro e manipolatore (dal modulo CW di DecoDXLog).
             text: qsTr("CW - decoder, keyer and macros...")

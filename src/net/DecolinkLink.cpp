@@ -497,12 +497,12 @@ void DecolinkLink::handleAudio(const Header& h, const QByteArray& body)
 
 // ── CAT ────────────────────────────────────────────────────────────────────
 
-void DecolinkLink::sendCat(const QString& line, Kind kind)
+void DecolinkLink::sendCat(const QString& line, Kind kind, const QString& voiceKey, bool voiceWrite)
 {
     if (!m_socket || !m_registered)
         return;
     const quint32 seq = ++m_catSeq;
-    m_pending.insert(seq, Pending{kind, nowMs()});
+    m_pending.insert(seq, Pending{kind, nowMs(), voiceKey, voiceWrite});
     sendPacket(CatReq, seq, (line + QLatin1Char('\n')).toLatin1());
 }
 
@@ -552,12 +552,30 @@ void DecolinkLink::handleCatResponse(quint32 seq, const QByteArray& body)
     const auto it = m_pending.find(seq);
     if (it == m_pending.end())
         return;                 // una risposta a una domanda che non e' nostra
+    const QString voiceKey=it->voiceKey;
+    const bool voiceWrite=it->voiceWrite;
     const Kind kind = it->kind;
     m_pending.erase(it);
     m_lastCatMs = nowMs();
 
     const QString text = QString::fromLatin1(body);
     const QStringList lines = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    if(!voiceKey.isEmpty()) {
+        if(lines.isEmpty() || text.contains("RPRT -")) {
+            m_voiceControls[voiceKey+"Supported"]=false;
+            m_voiceControls["error"]=tr("Remote CAT %1: %2").arg(voiceKey,text.trimmed());
+        } else if(voiceWrite) {
+            requestVoiceControl(voiceKey,0,false);return;
+        } else {
+            bool ok=false;
+            const double value=lines.value(voiceKey=="filter" ? 1 : 0).trimmed().toDouble(&ok);
+            if(ok && std::isfinite(value)) {
+                m_voiceControls[voiceKey+"Supported"]=true;
+                m_voiceControls[voiceKey]=(voiceKey=="agc" || voiceKey=="filter") ? value : value*100.;
+            }
+        }
+        emit voiceControlsReady(m_voiceControls);return;
+    }
     if (!lines.isEmpty() && lines.first().startsWith(QLatin1String("RPRT -8"))) {
         // Il relay ha rifiutato il comando: un altro operatore ha il PTT della
         // stazione e finche' parla la radio si puo' solo guardare.
@@ -566,8 +584,13 @@ void DecolinkLink::handleCatResponse(quint32 seq, const QByteArray& body)
         setStatus(tr("Another operator is transmitting"));
         return;
     }
-    if (lines.isEmpty() || lines.first().startsWith(QLatin1String("RPRT")))
-        return;                 // "RPRT 0" e' un si', "RPRT -1" un no: niente da leggere
+    if (lines.isEmpty() || lines.first().startsWith(QLatin1String("RPRT"))) {
+        if(kind==Kind::Alc)m_state.mask &= ~decoport::FieldAlc;
+        if(kind==Kind::Power)m_state.mask &= ~decoport::FieldForwardPower;
+        if(kind==Kind::Swr)m_state.mask &= ~decoport::FieldSwr;
+        if(kind==Kind::Alc || kind==Kind::Power || kind==Kind::Swr)emit stateChanged();
+        return;
+    }                 // "RPRT 0" e' un si', "RPRT -1" un no: niente da leggere
 
     bool changed = false;
     switch (kind) {
@@ -593,6 +616,18 @@ void DecolinkLink::handleCatResponse(quint32 seq, const QByteArray& body)
         if (on != m_state.ptt) {
             m_state.setPtt(on);
             changed = true;
+        }
+        break;
+    }
+    case Kind::Alc:
+    case Kind::Power:
+    case Kind::Swr: {
+        bool ok=false;double v=lines.first().trimmed().toDouble(&ok);
+        if(ok && std::isfinite(v) && v>=0) {
+            if(kind==Kind::Alc)m_state.setAlcPct(v*100.);
+            else if(kind==Kind::Power)m_state.setForwardPowerW(v);
+            else m_state.setSwr(v);
+            changed=true;
         }
         break;
     }
@@ -685,8 +720,13 @@ void DecolinkLink::onPoll()
     sendCat(QStringLiteral("m"), Kind::Mode);
     if (m_pollTick % 2 == 0)
         sendCat(QStringLiteral("t"), Kind::Ptt);
-    if (m_pollTick % 3 == 0)
+    if (m_pollTick % 3 == 0 && !m_state.ptt)
         sendCat(QStringLiteral("l STRENGTH"), Kind::Strength);
+    if (m_pollTick % 3 == 0 && m_state.ptt) {
+        sendCat(QStringLiteral("l ALC"),Kind::Alc);
+        sendCat(QStringLiteral("l RFPOWER_METER_WATTS"),Kind::Power);
+        sendCat(QStringLiteral("l SWR"),Kind::Swr);
+    }
 }
 
 void DecolinkLink::onWatch()
@@ -695,7 +735,20 @@ void DecolinkLink::onWatch()
 
     // pulizia delle domande senza risposta
     for (auto it = m_pending.begin(); it != m_pending.end();) {
-        if (now - it->sentMs > 3000) it = m_pending.erase(it);
+        if (now - it->sentMs > 3000) {
+            if(it->kind==Kind::Alc)m_state.mask &= ~decoport::FieldAlc;
+            if(it->kind==Kind::Power)m_state.mask &= ~decoport::FieldForwardPower;
+            if(it->kind==Kind::Swr)m_state.mask &= ~decoport::FieldSwr;
+            if(it->kind==Kind::Alc || it->kind==Kind::Power || it->kind==Kind::Swr)
+                QMetaObject::invokeMethod(this,[this]{emit stateChanged();},Qt::QueuedConnection);
+            if(!it->voiceKey.isEmpty()) {
+                m_voiceControls[it->voiceKey+"Supported"]=false;
+                m_voiceControls["error"]=tr("Remote CAT timeout: %1").arg(it->voiceKey);
+                const auto controls=m_voiceControls;
+                QMetaObject::invokeMethod(this,[this,controls]{emit voiceControlsReady(controls);},Qt::QueuedConnection);
+            }
+            it = m_pending.erase(it);
+        }
         else ++it;
     }
 
@@ -1162,4 +1215,37 @@ void DecolinkLink::onV3Tick()
     flushV3(false);
     if (m_v3Hold.isEmpty())
         m_v3Timer->stop();
+}
+
+void DecolinkLink::requestVoiceControl(const QString& key, double value, bool write)
+{
+    if(!isLinked() || !canTransmit() || !txBlockedReason().isEmpty()) {
+        emit voiceControlsReady({{"error",tr("Remote CAT access unavailable")}});return;
+    }
+    static const QMap<QString,QString> levels{{"power","RFPOWER"},{"rf","RF"},{"mic","MICGAIN"},{"agc","AGC"}};
+    if(key.isEmpty()) {
+        m_voiceControls.clear();
+        QVariantList agc;
+        const QStringList names{"OFF","SUPERFAST","FAST","SLOW","USER","MEDIUM","AUTO","LONG","ON"};
+        for(int i=0;i<names.size();++i)agc.append(QVariantMap{{"name",names[i]},{"value",i}});
+        m_voiceControls["agcModes"]=agc;
+        emit voiceControlsReady(m_voiceControls);
+        for(auto it=levels.begin();it!=levels.end();++it)requestVoiceControl(it.key(),0,false);
+        requestVoiceControl("filter",0,false);return;
+    }
+    if(!std::isfinite(value))return;
+    if(write && (ptt() || !m_voiceControls.value(key+"Supported").toBool()))return;
+    if(key=="filter") {
+        if(write) {
+            if(value<300 || value>4000)return;
+            const auto mode=m_state.mode;
+            if(mode!=decoport::Mode::Usb && mode!=decoport::Mode::Lsb && mode!=decoport::Mode::Digu && mode!=decoport::Mode::Digl)return;
+            sendCat(QStringLiteral("M %1 %2").arg(rigctlModeName(mode)).arg(int(value)),Kind::Other,key,true);
+        } else sendCat("m",Kind::Other,key,false);
+    } else if(levels.contains(key)) {
+        if(write) {
+            if(value<0 || value>(key=="agc" ? 8 : 100))return;
+            sendCat(QStringLiteral("L %1 %2").arg(levels[key]).arg(key=="agc" ? value : value/100.),Kind::Other,key,true);
+        } else sendCat(QStringLiteral("l %1").arg(levels[key]),Kind::Other,key,false);
+    }
 }

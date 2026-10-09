@@ -4265,6 +4265,7 @@ static QString canonicalApplicationDecodeMode(QString mode)
     }
     // CW: il modulo CW (decodificatore, macro, manipolatore) e' un modo
     // dell'applicazione come JTTY, non solo un nome di modo della radio.
+    if (upperMode == QStringLiteral("SSB")) return QStringLiteral("SSB");
     if (upperMode == QStringLiteral("CW")) {
         return QStringLiteral("CW");
     }
@@ -4289,6 +4290,7 @@ static bool isStreamingKeyboardMode(QString const& mode)
     QString const m = mode.trimmed();
     return m.compare(QStringLiteral("RTTY"), Qt::CaseInsensitive) == 0
         || m.compare(QStringLiteral("JTTY"), Qt::CaseInsensitive) == 0
+        || m.compare(QStringLiteral("SSB"), Qt::CaseInsensitive) == 0
         || m.compare(QStringLiteral("CW"), Qt::CaseInsensitive) == 0;
 }
 
@@ -4298,6 +4300,7 @@ static bool isNativePcmKeyboardMode(QString const& mode)
 {
     QString const m = mode.trimmed();
     return m.compare(QStringLiteral("JTTY"), Qt::CaseInsensitive) == 0
+        || m.compare(QStringLiteral("SSB"), Qt::CaseInsensitive) == 0
         || m.compare(QStringLiteral("CW"), Qt::CaseInsensitive) == 0;
 }
 
@@ -11619,6 +11622,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 
 DecodiumBridge::~DecodiumBridge()
 {
+    ssbStop();
     beginDecodeCallbackShutdown();
     // Close the SSTV queue and join its worker before any Decodium RX source
     // is torn down. The runtime object itself stays alive until member
@@ -18399,12 +18403,13 @@ void DecodiumBridge::setMode(const QString& v) {
             m_decoPortTxOutRate = 0;
             bridgeLog(QStringLiteral("Leaving JTTY: producer stopped, PTT release requested, USB TX output closing"));
         }
+        if (previousMode == QStringLiteral("SSB")) ssbStop();
         if (previousMode == QStringLiteral("CW")) {
             // Il CW in corso si ferma: manipolatore, audio e PTT remoto.
             emit cwModeLeaving();
             bridgeLog(QStringLiteral("Leaving CW: transmission stopped"));
         }
-        if (normalizedMode == QStringLiteral("JTTY") || normalizedMode == QStringLiteral("CW")) {
+        if (normalizedMode == QStringLiteral("JTTY") || normalizedMode == QStringLiteral("CW") || normalizedMode == QStringLiteral("SSB")) {
             // JTTY ha il suo ricevitore nativo sul PCM: il decodificatore
             // legacy si ferma come per RTTY. Lo stesso vale per il CW. La radio resta nel modo dati
             // configurato (e' la stessa strada di FT8) e la frequenza la
@@ -18533,7 +18538,7 @@ void DecodiumBridge::setMode(const QString& v) {
             ? QStringLiteral("FT2")
             : normalizedMode;
         m_bandManager->setCurrentMode(bandMode);
-        if (m_preserveFrequencyOnModeChange) {
+        if (m_preserveFrequencyOnModeChange || normalizedMode == QStringLiteral("SSB")) {
             m_bandManager->updateFromFrequency(m_frequency);
         } else {
             // updateForMode emits bandFrequencyRequested(), whose sole bridge
@@ -18593,7 +18598,7 @@ void DecodiumBridge::setMode(const QString& v) {
         QString const configuredRigMode = configuredCatRigMode();
         QString const rttyRestoreMode = m_rttyRigModeState.restoreTarget(
             rttyCatContext(), configuredRigMode, QDateTime::currentMSecsSinceEpoch());
-        if (!configuredRigMode.isEmpty() || !rttyRestoreMode.isEmpty()) {
+        if (normalizedMode == QStringLiteral("SSB") || !configuredRigMode.isEmpty() || !rttyRestoreMode.isEmpty()) {
             applyConfiguredCatRigMode(QStringLiteral("mode-change"));
         } else if (m_catBackend == QStringLiteral("tci")
             && m_hamlibCat
@@ -21422,6 +21427,7 @@ RemoteRadioLink* DecodiumBridge::remoteLinkIfAny() const
 // meccanismo di DecoPort: cambia solo il collegamento che sta dietro.
 void DecodiumBridge::setDecolinkUseRemote(bool on)
 {
+    ssbStop();
     if (on) {
         if (m_decoPortUseRemote && !m_remoteIsDecolink)
             setDecoPortUseRemote(false);
@@ -21683,29 +21689,7 @@ void DecodiumBridge::onDecoPortRxAudio(const QVector<short>& samples, quint64 ca
     m_audioSink->injectExternalSamples(samples);
     m_decoPortRemoteSamples += samples.size();
 
-    if (m_decoPortMonitor && m_decoPortMonitorOut && m_decoPortMonitorRate > 0) {
-        // Se la scheda non accetta i 12 kHz si va a 48 ripetendo ogni campione
-        // quattro volte: per un ascolto di controllo e' un compromesso onesto,
-        // e non tocca affatto quello che entra nel decoder.
-        QVector<short> out_samples;
-        if (m_decoPortMonitorRate == SAMPLE_RATE) {
-            out_samples = samples;
-        } else {
-            int const factor = m_decoPortMonitorRate / SAMPLE_RATE;
-            out_samples.reserve(samples.size() * factor);
-            for (short s : samples)
-                for (int i = 0; i < factor; ++i)
-                    out_samples.append(s);
-        }
-        // Volume affects the local speaker copy only; decoder PCM stays untouched.
-        for (short& sample : out_samples)
-            sample = static_cast<short>(std::lround(sample * m_remoteRxGain));
-        QPointer<RtlSdrAudioOutput> out(m_decoPortMonitorOut);
-        int const rate = m_decoPortMonitorRate;
-        QMetaObject::invokeMethod(m_decoPortMonitorOut, [out, out_samples, rate]() {
-            if (out) out->enqueueSamples(out_samples, rate);
-        }, Qt::QueuedConnection);
-    }
+    ssbMonitorAudio(samples);
 
     qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
     if (nowMs - m_lastDecoPortAudioLogMs >= 5000) {
@@ -22030,6 +22014,7 @@ void DecodiumBridge::decoPortPlayTxAudio(const QVector<short>& samples, bool fro
         connect(m_decoPortTxOut, &RtlSdrAudioOutput::error, this,
                 [this](const QString& message) {
             bridgeLog(QStringLiteral("DecoPort transmit audio error: %1").arg(message));
+            ssbStop();
             if (m_rttyTxActive)
                 rttyAlzaPtt(false);
         }, Qt::QueuedConnection);
@@ -22143,6 +22128,10 @@ void DecodiumBridge::onDecoPortRemoteState()
         emit catRigNameChanged();
     }
 
+    const auto telemetry=link->state();
+    updateRigTelemetry((telemetry.mask & decoport::FieldForwardPower) ? telemetry.forwardPowerW() : 0.,
+                       (telemetry.mask & decoport::FieldSwr) ? telemetry.swr() : 0.,
+                       telemetry.alcPct(), link->ptt() && (telemetry.mask & decoport::FieldAlc));
     double const f = link->frequencyHz();
     if (f <= 0.0 || std::abs(f - m_frequency) <= 1.0)
         return;
@@ -22158,6 +22147,7 @@ void DecodiumBridge::onDecoPortRemoteState()
 // nello stesso buffer si mescolerebbero in rumore.
 void DecodiumBridge::setDecoPortUseRemote(bool on)
 {
+    ssbStop();
     if (m_decoPortUseRemote == on)
         return;
 
@@ -22221,7 +22211,7 @@ void DecodiumBridge::setDecoPortUseRemote(bool on)
         stopAudioCapture();
         // Il codec USB deve stare dentro il modulatore, altrimenti la radio
         // ascolta il microfono e noi non decodifichiamo niente.
-        link->setModeName(QStringLiteral("DIGU"));
+        link->setModeName(m_mode == QStringLiteral("SSB") ? m_ssbRadioMode : QStringLiteral("DIGU"));
         onDecoPortRemoteState();
         setDecoPortMonitor(true);
         emit statusMessage(tr("Using the remote radio %1 — decoding its audio")
@@ -27681,6 +27671,7 @@ bool DecodiumBridge::transmitFt2LinkAudio(const QString& text,
 
 void DecodiumBridge::startTx()
 {
+    if (m_mode == QStringLiteral("SSB") || m_ssbTxActive) return;
     // Il CW a tasto verso la radio remota tiene il PTT: un altro modo che
     // partisse adesso trasmetterebbe sopra.
     if (m_cwRemoteKeying) {
@@ -29039,6 +29030,7 @@ void DecodiumBridge::resetStandardTxMessages()
 
 void DecodiumBridge::stopTx()
 {
+    ssbStop();
     // Qualunque sia il motivo per cui si smette, la radio remota deve smettere
     // con noi: e' l'unica che non puo' accorgersene da sola.
     if (m_decoPortUseRemote || !m_decoPortTxFrames.isEmpty())
@@ -29225,6 +29217,7 @@ void DecodiumBridge::disarmTuneWatchdog(const QString& reason)
 
 void DecodiumBridge::startTune()
 {
+    if (m_ssbTxActive || m_mode == QStringLiteral("SSB")) return;
     if (rtlSdrEnabled()) {
         const QString message = QStringLiteral("Tune blocked: RTL-SDR receiver mode is receive-only.");
         bridgeLog(message);
@@ -30947,7 +30940,7 @@ void DecodiumBridge::applyRttyRigMode(const QString& reason)
 
 void DecodiumBridge::applyConfiguredCatRigMode(const QString& reason)
 {
-    QString rigMode = configuredCatRigMode();
+    QString rigMode = m_mode == QStringLiteral("SSB") ? m_ssbRadioMode : configuredCatRigMode();
     if (rigMode.isEmpty() && m_mode != QStringLiteral("RTTY")) {
         rigMode = m_rttyRigModeState.restoreTarget(
             rttyCatContext(), rigMode, QDateTime::currentMSecsSinceEpoch());
@@ -30983,7 +30976,7 @@ void DecodiumBridge::applyConfiguredCatRigMode(const QString& reason)
         // microfono: da li' si trasmetterebbe il silenzio della stanza. Con una
         // radio in rete l'audio arriva sempre dal codec USB, quindi il modo da
         // chiedere e' sempre quello dei dati.
-        QString const wanted = rigMode.contains(QStringLiteral("-L"), Qt::CaseInsensitive)
+        QString const wanted = m_mode == QStringLiteral("SSB") ? m_ssbRadioMode : rigMode.contains(QStringLiteral("-L"), Qt::CaseInsensitive)
                                || rigMode.compare(QStringLiteral("LSB"), Qt::CaseInsensitive) == 0
                                    ? QStringLiteral("DIGL")
                                    : QStringLiteral("DIGU");
@@ -43089,8 +43082,12 @@ void DecodiumBridge::testCwMonitor() {
     playCwMonitor(events, 700);
 }
 
+// SSB voice workspace.
+#include "SsbBridge.inc"
+
 bool DecodiumBridge::cwTuneFrequency(double hz)
 {
+    if (m_ssbTxActive) return false;
     if (!std::isfinite(hz) || hz < 1000 || hz > 1e12 || !m_catConnected
         || m_transmitting || m_tuning || m_cwRemoteKeying || m_cwTxActive
         || sstvTxActive() || m_rttyTxActive) return false;
@@ -43116,6 +43113,7 @@ bool DecodiumBridge::cwTuneFrequency(double hz)
 
 bool DecodiumBridge::cwCanTransmit()
 {
+    if (m_ssbTxActive) return false;
     if (m_transmitting || m_tuning || sstvTxActive() || m_rttyTxActive)
         return false;
     if (m_decoPortUseRemote) {
@@ -52184,6 +52182,7 @@ void DecodiumBridge::ensureAudioSink()
                 this, [this](QVector<short> samples) {
             if (samples.isEmpty())
                 return;
+            if (m_mode == "SSB" && !m_decoPortUseRemote) ssbMonitorAudio(samples);
             // CW: lo stesso rubinetto, aperto solo mentre la finestra CW e' aperta
             // e mai in trasmissione (si decodificherebbe il proprio sidetone).
             if (m_cwInAscolto && !m_transmitting && !m_tuning)
@@ -54963,7 +54962,7 @@ QStringList DecodiumBridge::availableModes() const
 {
     // RTTY in fondo: e' l'unico che non passa dai decodificatori a slot, e
     // sceglierlo ferma la decodifica dei modi digitali invece di affiancarsi.
-    return {"FT8", "FT2", "FT2-Link", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR", "RTTY", "JTTY", "CW"};
+    return {"FT8", "FT2", "FT2-Link", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR", "RTTY", "JTTY", "CW", "SSB"};
 }
 
 // Simple radix-2 in-place FFT (Cooley-Tukey)

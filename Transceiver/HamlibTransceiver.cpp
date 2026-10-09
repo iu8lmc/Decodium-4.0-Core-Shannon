@@ -2476,3 +2476,57 @@ void HamlibTransceiver::do_tune (bool on)
     }
 #endif
 }
+
+
+QVariantMap HamlibTransceiver::voice_controls(QString const& key, double value, bool write)
+{
+    QVariantMap result;
+    auto* rig=m_->rig_.data();
+    if(!rig || !rig->caps) return {{"error",QStringLiteral("Radio disconnected")}};
+    struct Level { const char* name; setting_t id; };
+    const Level levels[]={{"power",RIG_LEVEL_RFPOWER},{"rf",RIG_LEVEL_RF},
+                          {"mic",RIG_LEVEL_MICGAIN},{"agc",RIG_LEVEL_AGC}};
+    QString error;
+    if(write) {
+        int rc=-RIG_EINVAL;
+        if(!std::isfinite(value)) return {{"error",QStringLiteral("Invalid control value")}};
+        if(key=="filter") {
+            rmode_t mode=RIG_MODE_NONE;pbwidth_t width=0;
+            rc=rig_get_mode(rig,RIG_VFO_CURR,&mode,&width);
+            if(rc==RIG_OK && (mode==RIG_MODE_USB || mode==RIG_MODE_LSB || mode==RIG_MODE_PKTUSB || mode==RIG_MODE_PKTLSB)
+               && value>=300 && value<=4000)
+                rc=rig_set_mode(rig,RIG_VFO_CURR,mode,pbwidth_t(value));
+            else rc=-RIG_EINVAL;
+        } else for(const auto& l:levels) if(key==l.name && rig_has_set_level(rig,l.id)) {
+            value_t v{};
+            if(l.id==RIG_LEVEL_AGC) {
+                bool allowed=false;
+                for(int i=0;i<rig->caps->agc_level_count;++i) if(value==rig->caps->agc_levels[i])allowed=true;
+                if(rig->caps->agc_level_count==0)allowed=value>=0 && value<=8 && value==int(value);
+                if(!allowed)break;
+                v.i=int(value);
+            } else {if(value<0 || value>100)break;v.f=float(value/100.);}
+            rc=rig_set_level(rig,RIG_VFO_CURR,l.id,v);break;
+        }
+        if(rc!=RIG_OK)error=QStringLiteral("%1: %2").arg(key,QString::fromLatin1(rigerror(rc)));
+    }
+    for(const auto& l:levels) {
+        bool canSet=rig_has_set_level(rig,l.id)!=0;
+        result[QString::fromLatin1(l.name)+"Supported"]=canSet;
+        value_t v{};
+        if(rig_has_get_level(rig,l.id) && rig_get_level(rig,RIG_VFO_CURR,l.id,&v)==RIG_OK)
+            result[l.name]=l.id==RIG_LEVEL_AGC ? double(v.i) : double(v.f)*100.;
+    }
+    QVariantList agc;
+    for(int i=0;i<rig->caps->agc_level_count;++i) {
+        const auto level=rig->caps->agc_levels[i];
+        agc.append(QVariantMap{{"name",QString::fromLatin1(rig_stragclevel(level))},{"value",int(level)}});
+    }
+    if(agc.isEmpty())for(int v:{0,2,3,5,6})agc.append(QVariantMap{{"name",QString::fromLatin1(rig_stragclevel(agc_level_e(v)))},{"value",v}});
+    result["agcModes"]=agc;
+    result["filterSupported"]=rig->caps->set_mode!=nullptr;
+    rmode_t mode=RIG_MODE_NONE;pbwidth_t width=0;
+    if(rig_get_mode(rig,RIG_VFO_CURR,&mode,&width)==RIG_OK)result["filter"]=double(width);
+    result["error"]=error;
+    return result;
+}

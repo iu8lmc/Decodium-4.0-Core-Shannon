@@ -2746,3 +2746,18 @@ void DecodiumTransceiverManager::loadSettings()
     }
     enforceForceLineAvailability();
 }
+
+void DecodiumTransceiverManager::requestVoiceControl(const QString& key, double value, bool write)
+{
+    if(!m_connected || !d->transceiver){emit voiceControlsReady({{"error",tr("CAT disconnected")}});return;}
+    QPointer<DecodiumTransceiverManager> owner(this);
+    auto* xcv=d->transceiver.data();
+    QMetaObject::invokeMethod(xcv,[owner,xcv,key,value,write]{
+        QVariantMap result;
+        try {result=xcv->voice_controls(key,value,write);}
+        catch(...) {result={{"error",QStringLiteral("Voice CAT request failed")}};}
+        if(owner)QMetaObject::invokeMethod(owner,[owner,xcv,result]{
+            if(owner && owner->m_connected && owner->d->transceiver==xcv)emit owner->voiceControlsReady(result);
+        },Qt::QueuedConnection);
+    },Qt::QueuedConnection);
+}

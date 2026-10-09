@@ -89,6 +89,7 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #include "DecodiumBridge.h"
 #include "JttyController.h"
 #include "CwController.h"
+#include "SsbController.h"
 #include "RotorModule.h"
 #include "DecodiumDiagnostics.h"
 #include "DecodiumDxCluster.h"
@@ -2470,6 +2471,15 @@ int main(int argc, char* argv[])
     }
 
     QStandardPaths::setTestModeEnabled(parser.isSet(testOption));
+    // Explicit test-only root keeps bridge settings (including named INI
+    // stores) separate from the operator's normal radio configuration.
+    if (parser.isSet(testOption)) {
+        const QString labSettingsRoot=qEnvironmentVariable("DECODIUM_LAB_SETTINGS_DIR");
+        if (!labSettingsRoot.isEmpty() && QDir::isAbsolutePath(labSettingsRoot)) {
+            QDir().mkpath(labSettingsRoot);
+            QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,labSettingsRoot);
+        }
+    }
 
     QString const rigName = parser.value(rigOption).trimmed();
     if (!rigName.isEmpty()) {
@@ -2804,6 +2814,7 @@ int main(int argc, char* argv[])
     decodium::jtty::JttyController jtty;
     // CW: decodificatore, manipolatori e macro (vengono da DecoDXLog).
     decodium::cw::CwController cwModule;
+    decodium::ssb::SsbController ssbModule;
     // Rotore d'antenna PRO.SIS.TEL (viene da DecoRotor): spento finche' l'operatore non lo accende.
     decodium::rotor::RotorModule rotorModule;
     auto labDialOverrideActive = std::make_shared<bool>(labDialHz > 0);
@@ -4413,6 +4424,16 @@ int main(int argc, char* argv[])
                           &cwModule, &decodium::cw::CwController::stop);
         engine.rootContext ()->setContextProperty ("cwModule", &cwModule);
         L("CW: modulo avviato");
+        decodium::ssb::SsbController::Hooks voice;
+        voice.begin=[&bridge]{return bridge.ssbBegin();};
+        voice.end=[&bridge]{bridge.ssbStop();};
+        voice.valid=[&bridge]{return bridge.ssbTxActive() && bridge.ssbValid();};
+        voice.send=[&bridge](const QVector<short>& samples){bridge.ssbSend(samples);};
+        voice.leadMs=[&bridge]{return bridge.decoPortUseRemote() ? bridge.cwRemoteLeadMs() : 150;};
+        ssbModule.setHooks(std::move(voice));
+        QObject::connect(&bridge,&DecodiumBridge::ssbStateChanged,&ssbModule,[&]{if(!bridge.ssbTxActive())ssbModule.stop();});
+        QObject::connect(&app,&QCoreApplication::aboutToQuit,&ssbModule,&decodium::ssb::SsbController::stop);
+        engine.rootContext()->setContextProperty("ssbModule",&ssbModule);
     }
     {
         // Rotore: nominativo e locatore sono quelli di Decodium; ogni stazione

@@ -1111,7 +1111,7 @@ QStringList DecodiumBridge::sstvTxPreflightBlockers() const
     blocks(m_sstvTxShuttingDown || m_shuttingDown
            || QCoreApplication::closingDown(), "application is shutting down");
     blocks(m_sstvOwnsBridgeTx, "an SSTV transmission already owns the TX path");
-    blocks(m_transmitting, "another mode is transmitting");
+    blocks(m_transmitting || m_ssbTxActive, "another mode is transmitting");
     blocks(m_tuning, "the tune tone is active");
     blocks(m_txEnabled, "Enable TX is armed for another mode");
     blocks(m_autoCqRepeat, "Auto CQ is running");

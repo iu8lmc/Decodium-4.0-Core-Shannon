@@ -7,6 +7,7 @@
 #include <boost/log/sources/severity_channel_logger.hpp>
 
 #include <QObject>
+#include <QVariantMap>
 #include <QVector>
 
 #include "qt_helpers.hpp"
@@ -291,6 +292,8 @@ public:
   Q_SLOT virtual void send_morse (QString const& /*text*/, int /*wpm*/) noexcept {}
 
   //
+  virtual QVariantMap voice_controls(QString const&, double, bool) { return {{"error", QStringLiteral("Voice CAT controls unavailable for this backend")}}; }
+
   // asynchronous status updates
   //
 

@@ -37794,4 +37794,66 @@ I modelli predefiniti partono come frame nativi compatti.</translation>
         <translation>Verso %1: %2° a %3 km</translation>
     </message>
 </context>
+
+<context>
+<name>SsbWindow</name>
+<message><source>SSB — PC microphone</source><translation>SSB — Microfono PC</translation></message>
+<message><source>REMOTE RADIO</source><translation>RADIO REMOTA</translation></message>
+<message><source>LOCAL RADIO</source><translation>RADIO LOCALE</translation></message>
+<message><source>CAT disconnected</source><translation>CAT disconnesso</translation></message>
+<message><source>Frequency in MHz. Press Enter to tune.</source><translation>Frequenza in MHz. Premi Invio per sintonizzare.</translation></message>
+<message><source>USB/data audio input</source><translation>Ingresso audio USB/dati</translation></message>
+<message><source>Activate SSB</source><translation>Attiva SSB</translation></message>
+<message><source>TX uses the radio audio output selected in Settings. USB/LSB requires the radio to accept PC audio; use data input when needed.</source><translation>La TX usa l’uscita audio radio scelta nelle Impostazioni. In USB/LSB la radio deve accettare l’audio PC; se necessario usa l’ingresso dati.</translation></message>
+<message><source>PC microphone • voice processing</source><translation>Microfono PC • Elaborazione voce</translation></message>
+<message><source>Select PC microphone…</source><translation>Seleziona microfono PC…</translation></message>
+<message><source>Mic gain</source><translation>Guadagno mic</translation></message>
+<message><source>Automatic gain</source><translation>Guadagno automatico</translation></message>
+<message><source>Voice filter</source><translation>Filtro voce</translation></message>
+<message><source>Hz • limiter active</source><translation>Hz • Limitatore attivo</translation></message>
+<message><source>Voice level</source><translation>Livello voce</translation></message>
+<message><source>Radio • CAT controls</source><translation>Radio • Controlli CAT</translation></message>
+<message><source>RF power %</source><translation>Potenza RF %</translation></message>
+<message><source>RX filter Hz</source><translation>Filtro RX Hz</translation></message>
+<message><source>Radio AGC</source><translation>AGC radio</translation></message>
+<message><source>RF gain %</source><translation>Guadagno RF %</translation></message>
+<message><source>Radio mic gain %</source><translation>Mic radio %</translation></message>
+<message><source>Read radio</source><translation>Leggi radio</translation></message>
+<message><source>AGC OFF enables manual reception gain using RF gain. Unavailable controls are disabled.</source><translation>Con AGC OFF regola manualmente la ricezione con Guadagno RF. I comandi non disponibili sono disabilitati.</translation></message>
+<message><source>RF: </source><translation>RF: </translation></message>
+<message><source>SWR: </source><translation>ROS: </translation></message>
+<message><source>Listen RX</source><translation>Ascolto RX</translation></message>
+<message><source>TRANSMITTING — release to receive</source><translation>TRASMISSIONE — rilascia per ricevere</translation></message>
+<message><source>HOLD TO TALK • PTT</source><translation>TIENI PREMUTO PER PARLARE • PTT</translation></message>
+</context>
+
+<context>
+<name>decodium::ssb::SsbController</name>
+<message><source>Audio devices changed; PTT released</source><translation>Dispositivi audio cambiati; PTT rilasciato</translation></message>
+<message><source>Radio unavailable or mode changed; PTT released</source><translation>Radio non disponibile o modo cambiato; PTT rilasciato</translation></message>
+<message><source>Microphone stopped; PTT released</source><translation>Microfono fermo; PTT rilasciato</translation></message>
+<message><source>Three-minute TX limit reached; release and press PTT again</source><translation>Limite di tre minuti TX raggiunto; rilascia e premi nuovamente PTT</translation></message>
+<message><source>Select a PC microphone</source><translation>Seleziona un microfono PC</translation></message>
+<message><source>Microphone must support 48 kHz PCM</source><translation>Il microfono deve supportare PCM a 48 kHz</translation></message>
+<message><source>Cannot open microphone</source><translation>Impossibile aprire il microfono</translation></message>
+<message><source>PTT refused: check CAT, USB/LSB mode and TX audio output</source><translation>PTT rifiutato: controlla CAT, modo USB/LSB e uscita audio TX</translation></message>
+<message><source>SSB transmitting</source><translation>SSB in trasmissione</translation></message>
+<message><source>Microphone error; PTT released</source><translation>Errore microfono; PTT rilasciato</translation></message>
+<message><source>Receiving</source><translation>In ricezione</translation></message>
+<message><source>Radio unavailable; PTT released</source><translation>Radio non disponibile; PTT rilasciato</translation></message>
+<message><source>Microphone backlog; PTT released</source><translation>Accumulo audio microfono; PTT rilasciato</translation></message>
+</context>
+
+<context>
+<name>DecodiumBridge</name>
+<message><source>Advanced CAT controls unavailable on this connection</source><translation>Controlli CAT avanzati non disponibili su questo collegamento</translation></message>
+</context>
+
+<context>
+<name>DecolinkLink</name>
+<message><source>Remote CAT %1: %2</source><translation>CAT remoto %1: %2</translation></message>
+<message><source>Remote CAT timeout: %1</source><translation>Tempo scaduto CAT remoto: %1</translation></message>
+<message><source>Remote CAT access unavailable</source><translation>Accesso CAT remoto non disponibile</translation></message>
+</context>
+<context><name>Main</name><message><source>SSB - PC microphone and radio controls...</source><translation>SSB - Microfono PC e controlli radio...</translation></message></context>
 </TS>

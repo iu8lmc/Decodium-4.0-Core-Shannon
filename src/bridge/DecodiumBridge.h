@@ -389,6 +389,9 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QObject* spotShare READ spotShareObject CONSTANT)
     // Amplificatore: sorgente di misura indipendente dalla radio.
     Q_PROPERTY(QObject* amplifier READ amplifierObject CONSTANT)
+    Q_PROPERTY(bool ssbTxActive READ ssbTxActive NOTIFY ssbStateChanged)
+    Q_PROPERTY(QVariantMap ssbControls READ ssbControls NOTIFY ssbStateChanged)
+    Q_PROPERTY(QString ssbRadioMode READ ssbRadioMode NOTIFY ssbStateChanged)
     Q_PROPERTY(bool catConnected READ catConnected NOTIFY catConnectedChanged)
     Q_PROPERTY(QString catRigName READ catRigName NOTIFY catRigNameChanged)
     Q_PROPERTY(QString catMode READ catMode NOTIFY catModeChanged)
@@ -1364,7 +1367,19 @@ public:
     bool   cwInAscolto() const { return m_cwInAscolto; }
     void   setCwInAscolto(bool v);
     bool   cwCanTransmit();
-    bool   cwTuneFrequency(double hz);
+    void ssbMonitorAudio(const QVector<short>& samples);
+    bool ssbTxActive() const { return m_ssbTxActive; }
+    QVariantMap ssbControls() const { return m_ssbControls; }
+    QString ssbRadioMode() const { return m_ssbRadioMode; }
+    bool ssbBegin();
+    bool ssbValid() const;
+    void ssbSend(const QVector<short>& samples);
+    Q_INVOKABLE void ssbStop();
+    Q_INVOKABLE void ssbSetRadioMode(const QString& mode);
+    Q_INVOKABLE void ssbRefreshControls();
+    Q_INVOKABLE void ssbSetControl(const QString& key, double value);
+    Q_SIGNAL void ssbStateChanged();
+    Q_INVOKABLE bool cwTuneFrequency(double hz);
     bool   cwSendAudio(const QString& text, int wpm);
     void   cwAbortAudio();
     // CW a tasto verso la radio remota (Decolink): invece dell'audio si mandano gli
@@ -3339,6 +3354,12 @@ private:
     bool   m_spectrumVisible {true};
     bool   m_rttyInAscolto {false};
     bool   m_cwInAscolto {false};
+    bool m_ssbTxActive {false};
+    bool m_ssbRemoteTx {false};
+    bool m_ssbRestoreMonitor {false};
+    bool m_ssbVoiceConnected {false};
+    QVariantMap m_ssbControls;
+    QString m_ssbRadioMode {QStringLiteral("DIGU")};
     bool   m_cwRemoteKeying {false};
     // Il tono del CW a tasto remoto, sentito sulla scheda audio locale.
     decodium::cw::CwSidetone* m_cwSidetone {nullptr};
