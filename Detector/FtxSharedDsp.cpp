@@ -123,9 +123,25 @@ namespace
     std::unordered_map<FftPlanKey, fftwf_plan, FftPlanKeyHash> plans_;
   };
 
+  // La registry indicizza i piani per INDIRIZZO del buffer, e i buffer di
+  // lavoro sono thread_local: una registry globale sopravvive al thread che
+  // li ha allocati e conserva piani che puntano a memoria gia' liberata.
+  // Quando l'allocatore riassegna lo stesso indirizzo al workspace di un
+  // thread nuovo, la ricerca trova il piano vecchio e FFTW scrive attraverso
+  // un piano costruito su una allocazione che non esiste piu': lo heap si
+  // corrompe e il crash si manifesta piu' tardi, tipicamente nella free del
+  // distruttore del workspace alla morte di un altro thread (0xc0000374).
+  // E' il difetto che teneva spenta la fase profonda di FT8: quella fase
+  // porta i thread di decodifica da pochi a una ventina, e con essi il
+  // ricambio di indirizzi che rende la collisione sistematica.
+  //
+  // La registry ha percio' la stessa durata dei buffer che indicizza: uno
+  // spazio per thread, distrutto insieme al thread. destroy_plan non tocca
+  // il buffer, quindi l'ordine di distruzione fra workspace e registry e'
+  // indifferente.
   FftPlanRegistry& fft_plan_registry ()
   {
-    static auto* registry = new FftPlanRegistry;
+    thread_local auto* registry = new FftPlanRegistry;
     return *registry;
   }
 

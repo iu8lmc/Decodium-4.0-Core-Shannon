@@ -72,8 +72,8 @@ Rectangle {
             }
 
             Text {
-                text: "TIME SYNC"
-                font.family: "Monospace"
+                text: qsTr("TIME SYNC")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 font.bold: true
                 color: "#B0BEC5"
@@ -127,7 +127,7 @@ Rectangle {
             // UTC Clock
             Text {
                 id: utcClock
-                font.family: "Monospace"
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 11
                 font.bold: true
                 color: "#00BCD4"
@@ -189,8 +189,8 @@ Rectangle {
 
             // NTP Offset
             Text {
-                text: "NTP Offset:"
-                font.family: "Monospace"
+                text: qsTr("NTP Offset:")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: "#78909C"
             }
@@ -200,7 +200,7 @@ Rectangle {
                     if (!bridge.ntpSynced) return "Syncing..."
                     return bridge.ntpOffsetMs.toFixed(1) + " ms"
                 }
-                font.family: "Monospace"
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: {
                     if (!bridge.ntpEnabled) return "#78909C"
@@ -214,15 +214,15 @@ Rectangle {
 
             // Soundcard Drift
             Text {
-                text: "SC Drift:"
-                font.family: "Monospace"
+                text: qsTr("SC Drift:")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: "#78909C"
             }
             Text {
                 text: bridge.soundcardDriftPpm.toFixed(1) + " ppm (" +
                       bridge.soundcardDriftMsPerPeriod.toFixed(1) + " ms/T)"
-                font.family: "Monospace"
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: {
                     var sev = bridge.driftSeverity
@@ -234,8 +234,8 @@ Rectangle {
 
             // Average DT
             Text {
-                text: "Avg DT:"
-                font.family: "Monospace"
+                text: qsTr("Avg DT:")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: "#78909C"
             }
@@ -243,14 +243,14 @@ Rectangle {
                 text: {
                     if (!timeSyncPanel.dtMetricsActive) return "N/A"
                     if (bridge.timeSyncSampleCount <= 0) {
-                        return bridge.decodeLatencyMs > 0 ? "No qualifying decodes" : "Waiting cycle"
+                        return bridge.decodeLatencyMs > 0 ? qsTr("No qualifying decodes") : qsTr("Waiting cycle")
                     }
                     var dt = bridge.avgDt
-                    var status = Math.abs(dt) < 0.1 ? "LOCKED" :
-                                 Math.abs(dt) < 0.3 ? "Converging" : "Adjusting"
+                    var status = Math.abs(dt) < 0.1 ? qsTr("LOCKED") :
+                                 Math.abs(dt) < 0.3 ? qsTr("Converging") : qsTr("Adjusting")
                     return dt.toFixed(3) + " s (" + status + ")"
                 }
-                font.family: "Monospace"
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: {
                     if (!timeSyncPanel.dtMetricsActive) return "#78909C"
@@ -264,8 +264,8 @@ Rectangle {
 
             // Decode Latency
             Text {
-                text: "Decode Latency:"
-                font.family: "Monospace"
+                text: qsTr("Decode Latency:")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: "#78909C"
             }
@@ -273,10 +273,10 @@ Rectangle {
                 text: {
                     if (!timeSyncPanel.dtMetricsActive) return "N/A"
                     if (bridge.decodeLatencyMs < 0) return "TIMEOUT"
-                    if (bridge.decodeLatencyMs === 0) return "Waiting cycle"
+                    if (bridge.decodeLatencyMs === 0) return qsTr("Waiting cycle")
                     return bridge.decodeLatencyMs.toFixed(0) + " ms"
                 }
-                font.family: "Monospace"
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: {
                     if (!timeSyncPanel.dtMetricsActive) return "#78909C"
@@ -289,8 +289,8 @@ Rectangle {
             }
 
             Text {
-                text: "Settings:"
-                font.family: "Monospace"
+                text: qsTr("Settings:")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 10
                 color: "#78909C"
             }
@@ -305,8 +305,8 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Open"
-                    font.family: "Monospace"
+                    text: qsTr("Open")
+                    font.family: decodiumMonoFontFamily
                     font.pixelSize: 10
                     color: "#B2EBF2"
                 }

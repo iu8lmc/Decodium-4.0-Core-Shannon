@@ -1,10 +1,13 @@
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdint>
 #include <iostream>
 #include <random>
 #include <stdexcept>
 #include <vector>
+
+#include <fftw3.h>
 
 #include <QByteArray>
 #include <QCommandLineOption>
@@ -118,6 +121,66 @@ namespace
     return static_cast<float> (std::sqrt (sum_sq / static_cast<double> (count)));
   }
 
+  // Deriva di frequenza lineare DENTRO la cornice del burst: 0 Hz all'inizio,
+  // drift_hz alla fine (rampa, non un gradino). Serve a misurare se il
+  // raggio di ricerca del sincronismo (ft2_sync_freq_radius_hz, default
+  // +-12 Hz) perde davvero decodifiche per via della deriva vera durante lo
+  // slot -- un problema diverso da quello (gia' risolto) della deriva FRA
+  // due slot del tipo 8.
+  //
+  // Metodo: segnale analitico via trasformata di Hilbert (FFT, azzera le
+  // frequenze negative, raddoppia le positive), poi si moltiplica per una
+  // rampa di fase pi*drift_rate*t^2 (integrale di uno spostamento di
+  // frequenza lineare in t) e si tiene la sola parte reale.
+  void apply_linear_drift (std::vector<float>& wave, float drift_hz, float sample_rate)
+  {
+    if (drift_hz == 0.0f || wave.empty ())
+      {
+        return;
+      }
+    constexpr float kPi = 3.14159265358979323846f;
+    int const n = static_cast<int> (wave.size ());
+    std::vector<std::complex<float>> buf (static_cast<size_t> (n));
+    for (int i = 0; i < n; ++i)
+      {
+        buf[static_cast<size_t> (i)] = std::complex<float> (wave[static_cast<size_t> (i)], 0.0f);
+      }
+
+    fftwf_plan const fwd = fftwf_plan_dft_1d (
+        n, reinterpret_cast<fftwf_complex*> (buf.data ()),
+        reinterpret_cast<fftwf_complex*> (buf.data ()), FFTW_FORWARD, FFTW_ESTIMATE);
+    fftwf_execute (fwd);
+    fftwf_destroy_plan (fwd);
+
+    int const half = n / 2;
+    for (int i = 1; i < half; ++i)
+      {
+        buf[static_cast<size_t> (i)] *= 2.0f;
+      }
+    for (int i = half; i < n; ++i)
+      {
+        buf[static_cast<size_t> (i)] = std::complex<float> (0.0f, 0.0f);
+      }
+
+    fftwf_plan const inv = fftwf_plan_dft_1d (
+        n, reinterpret_cast<fftwf_complex*> (buf.data ()),
+        reinterpret_cast<fftwf_complex*> (buf.data ()), FFTW_BACKWARD, FFTW_ESTIMATE);
+    fftwf_execute (inv);
+    fftwf_destroy_plan (inv);
+    float const inv_n = 1.0f / static_cast<float> (n);
+
+    double const duration_s = static_cast<double> (n) / static_cast<double> (sample_rate);
+    double const drift_rate = static_cast<double> (drift_hz) / duration_s;
+    for (int i = 0; i < n; ++i)
+      {
+        double const t = static_cast<double> (i) / static_cast<double> (sample_rate);
+        double const phase = static_cast<double> (kPi) * drift_rate * t * t;
+        std::complex<float> const rot (static_cast<float> (std::cos (phase)),
+                                       static_cast<float> (std::sin (phase)));
+        wave[static_cast<size_t> (i)] = (buf[static_cast<size_t> (i)] * inv_n * rot).real ();
+      }
+  }
+
   void add_awgn (std::vector<float>& frame, float snr_db, int seed)
   {
     float const signal_rms = compute_signal_rms (frame);
@@ -177,6 +240,10 @@ int main (int argc, char* argv[])
           QStringLiteral ("PRNG seed used when --snr-db is provided."),
           QStringLiteral ("n"),
           QStringLiteral ("12345"));
+      QCommandLineOption drift_option (
+          QStringList {QStringLiteral ("drift-hz")},
+          QStringLiteral ("Linear frequency drift across the burst, in Hz (0 at start, drift-hz at end). Omit for no drift."),
+          QStringLiteral ("hz"));
 
       parser.addOption (message_option);
       parser.addOption (freq_option);
@@ -184,6 +251,7 @@ int main (int argc, char* argv[])
       parser.addOption (offset_option);
       parser.addOption (snr_option);
       parser.addOption (seed_option);
+      parser.addOption (drift_option);
       parser.addPositionalArgument (
           QStringLiteral ("output"),
           QStringLiteral ("Path to the generated 12000 Hz mono 16-bit FT2 WAV file."));
@@ -230,18 +298,26 @@ int main (int argc, char* argv[])
           fail (QStringLiteral ("failed to generate FT2 waveform"));
         }
 
+      std::vector<float> burst (wave.begin (), wave.end ());
+      float drift_hz = 0.0f;
+      if (parser.isSet (drift_option))
+        {
+          drift_hz = parse_float_option (parser, drift_option, QStringLiteral ("drift-hz"));
+          apply_linear_drift (burst, drift_hz, static_cast<float> (kSampleRate));
+        }
+
       int const offset_samples =
           static_cast<int> (std::lround (static_cast<double> (offset_ms) * kSampleRate / 1000.0));
-      if (offset_samples < 0 || offset_samples + wave.size () > kFrameSamples)
+      if (offset_samples < 0 || offset_samples + static_cast<int> (burst.size ()) > kFrameSamples)
         {
           fail (QStringLiteral ("waveform does not fit in a %1-sample FT2 frame with the requested offset")
                     .arg (kFrameSamples));
         }
 
       std::vector<float> frame (static_cast<size_t> (kFrameSamples), 0.0f);
-      for (int i = 0; i < wave.size (); ++i)
+      for (size_t i = 0; i < burst.size (); ++i)
         {
-          frame[static_cast<size_t> (offset_samples + i)] = gain * wave[i];
+          frame[static_cast<size_t> (offset_samples) + i] = gain * burst[i];
         }
 
       if (parser.isSet (snr_option))
@@ -279,6 +355,10 @@ int main (int argc, char* argv[])
       std::cout << "samples: " << kFrameSamples << '\n';
       std::cout << "freq_hz: " << frequency << '\n';
       std::cout << "offset_ms: " << offset_ms << '\n';
+      if (parser.isSet (drift_option))
+        {
+          std::cout << "drift_hz: " << drift_hz << '\n';
+        }
       if (parser.isSet (snr_option))
         {
           std::cout << "snr_db: " << parser.value (snr_option).toStdString () << '\n';

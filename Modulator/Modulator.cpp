@@ -205,6 +205,7 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
   if((mode=="FT8" and m_nsps==1024)) delay_ms=400;            //SuperFox Qary Polar Code transmission
   if(mode=="Q65" and m_nsps<=3600) delay_ms=500;              //Q65-15 and Q65-30
   if(mode=="FT4") delay_ms=500;                               //FT4, match JTDX lead-in
+  if(mode=="FT2LINK") delay_ms=300;                            //FT2-Link precomputed wide waveform
   if(mode=="FT2") {
 #if defined(Q_OS_LINUX)
     delay_ms=0;                                               //Linux FT2: start payload immediately after PTT
@@ -307,7 +308,11 @@ void Modulator::close ()
     {
       if (m_quickClose)
         {
+#if defined(Q_OS_MAC)
+          m_stream->finishPlayback ();
+#else
           m_stream->reset ();
+#endif
         }
       else
         {

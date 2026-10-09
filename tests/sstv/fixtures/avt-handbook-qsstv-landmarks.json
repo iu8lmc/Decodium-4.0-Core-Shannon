@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "kind": "clean-room-source-landmarks",
+  "sources": [
+    {
+      "name": "SSTV Handbook",
+      "locator": "https://www.sstv-handbook.com/download/sstv-handbook.pdf",
+      "retrievedUtc": "2026-08-24",
+      "sha256": "e244de9d5cbba525d33b25906c3751ab0ed62af2a3b373feffda44de4f13909d",
+      "pdfCreationDate": "2019-11-17T04:41:52+01:00",
+      "pages": 175,
+      "fileBytes": 18043795,
+      "landmarks": "chapter 4.2.5, figure 4.7, table 4.6 and chapter 5 mode list"
+    },
+    {
+      "name": "QSSTV",
+      "repository": "https://github.com/ON4QZ/QSSTV.git",
+      "commit": "8c27d6d169d8c6c197eb47c2089870e39bc06a02",
+      "landmarks": "src/sstv/sstvparam.cpp and src/sstv/modes/modeavt.cpp"
+    },
+    {
+      "name": "MMSSTV source mirror",
+      "repository": "https://github.com/n5ac/mmsstv.git",
+      "commit": "8060b5f1e9727b0052d74108081c6db7b26babad",
+      "landmarks": "Main.cpp LineAVT and AVT header transmitter"
+    }
+  ],
+  "wire": {
+    "normalBlackHz": 1500,
+    "normalWhiteHz": 2300,
+    "colourOrder": ["R", "G", "B"],
+    "perLineSync": false,
+    "perComponentGap": false,
+    "standardVisRepetitions": 3,
+    "standardVisFramePicoseconds": 910000000000,
+    "tripleVisPicoseconds": 2730000000000,
+    "countdown": {
+      "frames": 32,
+      "tonesPerFrame": 17,
+      "baud": 102.4,
+      "symbolPicoseconds": 9765625000,
+      "framePicoseconds": 166015625000,
+      "totalPicoseconds": 5312500000000,
+      "startHz": 1900,
+      "zeroHz": 1600,
+      "oneHz": 2200,
+      "bitOrder": "MSB-first",
+      "inverseByteRequired": true,
+      "modePrefixes": {
+        "avt-24": 2,
+        "avt-90": 5,
+        "avt-94": 3
+      }
+    },
+    "completeHeaderPicoseconds": 8042500000000
+  },
+  "modes": [
+    {
+      "id": "avt-24",
+      "visNormal": 64,
+      "preparedWidth": 128,
+      "effectiveWidth": 128,
+      "height": 120,
+      "componentPicoseconds": 62500000000,
+      "imagePicoseconds": 22500000000000
+    },
+    {
+      "id": "avt-90",
+      "visNormal": 68,
+      "preparedWidth": 320,
+      "effectiveWidth": 256,
+      "height": 240,
+      "componentPicoseconds": 125000000000,
+      "imagePicoseconds": 90000000000000,
+      "geometryResolution": "The Handbook defines 256x240 effective resolution; pinned QSSTV and MMSSTV prepare/scan 320 columns over the same 125 ms component."
+    },
+    {
+      "id": "avt-94",
+      "visNormal": 72,
+      "preparedWidth": 320,
+      "effectiveWidth": 320,
+      "height": 200,
+      "componentPicoseconds": 156250000000,
+      "imagePicoseconds": 93750000000000
+    }
+  ],
+  "catalogueOnlyVariants": ["narrow", "qrm", "narrow-qrm"],
+  "knownDivergences": [
+    "The pinned MMSSTV transmitter starts its AVT countdown with 0x5fa0, whose 010 prefix names AVT24 even though that implementation exposes AVT90; Decodium does not copy this prefix defect.",
+    "QSSTV's parameter table prepares AVT90 as 320 columns while the Handbook records 256 effective columns; Decodium stores both fields and does not describe 320 as the effective resolution.",
+    "This fixture records independently audited source landmarks, not a captured PCM vector or live interoperability proof."
+  ]
+}
