@@ -61,7 +61,10 @@ ft2_plugin/
 ft2_plugin.rar
 
 # Claude / IDE temp files
-.claude/
+# Il solo settings.json del progetto e' versionato: il resto di .claude/
+# (sessioni, override personali, file temporanei) resta fuori dal repo.
+.claude/*
+!.claude/settings.json
 tmpclaude-*
 .zip
 .idea/
