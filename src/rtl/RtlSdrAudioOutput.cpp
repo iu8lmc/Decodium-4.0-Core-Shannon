@@ -69,8 +69,17 @@ void RtlSdrAudioOutput::start(const QAudioDevice& output, int sampleRate)
         }
         const QString message = QStringLiteral("RTL-SDR audio output stopped (Qt error %1).")
                                     .arg(static_cast<int>(m_sink->error()));
-        stop(QStringLiteral("Qt audio output error"));
-        emit error(message);
+        // Il segnale parte da dentro QAudioSink (anche durante start()): non si
+        // puo' cancellare il sink da qui, altrimenti Qt6Multimedia continua a
+        // usare un oggetto gia' distrutto. Si chiude dopo, a ciclo finito.
+        QAudioSink *failed = m_sink;
+        QMetaObject::invokeMethod(this, [this, failed, message]() {
+            if (m_sink != failed) {
+                return;
+            }
+            stop(QStringLiteral("Qt audio output error"));
+            emit error(message);
+        }, Qt::QueuedConnection);
     });
 
     m_device = m_sink->start();
