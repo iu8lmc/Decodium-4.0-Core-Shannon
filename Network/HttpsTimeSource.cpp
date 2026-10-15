@@ -1,6 +1,7 @@
 // -*- Mode: C++ -*-
 #include "HttpsTimeSource.hpp"
 
+#include <QByteArray>
 #include <QDateTime>
 #include <QLocale>
 #include <QTimeZone>
@@ -26,6 +27,11 @@ namespace
         return values[n / 2];
     }
 
+    QTimeZone utcTimeZone()
+    {
+        return QTimeZone(QByteArrayLiteral("UTC"));
+    }
+
     // Parse "Tue, 13 May 2026 00:30:45 GMT" → ms since epoch.
     qint64 parseHttpDateMs(QString const& header)
     {
@@ -36,7 +42,7 @@ namespace
             header.trimmed(),
             QStringLiteral("ddd, dd MMM yyyy HH:mm:ss 'GMT'"));
         if (dt.isValid()) {
-            dt.setTimeZone(QTimeZone::UTC);
+            dt.setTimeZone(utcTimeZone());
             return dt.toMSecsSinceEpoch();
         }
         // Fallback Qt parser tollerante

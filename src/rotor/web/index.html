@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<title>DecoRotor</title>
+<style>
+  :root {
+    /* Stessa palette dell'app desktop e delle app native. */
+    --bg: #060910; --panel: #0d141f; --elevated: #131c2a; --line: rgba(56,189,248,.22);
+    --text: #e6edf6; --muted: #94a6bc; --dim: #5c6e85;
+    --accent: #38bdf8; --ok: #34d399; --warn: #fbbf24; --stop: #f87171;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: env(safe-area-inset-top) 12px calc(12px + env(safe-area-inset-bottom));
+    max-width: 560px; margin-inline: auto;
+  }
+  header { display: flex; align-items: center; gap: 8px; padding: 14px 2px 10px; }
+  h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  #link { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stop); }
+  #dot.on { background: var(--ok); }
+  #dot.moving { background: var(--warn); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .readout { display: flex; gap: 12px; text-align: center; }
+  .readout div { flex: 1; }
+  .readout b { display: block; font-size: 34px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .readout small { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .8px; }
+  .target { color: var(--accent); font-size: 13px; min-height: 18px; }
+
+  svg { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  .rose-bg { fill: var(--bg); stroke: var(--line); }
+  .tick { stroke: rgba(56,189,248,.12); }
+  .tick.major { stroke: var(--muted); }
+  .rose-label { fill: var(--muted); font-size: 13px; text-anchor: middle; font-weight: 600; }
+  .needle { stroke: var(--stop); stroke-width: 4; stroke-linecap: round; }
+  .needle-tail { stroke: var(--muted); stroke-width: 3; stroke-linecap: round; }
+  .target-line { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 5; }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  .row { display: flex; gap: 8px; }
+  .row + .row { margin-top: 8px; }
+  input[type=number] {
+    flex: 1; min-width: 0; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 17px;
+    font-variant-numeric: tabular-nums;
+  }
+  button {
+    background: var(--elevated); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .4; }
+  .go { background: var(--accent); border-color: var(--accent); color: #060910; }
+  .stop { background: var(--stop); border-color: var(--stop); color: #060910; flex: 2; padding: 16px; font-size: 17px; }
+  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .presets button { padding: 11px 0; font-size: 14px; }
+  #msg { min-height: 20px; font-size: 13px; color: var(--warn); text-align: center; margin: 4px 0 0; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DecoRotor</h1>
+  <span id="link"><span id="dot"></span><span id="linkText">collegamento…</span></span>
+</header>
+
+<div class="card">
+  <div class="readout">
+    <div>
+      <small>Azimut</small><b id="azVal">---</b>
+      <div class="target" id="azTarget"></div>
+    </div>
+    <div id="elBox" class="hidden">
+      <small>Elevazione</small><b id="elVal">---</b>
+      <div class="target" id="elTarget"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <svg id="rose" viewBox="0 0 300 300" role="img" aria-label="Rosa dei venti"></svg>
+  <p class="hint">Tocca la rosa per puntare l'antenna</p>
+</div>
+
+<div class="card">
+  <div class="row">
+    <input id="azInput" type="number" min="0" max="360" step="1" inputmode="decimal" placeholder="Azimut °">
+    <input id="elInput" type="number" min="0" max="90" step="1" inputmode="decimal" placeholder="Elev. °" class="hidden">
+    <button class="go" id="goBtn">VAI</button>
+  </div>
+  <div class="row presets" id="presets"></div>
+  <div class="row">
+    <button class="stop" id="stopBtn">STOP</button>
+    <button id="parkBtn">PARK</button>
+  </div>
+  <p id="msg"></p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const token = params.get("token") || "";
+
+let socket = null, state = {}, retry = 1000;
+
+/* ---------- rosa dei venti ---------- */
+const CX = 150, CY = 150, R = 132;
+const polar = (deg, radius) => {
+  const rad = (deg - 90) * Math.PI / 180;
+  return [CX + radius * Math.cos(rad), CY + radius * Math.sin(rad)];
+};
+
+function drawRose() {
+  const parts = [`<circle class="rose-bg" cx="${CX}" cy="${CY}" r="${R}"/>`];
+  for (let deg = 0; deg < 360; deg += 10) {
+    const major = deg % 30 === 0;
+    const [x1, y1] = polar(deg, R - (major ? 14 : 7));
+    const [x2, y2] = polar(deg, R - 1);
+    parts.push(`<line class="tick${major ? " major" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`);
+  }
+  ["N", "NE", "E", "SE", "S", "SO", "O", "NO"].forEach((name, i) => {
+    const [x, y] = polar(i * 45, R - 30);
+    parts.push(`<text class="rose-label" x="${x}" y="${y + 5}">${name}</text>`);
+  });
+  parts.push('<line id="targetLine" class="target-line" x1="150" y1="150" x2="150" y2="150"/>');
+  parts.push('<line id="needleTail" class="needle-tail" x1="150" y1="150" x2="150" y2="150"/>');
+  parts.push('<line id="needle" class="needle" x1="150" y1="150" x2="150" y2="150"/>');
+  parts.push(`<circle cx="${CX}" cy="${CY}" r="5" fill="#e6edf3"/>`);
+  $("rose").innerHTML = parts.join("");
+}
+
+function updateRose() {
+  const az = state.az;
+  if (az == null) return;
+  const [hx, hy] = polar(az, R - 22), [tx, ty] = polar(az + 180, 34);
+  const needle = $("needle"), tail = $("needleTail");
+  needle.setAttribute("x2", hx); needle.setAttribute("y2", hy);
+  tail.setAttribute("x2", tx); tail.setAttribute("y2", ty);
+
+  const line = $("targetLine");
+  if (state.az_target != null) {
+    const [x, y] = polar(state.az_target, R - 4);
+    line.setAttribute("x2", x); line.setAttribute("y2", y);
+    line.style.display = "";
+  } else {
+    line.style.display = "none";
+  }
+}
+
+$("rose").addEventListener("click", (event) => {
+  const box = event.currentTarget.getBoundingClientRect();
+  const scale = 300 / box.width;
+  const x = (event.clientX - box.left) * scale - CX;
+  const y = (event.clientY - box.top) * scale - CY;
+  if (Math.hypot(x, y) > R) return;
+  const bearing = (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360;
+  send({ cmd: "goto", az: Math.round(bearing) });
+});
+
+/* ---------- collegamento ---------- */
+function connect() {
+  const url = `ws://${location.hostname}:${WS_PORT}/${token ? "?token=" + encodeURIComponent(token) : ""}`;
+  socket = new WebSocket(url);
+
+  socket.onopen = () => { retry = 1000; setLink("collegato", "on"); };
+  socket.onclose = () => {
+    setLink("riconnessione…", "");
+    setTimeout(connect, retry);
+    retry = Math.min(retry * 2, 10000);
+  };
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "state") render(data);
+    else if (data.type === "error") message(data.message);
+    else if (data.type === "ack" && data.cmd === "goto") message("");
+  };
+}
+
+function send(payload) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) { message("gateway non raggiungibile"); return; }
+  socket.send(JSON.stringify(payload));
+}
+
+function setLink(text, cls) {
+  $("linkText").textContent = text;
+  $("dot").className = cls;
+}
+
+function message(text) { $("msg").textContent = text; }
+
+function render(data) {
+  state = data;
+  const fmt = (v) => v == null ? "---" : v.toFixed(1) + "°";
+  $("azVal").textContent = fmt(data.az);
+  $("elVal").textContent = fmt(data.el);
+  $("azTarget").textContent = data.az_target != null ? "→ " + fmt(data.az_target) : "";
+  $("elTarget").textContent = data.el_target != null ? "→ " + fmt(data.el_target) : "";
+  $("elBox").classList.toggle("hidden", !data.has_el);
+  $("elInput").classList.toggle("hidden", !data.has_el);
+
+  if (!data.connected) setLink(data.error ? "seriale assente" : "control box offline", "");
+  else setLink(data.moving ? "in rotazione" : data.port, data.moving ? "moving" : "on");
+  message(data.error || "");
+  updateRose();
+}
+
+/* ---------- comandi ---------- */
+$("goBtn").onclick = () => {
+  const az = parseFloat($("azInput").value);
+  const el = parseFloat($("elInput").value);
+  const payload = { cmd: "goto" };
+  if (!Number.isNaN(az)) payload.az = az;
+  if (!Number.isNaN(el)) payload.el = el;
+  if (payload.az === undefined && payload.el === undefined) { message("indica almeno un angolo"); return; }
+  send(payload);
+};
+$("stopBtn").onclick = () => send({ cmd: "stop", axis: "all" });
+$("parkBtn").onclick = () => send({ cmd: "park" });
+
+["N 0", "NE 45", "E 90", "SE 135", "S 180", "SO 225", "O 270", "NO 315"].forEach((preset) => {
+  const [name, deg] = preset.split(" ");
+  const button = document.createElement("button");
+  button.textContent = name;
+  button.onclick = () => send({ cmd: "goto", az: Number(deg) });
+  $("presets").append(button);
+});
+
+/* ---------- avvio ---------- */
+let WS_PORT = 8765;
+drawRose();
+fetch("/api/info")
+  .then((response) => response.json())
+  .then((info) => { WS_PORT = info.ws_port; })
+  .catch(() => {})
+  .finally(connect);
+</script>
+</body>
+</html>
