@@ -40,6 +40,7 @@ public:
                  QStringList const& network_interface_names,
                  int TTL, QObject * parent = nullptr,
                  QString const& reporting_role = QString {});
+  ~MessageClient () override;
 
   // query server details
   QHostAddress server_address () const;
@@ -55,6 +56,9 @@ public:
 
   // change the server port messages are sent to
   Q_SLOT void set_TTL (int TTL);
+
+  // change the identifier serialized in every WSJT-X protocol packet
+  Q_SLOT void set_client_id (QString const& id);
 
   // set fixed UDP listen port for incoming commands (0 = ephemeral)
   Q_SLOT void set_listen_port (port_type listen_port);

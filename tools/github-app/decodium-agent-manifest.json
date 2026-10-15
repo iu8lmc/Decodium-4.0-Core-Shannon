@@ -1,0 +1,26 @@
+{
+  "name": "decodium-agent",
+  "description": "Automated assistant for the Decodium 4 project: triages issues, reviews code against the actual sources, and opens pull requests for human review. It cannot merge its own work, push to the upstream repository, or modify CI workflows.",
+  "url": "https://github.com/iu8lmc/Decodium-4.0-Core-Shannon",
+  "redirect_url": "https://github.com/settings/apps",
+  "public": true,
+  "hook_attributes": {
+    "url": "https://groups.ft2.it/decodium-agent/webhook",
+    "active": false
+  },
+  "default_permissions": {
+    "metadata": "read",
+    "issues": "write",
+    "pull_requests": "write",
+    "contents": "write",
+    "checks": "read",
+    "actions": "read"
+  },
+  "default_events": [
+    "issues",
+    "issue_comment",
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment"
+  ]
+}

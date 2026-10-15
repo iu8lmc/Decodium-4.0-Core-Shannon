@@ -7,18 +7,20 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
-import QtQuick.Effects  // 1.0.182 — MultiEffect Qt 6.5+
 
 Dialog {
     id: macroDialog
-    title: "Macro Settings"
-    modal: true
-    width: 700
-    height: 600
+    title: qsTr("Macro Settings")
+    property var nativeHostWindow: null
+    modal: false
+    dim: false
+    width: nativeHostWindow && parent ? Math.max(500, parent.width) : 700
+    height: nativeHostWindow && parent ? Math.max(400, parent.height) : 600
     closePolicy: Popup.CloseOnEscape
     property bool positionInitialized: false
 
     function clampToParent() {
+        if (nativeHostWindow) return
         if (!parent) return
         x = Math.max(0, Math.min(x, parent.width - width))
         y = Math.max(0, Math.min(y, parent.height - height))
@@ -26,9 +28,39 @@ Dialog {
 
     function ensureInitialPosition() {
         if (positionInitialized || !parent) return
+        if (nativeHostWindow) {
+            x = 0
+            y = 0
+            positionInitialized = true
+            return
+        }
         x = Math.max(0, Math.round((parent.width - width) / 2))
         y = Math.max(0, Math.round((parent.height - height) / 2))
         positionInitialized = true
+    }
+
+    function startNativeHostMove() {
+        if (!nativeHostWindow || typeof nativeHostWindow.startSystemMove !== "function")
+            return false
+        try {
+            return nativeHostWindow.startSystemMove()
+        } catch (error) {
+            console.log("Macro startSystemMove failed: " + error)
+        }
+        return false
+    }
+
+    function finishNativeHostMove() {
+        if (nativeHostWindow && typeof nativeHostWindow.finishDesktopMove === "function")
+            nativeHostWindow.finishDesktopMove()
+    }
+
+    function requestWindowClose() {
+        if (nativeHostWindow && typeof nativeHostWindow.hideHostedWindow === "function") {
+            nativeHostWindow.hideHostedWindow()
+            return
+        }
+        macroDialog.close()
     }
 
     onAboutToShow: ensureInitialPosition()
@@ -49,18 +81,9 @@ Dialog {
         border.width: 2
         radius: 12
 
-        // 1.0.182 — UI Visual Boost: MultiEffect shadow gated su uiQuality High.
-        // Su Low/Medium nessuna ombra (PC modesti). Pattern identico a
-        // SettingsDialog.qml ~1001-1014.
-        layer.enabled: bridge && bridge.uiQuality === "High"
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowBlur: 0.5
-            shadowColor: Qt.rgba(0, 0, 0, 0.45)
-            shadowVerticalOffset: 4
-            shadowHorizontalOffset: 0
-            blurMax: 16
-        }
+        // Keep this dialog compatible with the Linux Qt 6.4 AppImage runtime.
+        // QtQuick.Effects/MultiEffect is only available from Qt 6.5.
+        layer.enabled: false
     }
 
     header: Rectangle {
@@ -68,18 +91,54 @@ Dialog {
         color: "transparent"
 
         MouseArea {
-            anchors.fill: parent
-            property point clickPos: Qt.point(0, 0)
+            z: 2
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.rightMargin: 80
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            property point pressGlobalPos: Qt.point(0, 0)
+            property point pressWindowPos: Qt.point(0, 0)
+            property bool nativeMoveActive: false
             cursorShape: Qt.SizeAllCursor
             onPressed: function(mouse) {
-                clickPos = Qt.point(mouse.x, mouse.y)
+                pressGlobalPos = mapToGlobal(mouse.x, mouse.y)
                 macroDialog.positionInitialized = true
+                if (macroDialog.nativeHostWindow) {
+                    pressWindowPos = Qt.point(macroDialog.nativeHostWindow.x,
+                                              macroDialog.nativeHostWindow.y)
+                    nativeMoveActive = macroDialog.startNativeHostMove()
+                } else {
+                    pressWindowPos = Qt.point(macroDialog.x, macroDialog.y)
+                }
+                mouse.accepted = true
             }
             onPositionChanged: function(mouse) {
                 if (!pressed) return
-                macroDialog.x += mouse.x - clickPos.x
-                macroDialog.y += mouse.y - clickPos.y
+                var currentGlobalPos = mapToGlobal(mouse.x, mouse.y)
+                if (macroDialog.nativeHostWindow) {
+                    if (nativeMoveActive)
+                        return
+                    macroDialog.nativeHostWindow.x = Math.round(
+                                pressWindowPos.x + currentGlobalPos.x - pressGlobalPos.x)
+                    macroDialog.nativeHostWindow.y = Math.round(
+                                pressWindowPos.y + currentGlobalPos.y - pressGlobalPos.y)
+                    return
+                }
+                macroDialog.x = pressWindowPos.x + currentGlobalPos.x - pressGlobalPos.x
+                macroDialog.y = pressWindowPos.y + currentGlobalPos.y - pressGlobalPos.y
                 macroDialog.clampToParent()
+                mouse.accepted = true
+            }
+            onReleased: {
+                nativeMoveActive = false
+                macroDialog.finishNativeHostMove()
+            }
+            onCanceled: {
+                nativeMoveActive = false
+                macroDialog.finishNativeHostMove()
             }
         }
 
@@ -89,7 +148,7 @@ Dialog {
             spacing: 10
 
             Text {
-                text: "⌨️ TX Macro Configuration"
+                text: qsTr("⌨️ TX Macro Configuration")
                 font.pixelSize: 18
                 font.bold: true
                 color: secondaryCyan
@@ -120,12 +179,16 @@ Dialog {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         macroDialogMinimized = true
-                        macroDialog.close()
+                        if (macroDialog.nativeHostWindow
+                                && typeof macroDialog.nativeHostWindow.minimizeHostedWindow === "function")
+                            macroDialog.nativeHostWindow.minimizeHostedWindow()
+                        else
+                            macroDialog.close()
                     }
                 }
 
                 ToolTip.visible: macroMinMA.containsMouse
-                ToolTip.text: "Riduci a icona"
+                ToolTip.text: qsTr("Minimize")
                 ToolTip.delay: 500
             }
 
@@ -150,11 +213,11 @@ Dialog {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: macroDialog.close()
+                    onClicked: macroDialog.requestWindowClose()
                 }
 
                 ToolTip.visible: macroCloseMA.containsMouse
-                ToolTip.text: "Chiudi"
+                ToolTip.text: "Close"
                 ToolTip.delay: 500
             }
         }
@@ -178,7 +241,7 @@ Dialog {
                 spacing: 10
 
                 Text {
-                    text: "Contest Mode"
+                    text: qsTr("Contest Mode")
                     font.pixelSize: 14
                     font.bold: true
                     color: primaryBlue
@@ -188,7 +251,7 @@ Dialog {
                     spacing: 12
 
                     Text {
-                        text: "Contest:"
+                        text: qsTr("Contest:")
                         font.pixelSize: 12
                         color: textSecondary
                         Layout.preferredWidth: 80
@@ -228,7 +291,7 @@ Dialog {
                     visible: appEngine.macroManager && appEngine.macroManager.contestMode
 
                     Text {
-                        text: "Serial #:"
+                        text: qsTr("Serial #:")
                         font.pixelSize: 12
                         color: textSecondary
                         Layout.preferredWidth: 80
@@ -248,8 +311,10 @@ Dialog {
                         }
 
                         contentItem: TextInput {
+                            selectByMouse: true
+                            onActiveFocusChanged: if (activeFocus) selectAll()
                             text: serialSpinBox.value.toString().padStart(4, '0')
-                            font.family: "Monospace"
+                            font.family: decodiumMonoFontFamily
                             font.pixelSize: 14
                             color: accentGreen
                             horizontalAlignment: Text.AlignHCenter
@@ -266,13 +331,13 @@ Dialog {
                     }
 
                     Text {
-                        text: "Exchange:"
+                        text: qsTr("Exchange:")
                         font.pixelSize: 12
                         color: textSecondary
                         Layout.leftMargin: 20
                     }
 
-                    TextField {
+                    DecoTextField {
                         id: exchangeField
                         text: appEngine.macroManager ? appEngine.macroManager.exchange : ""
                         Layout.preferredWidth: 120
@@ -310,7 +375,7 @@ Dialog {
 
                 RowLayout {
                     Text {
-                        text: "TX Macro Templates"
+                        text: qsTr("TX Macro Templates")
                         font.pixelSize: 14
                         font.bold: true
                         color: textPrimary
@@ -319,7 +384,7 @@ Dialog {
                     Item { Layout.fillWidth: true }
 
                     Button {
-                        text: "Reset to Default"
+                        text: qsTr("Reset to Default")
                         implicitHeight: 28
                         background: Rectangle {
                             color: parent.hovered ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -343,7 +408,7 @@ Dialog {
 
                 // Help text
                 Text {
-                    text: "Codes: %M=MyCall  %T=TheirCall  %R=Report  %N=Serial#  %G4=Grid4  %G6=Grid6  %E=Exchange"
+                    text: qsTr("Codes: %M=MyCall  %T=TheirCall  %R=Report  %N=Serial#  %G4=Grid4  %G6=Grid6  %E=Exchange")
                     font.pixelSize: 10
                     color: textSecondary
                     wrapMode: Text.WordWrap
@@ -387,12 +452,12 @@ Dialog {
                                     }
                                 }
 
-                                TextField {
+                                DecoTextField {
                                     id: macroField
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 32
                                     text: appEngine.macroManager ? appEngine.macroManager.getMacroTemplate(index) : ""
-                                    font.family: "Monospace"
+                                    font.family: decodiumMonoFontFamily
                                     font.pixelSize: 12
                                     color: textPrimary
 
@@ -413,7 +478,7 @@ Dialog {
                                 Button {
                                     implicitWidth: 60
                                     implicitHeight: 32
-                                    text: "Preview"
+                                    text: qsTr("Preview")
 
                                     background: Rectangle {
                                         color: parent.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -458,8 +523,8 @@ Dialog {
                     Text {
                         id: previewText
                         anchors.centerIn: parent
-                        text: "Click 'Preview' to see expanded macro"
-                        font.family: "Monospace"
+                        text: qsTr("Click 'Preview' to see expanded macro")
+                        font.family: decodiumMonoFontFamily
                         font.pixelSize: 12
                         color: accentGreen
                     }

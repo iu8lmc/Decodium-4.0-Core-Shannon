@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <QDateTime>
 #include <QHostAddress>
 #include <QByteArray>
 #include <QElapsedTimer>
@@ -32,10 +33,46 @@ namespace
   unsigned constexpr hrd_startup_command_reply_retries {8};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
+  int constexpr hrd_data_mode_settle_ms {12000};
   qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
   qsizetype constexpr hrd_v5_header_size {16};
   quint32 constexpr hrd_v5_magic_1 {0x1234ABCDu};
   quint32 constexpr hrd_v5_magic_2 {0xABCD1234u};
+
+  bool hrd_is_data_mode (Transceiver::MODE mode)
+  {
+    switch (mode)
+      {
+      case Transceiver::DIG_U:
+      case Transceiver::DIG_L:
+      case Transceiver::DIG_FM:
+        return true;
+      default:
+        return false;
+      }
+  }
+
+  bool hrd_data_carrier_matches (Transceiver::MODE data_mode, Transceiver::MODE carrier_mode)
+  {
+    switch (data_mode)
+      {
+      case Transceiver::DIG_U:  return carrier_mode == Transceiver::USB;
+      case Transceiver::DIG_L:  return carrier_mode == Transceiver::LSB;
+      case Transceiver::DIG_FM: return carrier_mode == Transceiver::FM;
+      default:                  return false;
+      }
+  }
+
+  auto hrd_data_carrier_mode (Transceiver::MODE data_mode) -> Transceiver::MODE
+  {
+    switch (data_mode)
+      {
+      case Transceiver::DIG_U:  return Transceiver::USB;
+      case Transceiver::DIG_L:  return Transceiver::LSB;
+      case Transceiver::DIG_FM: return Transceiver::FM;
+      default:                  return data_mode;
+      }
+  }
 
   void hrd_append_le16 (QByteArray& data, quint16 value)
   {
@@ -180,6 +217,26 @@ namespace
     return text.trimmed ().simplified ().toCaseFolded ();
   }
 
+  unsigned hrd_context_id_from_reply (QString const& text)
+  {
+    bool ok {false};
+    auto const direct = text.trimmed ().toUInt (&ok);
+    if (ok)
+      {
+        return direct;
+      }
+
+    QRegularExpression const first_number {QStringLiteral ("(\\d+)")};
+    auto const match = first_number.match (text);
+    if (!match.hasMatch ())
+      {
+        return 0;
+      }
+
+    auto const parsed = match.captured (1).toUInt (&ok);
+    return ok ? parsed : 0;
+  }
+
   void hrd_diag (QString const& message)
   {
     DIAG_CAT (QStringLiteral ("[HRD] ") + message);
@@ -250,6 +307,8 @@ HRDTransceiver::HRDTransceiver (logger_type * logger
   , ptt_button_ {-1}
   , alt_ptt_button_ {-1}
   , reversed_ {false}
+  , pending_data_mode_ {UNK}
+  , pending_data_mode_until_ms_ {0}
   , startup_diagnostics_active_ {false}
   , hrd_command_sequence_ {0}
 {
@@ -262,6 +321,45 @@ int HRDTransceiver::do_start ()
   startup_timer.start ();
   ScopedStartupDiagnostics diagnostics_guard {startup_diagnostics_active_};
   hrd_command_sequence_ = 0;
+  pending_data_mode_ = UNK;
+  pending_data_mode_until_ms_ = 0;
+  radios_.clear ();
+  buttons_.clear ();
+  dropdown_names_.clear ();
+  dropdowns_.clear ();
+  slider_names_.clear ();
+  sliders_.clear ();
+  mode_A_map_.clear ();
+  mode_B_map_.clear ();
+  data_mode_dropdown_selection_on_.clear ();
+  data_mode_dropdown_selection_off_.clear ();
+  split_mode_dropdown_selection_on_.clear ();
+  split_mode_dropdown_selection_off_.clear ();
+  rx_A_selection_.clear ();
+  rx_B_selection_.clear ();
+  current_radio_ = 0;
+  vfo_count_ = 0;
+  vfo_A_button_ = -1;
+  vfo_B_button_ = -1;
+  vfo_toggle_button_ = -1;
+  mode_A_dropdown_ = -1;
+  mode_B_dropdown_ = -1;
+  data_mode_toggle_button_ = -1;
+  data_mode_on_button_ = -1;
+  data_mode_off_button_ = -1;
+  data_mode_dropdown_ = -1;
+  split_mode_button_ = -1;
+  split_mode_dropdown_ = -1;
+  split_mode_dropdown_write_only_ = false;
+  split_off_button_ = -1;
+  tx_A_button_ = -1;
+  tx_B_button_ = -1;
+  rx_A_button_ = -1;
+  rx_B_button_ = -1;
+  receiver_dropdown_ = -1;
+  ptt_button_ = -1;
+  alt_ptt_button_ = -1;
+  reversed_ = false;
   hrd_diag (QStringLiteral ("startup begin server='%1' usePtt=%2 audioSource=%3")
             .arg (server_)
             .arg (use_for_ptt_ ? 1 : 0)
@@ -443,17 +541,76 @@ int HRDTransceiver::do_start ()
       CAT_ERROR ("no rig found");
       throw error {tr ("Ham Radio Deluxe: no rig found")};
     }
-  auto current_radio_iter = std::find_if (radios_.begin (), radios_.end (), [&current_radio_name] (RadioMap::value_type const& radio)
-                                          {
-                                            return std::get<1> (radio) == current_radio_name;
-                                          });
-  if (current_radio_iter == radios_.end ())
+  auto const normalized_current = hrd_normalized_radio_name (current_radio_name);
+  auto radio_name_matches = [&current_radio_name, &normalized_current] (RadioMap::value_type const& radio)
     {
-      auto const normalized_current = hrd_normalized_radio_name (current_radio_name);
-      current_radio_iter = std::find_if (radios_.begin (), radios_.end (), [&normalized_current] (RadioMap::value_type const& radio)
-                                         {
-                                           return hrd_normalized_radio_name (std::get<1> (radio)) == normalized_current;
-                                         });
+      return std::get<1> (radio) == current_radio_name
+          || hrd_normalized_radio_name (std::get<1> (radio)) == normalized_current;
+    };
+
+  std::vector<RadioMap::iterator> matching_radios;
+  for (auto it = radios_.begin (); it != radios_.end (); ++it)
+    {
+      if (radio_name_matches (*it))
+        {
+          matching_radios.push_back (it);
+        }
+    }
+
+  auto current_radio_iter = matching_radios.empty () ? radios_.end () : matching_radios.front ();
+  QString current_context_reply;
+  unsigned current_context_id {0};
+  if (matching_radios.size () > 1)
+    {
+      try
+        {
+          current_context_reply = send_command (QStringLiteral ("get context"), false, false);
+          current_context_id = hrd_context_id_from_reply (current_context_reply);
+          HRD_info << "Current context: " << current_context_reply << "\n";
+          hrd_diag (QStringLiteral ("current context reply='%1' parsed=%2")
+                    .arg (hrd_preview (current_context_reply))
+                    .arg (current_context_id));
+        }
+      catch (error const& e)
+        {
+          hrd_diag (QStringLiteral ("get context unavailable while selecting radio: %1")
+                    .arg (QString::fromUtf8 (e.what ())));
+        }
+    }
+
+  if (current_context_id)
+    {
+      auto context_iter = std::find_if (radios_.begin (), radios_.end (), [current_context_id] (RadioMap::value_type const& radio)
+                                        {
+                                          return std::get<0> (radio) == current_context_id;
+                                        });
+      if (context_iter != radios_.end ())
+        {
+          if (radio_name_matches (*context_iter))
+            {
+              current_radio_iter = context_iter;
+            }
+          else
+            {
+              hrd_diag (QStringLiteral ("current context id=%1 name='%2' does not match current radio name='%3'; keeping name match")
+                        .arg (current_context_id)
+                        .arg (hrd_preview (std::get<1> (*context_iter)))
+                        .arg (hrd_preview (current_radio_name)));
+            }
+        }
+      else
+        {
+          hrd_diag (QStringLiteral ("current context id=%1 not found in radio inventory")
+                    .arg (current_context_id));
+        }
+    }
+
+  if (matching_radios.size () > 1 && current_radio_iter != radios_.end ())
+    {
+      hrd_diag (QStringLiteral ("duplicate HRD radio name '%1' matches=%2 selected context id=%3")
+                .arg (hrd_preview (current_radio_name))
+                .arg (static_cast<int> (matching_radios.size ()))
+                .arg (std::get<0> (*current_radio_iter)));
     }
   if (current_radio_iter == radios_.end ())
     {
@@ -462,7 +619,7 @@ int HRDTransceiver::do_start ()
       // the first inventory radio introduced in 1.0.176 upstream (b1b2ec9). When the
       // configured radio is no longer current in HRD, fail loudly instead of driving a
       // different rig without telling the user.
-      QSettings strictSettings (QStringLiteral ("Decodium"), QStringLiteral ("Decodium3"));
+      QSettings strictSettings (QSettings::IniFormat, QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("Decodium3"));
       strictSettings.beginGroup (QStringLiteral ("Transceiver"));
       bool const strict_radio_match = strictSettings.value (QStringLiteral ("hrdStrictRadioMatch"), true).toBool ();
       strictSettings.endGroup ();
@@ -573,15 +730,44 @@ int HRDTransceiver::do_start ()
   // appears to be an HRD defect and we cannot work around it
   if ((data_mode_dropdown_ = find_dropdown (QRegularExpression ("^(Data)$"))) >= 0)
     {
-      // When HRD exposes both "On" and a data profile such as "D1",
-      // select "On". Some Icom HRD profiles keep the rig in plain USB
-      // when D1 is selected before the DATA state is enabled.
-      data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(On)$"));
-      if (!data_mode_dropdown_selection_on_.size ())
-        {
-          data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(Data1|D1|D1-FIL1)$"));
-        }
+      auto const data_mode_generic_on =
+        find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(On)$"));
+      auto const data_mode_profile_on =
+        find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(Data1|D1|D1-FIL1)$"));
       data_mode_dropdown_selection_off_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(Off)$"));
+
+      for (auto const selection : data_mode_generic_on)
+        {
+          prefer_data_mode_dropdown_selection (selection);
+        }
+      for (auto const selection : data_mode_profile_on)
+        {
+          prefer_data_mode_dropdown_selection (selection);
+        }
+
+      // Prefer the user's active Icom data profile when it is a concrete
+      // profile. On IC-7100 HRD accepts "Data On" but reports "Data Off"
+      // again as soon as PTT starts; the stable setting in the tap is "D1".
+      if (data_mode_dropdown_selection_off_.size ())
+        {
+          try
+            {
+              auto const current_data_selection = get_dropdown (data_mode_dropdown_);
+              if (current_data_selection >= 0
+                  && current_data_selection != data_mode_dropdown_selection_off_.front ()
+                  && data_mode_generic_on.cend () == std::find (data_mode_generic_on.cbegin (),
+                                                                data_mode_generic_on.cend (),
+                                                                current_data_selection))
+                {
+                  prefer_data_mode_dropdown_selection (current_data_selection);
+                }
+            }
+          catch (error const& e)
+            {
+              hrd_diag (QStringLiteral ("unable to read initial Data dropdown selection: %1")
+                        .arg (QString::fromUtf8 (e.what ())));
+            }
+        }
     }
 
   ptt_button_ = find_button (QRegularExpression ("^(TX)$"));
@@ -672,8 +858,7 @@ int HRDTransceiver::find_dropdown (QRegularExpression const& re) const
 
 std::vector<int> HRDTransceiver::find_dropdown_selection (int dropdown, QRegularExpression const& re) const
 {
-  std::vector<int> indices;     // this will always contain at least a
-                                // -1
+  std::vector<int> indices;
   auto list = dropdowns_.value (dropdown_names_.value (dropdown));
   int index {0};
   while (-1 != (index = list.lastIndexOf (re, index - 1)))
@@ -705,13 +890,13 @@ void HRDTransceiver::map_modes (int dropdown, ModeMap *map)
   map->push_back (std::forward_as_tuple (CW_R, find_dropdown_selection (dropdown, QRegularExpression ("^(CW-R|CW-R\\(N\\)|CW|CW-USB|CWU)$"))));
   map->push_back (std::forward_as_tuple (LSB, lsb_selection));
   map->push_back (std::forward_as_tuple (USB, usb_selection));
-  map->push_back (std::forward_as_tuple (DIG_U, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGU|DATA-U|PKT-U|DATA|AFSK|USER-U)$")), usb_selection)));
-  map->push_back (std::forward_as_tuple (DIG_L, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGL|DATA-L|PKT-L|DATA-R|USER-L)$")), lsb_selection)));
+  map->push_back (std::forward_as_tuple (DIG_U, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGU|USB-D|USB-D[123]|DATA-U|DATA-USB|PKT-U|DATA|AFSK|USER-U)$")), usb_selection)));
+  map->push_back (std::forward_as_tuple (DIG_L, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGL|LSB-D|LSB-D[123]|DATA-L|DATA-LSB|PKT-L|DATA-R|USER-L)$")), lsb_selection)));
   map->push_back (std::forward_as_tuple (FSK, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|FSK|RTTY|RTTY-LSB)$"))));
   map->push_back (std::forward_as_tuple (FSK_R, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|FSK-R|RTTY-R|RTTY|RTTY-USB)$"))));
   map->push_back (std::forward_as_tuple (AM, find_dropdown_selection (dropdown, QRegularExpression ("^(AM|DSB|SAM|DRM)$"))));
   map->push_back (std::forward_as_tuple (FM, fm_selection));
-  map->push_back (std::forward_as_tuple (DIG_FM, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(PKT-FM|PKT|DATA\\(FM\\))$")), fm_selection)));
+  map->push_back (std::forward_as_tuple (DIG_FM, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(FM-D|FM-D[123]|DATA-FM|PKT-FM|PKT|DATA\\(FM\\))$")), fm_selection)));
 
   CAT_TRACE ("for dropdown" << dropdown_names_[dropdown]);
   std::for_each (map->begin (), map->end (), [this, dropdown] (ModeMap::value_type const& item)
@@ -728,7 +913,12 @@ int HRDTransceiver::lookup_mode (MODE mode, ModeMap const& map) const
     {
       throw error {tr ("Ham Radio Deluxe: rig doesn't support mode")};
     }
-  return std::get<1> (*it).front ();
+  auto const& selections = std::get<1> (*it);
+  if (selections.empty ())
+    {
+      throw error {tr ("Ham Radio Deluxe: rig doesn't support mode")};
+    }
+  return selections.front ();
 }
 
 auto HRDTransceiver::lookup_mode (int mode, ModeMap const& map) const -> MODE
@@ -748,6 +938,81 @@ auto HRDTransceiver::lookup_mode (int mode, ModeMap const& map) const -> MODE
       throw error {tr ("Ham Radio Deluxe: sent an unrecognised mode")};
     }
   return std::get<0> (*it);
+}
+
+bool HRDTransceiver::set_mode_dropdown (int dropdown, ModeMap const& map, MODE mode)
+{
+  if (dropdown < 0 || UNK == mode)
+    {
+      return false;
+    }
+
+  auto const desired_selection = lookup_mode (mode, map);
+  if (hrd_is_data_mode (mode))
+    {
+      auto const carrier_mode = hrd_data_carrier_mode (mode);
+      int carrier_selection {-1};
+      try
+        {
+          carrier_selection = lookup_mode (carrier_mode, map);
+        }
+      catch (error const&)
+        {
+          carrier_selection = -1;
+        }
+
+      // Some HRD radio profiles do not expose USB-D/DATA-U in the Mode
+      // dropdown. They expose plain USB plus a separate Data control. In that
+      // case selecting the fallback USB item creates a visible USB -> USB-D
+      // bounce on Icom rigs. If the carrier is already correct, leave the Mode
+      // dropdown alone and only assert the Data control.
+      if (carrier_selection >= 0 && desired_selection == carrier_selection)
+        {
+          int current_selection {-1};
+          try
+            {
+              current_selection = get_dropdown (dropdown);
+            }
+          catch (error const&)
+            {
+              current_selection = -1;
+            }
+          if (current_selection == carrier_selection)
+            {
+              hrd_diag (QStringLiteral ("skipping carrier fallback mode write for Data mode %1 on dropdown %2 selection=%3")
+                        .arg (mode)
+                        .arg (dropdown_names_.value (dropdown))
+                        .arg (carrier_selection));
+              return false;
+            }
+
+          try
+            {
+              auto const current_mode = lookup_mode (current_selection, map);
+              if (hrd_data_carrier_matches (mode, current_mode))
+                {
+                  hrd_diag (QStringLiteral ("skipping carrier-equivalent mode write for Data mode %1 currentMode=%2 dropdown=%3")
+                            .arg (mode)
+                            .arg (current_mode)
+                            .arg (dropdown_names_.value (dropdown)));
+                  return false;
+                }
+            }
+          catch (error const&)
+            {
+              // Fall through and set the dropdown explicitly. This matches the
+              // previous behaviour for unrecognised HRD mode values.
+            }
+
+          // If the carrier really must change, keep DATA latched before the
+          // carrier write as well as after it. This avoids clearing the data
+          // profile on HRD/Icom combinations where Data is a separate control.
+          set_data_mode (mode);
+        }
+    }
+
+  set_dropdown (dropdown, desired_selection);
+  return true;
 }
 
 int HRDTransceiver::get_dropdown (int dd)
@@ -787,6 +1052,22 @@ void HRDTransceiver::set_dropdown (int dd, int value)
 void HRDTransceiver::do_ptt (bool on)
 {
   CAT_TRACE (on);
+  if (on)
+    {
+      auto ptt_mode = state ().mode ();
+      auto const now_ms = QDateTime::currentMSecsSinceEpoch ();
+      if (!hrd_is_data_mode (ptt_mode)
+          && pending_data_mode_ != UNK
+          && now_ms <= pending_data_mode_until_ms_)
+        {
+          ptt_mode = pending_data_mode_;
+        }
+      if (hrd_is_data_mode (ptt_mode))
+        {
+          hrd_diag (QStringLiteral ("PTT data-mode guard mode=%1").arg (ptt_mode));
+          set_data_mode (ptt_mode);
+        }
+    }
   if (use_for_ptt_)
     {
       if (alt_ptt_button_ >= 0 && TransceiverFactory::TX_audio_source_rear == audio_source_)
@@ -828,8 +1109,53 @@ void HRDTransceiver::set_button (int button_index, bool checked)
     }
 }
 
+void HRDTransceiver::prefer_data_mode_dropdown_selection (int selection)
+{
+  if (selection < 0)
+    {
+      return;
+    }
+
+  auto const existing = std::find (data_mode_dropdown_selection_on_.begin (),
+                                   data_mode_dropdown_selection_on_.end (),
+                                   selection);
+  if (data_mode_dropdown_selection_on_.end () == existing)
+    {
+      data_mode_dropdown_selection_on_.insert (data_mode_dropdown_selection_on_.begin (), selection);
+    }
+  else if (data_mode_dropdown_selection_on_.begin () != existing)
+    {
+      data_mode_dropdown_selection_on_.erase (existing);
+      data_mode_dropdown_selection_on_.insert (data_mode_dropdown_selection_on_.begin (), selection);
+    }
+}
+
+auto HRDTransceiver::protect_pending_data_mode (MODE mode) const -> MODE
+{
+  if (hrd_is_data_mode (mode)
+      || pending_data_mode_ == UNK
+      || QDateTime::currentMSecsSinceEpoch () > pending_data_mode_until_ms_)
+    {
+      return mode;
+    }
+
+  return hrd_data_carrier_matches (pending_data_mode_, mode)
+       ? pending_data_mode_
+       : mode;
+}
+
 void HRDTransceiver::set_data_mode (MODE m)
 {
+  auto const requested_mode = m;
+  m = protect_pending_data_mode (m);
+  if (m != requested_mode)
+    {
+      hrd_diag (QStringLiteral ("preserving pending Data mode %1 while HRD reports carrier mode %2")
+                .arg (m)
+                .arg (requested_mode));
+    }
+
+  bool sent_data_command {false};
   if (data_mode_toggle_button_ >= 0)
     {
       switch (m)
@@ -843,6 +1169,7 @@ void HRDTransceiver::set_data_mode (MODE m)
           set_button (data_mode_toggle_button_, false);
           break;
         }
+      sent_data_command = true;
     }
   else if (data_mode_on_button_ >= 0 && data_mode_off_button_ >= 0)
     {
@@ -857,6 +1184,7 @@ void HRDTransceiver::set_data_mode (MODE m)
           set_button (data_mode_off_button_, true);
           break;
         }
+      sent_data_command = true;
     }
   else if (data_mode_dropdown_ >= 0
       && data_mode_dropdown_selection_off_.size ()
@@ -873,11 +1201,27 @@ void HRDTransceiver::set_data_mode (MODE m)
           set_dropdown (data_mode_dropdown_, data_mode_dropdown_selection_off_.front ());
           break;
         }
+      sent_data_command = true;
+    }
+
+  if (sent_data_command)
+    {
+      if (hrd_is_data_mode (m))
+        {
+          pending_data_mode_ = m;
+          pending_data_mode_until_ms_ = QDateTime::currentMSecsSinceEpoch () + hrd_data_mode_settle_ms;
+        }
+      else
+        {
+          pending_data_mode_ = UNK;
+          pending_data_mode_until_ms_ = 0;
+        }
     }
 }
 
 auto HRDTransceiver::get_data_mode (MODE m) -> MODE
 {
+  auto const now_ms = QDateTime::currentMSecsSinceEpoch ();
   if (data_mode_dropdown_ >= 0
       && data_mode_dropdown_selection_off_.size ())
     {
@@ -886,6 +1230,7 @@ auto HRDTransceiver::get_data_mode (MODE m) -> MODE
       // we must rely on the initial parse finding valid on values
       if (selection >= 0 && selection != data_mode_dropdown_selection_off_.front ())
         {
+          prefer_data_mode_dropdown_selection (selection);
           switch (m)
             {
             case USB: m = DIG_U; break;
@@ -893,14 +1238,45 @@ auto HRDTransceiver::get_data_mode (MODE m) -> MODE
             case FM: m = DIG_FM; break;
             default: break;
             }
+          // HRD can briefly report the Data dropdown as active and then
+          // drop back to Off while PTT is still settling. Keep the guard
+          // alive until its timeout instead of clearing it on the first
+          // successful readback.
         }
+      else if (selection >= 0
+               && pending_data_mode_ != UNK
+               && now_ms <= pending_data_mode_until_ms_
+               && hrd_data_carrier_matches (pending_data_mode_, m))
+        {
+          if (data_mode_dropdown_selection_on_.size ())
+            {
+              hrd_diag (QStringLiteral ("HRD reported Data Off while mode %1 is pending on carrier %2; reasserting Data selection %3")
+                        .arg (pending_data_mode_)
+                        .arg (m)
+                        .arg (data_mode_dropdown_selection_on_.front ()));
+              set_dropdown (data_mode_dropdown_, data_mode_dropdown_selection_on_.front ());
+              pending_data_mode_until_ms_ = now_ms + hrd_data_mode_settle_ms;
+            }
+          return pending_data_mode_;
+        }
+    }
+  if (pending_data_mode_ != UNK && now_ms > pending_data_mode_until_ms_)
+    {
+      pending_data_mode_ = UNK;
+      pending_data_mode_until_ms_ = 0;
     }
   return m;
 }
 
 void HRDTransceiver::do_frequency (Frequency f, MODE m, bool /*no_ignore*/)
 {
+  m = protect_pending_data_mode (m);
   CAT_TRACE (f << "reversed" << reversed_);
+  hrd_diag (QStringLiteral ("QSY RX context=%1 hz=%2 mode=%3 reversed=%4")
+            .arg (current_radio_)
+            .arg (QString::number (f))
+            .arg (m)
+            .arg (reversed_ ? 1 : 0));
   if (UNK != m)
     {
       do_mode (m);
@@ -916,11 +1292,21 @@ void HRDTransceiver::do_frequency (Frequency f, MODE m, bool /*no_ignore*/)
       send_simple_command ("set frequency-hz " + QString::number (f));
     }
   update_rx_frequency (f);
+  if (hrd_is_data_mode (m))
+    {
+      set_data_mode (m);
+    }
 }
 
 void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*/)
 {
+  mode = protect_pending_data_mode (mode);
   CAT_TRACE (tx << "reversed" << reversed_);
+  hrd_diag (QStringLiteral ("QSY TX context=%1 hz=%2 mode=%3 reversed=%4")
+            .arg (current_radio_)
+            .arg (QString::number (tx))
+            .arg (mode)
+            .arg (reversed_ ? 1 : 0));
 
   // re-check if reversed VFOs
   bool rx_A {true};
@@ -951,11 +1337,11 @@ void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*
         {
           if (!reversed_ && mode_B_dropdown_ >= 0)
             {
-              set_dropdown (mode_B_dropdown_, lookup_mode (mode, mode_B_map_));
+              set_mode_dropdown (mode_B_dropdown_, mode_B_map_, mode);
             }
           else if (reversed_ && mode_B_dropdown_ >= 0)
             {
-              set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+              set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
             }
           else
             {
@@ -964,7 +1350,7 @@ void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*
               if (rx_B_button_ >= 0)
                 {
                   set_button (reversed_ ? rx_A_button_ : rx_B_button_);
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_data_mode (mode);
                   set_button (reversed_ ? rx_B_button_ : rx_A_button_);
                 }
@@ -972,14 +1358,14 @@ void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*
                        && rx_A_selection_.size () && rx_B_selection_.size ())
                 {
                   set_dropdown (receiver_dropdown_, (reversed_ ? rx_A_selection_ : rx_B_selection_).front ());
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_data_mode (mode);
                   set_dropdown (receiver_dropdown_, (reversed_ ? rx_B_selection_ : rx_A_selection_).front ());
                 }
               else if (vfo_count_ > 1 && ((vfo_A_button_ >=0 && vfo_B_button_ >=0) || vfo_toggle_button_ >= 0))
                 {
                   set_button (vfo_A_button_ >= 0 ? (reversed_ ? vfo_A_button_ : vfo_B_button_) : vfo_toggle_button_);
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_data_mode (mode);
                   set_button (vfo_A_button_ >= 0 ? (reversed_ ? vfo_B_button_ : vfo_A_button_) : vfo_toggle_button_);
                 }
@@ -1013,7 +1399,7 @@ void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*
                 {
                   // do this here rather than later so we only
                   // toggle/switch VFOs once
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_data_mode (mode);
                 }
               set_button (vfo_A_button_ >= 0 ? vfo_A_button_ : vfo_toggle_button_);
@@ -1021,6 +1407,10 @@ void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*
         }
     }
   update_other_frequency (tx);
+  if (hrd_is_data_mode (mode))
+    {
+      set_data_mode (mode);
+    }
 
   if (split_mode_button_ >= 0)
     {
@@ -1087,14 +1477,15 @@ void HRDTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool /*no_ignore*
 
 void HRDTransceiver::do_mode (MODE mode)
 {
+  mode = protect_pending_data_mode (mode);
   CAT_TRACE (mode);
   if (reversed_ && mode_B_dropdown_ >= 0)
     {
-      set_dropdown (mode_B_dropdown_, lookup_mode (mode, mode_B_map_));
+      set_mode_dropdown (mode_B_dropdown_, mode_B_map_, mode);
     }
   else
     {
-      set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+      set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
     }
   if (mode != UNK && state ().split ()) // rationalise mode if split
     {
@@ -1102,7 +1493,7 @@ void HRDTransceiver::do_mode (MODE mode)
         {
           if (mode_B_dropdown_ >= 0)
             {
-              set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+              set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
             }
           else
             {
@@ -1111,20 +1502,20 @@ void HRDTransceiver::do_mode (MODE mode)
               if (rx_B_button_ >= 0)
                 {
                   set_button (rx_A_button_);
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_button (rx_B_button_);
                 }
               else if (receiver_dropdown_ >= 0
                        && rx_A_selection_.size () && rx_B_selection_.size ())
                 {
                   set_dropdown (receiver_dropdown_, rx_A_selection_.front ());
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_dropdown (receiver_dropdown_, rx_B_selection_.front ());
                 }
               else if (vfo_count_ > 1 && ((vfo_A_button_ >=0 && vfo_B_button_ >=0) || vfo_toggle_button_ >= 0))
                 {
                   set_button (vfo_A_button_ >= 0 ? vfo_A_button_ : vfo_toggle_button_);
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_button (vfo_B_button_ >= 0 ? vfo_B_button_ : vfo_toggle_button_);
                 }
               // else Tx VFO mode gets set when Tx VFO frequency is
@@ -1140,7 +1531,7 @@ void HRDTransceiver::do_mode (MODE mode)
         {
           if (mode_B_dropdown_ >= 0)
             {
-              set_dropdown (mode_B_dropdown_, lookup_mode (mode, mode_B_map_));
+              set_mode_dropdown (mode_B_dropdown_, mode_B_map_, mode);
             }
           else
             {
@@ -1149,20 +1540,20 @@ void HRDTransceiver::do_mode (MODE mode)
               if (rx_B_button_ >= 0)
                 {
                   set_button (rx_B_button_);
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_button (rx_A_button_);
                 }
               else if (receiver_dropdown_ >= 0
                        && rx_A_selection_.size () && rx_B_selection_.size ())
                 {
                   set_dropdown (receiver_dropdown_, rx_B_selection_.front ());
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_dropdown (receiver_dropdown_, rx_A_selection_.front ());
                 }
               else if (vfo_count_ > 1 && ((vfo_A_button_ >=0 && vfo_B_button_ >=0) || vfo_toggle_button_ >= 0))
                 {
                   set_button (vfo_B_button_ >= 0 ? vfo_B_button_ : vfo_toggle_button_);
-                  set_dropdown (mode_A_dropdown_, lookup_mode (mode, mode_A_map_));
+                  set_mode_dropdown (mode_A_dropdown_, mode_A_map_, mode);
                   set_button (vfo_A_button_ >= 0 ? vfo_A_button_ : vfo_toggle_button_);
                 }
               // else Tx VFO mode gets set when Tx VFO frequency is

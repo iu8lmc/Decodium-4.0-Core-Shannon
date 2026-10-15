@@ -8,6 +8,7 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: bootWindow
+    font.family: Qt.platform.os === "windows" ? "Segoe UI" : (Qt.platform.os === "osx" ? "Helvetica Neue" : "")
     visible: true
     visibility: Window.Windowed
     flags: Qt.SplashScreen | Qt.WindowStaysOnTopHint
@@ -17,7 +18,7 @@ ApplicationWindow {
     minimumHeight: 500
     x: centeredBootX()
     y: centeredBootY()
-    title: "Decodium 4.0 — Loading..."
+    title: qsTr("Decodium 4.0 — Loading...")
     color: "#1a1a2e"
     property int mainLoadElapsedSeconds: 0
     property double mainLoadStartedMs: 0
@@ -91,16 +92,25 @@ ApplicationWindow {
         if (mainLoadStatus === Component.Ready) {
             componentStatusPoller.stop()
             if (!mainWindowObject) {
-                mainWindowObject = mainComponent.createObject(null)
+                // Keep Main hidden until C++ applies the graphics configuration.
+                // The engine objectCreated hook only sees this BootLoader window.
+                mainWindowObject = mainComponent.createObject(null, { "visible": false })
                 if (!mainWindowObject) {
                     mainLoadStatus = Component.Error
                     console.log("BootLoader: Main.qml createObject(null) failed")
                     return
                 }
+                if (bridge && typeof bridge.configureQuickWindowGraphics === "function") {
+                    var graphicsConfigured = bridge.configureQuickWindowGraphics(mainWindowObject)
+                    console.log("BootLoader: Main window graphics configured before show="
+                                + graphicsConfigured)
+                }
                 if (mainWindowObject.closing) {
                     mainWindowObject.closing.connect(function() { Qt.quit() })
                 }
-                if (mainWindowObject.show)
+                if (mainWindowObject.showRestoredWindowState)
+                    mainWindowObject.showRestoredWindowState()
+                else if (mainWindowObject.show)
                     mainWindowObject.show()
                 if (mainWindowObject.raise)
                     mainWindowObject.raise()
@@ -112,6 +122,10 @@ ApplicationWindow {
             // Keep this hidden root object alive so the top-level main window
             // is not garbage-collected. The splash type has no taskbar button.
             bootWindow.visible = false
+            Qt.callLater(function() {
+                if (!bootWindow.visible && typeof bootWindow.releaseResources === "function")
+                    bootWindow.releaseResources()
+            })
         } else if (mainLoadStatus === Component.Error) {
             componentStatusPoller.stop()
             console.log("BootLoader: Main.qml load error: "
@@ -137,14 +151,14 @@ ApplicationWindow {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "DECODIUM 4.0"
+            text: qsTr("DECODIUM 4.0")
             color: "#ff7814"
             font.pixelSize: 42
             font.bold: true
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "Core Shannon"
+            text: qsTr("Core Gallager")
             color: "#aaaacc"
             font.pixelSize: 18
         }
@@ -227,8 +241,12 @@ ApplicationWindow {
         repeat: false
         onTriggered: {
             console.log("BootLoader: starting Main.qml load at +" + bootWindow.bootElapsedMs() + " ms")
-            if (bridge && bridge.notifyMainQmlLoadStarted)
-                bridge.notifyMainQmlLoadStarted()
+            try {
+                if (bridge)
+                    bridge.notifyMainQmlLoadStarted()
+            } catch (e) {
+                console.log("BootLoader: notifyMainQmlLoadStarted failed: " + e)
+            }
             bootWindow.mainLoadElapsedSeconds = 0
             bootWindow.mainLoadStartedMs = Date.now()
             bootWindow.mainComponent = Qt.createComponent("Main.qml", Component.Asynchronous)

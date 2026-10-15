@@ -1,0 +1,4 @@
+sounddevice>=0.4.6
+numpy>=1.24
+# opzionale, solo per --freq-offset:
+# scipy>=1.10

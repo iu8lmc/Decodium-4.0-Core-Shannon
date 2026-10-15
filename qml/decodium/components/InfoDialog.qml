@@ -6,7 +6,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects  // 1.0.182 — MultiEffect Qt 6.5+
 
 Dialog {
     id: infoDialog
@@ -50,18 +49,9 @@ Dialog {
         border.width: 2
         radius: 16
 
-        // 1.0.182 — UI Visual Boost: MultiEffect shadow gated su uiQuality High.
-        // Su Low/Medium nessuna ombra (PC modesti). Pattern identico a
-        // SettingsDialog.qml ~1001-1014.
-        layer.enabled: bridge && bridge.uiQuality === "High"
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowBlur: 0.5
-            shadowColor: Qt.rgba(0, 0, 0, 0.45)
-            shadowVerticalOffset: 4
-            shadowHorizontalOffset: 0
-            blurMax: 16
-        }
+        // Keep this dialog compatible with the Linux Qt 6.4 AppImage runtime.
+        // QtQuick.Effects/MultiEffect is only available from Qt 6.5.
+        layer.enabled: false
     }
 
     header: Rectangle {
@@ -90,7 +80,7 @@ Dialog {
             anchors.margins: 16
 
             Text {
-                text: "DECODIUM INFO"
+                text: qsTr("DECODIUM INFO")
                 font.pixelSize: 18
                 font.bold: true
                 color: secondaryCyan
@@ -225,7 +215,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "4.0 Core Shannon"
+                        text: qsTr("4.0 Core Gallager")
                         font.pixelSize: 16
                         color: secondaryCyan
                     }
@@ -234,7 +224,7 @@ Dialog {
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         Layout.preferredWidth: 500
-                        text: "Advanced Digital Mode Decoder for Amateur Radio\nFT8 / FT4 / FT2 / Q65 / JT65 / MSK144 / MSK40 / JTMS / FSK441"
+                        text: qsTr("Advanced Digital Mode Decoder for Amateur Radio\nFT8 / FT4 / FT2 / Q65 / JT65 / MSK144 / MSK40 / JTMS / FSK441")
                         font.pixelSize: 13
                         color: textSecondary
                         horizontalAlignment: Text.AlignHCenter
@@ -267,28 +257,28 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Decodium by IU8LMC"
+                                text: qsTr("Decodium by IU8LMC")
                                 font.pixelSize: 12
                                 color: textPrimary
                             }
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Qt6 Modern UI Port by IU8LMC"
+                                text: qsTr("Qt6 Modern UI Port by IU8LMC")
                                 font.pixelSize: 12
                                 color: textPrimary
                             }
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Developed by Salvatore Raccampo 9H1SR"
+                                text: qsTr("Developed by Salvatore Raccampo 9H1SR")
                                 font.pixelSize: 12
                                 color: textPrimary
                             }
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "WSJT-X Algorithms by K1JT (Joe Taylor)"
+                                text: qsTr("WSJT-X Algorithms by K1JT (Joe Taylor)")
                                 font.pixelSize: 12
                                 color: textPrimary
                             }
@@ -297,7 +287,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Copyright 2024-2026 - Open Source GPL"
+                                text: qsTr("Copyright 2024-2026 - Open Source GPL")
                                 font.pixelSize: 11
                                 color: textSecondary
                             }
@@ -321,7 +311,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "DECODIUM HISTORY"
+                        text: qsTr("DECODIUM HISTORY")
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -336,7 +326,7 @@ Dialog {
                             { year: "2025", title: "Decodium 1.0", desc: "First public release with Neural Sync, Coherent Averaging, modern UI, integrated CAT control, and PSK Reporter." },
                             { year: "2025", title: "Decodium 1.5", desc: "Release with decoder improvements, new UI, macro management, and the astronomy window." },
                             { year: "2026", title: "Decodium 2.0", desc: "Version optimized for older computers: bitshift, memcpy, and magnitude-squared optimizations. Yaesu CAT fix with DTR/RTS." },
-                            { year: "2026", title: "Decodium 4.0 Core Shannon", desc: "Complete architectural refactor. New modular UI, PSK Reporter, Cloudlog, live DX Cluster, ADIF, and LotW integration. Named after Claude Shannon, father of information theory." }
+                            { year: "2026", title: "Decodium 4.0 Core Gallager", desc: "Complete architectural refactor. New modular UI, PSK Reporter, Cloudlog, live DX Cluster, ADIF, and LotW integration. Named after Robert Gallager, inventor of LDPC codes." }
                         ]
 
                         Rectangle {
@@ -417,7 +407,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "CONTACTS & FEEDBACK"
+                        text: qsTr("CONTACTS & FEEDBACK")
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -439,7 +429,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Developer: IU8LMC"
+                                text: qsTr("Developer: IU8LMC")
                                 font.pixelSize: 14
                                 color: textPrimary
                             }
@@ -454,7 +444,7 @@ Dialog {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "iu8lmc@gmail.com"
+                                    text: qsTr("iu8lmc@gmail.com")
                                     font.pixelSize: 14
                                     color: secondaryCyan
                                 }
@@ -472,7 +462,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Developer: 9H1SR"
+                                text: qsTr("Developer: 9H1SR")
                                 font.pixelSize: 14
                                 color: textPrimary
                             }
@@ -487,7 +477,7 @@ Dialog {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "9h1sr@gmail.com"
+                                    text: qsTr("9h1sr@gmail.com")
                                     font.pixelSize: 14
                                     color: accentGreen
                                 }
@@ -524,7 +514,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "SEND FEEDBACK"
+                                text: qsTr("SEND FEEDBACK")
                                 font.pixelSize: 14
                                 font.bold: true
                                 color: accentOrange
@@ -535,12 +525,12 @@ Dialog {
                                 spacing: 5
 
                                 Text {
-                                    text: "Subject"
+                                    text: qsTr("Subject")
                                     color: textSecondary
                                     font.pixelSize: 11
                                 }
 
-                                TextField {
+                                DecoTextField {
                                     id: feedbackSubject
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 42
@@ -562,7 +552,7 @@ Dialog {
                                 spacing: 5
 
                                 Text {
-                                    text: "Message, suggestion, or bug report"
+                                    text: qsTr("Message, suggestion, or bug report")
                                     color: textSecondary
                                     font.pixelSize: 11
                                 }
@@ -588,7 +578,7 @@ Dialog {
 
                             Button {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Send Feedback"
+                                text: qsTr("Send Feedback")
                                 font.pixelSize: 12
 
                                 background: Rectangle {
@@ -611,7 +601,7 @@ Dialog {
 
                                 onClicked: {
                                     var subject = encodeURIComponent(feedbackSubject.text || "Decodium Feedback")
-                                    var body = encodeURIComponent(feedbackMessage.text + "\n\n--\nDecodium 4.0 Core Shannon\nCallsign: " + (bridge ? bridge.callsign : "N/A"))
+                                    var body = encodeURIComponent(feedbackMessage.text + "\n\n--\nDecodium 4.0 Core Gallager\nCallsign: " + (bridge ? bridge.callsign : "N/A"))
                                     Qt.openUrlExternally("mailto:iu8lmc@gmail.com,9h1sr@gmail.com?subject=" + subject + "&body=" + body)
                                 }
                             }
@@ -635,7 +625,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "QUICK GUIDE"
+                        text: qsTr("QUICK GUIDE")
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -659,7 +649,7 @@ Dialog {
                             spacing: 10
 
                             Text {
-                                text: "QUICK START"
+                                text: qsTr("QUICK START")
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: accentGreen
@@ -702,7 +692,7 @@ Dialog {
                             spacing: 8
 
                             Text {
-                                text: "KEYBOARD SHORTCUTS"
+                                text: qsTr("KEYBOARD SHORTCUTS")
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: accentOrange
@@ -716,13 +706,17 @@ Dialog {
                                 Repeater {
                                     model: [
                                         { key: "F1", action: "Monitor On/Off" },
-                                        { key: "F2", action: "Enable TX" },
-                                        { key: "F3", action: "Auto Sequence" },
+                                        { key: "F2", action: "QSY Quick Picker" },
+                                        { key: "F3", action: "Auto Sequence On/Off" },
                                         { key: "F4", action: "Log QSO" },
-                                        { key: "ESC", action: "Halt TX" },
-                                        { key: "Ctrl+S", action: "Open Settings" },
-                                        { key: "Ctrl+L", action: "Open Log" },
-                                        { key: "Ctrl+M", action: "Open Macro" }
+                                        { key: "Esc", action: "Halt TX" },
+                                        { key: "Ctrl+S", action: qsTr("Open Settings") },
+                                        { key: "Ctrl+L", action: qsTr("Open Log") },
+                                        { key: "Ctrl+M", action: qsTr("Open Macros") },
+                                        { key: "Ctrl+Shift+H", action: "Decode History" },
+                                        { key: "Ctrl+Shift+L", action: qsTr("Reset windows Layout") },
+                                        { key: "Ctrl+Shift+C", action: qsTr("Compact Full Spectrum") },
+                                        { key: "Ctrl+Shift+F", action: "Dev Overlay" }
                                     ]
 
                                     RowLayout {
@@ -773,7 +767,7 @@ Dialog {
                             spacing: 10
 
                             Text {
-                                text: "OPERATING TIPS"
+                                text: qsTr("OPERATING TIPS")
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: primaryBlue
@@ -814,7 +808,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "USEFUL LINKS"
+                        text: qsTr("USEFUL LINKS")
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
