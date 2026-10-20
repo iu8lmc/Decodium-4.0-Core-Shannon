@@ -41,14 +41,15 @@ public:
     // Avvia il server sulla porta indicata (default 8080). Ritorna true se
     // il bind ha avuto successo. Se gia' running su un'altra porta, ferma
     // e riavvia.
-    bool start(quint16 port = 8080);
+    bool start(quint16 port = 8080, QString const& accessToken = QString());
     void stop();
     bool isRunning() const;
     quint16 port() const { return m_port; }
 
-    // URL completo accessibile da altri device LAN (es. http://192.168.1.20:8080).
+    // URL completo accessibile da altri device LAN (es. http://192.168.1.20:8080/?token=...).
     // Ritorna stringa vuota se non running o se non riesce a determinare un IP.
     QString accessUrl() const;
+    QString qrUrl() const;
 
     // Fase 2 — WebSocket push real-time. Quando il bridge emette
     // decodeListChanged o rxFrequencyChanged etc, broadcastiamo il
@@ -73,6 +74,9 @@ private Q_SLOTS:
 private:
     void handleRequest(QTcpSocket* socket, QString const& method,
                        QString const& path, QString const& query);
+    bool isAuthorizedQuery(QString const& query) const;
+    QString tokenQuery() const;
+    QString baseUrl() const;
     QByteArray buildIndexHtml() const;
     QByteArray buildStateJson() const;
     QByteArray buildDecodesJson() const;
@@ -86,6 +90,7 @@ private:
     DecodiumBridge*           m_bridge {nullptr};
     QPointer<QTcpServer>      m_server;
     quint16                   m_port {0};
+    QString                   m_accessToken;
     // Fase 2: WebSocket server (porta = m_port + 1, default 8081)
     QPointer<QWebSocketServer> m_wsServer;
     QVector<QWebSocket*>       m_wsClients;

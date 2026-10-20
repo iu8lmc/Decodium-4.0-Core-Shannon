@@ -64,12 +64,8 @@ bool compare_message (QString const& message, bool check_only)
       decodium::txmsg::encodeJt9 (QString::fromLatin1 (msg.data (), 22), check_only);
   QByteArray const cpp_input = decodium::legacy_jt::detail::fixed_ascii (
       QString::fromLatin1 (msg.data (), 22).toLatin1 (), 22);
-  QByteArray trimmed = cpp_input;
-  while (!trimmed.isEmpty () && trimmed.at (0) == ' ')
-    {
-      trimmed.remove (0, 1);
-      trimmed = decodium::legacy_jt::detail::fixed_ascii (trimmed, 22);
-    }
+  QByteArray const trimmed = decodium::legacy_jt::detail::fixed_ascii (
+      decodium::legacy_jt::detail::trim_left_ascii (cpp_input), 22);
   decodium::legacy_jt::detail::PackedJtMessage const packed =
       decodium::legacy_jt::detail::packmsg (trimmed);
 
@@ -88,8 +84,8 @@ bool compare_message (QString const& message, bool check_only)
                     "  fortran state: itype=%d nc1=%d nc2=%d ng=%d k1=%d k2=%d\n"
                     "  cxx state    : itype=%d nc1=%d nc2=%d ng=%d\n",
                     input.constData (),
-                    fortran_msgsent.size (), fortran_msgsent.constData (),
-                    cpp_msgsent.size (), cpp_msgsent.constData (),
+                    static_cast<int> (fortran_msgsent.size ()), fortran_msgsent.constData (),
+                    static_cast<int> (cpp_msgsent.size ()), cpp_msgsent.constData (),
                     __packjt_MOD_jt_itype, __packjt_MOD_jt_nc1, __packjt_MOD_jt_nc2,
                     __packjt_MOD_jt_ng, __packjt_MOD_jt_k1, __packjt_MOD_jt_k2,
                     packed.itype, packed.nc1, packed.nc2, packed.ng);
@@ -118,7 +114,7 @@ bool compare_message (QString const& message, bool check_only)
     {
       std::fprintf (stderr,
                     "tone count mismatch for '%s': expected 85 got %d\n",
-                    input.constData (), encoded.tones.size ());
+                    input.constData (), static_cast<int> (encoded.tones.size ()));
       return false;
     }
 
@@ -148,6 +144,8 @@ int main (int argc, char** argv)
   QCoreApplication app {argc, argv};
 
   QStringList const kMessages {
+    QStringLiteral (""),
+    QStringLiteral ("CQ 9H1SR JM75"),
     QStringLiteral ("CQ WB9XYZ EN34"),
     QStringLiteral ("CQ DX WB9XYZ EN34"),
     QStringLiteral ("QRZ WB9XYZ EN34"),
@@ -236,6 +234,6 @@ int main (int argc, char** argv)
       return 1;
     }
 
-  std::printf ("JT9 compare passed for %d messages\n", kMessages.size ());
+  std::printf ("JT9 compare passed for %d messages\n", static_cast<int> (kMessages.size ()));
   return 0;
 }

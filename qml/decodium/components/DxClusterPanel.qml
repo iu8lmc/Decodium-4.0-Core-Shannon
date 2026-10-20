@@ -10,6 +10,22 @@ import QtQuick.Layouts
 Rectangle {
     id: root
     signal closeRequested()
+    signal positionCommitted()
+
+    // La lista usa il modello C++ degli spot (bridge.dxCluster.spotModel): uno
+    // spot nuovo aggiunge una riga e il piu' vecchio la toglie, senza rifare le
+    // altre. Prima il modello era bridge.dxCluster.spots, cioe' l'intero elenco
+    // ricopiato in JavaScript e ricostruito da capo a ogni gruppo di spot, in
+    // ognuna delle due copie del pannello (incassata e staccata) anche a pannello
+    // chiuso: 100-180 ms di thread dell'interfaccia ogni volta, barra a scatti e
+    // campioni audio persi durante i pile-up.
+    readonly property var spotModel: bridge.dxCluster ? bridge.dxCluster.spotModel : null
+    readonly property bool onlineServicesPaused: !!(bridge && bridge.offlineMode)
+
+    // 1.0.343 — se incassato in un layout (DX-Pedition SplitView): disabilita
+    // drag header + resize grip (il grip scriveva saveGeometry corrompendo il
+    // pannello Cluster floating classico). La cella SplitView lo dimensiona.
+    property bool embedded: false
 
     property color bgDeep:        bridge.themeManager.bgDeep
     property color secondaryCyan: bridge.themeManager.secondaryColor
@@ -18,8 +34,20 @@ Rectangle {
     property color textSecondary: bridge.themeManager.textSecondary
     property color glassBorder:   bridge.themeManager.glassBorder
     property color warningOrange: bridge.themeManager.warningColor
+    readonly property bool glassSurfaceEnabled: !root.embedded && bridge.themeManager
+                                                && bridge.themeManager.isGlassTheme
+                                                && bridge.themeManager.glassTransparencySupported
 
-    color:         Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.93)
+    // The window shell can be transparent while this panel is still opaque.
+    // Keep the content surface translucent as well, otherwise DX Cluster
+    // visually masks the spectrum behind it.
+    color:         root.embedded
+                   ? root.bgDeep
+                   : root.glassSurfaceEnabled
+                   ? Qt.rgba(bridge.themeManager.panelColor.r,
+                             bridge.themeManager.panelColor.g,
+                             bridge.themeManager.panelColor.b, 0.30)
+                   : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.93)
     border.color:  glassBorder
     border.width:  1
     radius:        8
@@ -45,6 +73,7 @@ Rectangle {
 
         MouseArea {
             anchors.fill: parent
+            enabled: !root.embedded
             drag.target: root
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0
@@ -54,6 +83,7 @@ Rectangle {
             hoverEnabled: true
             cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
             onPressed: root.z = 250
+            onReleased: root.positionCommitted()
         }
 
         RowLayout {
@@ -61,28 +91,33 @@ Rectangle {
             spacing: 6
 
             Rectangle {
-                width: 8; height: 8; radius: 4
-                color: bridge.dxCluster && bridge.dxCluster.connected ? "#00e676" : "#ef5350"
+                Layout.preferredWidth: 8; Layout.preferredHeight: 8; radius: 4
+                color: root.onlineServicesPaused ? root.warningOrange
+                      : bridge.dxCluster && bridge.dxCluster.connected ? "#00e676" : "#ef5350"
             }
             Text {
-                text: "DX Cluster"
+                text: qsTr("DX Cluster")
                 color: secondaryCyan; font.bold: true; font.pixelSize: 12
             }
             Text {
-                text: bridge.dxCluster && bridge.dxCluster.connected
+                text: root.onlineServicesPaused
+                      ? qsTr("online services paused")
+                      : bridge.dxCluster && bridge.dxCluster.connected
                       ? "● " + bridge.dxCluster.host
                       : "disconnected"
-                color: textSecondary; font.pixelSize: 10
+                color: root.onlineServicesPaused ? root.warningOrange : textSecondary; font.pixelSize: 10
             }
             Item { Layout.fillWidth: true }
 
             Text {
-                text: (bridge.dxCluster && bridge.dxCluster.spots ? bridge.dxCluster.spots.length : 0) + " spot"
+                text: (root.spotModel ? root.spotModel.count : 0) + " spot"
                 color: textSecondary; font.pixelSize: 10
             }
 
             Rectangle {
-                width: 86; height: 22; radius: 4
+                Layout.preferredWidth: root.onlineServicesPaused ? 112 : 86
+                Layout.preferredHeight: 22
+                radius: 4
                 color: connMouse.containsMouse
                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
                        : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
@@ -92,6 +127,8 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         if (!bridge.dxCluster) return
+                        if (root.onlineServicesPaused)
+                            bridge.resumeOnlineServices()
                         if (bridge.dxCluster.connected)
                             bridge.disconnectDxCluster()
                         else
@@ -100,7 +137,8 @@ Rectangle {
                 }
                 Text {
                     anchors.centerIn: parent
-                    text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnect" : "Connect"
+                    text: root.onlineServicesPaused ? qsTr("Go online")
+                          : bridge.dxCluster && bridge.dxCluster.connected ? qsTr("Disconnect") : qsTr("Connect")
                     color: secondaryCyan; font.pixelSize: 10
                     elide: Text.ElideRight
                 }
@@ -119,23 +157,46 @@ Rectangle {
         }
     }
 
+    Rectangle {
+        id: offlineNotice
+        anchors.top: header.bottom
+        width: parent.width
+        height: root.onlineServicesPaused ? 28 : 0
+        visible: height > 0
+        clip: true
+        color: Qt.rgba(root.warningOrange.r, root.warningOrange.g, root.warningOrange.b, 0.14)
+        border.color: Qt.rgba(root.warningOrange.r, root.warningOrange.g, root.warningOrange.b, 0.48)
+        border.width: 1
+
+        Text {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            verticalAlignment: Text.AlignVCenter
+            text: qsTr("Online services are paused locally; this is not a Windows Internet-status check. Click Go online to resume Cluster and updates.")
+            color: root.warningOrange
+            font.pixelSize: 10
+            elide: Text.ElideRight
+        }
+    }
+
     // Table headers
     Rectangle {
         id: colHeader
-        anchors.top: header.bottom
+        anchors.top: offlineNotice.bottom
         width: parent.width; height: 22
         color: Qt.rgba(0, 0, 0, 0.25)
 
         Row {
             anchors { fill: parent; leftMargin: 6 }
             spacing: 0
-            Text { width: 46;  text: "Time";     color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 76;  text: "DX Call";  color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 70;  text: "Freq";     color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 44;  text: "Band";     color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 48;  text: "Mode";     color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 70;  text: "Spotter";  color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { Layout.fillWidth: true; text: "Info"; color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 46;  text: qsTr("Time");     color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 76;  text: qsTr("DX Call");  color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 70;  text: qsTr("Freq");     color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 44;  text: qsTr("Band");     color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 48;  text: qsTr("Mode");     color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 70;  text: qsTr("Spotter");  color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { Layout.fillWidth: true; text: qsTr("Info"); color: textSecondary; font.pixelSize: 10; font.bold: true }
         }
     }
 
@@ -150,21 +211,29 @@ Rectangle {
             margins: 1
         }
         clip: true
-        model: {
-            var all = bridge.dxCluster ? bridge.dxCluster.spots : []
-            if (root.modeFilter === "") return all
-            return all.filter(function(s) { return s["mode"] === root.modeFilter })
-        }
+        model: root.spotModel
 
         onCountChanged: if (count > 0) positionViewAtEnd()
+        // A elenco pieno ogni spot nuovo toglie il piu' vecchio e il conteggio
+        // non cambia: si scende in fondo a ogni riga inserita.
+        Connections {
+            target: root.spotModel
+            function onRowsInserted() { spotList.positionViewAtEnd() }
+        }
 
         delegate: Rectangle {
             width:  spotList.width
-            height: 22
+            // Mentre una riga viene tolta il delegato rivaluta i binding con
+            // modelData gia' indefinito: si legge da qui, mai indefinito.
+            readonly property var spot: modelData || ({})
+            // Il filtro per modo nasconde la riga invece di ricostruire la lista.
+            readonly property bool shown: root.modeFilter === "" || spot["mode"] === root.modeFilter
+            visible: shown
+            height: shown ? 22 : 0
             color: {
                 if (rowMouse.containsMouse)
                     return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
-                var md = modelData["mode"] || ""
+                var md = spot["mode"] || ""
                 if (md === "FT8" || md === "FT4" || md === "FT2")
                     return Qt.rgba(0, 0.9, 0.5, 0.07)
                 return index % 2 === 0 ? Qt.rgba(0,0,0,0.05) : Qt.rgba(0,0,0,0)
@@ -178,15 +247,15 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
 
                 onDoubleClicked: {
-                    var freqKhz = modelData["frequency"] || 0
+                    var freqKhz = spot["frequency"] || 0
                     if (freqKhz > 0) {
-                        var mode = modelData["mode"] || ""
+                        var mode = spot["mode"] || ""
                         bridge.qsyTo(freqKhz * 1000.0, mode)
                     }
                 }
 
                 onClicked: {
-                    var call = modelData["dxCall"] || ""
+                    var call = spot["dxCall"] || ""
                     if (call.length > 0) bridge.dxCall = call
                 }
             }
@@ -197,20 +266,20 @@ Rectangle {
 
                 Text {
                     width: 46
-                    text: modelData["time"] || ""
+                    text: spot["time"] || ""
                     color: textSecondary; font.pixelSize: 10
                     elide: Text.ElideRight
                 }
                 Text {
                     width: 76
-                    text: modelData["dxCall"] || ""
+                    text: spot["dxCall"] || ""
                     color: accentGreen; font.pixelSize: 11; font.bold: true
                     elide: Text.ElideRight
                 }
                 Text {
                     width: 70
                     text: {
-                        var f = modelData["frequency"] || 0
+                        var f = spot["frequency"] || 0
                         return f > 0 ? f.toFixed(1) + " kHz" : ""
                     }
                     color: textPrimary; font.pixelSize: 10
@@ -218,14 +287,14 @@ Rectangle {
                 }
                 Text {
                     width: 44
-                    text: modelData["band"] || ""
+                    text: spot["band"] || ""
                     color: secondaryCyan; font.pixelSize: 10
                 }
                 Rectangle {
                     width: 48; height: 18; radius: 3
                     anchors.verticalCenter: parent.verticalCenter
                     color: {
-                        var md = modelData["mode"] || ""
+                        var md = spot["mode"] || ""
                         if (md === "FT8") return Qt.rgba(0, 0.7, 1, 0.25)
                         if (md === "FT4") return Qt.rgba(0, 1, 0.6, 0.2)
                         if (md === "FT2") return Qt.rgba(1, 0.6, 0, 0.22)
@@ -235,20 +304,20 @@ Rectangle {
                     }
                     Text {
                         anchors.centerIn: parent
-                        text: modelData["mode"] || "?"
+                        text: spot["mode"] || "?"
                         color: textPrimary; font.pixelSize: 9; font.bold: true
                     }
                 }
                 Text {
                     width: 70
-                    text: modelData["spotter"] || ""
+                    text: spot["spotter"] || ""
                     color: textSecondary; font.pixelSize: 10
                     leftPadding: 4
                     elide: Text.ElideRight
                 }
                 Text {
                     width: Math.max(90, spotList.width - 358)
-                    text: modelData["comment"] || ""
+                    text: spot["comment"] || ""
                     color: textSecondary; font.pixelSize: 10
                     elide: Text.ElideRight
                 }
@@ -259,9 +328,9 @@ Rectangle {
                 visible: rowMouse.containsMouse
                 delay: 500
                 text: {
-                    var c = (modelData && modelData["dxCall"]) ? modelData["dxCall"] : ""
-                    var f = (modelData && modelData["frequency"]) ? modelData["frequency"] : 0
-                    var sp = (modelData && modelData["spotter"]) ? modelData["spotter"] : ""
+                    var c = (modelData && spot["dxCall"]) ? spot["dxCall"] : ""
+                    var f = (modelData && spot["frequency"]) ? spot["frequency"] : 0
+                    var sp = (modelData && spot["spotter"]) ? spot["spotter"] : ""
                     return c + " - " + f.toFixed(1) + " kHz\nSpotter: " + sp +
                            "\nClick: set DX call\nDouble-click: QSY"
                 }
@@ -272,7 +341,11 @@ Rectangle {
                     wrapMode: Text.WordWrap
                 }
                 background: Rectangle {
-                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
+                    color: root.glassTheme && root.glassTransparencySupported
+                           ? Qt.rgba(root.bridge.themeManager.panelColor.r,
+                                     root.bridge.themeManager.panelColor.g,
+                                     root.bridge.themeManager.panelColor.b, 0.48)
+                           : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
                     border.color: secondaryCyan; radius: 4
                 }
             }
@@ -298,7 +371,7 @@ Rectangle {
             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
             spacing: 8
 
-            Text { text: "Filter:"; color: textSecondary; font.pixelSize: 10 }
+            Text { text: qsTr("Filter:"); color: textSecondary; font.pixelSize: 10 }
 
             Repeater {
                 model: ["All", "FT8", "FT4", "FT2", "CW", "SSB"]
@@ -329,13 +402,15 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: if (bridge.dxCluster) bridge.dxCluster.clearSpots()
                 }
-                Text { anchors.centerIn: parent; text: "Clear"; color: textSecondary; font.pixelSize: 10 }
+                Text { anchors.centerIn: parent; text: qsTr("Clear"); color: textSecondary; font.pixelSize: 10 }
             }
         }
     }
 
     Rectangle {
         id: resizeHandle
+        visible: !root.embedded
+        enabled: !root.embedded
         width: 18
         height: 18
         anchors.right: parent.right

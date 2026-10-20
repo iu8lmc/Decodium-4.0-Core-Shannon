@@ -1,9 +1,12 @@
 #include "HamlibTransceiver.hpp"
+#include "src/cw/CwCatText.h"
 
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 #include <tuple>
 #include <QByteArray>
+#include <QRegularExpression>
 #include <QString>
 #include <QStandardPaths>
 #include <QFile>
@@ -13,6 +16,8 @@
 #include <QJsonValue>
 #include <QDebug>
 #include <hamlib/rig.h>
+#include "QmxTelemetry.hpp"
+#include "src/radio/DecodiumProfileSettings.h"
 #include "pimpl_impl.hpp"
 #include "moc_HamlibTransceiver.cpp"
 
@@ -22,6 +27,16 @@
 
 namespace
 {
+  unsigned int configured_qmx_swr_threshold_hundredths ()
+  {
+    double const threshold = qBound (
+        1.5,
+        decodium::profiledSettingsValue (
+            QString {}, QStringLiteral ("SWRStopThreshold"), 2.5).toDouble (),
+        5.0);
+    return static_cast<unsigned int> (std::lround (threshold * 100.0));
+  }
+
 #if defined (WIN32)
   QString hamlib_windows_port_path (QString const& port)
   {
@@ -31,6 +46,14 @@ namespace
         return trimmed;
       }
     if (trimmed.startsWith (QStringLiteral ("\\\\.\\")))
+      {
+        return trimmed;
+      }
+    // "host:porta" non e' un dispositivo: e' la presa locale del multiplexer
+    // CAT di DecoPort (o un ser2net), che Hamlib apre in rete da se'. Un nome
+    // COM non ha mai i due punti, quindi per le porte vere non cambia niente.
+    static QRegularExpression const network_path {QStringLiteral ("^[^:\\\\/]+:\\d+$")};
+    if (network_path.match (trimmed).hasMatch ())
       {
         return trimmed;
       }
@@ -113,6 +136,35 @@ namespace
   {
     rig_unregister (rig_get_caps_int (rig_model, RIG_CAPS_RIG_MODEL));
     return 1;			// keep them coming
+  }
+
+  bool env_flag_enabled (char const * name)
+  {
+    QByteArray const raw = qgetenv (name).trimmed ().toLower ();
+    return raw == "1" || raw == "true" || raw == "yes" || raw == "on";
+  }
+
+  bool is_icom_serial_cat (unsigned model)
+  {
+    if (RIG_PORT_SERIAL != rig_get_caps_int (model, RIG_CAPS_PORT_TYPE))
+      {
+        return false;
+      }
+    QString const mfg = QString::fromLatin1 (rig_get_caps_cptr (model, RIG_CAPS_MFG_NAME_CPTR)).trimmed ();
+    return 0 == mfg.compare (QStringLiteral ("Icom"), Qt::CaseInsensitive);
+  }
+
+  bool is_icom_serial_cat_ptt (unsigned model, TransceiverFactory::ParameterPack const& params)
+  {
+    return TransceiverFactory::PTT_method_CAT == params.ptt_type
+        && is_icom_serial_cat (model);
+  }
+
+  bool is_yaesu_rig (RIG const * rig)
+  {
+    return rig && rig->caps && rig->caps->mfg_name
+      && 0 == QString::fromLatin1 (rig->caps->mfg_name).trimmed ()
+        .compare (QStringLiteral ("Yaesu"), Qt::CaseInsensitive);
   }
 
   // int frequency_change_callback (RIG * /* rig */, vfo_t vfo, freq_t f, rig_ptr_t arg)
@@ -507,12 +559,42 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
       throw error {tr ("Hamlib initialisation error")};
     }
 
+  // Icom CI-V passive split/mode/PTT reads are fragile on some serial
+  // adapters/radios. Keep those conservative by default, but still poll the
+  // dial frequency: without rig_get_freq(), turning the radio VFO cannot update
+  // Decodium.
+  bool const icom_serial_cat = is_icom_serial_cat (m_->model_);
+  rig_split_control_enabled_ = params.split_mode == TransceiverFactory::split_mode_rig;
+  bool const force_passive_state = env_flag_enabled ("DECODIUM_HAMLIB_POLL_PASSIVE_STATE");
+  poll_passive_state_ = !icom_serial_cat || force_passive_state;
+  poll_frequency_state_ = !env_flag_enabled ("DECODIUM_HAMLIB_DISABLE_FREQ_POLL");
+  adaptive_frequency_poll_ = icom_serial_cat
+      && poll_frequency_state_
+      && !env_flag_enabled ("DECODIUM_HAMLIB_DISABLE_FREQ_POLL_BACKOFF");
+  explicit_frequency_poll_vfo_ = adaptive_frequency_poll_
+      && !env_flag_enabled ("DECODIUM_HAMLIB_DISABLE_EXPLICIT_FREQ_VFO");
+  poll_ptt_state_ = !is_icom_serial_cat_ptt (m_->model_, params)
+      || env_flag_enabled ("DECODIUM_HAMLIB_POLL_PTT");
+  cat_keep_alive_ = params.cat_keep_alive && icom_serial_cat;
+  if (adaptive_frequency_poll_)
+    {
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib Icom serial frequency polling uses adaptive backoff"
+        << "initialSkipTicks=" << kFrequencyPollInitialBackoffTicks_
+        << "maxSkipTicks=" << kFrequencyPollMaxBackoffTicks_
+        << "explicitVfo=" << explicit_frequency_poll_vfo_;
+    }
+
   // m_->rig_->state.obj = this;
 
   if (!m_->is_dummy_)
     {
       // printf("Hamlib open params: power_on=%d power_off=%d ptt_share=%d\n",(params.poll_interval & rig__power) == rig__power,(params.poll_interval & rig__power_off) == rig__power_off,(params.poll_interval & ptt__share) == ptt__share);
-      if (params.poll_interval & do__pwr) { do_pwr_ = true; do_pwr2_ = true; do_swr_ = true;}
+      if (params.poll_interval & do__pwr) { do_pwr_ = true; do_pwr2_ = true; do_swr_ = true; }
+      // ALC is needed by the one-shot audio calibration even when the user has
+      // not enabled the visible PWR/SWR telemetry widget. We only read it while
+      // TX/PTT is active, so RX polling stays cheap.
+      do_alc_ = true;
 
       switch (rig_get_caps_int (m_->model_, RIG_CAPS_PORT_TYPE))
         {
@@ -527,6 +609,16 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
 #endif
             }
           m_->set_conf ("serial_speed", QByteArray::number (params.baud).data ());
+          if (icom_serial_cat)
+            {
+              // Icom CI-V can spend several seconds inside Hamlib's internal
+              // band-change preflight if the serial bus is briefly late. Keep
+              // failed transactions short; the adaptive poll/backoff layer will
+              // absorb the miss without tearing down CAT.
+              m_->set_conf ("timeout", "700");
+              m_->set_conf ("retry", "1");
+              m_->set_conf ("timeout_retry", "0");
+            }
           if (params.data_bits != TransceiverFactory::default_data_bits)
             {
               m_->set_conf ("data_bits", TransceiverFactory::seven_data_bits == params.data_bits ? "7" : "8");
@@ -622,6 +714,19 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
   // do this late to allow any configuration option to be overriden
   load_user_settings ();
 
+  // A radio that is fully asleep can reject Hamlib's normal opening probes.
+  // Hamlib's portable auto_power_on option runs its model-specific wake-up
+  // sequence before those probes.  It is deliberately set only for the one
+  // connection created by an explicit dashboard Power On action; normal CAT
+  // startup must never turn a radio on by itself.
+  if (params.auto_power_on)
+    {
+      m_->set_conf ("auto_power_on", "1");
+      qInfo ().noquote ()
+        << "[CATDBG] Explicit cold-start Power On enabled for Hamlib open"
+        << "rig=" << params.rig_name;
+    }
+
   // would be nice to get events but not supported on Windows and also not on a lot of rigs
   // rig_set_freq_callback (m_->rig_.data (), &frequency_change_callback, this);
 }
@@ -687,7 +792,13 @@ int HamlibTransceiver::do_start ()
       rig_set_conf (m_->rig_.data (), token, "WSJTX");
     }
 
-  m_->error_check (rig_open (m_->rig_.data ()), tr ("opening connection to rig"));
+  // Hamlib puo' lasciare la COM aperta quando rig_open() fallisce dopo il primo
+  // contatto con la radio. Senza rig_close() il tentativo successivo trova la
+  // porta occupata ("already open", Access denied).
+  int const open_rc = rig_open (m_->rig_.data ());
+  if (RIG_OK != open_rc)
+    rig_close (m_->rig_.data ());
+  m_->error_check (open_rc, tr ("opening connection to rig"));
 
   // Hamlib 4.7.0 bug: kenwood_open (e altri) restituiscono 0 ("continuing anyway")
   // anche se il rig non risponde, lasciando caps/state in stato invalido.
@@ -698,9 +809,17 @@ int HamlibTransceiver::do_start ()
       throw error {tr ("Rig not ready — caps null after open (no response from radio?)")};
     }
 
+  rig_powered_off_ = false;
+  power_on_settle_clock_.invalidate ();
+  power_off_probe_clock_.invalidate ();
+
+  // Safety first: some radios/interfaces can briefly key the transmitter
+  // while CAT is opened, especially when the rig was left in CW.  Release
+  // PTT before any startup probe (power status, mode, frequency, ...), so a
+  // slow first CAT response cannot extend that unintended TX window.
   if (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt)
     {
-      CAT_TRACE ("startup rig_set_ptt PTT=false");
+      CAT_TRACE ("startup immediate rig_set_ptt PTT=false");
       int const ptt_off_rc = rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR, RIG_PTT_OFF);
       if (RIG_OK == ptt_off_rc)
         {
@@ -709,8 +828,33 @@ int HamlibTransceiver::do_start ()
         }
       else if (-RIG_ENAVAIL != ptt_off_rc && -RIG_ENIMPL != ptt_off_rc)
         {
-          CAT_TRACE ("startup rig_set_ptt PTT=false failed with rc:" << ptt_off_rc << "ignoring");
+          CAT_TRACE ("startup immediate rig_set_ptt PTT=false failed with rc:" << ptt_off_rc);
         }
+    }
+
+  // Some rigs keep CAT alive in standby/off. NewCAT is one example: it
+  // accepts the PS command but deliberately rejects VS/FA while power is off.
+  // Do not turn this into a failed connection: the open serial session is the
+  // route required by the dashboard's Power On command.
+  if (!m_->is_dummy_ && m_->rig_->caps->get_powerstat)
+    {
+      powerstat_t power_status {RIG_POWER_UNKNOWN};
+      int const power_rc = rig_get_powerstat (m_->rig_.data (), &power_status);
+      if (RIG_OK == power_rc && RIG_POWER_OFF == power_status)
+        {
+          rig_powered_off_ = true;
+          power_off_probe_clock_.restart ();
+          qInfo ().noquote ()
+            << "[CATDBG] Hamlib CAT session opened while rig power is off"
+            << "rig=" << rig_get_caps_cptr (m_->model_, RIG_CAPS_MODEL_NAME_CPTR)
+            << "— waiting for dashboard Power On";
+          // TransceiverBase has already set its online state. Publish it so
+          // the QML dashboard can issue request_power_on() on this live port.
+          update_complete (true);
+          return -1;
+        }
+      CAT_TRACE ("startup rig_get_powerstat rc=" << power_rc
+                 << "status=" << power_status);
     }
 
   // reset dynamic state
@@ -722,29 +866,104 @@ int HamlibTransceiver::do_start ()
   m_->tickle_hamlib_ = false;
   m_->get_vfo_works_ = true;
   m_->set_vfo_works_ = true;
-  bool const requestedPowerSwrPolling = do_pwr_ || do_pwr2_ || do_swr_;
+  bool const requestedTransmitTelemetry = do_pwr_ || do_pwr2_ || do_swr_ || do_alc_;
+  bool const requestedPowerTelemetry = do_pwr_ || do_pwr2_;
+  bool const requestedSwrTelemetry = do_swr_;
   bool const hasGetLevelFunction = !m_->is_dummy_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_LEVEL);
-  int const getLevelCaps = !m_->is_dummy_ ? rig_get_caps_int (m_->model_, RIG_CAPS_HAS_GET_LEVEL) : 0;
+  setting_t const getLevelCaps = !m_->is_dummy_ ? static_cast<setting_t>(rig_get_caps_int (m_->model_, RIG_CAPS_HAS_GET_LEVEL)) : 0; // 1.0.326 B1: was int (32-bit truncation; RIG_LEVEL_RFPOWER_METER_WATTS is bit 39)
   bool const hasRfPowerMeterWatts = hasGetLevelFunction
       && (getLevelCaps & RIG_LEVEL_RFPOWER_METER_WATTS) == RIG_LEVEL_RFPOWER_METER_WATTS;
   bool const hasRfPower = hasGetLevelFunction
       && (getLevelCaps & RIG_LEVEL_RFPOWER) == RIG_LEVEL_RFPOWER;
   bool const hasSwr = hasGetLevelFunction
       && (getLevelCaps & RIG_LEVEL_SWR) == RIG_LEVEL_SWR;
+  // Some Hamlib/Linux backends can answer RIG_LEVEL_ALC even when the caps mask
+  // does not advertise it. Probe once during TX, then disable only on ENAVAIL/ENIMPL.
+  bool const hasAlcCap = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_ALC) == RIG_LEVEL_ALC;
+  // 1.0.581 — strumenti del finale: solo se dichiarati. Vale la stessa cautela
+  // scritta piu' sotto per l'ALC, ma senza l'eccezione della sonda: quattro
+  // livelli in piu' chiesti "per vedere se rispondono" su un CI-V a 19200
+  // sarebbero traffico speso quasi sempre per niente.
+  do_vd_ = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_VD_METER) == RIG_LEVEL_VD_METER;
+  do_id_ = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_ID_METER) == RIG_LEVEL_ID_METER;
+  do_pa_temp_ = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_TEMP_METER) == RIG_LEVEL_TEMP_METER;
+  do_comp_ = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_COMP_METER) == RIG_LEVEL_COMP_METER;
+  do_rfpower_ = hasRfPower;
+  // 1.0.365 — do NOT run the opportunistic ALC probe on slow serial buses
+  // (Icom CI-V, Yaesu): on a rig whose caps mask does not advertise ALC, the
+  // extra rig_get_level(ALC) issued every TX tick congests the serial port and
+  // can make a concurrent rig_set_ptt(OFF) fail (Icom one_transaction -13 bus
+  // error), leaving the radio stuck in TX — regressed in 1.0.326 when the probe
+  // + unconditional do_alc_ were introduced (worked in 1.0.325). Rigs that
+  // DECLARE ALC in caps (e.g. Yaesu FT-991) are unaffected; the probe stays
+  // available on fast back ends (Net rigctl / non-serial).
+  bool const port_is_serial =
+      !m_->is_dummy_ && rig_get_caps_int (m_->model_, RIG_CAPS_PORT_TYPE) == RIG_PORT_SERIAL;
+  alc_probe_pending_ = do_alc_ && hasGetLevelFunction && !hasAlcCap && !port_is_serial;
+  bool const hasAlc = hasAlcCap || alc_probe_pending_;
 
-  do_pwr_ &= hasRfPowerMeterWatts;
-  do_pwr2_ &= hasRfPower;
-  do_swr_ &= hasSwr;
-  if (requestedPowerSwrPolling)
+#if HAVE_HAMLIB_SEND_RAW && defined (RIG_MODEL_QRPLABS_QMX)
+  // Hamlib 4.7.x knows the QMX CAT backend, but does not expose get_level or
+  // PWR/SWR capabilities for it. QMX firmware >= 1.03 nevertheless documents
+  // PC; (tenths of a watt) and SW; (hundredths of SWR). Use Hamlib's own raw
+  // transaction API so the commands remain serialized on this worker and on
+  // the already-open rig port. Never open or contend for the serial device.
+  bool const isQmx = !m_->is_dummy_ && port_is_serial && m_->model_ == RIG_MODEL_QRPLABS_QMX;
+  qmx_raw_power_ = isQmx && requestedPowerTelemetry
+      && !hasRfPowerMeterWatts && !hasRfPower;
+  qmx_raw_swr_ = isQmx && requestedSwrTelemetry && !hasSwr;
+#else
+  qmx_raw_power_ = false;
+  qmx_raw_swr_ = false;
+#endif
+  qmx_raw_power_failures_ = 0;
+  qmx_raw_swr_failures_ = 0;
+  qmx_swr_filter_.reset ();
+  qmx_swr_filter_tx_active_ = false;
+  qmx_swr_transition_clock_.invalidate ();
+  qmx_swr_threshold_hundredths_ = configured_qmx_swr_threshold_hundredths ();
+  qmx_swr_transition_serial_ = 0;
+
+  // S-meter: solo se il rig lo dichiara. Niente sonde opportunistiche come
+  // per l'ALC - quelle sono costate una radio rimasta in trasmissione, e un
+  // indicatore di comodo non vale quel rischio.
+  bool const hasStrength = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_STRENGTH) == RIG_LEVEL_STRENGTH;
+  do_strength_ = hasStrength;
+  strength_tick_ = 0;
+  strength_failures_ = 0;
+
+  do_pwr_ = requestedPowerTelemetry && (hasRfPowerMeterWatts || qmx_raw_power_);
+  do_pwr2_ = requestedPowerTelemetry && !do_pwr_ && hasRfPower;
+  do_swr_ = requestedSwrTelemetry && (hasSwr || qmx_raw_swr_);
+  do_alc_ &= hasAlc;
+  if (requestedTransmitTelemetry)
     {
       qInfo ().noquote ()
-        << "[CATDBG] Hamlib PWR/SWR polling support"
+        << "[CATDBG] Hamlib TX telemetry polling support"
         << "rig=" << rig_get_caps_cptr (m_->model_, RIG_CAPS_MODEL_NAME_CPTR)
         << "model=" << m_->model_
         << "getLevel=" << hasGetLevelFunction
         << "rfpowerMeterWatts=" << hasRfPowerMeterWatts
         << "rfpower=" << hasRfPower
-        << "swr=" << hasSwr;
+        << "swr=" << hasSwr
+        << "alc=" << hasAlc
+        << "alcCap=" << hasAlcCap
+        << "alcProbe=" << alc_probe_pending_
+        << "qmxRawPower=" << qmx_raw_power_
+        << "qmxRawSwr=" << qmx_raw_swr_
+        << "effectivePower=" << (do_pwr_ || do_pwr2_)
+        << "effectiveSwr=" << do_swr_
+        << "passiveStatePoll=" << poll_passive_state_
+        << "frequencyPoll=" << poll_frequency_state_
+        << "passivePttPoll=" << poll_ptt_state_
+        << "catKeepAlive=" << cat_keep_alive_
+        << "rigSplitControl=" << rig_split_control_enabled_;
     }
 
   // the Net rigctl back end promises all functions work but we must
@@ -766,8 +985,44 @@ int HamlibTransceiver::do_start ()
       m_->error_check (rc, "testing getting current VFO");
     }
 
-  if ((WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_)
-      && rig_get_function_ptr (m_->model_, RIG_FUNCTION_SET_SPLIT_VFO)) // if split is possible do some extra setup
+  // Icom CI-V can set VFO A/B but cannot report which VFO is selected.  The
+  // traditional Hamlib startup workaround switches to the other VFO, reads
+  // it, then forces VFO A.  That is visible as a real (and surprising) QSY
+  // whenever A and B hold different band frequencies.  With rig split
+  // control disabled we neither need nor have permission to alter the
+  // operator's VFO selection: obtain the selected VFO's state using only
+  // read commands instead.
+  bool const preserve_selected_icom_vfo = adaptive_frequency_poll_
+      && !rig_split_control_enabled_;
+  if (preserve_selected_icom_vfo)
+    {
+      freq_t current_frequency {0};
+      rmode_t current_mode {RIG_MODE_USB};
+      pbwidth_t current_width {RIG_PASSBAND_NORMAL};
+
+      if (m_->freq_query_works_)
+        {
+          m_->error_check (rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &current_frequency),
+                           tr ("getting current VFO frequency"));
+          current_frequency = std::round (current_frequency);
+          update_rx_frequency (current_frequency);
+        }
+      if (m_->mode_query_works_)
+        {
+          m_->error_check (rig_get_mode (m_->rig_.data (), RIG_VFO_CURR,
+                                         &current_mode, &current_width),
+                           tr ("getting current VFO mode"));
+          update_mode (m_->map_mode (current_mode));
+        }
+
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib Icom startup preserved selected VFO"
+        << "splitControl=" << rig_split_control_enabled_
+        << "frequencyHz=" << current_frequency
+        << "mode=" << rig_strrmode (current_mode);
+    }
+  else if ((WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_)
+           && rig_get_function_ptr (m_->model_, RIG_FUNCTION_SET_SPLIT_VFO)) // if split is possible do some extra setup
     {
       freq_t f1;
       freq_t f2;
@@ -918,7 +1173,13 @@ int HamlibTransceiver::do_start ()
 #endif
 
   int resolution {0};
-  if (m_->freq_query_works_)
+  if (adaptive_frequency_poll_)
+    {
+      resolution = -1;          // best guess; avoid startup get/set/get probes on fragile CI-V links
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib frequency resolution probe skipped for adaptive Icom serial polling";
+    }
+  else if (m_->freq_query_works_)
     {
       freq_t current_frequency;
       m_->error_check (rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &current_frequency), tr ("getting current VFO frequency"));
@@ -962,14 +1223,30 @@ int HamlibTransceiver::do_start ()
   rig_set_cache_timeout_ms (m_->rig_.data (), HAMLIB_CACHE_ALL, orig_cache_timeout);
 #endif
 
+  frequency_poll_failures_ = 0;
+  frequency_poll_skip_ticks_ = 0;
+  frequency_poll_backoff_ticks_ = kFrequencyPollInitialBackoffTicks_;
+
   do_poll ();
+  start_cat_keep_alive_timer ();
 
   CAT_TRACE ("finished start " << state () << " reversed=" << m_->reversed_ << " resolution=" << resolution);
   return resolution;
 }
 
+bool HamlibTransceiver::do_state_commands_available () const
+{
+  if (rig_powered_off_)
+    {
+      return false;
+    }
+  return !power_on_settle_clock_.isValid ()
+      || power_on_settle_clock_.elapsed () >= kPowerOnSettleMs_;
+}
+
 void HamlibTransceiver::do_stop ()
 {
+  stop_cat_keep_alive_timer ();
   stop_polling ();
 
   if (m_->is_dummy_ && !m_->ptt_only_)
@@ -983,12 +1260,59 @@ void HamlibTransceiver::do_stop ()
           rig_get_mode (m_->rig_.data (), RIG_VFO_CURR, &impl::dummy_mode_, &width);
         }
     }
+  // 1.0.365 — safety net: always release PTT before closing the rig. The
+  // normal TX-off path do_ptt(false) routes through error_check(), which
+  // THROWS on a CI-V bus error, leaving ptt_on_ true and the radio stuck in
+  // TX when the app is closed mid-transmission. rig_close() does NOT turn TX
+  // off on Icom CI-V. Drop PTT here best-effort: no throw, a few retries,
+  // independent of bus state.
+  // Radio spenta via CAT: non risponde piu' e ogni tentativo di PTT scade dopo
+  // un timeout. Con tentativi in coda la chiusura supera la finestra di stop, il
+  // thread viene terminato prima di rig_close() e la COM resta aperta.
+  if (m_->rig_ && !m_->is_dummy_ && !rig_powered_off_
+      && RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt
+      && (ptt_on_ || state ().ptt ()))
+    {
+      int const attempts = ptt_off_attempt_limit (true);
+      int rc = -RIG_EIO;
+      for (int attempt = 0; attempt < attempts; ++attempt)
+        {
+          rc = rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR, RIG_PTT_OFF);
+          CAT_TRACE ("do_stop PTT=false attempt=" << attempt << " rc=" << rc);
+          if (RIG_OK == rc)
+            {
+              ptt_on_ = false;
+              ptt_off_failed_recently_ = false;
+              update_PTT (false);
+              break;
+            }
+        }
+      if (RIG_OK != rc)
+        {
+          qWarning ().noquote ()
+            << "[CATDBG] Hamlib shutdown PTT-off failed rc=" << rc
+            << "attempts=" << attempts
+            << "— closing without more CAT retries";
+        }
+    }
   if (m_->rig_)
     {
       rig_close (m_->rig_.data ());
     }
 
   CAT_TRACE ("state: " << state () << " reversed=" << m_->reversed_);
+}
+
+int HamlibTransceiver::ptt_off_attempt_limit (bool shutdown) const
+{
+  // Icom CI-V bus errors/timeouts can consume seconds per rig_set_ptt(false).
+  // The adaptive Icom serial path already detected a slow/failing bus, so keep
+  // one safety attempt and avoid a shutdown retry train.
+  if (adaptive_frequency_poll_ || ptt_off_failed_recently_)
+    {
+      return 1;
+    }
+  return shutdown ? 3 : 2;
 }
 
 void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
@@ -1006,7 +1330,23 @@ void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
         {
           target_vfo = RIG_VFO_MAIN; // no VFO A/B so force to Rx on MAIN
         }
-      m_->error_check (rig_set_freq (m_->rig_.data (), target_vfo, f), tr ("setting frequency"));
+      auto const write_result = set_frequency_or_tolerate (target_vfo, f, tr ("setting frequency"));
+      if (FrequencyWriteResult::Rejected == write_result
+          || FrequencyWriteResult::Deferred == write_result)
+        {
+          return;
+        }
+
+      // A CI-V timeout/bus error may be returned after the request has been
+      // queued, but it is not confirmation that the radio accepted the QSY.
+      // Publishing f here used to clear the bridge's local-QSY guard; a late
+      // poll for the old band frequency could then overwrite the requested
+      // dial. Keep the last confirmed frequency until polling verifies it,
+      // allowing the bounded bridge retry to reissue the QSY if necessary.
+      if (FrequencyWriteResult::AppliedWithTransientError == write_result)
+        {
+          return;
+        }
       update_rx_frequency (f);
 
       if (m_->mode_query_works_ && UNK != m)
@@ -1024,7 +1364,12 @@ void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
 
               // for the 2nd time because a mode change may have caused a
               // frequency change
-              m_->error_check (rig_set_freq (m_->rig_.data (), RIG_VFO_CURR, f), tr ("setting frequency"));
+              auto const post_mode_write = set_frequency_or_tolerate (RIG_VFO_CURR, f, tr ("setting frequency"));
+              if (FrequencyWriteResult::Rejected == post_mode_write
+                  || FrequencyWriteResult::Deferred == post_mode_write)
+                {
+                  return;
+                }
 
               // for the second time because some rigs change mode according
               // to frequency such as the TS-2000 auto mode setting
@@ -1045,6 +1390,18 @@ void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
 void HamlibTransceiver::do_tx_frequency (Frequency tx, MODE mode, bool no_ignore)
 {
   CAT_TRACE ("txf: " << tx << " reversed: " << m_->reversed_);
+
+  if (!rig_split_control_enabled_)
+    {
+      update_other_frequency (0);
+      update_split (false);
+      return;
+    }
+
+  if (suppress_cat_write_during_backoff (tr ("setting TX/split frequency")))
+    {
+      return;
+    }
 
   if (WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_) // split is meaningless if you can't see it
     {
@@ -1159,6 +1516,11 @@ void HamlibTransceiver::do_mode (MODE mode)
 {
   CAT_TRACE (mode);
 
+  if (suppress_cat_write_during_backoff (tr ("setting current VFO mode")))
+    {
+      return;
+    }
+
   auto vfos = m_->get_vfos (state ().split ());
   // auto rx_vfo = std::get<0> (vfos);
   auto tx_vfo = std::get<1> (vfos);
@@ -1213,6 +1575,202 @@ void HamlibTransceiver::do_mode (MODE mode)
   update_mode (mode);
 }
 
+bool HamlibTransceiver::poll_vfo_frequency (vfo_t vfo, freq_t * frequency, QString const& doing)
+{
+  int const rc = rig_get_freq (m_->rig_.data (), vfo, frequency);
+  if (RIG_OK == rc)
+    {
+      note_frequency_poll_success ();
+      return true;
+    }
+
+  if (-RIG_ENAVAIL == rc || -RIG_ENIMPL == rc)
+    {
+      m_->freq_query_works_ = false;
+      poll_frequency_state_ = false;
+      stop_cat_keep_alive_timer ();
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib frequency polling disabled: rig_get_freq unavailable"
+        << "rc=" << rc
+        << "op=" << doing;
+      return false;
+    }
+
+  note_frequency_poll_failure (rc, doing);
+  return false;
+}
+
+void HamlibTransceiver::note_frequency_poll_success ()
+{
+  bool const was_unstable = frequency_poll_failures_ || frequency_poll_skip_ticks_
+      || frequency_poll_write_quiet_ticks_ > 0
+      || frequency_poll_backoff_ticks_ != kFrequencyPollInitialBackoffTicks_;
+
+  frequency_poll_write_quiet_ticks_ = 0;
+
+  if (was_unstable)
+    {
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib frequency polling recovered"
+        << "writeQuietTicks=" << frequency_poll_write_quiet_ticks_;
+    }
+  frequency_poll_failures_ = 0;
+  frequency_poll_skip_ticks_ = 0;
+  frequency_poll_backoff_ticks_ = kFrequencyPollInitialBackoffTicks_;
+}
+
+void HamlibTransceiver::note_frequency_poll_failure (int rc, QString const& doing)
+{
+  ++frequency_poll_failures_;
+  if (adaptive_frequency_poll_)
+    {
+      frequency_poll_write_quiet_ticks_ = std::max (frequency_poll_write_quiet_ticks_,
+                                                    kFrequencyPollWriteQuietTicks_);
+    }
+
+  qWarning ().noquote ()
+    << "[CATDBG] Hamlib frequency poll failed"
+    << frequency_poll_failures_ << "/" << kFrequencyPollMaxFailures_
+    << "rc=" << rc
+    << "op=" << doing
+    << "writeQuietTicks=" << frequency_poll_write_quiet_ticks_;
+
+  if (adaptive_frequency_poll_ && frequency_poll_failures_ >= kFrequencyPollMaxFailures_)
+    {
+      frequency_poll_skip_ticks_ = frequency_poll_backoff_ticks_;
+      frequency_poll_backoff_ticks_ = std::min (kFrequencyPollMaxBackoffTicks_,
+                                                frequency_poll_backoff_ticks_ * 2);
+      frequency_poll_failures_ = 0;
+      qWarning ().noquote ()
+        << "[CATDBG] Hamlib frequency polling backoff after timeout"
+        << "skipTicks=" << frequency_poll_skip_ticks_
+        << "nextSkipTicks=" << frequency_poll_backoff_ticks_;
+    }
+}
+
+bool HamlibTransceiver::cat_write_backoff_active () const
+{
+  return adaptive_frequency_poll_
+      && (frequency_poll_failures_ > 0
+          || frequency_poll_skip_ticks_ > 0
+          || frequency_poll_write_quiet_ticks_ > 0);
+}
+
+bool HamlibTransceiver::suppress_cat_write_during_backoff (QString const& operation) const
+{
+  if (!cat_write_backoff_active ())
+    {
+      return false;
+    }
+
+  qWarning ().noquote ()
+    << "[CATDBG] Hamlib CAT write suppressed while Icom frequency polling is unstable"
+    << "op=" << operation
+    << "failures=" << frequency_poll_failures_
+    << "skipTicks=" << frequency_poll_skip_ticks_
+    << "writeQuietTicks=" << frequency_poll_write_quiet_ticks_
+    << "nextSkipTicks=" << frequency_poll_backoff_ticks_;
+  return true;
+}
+
+HamlibTransceiver::FrequencyWriteResult HamlibTransceiver::set_frequency_or_tolerate (vfo_t vfo,
+                                                                                      Frequency f,
+                                                                                      QString const& operation)
+{
+  int const rc = rig_set_freq (m_->rig_.data (), vfo, f);
+  if (RIG_OK == rc)
+    {
+      return FrequencyWriteResult::Applied;
+    }
+
+  QString const error_text = QString::fromLocal8Bit (rigerror (rc));
+  bool const rejected_after_timeout =
+      adaptive_frequency_poll_
+      && rc == -RIG_ERJCTED
+      && (error_text.contains (QStringLiteral ("timed out"), Qt::CaseInsensitive)
+          || error_text.contains (QStringLiteral ("timeout"), Qt::CaseInsensitive)
+          || error_text.contains (QStringLiteral ("returning(-5)"), Qt::CaseInsensitive)
+          || error_text.contains (QStringLiteral ("rig_get_freq failed"), Qt::CaseInsensitive)
+          || error_text.contains (QStringLiteral ("Communication bus error"), Qt::CaseInsensitive)
+          || error_text.contains (QStringLiteral ("returning(-13)"), Qt::CaseInsensitive));
+  if (rejected_after_timeout)
+    {
+      note_frequency_poll_failure (-RIG_ETIMEOUT, operation + tr (" (write preflight timeout)"));
+      qWarning ().noquote ()
+        << "[CATDBG] Hamlib Icom frequency write deferred after preflight timeout"
+        << "rc=" << rc
+        << "vfo=" << rig_strvfo (vfo)
+        << "freq=" << QString::number (static_cast<double> (f), 'f', 0)
+        << "op=" << operation;
+      return FrequencyWriteResult::Deferred;
+    }
+
+  // RIG_ELIMIT was added after Hamlib 4.5. Keep the stable numeric error code
+  // here so source builds remain compatible with distributions shipping 4.5.
+  constexpr int hamlib_limit_exceeded_error = 21;
+  bool const rejected_frequency =
+      rc == -RIG_ERJCTED
+      || rc == -RIG_EINVAL
+      || rc == -RIG_EDOM
+      || rc == -hamlib_limit_exceeded_error
+      || rc == -RIG_ENAVAIL
+      || rc == -RIG_ENTARGET
+      || rc == -RIG_EVFO;
+  if (rejected_frequency)
+    {
+      qWarning ().noquote ()
+        << "[CATDBG] Hamlib frequency write rejected by rig"
+        << "rc=" << rc
+        << "vfo=" << rig_strvfo (vfo)
+        << "freq=" << QString::number (static_cast<double> (f), 'f', 0)
+        << "op=" << operation
+        << "reason=" << error_text;
+      return FrequencyWriteResult::Rejected;
+    }
+
+  bool const transient_icom_serial_error =
+      adaptive_frequency_poll_
+      && (rc == -RIG_EIO || rc == -RIG_ETIMEOUT || rc == -RIG_BUSERROR);
+  if (transient_icom_serial_error)
+    {
+      note_frequency_poll_failure (rc, operation + tr (" (write tolerated)"));
+      qWarning ().noquote ()
+        << "[CATDBG] Hamlib Icom frequency write transient error tolerated"
+        << "rc=" << rc
+        << "vfo=" << rig_strvfo (vfo)
+        << "freq=" << QString::number (static_cast<double> (f), 'f', 0)
+        << "op=" << operation;
+      return FrequencyWriteResult::AppliedWithTransientError;
+    }
+
+  m_->error_check (rc, operation);
+  return FrequencyWriteResult::Rejected;
+}
+
+vfo_t HamlibTransceiver::frequency_poll_vfo () const
+{
+  if (!explicit_frequency_poll_vfo_
+      || !m_->rig_
+      || m_->one_VFO_)
+    {
+      return RIG_VFO_CURR;
+    }
+
+  auto const vfo_list = m_->rig_->state.vfo_list;
+  if (m_->reversed_)
+    {
+      if (vfo_list & RIG_VFO_B) return RIG_VFO_B;
+      if (vfo_list & RIG_VFO_SUB) return RIG_VFO_SUB;
+    }
+
+  if (vfo_list & RIG_VFO_A) return RIG_VFO_A;
+  if (vfo_list & RIG_VFO_MAIN) return RIG_VFO_MAIN;
+  // Some Hamlib Icom backends under-report vfo_list/targetable capability.
+  // For serial CI-V polling, try MAIN explicitly before falling back to CURR;
+  // this avoids the fragile "current VFO" transaction path on IC-7300 class rigs.
+  return RIG_VFO_MAIN;
+}
+
 void HamlibTransceiver::do_poll ()
 {
   auto * rig = m_->rig_.data ();
@@ -1221,12 +1779,66 @@ void HamlibTransceiver::do_poll ()
       return;
     }
 
+  // A serial CAT link can remain alive while the rig is in standby.  Do not
+  // let the ordinary polling cycle turn that usable link into a failure by
+  // asking NewCAT for VFO/mode data before the radio has been powered on.
+  // Still probe get_powerstat at a deliberately low rate: this is how a
+  // front-panel power-on recovers automatically without reopening the CAT
+  // endpoint or treating a transient standby reply as a port failure.
+  if (rig_powered_off_)
+    {
+      bool const due = !power_off_probe_clock_.isValid ()
+        || power_off_probe_clock_.elapsed () >= kPowerOffProbeIntervalMs_;
+      if (due && rig->caps->get_powerstat)
+        {
+          power_off_probe_clock_.restart ();
+          powerstat_t power_status {RIG_POWER_UNKNOWN};
+          int const power_rc = rig_get_powerstat (rig, &power_status);
+          if (RIG_OK == power_rc && RIG_POWER_OFF != power_status)
+            {
+              rig_powered_off_ = false;
+              power_on_settle_clock_.restart ();
+              qInfo ().noquote ()
+                << "[CATDBG] Hamlib detected front-panel power-on; resuming CAT after"
+                << kPowerOnSettleMs_ << "ms settle";
+            }
+          else
+            {
+              CAT_TRACE ("standby power probe rc=" << power_rc
+                         << "status=" << power_status);
+            }
+        }
+      return;
+    }
+
+  // Some radios acknowledge their CAT Power On command before their VFO
+  // command parser is ready.  The timer keeps running, but its work is held
+  // for a short bounded window so the worker thread and the GUI stay live.
+  if (power_on_settle_clock_.isValid ())
+    {
+      if (power_on_settle_clock_.elapsed () < kPowerOnSettleMs_)
+        {
+          return;
+        }
+      power_on_settle_clock_.invalidate ();
+      start_cat_keep_alive_timer ();
+      qInfo ().noquote () << "[CATDBG] Hamlib power-on settle complete";
+    }
+
   freq_t f {0};
   rmode_t m {RIG_MODE_USB};
   pbwidth_t w {RIG_PASSBAND_NORMAL};
   split_t s {RIG_SPLIT_OFF};
+  bool const tx_active = ptt_on_ || state ().ptt ();
 
-  if (m_->get_vfo_works_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_VFO))
+  // While transmitting, frequency/mode/VFO reads provide no useful UI data:
+  // Decodium already owns the requested TX state. On serial rigs they also
+  // compete with PTT and meter transactions on the same CAT bus. Keep only
+  // the PTT confirmation and explicitly enabled TX telemetry active.
+  if (!tx_active
+      && poll_passive_state_
+      && m_->get_vfo_works_
+      && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_VFO))
     {
       vfo_t v;
       m_->error_check (rig_get_vfo (m_->rig_.data (), &v), tr ("getting current VFO")); // has side effect of establishing current VFO inside hamlib
@@ -1234,7 +1846,9 @@ void HamlibTransceiver::do_poll ()
       m_->reversed_ = RIG_VFO_B == v;
     }
 
-  if ((WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_)
+  if (!tx_active
+      && poll_passive_state_
+      && (WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_)
       && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_SPLIT_VFO) && m_->split_query_works_)
     {
       vfo_t v {RIG_VFO_NONE};		// so we can tell if it doesn't get updated :(
@@ -1263,18 +1877,46 @@ void HamlibTransceiver::do_poll ()
         }
     }
 
-  if (m_->freq_query_works_)
+  bool frequency_poll_due = poll_passive_state_ || poll_frequency_state_;
+  if (adaptive_frequency_poll_ && frequency_poll_skip_ticks_ > 0)
     {
-      // only read if possible and when receiving or simplex
+      --frequency_poll_skip_ticks_;
+      frequency_poll_due = false;
+    }
+
+  if (!tx_active && frequency_poll_due && m_->freq_query_works_)
+    {
+      bool current_frequency_ok = true;
+      // The outer guard limits dial reads to RX; direct VFO addressing is
+      // still used where available.
       if (!state ().ptt () || !state ().split ())
         {
-          m_->error_check (rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &f), tr ("getting current VFO frequency"));
-          f = std::round (f);
-          CAT_TRACE ("rig_get_freq frequency=" << Radio::frequency (f));
-          update_rx_frequency (f);
+          vfo_t const poll_vfo = frequency_poll_vfo ();
+          if (explicit_frequency_poll_vfo_ && !frequency_poll_vfo_logged_)
+            {
+              frequency_poll_vfo_logged_ = true;
+              qInfo ().noquote ()
+                << "[CATDBG] Hamlib frequency polling VFO selected"
+                << rig_strvfo (poll_vfo)
+                << "vfoList=" << m_->rig_->state.vfo_list
+                << "targetable=" << rig_get_caps_int (m_->model_, RIG_CAPS_TARGETABLE_VFO);
+            }
+          current_frequency_ok = poll_vfo_frequency (
+              poll_vfo,
+              &f,
+              poll_vfo == RIG_VFO_CURR
+                  ? tr ("getting current VFO frequency")
+                  : tr ("getting RX VFO frequency"));
+          if (current_frequency_ok)
+            {
+              f = std::round (f);
+              CAT_TRACE ("rig_get_freq frequency=" << Radio::frequency (f));
+              update_rx_frequency (f);
+            }
         }
 
-      if ((WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_)
+      if (current_frequency_ok
+          && (WSJT_RIG_NONE_CAN_SPLIT || !m_->is_dummy_)
           && state ().split ()
           && (rig_get_caps_int (m_->model_, RIG_CAPS_TARGETABLE_VFO) & RIG_TARGETABLE_FREQ)
           && !m_->one_VFO_)
@@ -1285,19 +1927,22 @@ void HamlibTransceiver::do_poll ()
 
           // we can only probe current VFO unless rig supports reading
           // the other one directly because we can't glitch the Rx
-          m_->error_check (rig_get_freq (m_->rig_.data ()
-                                         , m_->reversed_
-                                         ? (m_->rig_->state.vfo_list & RIG_VFO_A ? RIG_VFO_A : RIG_VFO_MAIN)
-                                         : (m_->rig_->state.vfo_list & RIG_VFO_B ? RIG_VFO_B : RIG_VFO_SUB)
-                                         , &f), tr ("getting other VFO frequency"));
-          f = std::round (f);
-          CAT_TRACE ("rig_get_freq other VFO=" << f);
-          update_other_frequency (f);
+          if (poll_vfo_frequency (m_->reversed_
+                                  ? (m_->rig_->state.vfo_list & RIG_VFO_A ? RIG_VFO_A : RIG_VFO_MAIN)
+                                  : (m_->rig_->state.vfo_list & RIG_VFO_B ? RIG_VFO_B : RIG_VFO_SUB),
+                                  &f,
+                                  tr ("getting other VFO frequency")))
+            {
+              f = std::round (f);
+              CAT_TRACE ("rig_get_freq other VFO=" << f);
+              update_other_frequency (f);
+            }
         }
     }
 
-  // only read when receiving or simplex if direct VFO addressing unavailable
-  if ((!state ().ptt () || !state ().split ())
+  // Mode reads are useful in RX only; during TX the requested mode is known.
+  if (!tx_active
+      && poll_passive_state_
       && m_->mode_query_works_)
     {
       // We have to ignore errors here because Yaesu FTdx... rigs can
@@ -1318,7 +1963,9 @@ void HamlibTransceiver::do_poll ()
         }
     }
 
-  if (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_PTT))
+  if (poll_ptt_state_
+      && RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt
+      && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_PTT))
   {
     ptt_t p;
     auto rc = rig_get_ptt (m_->rig_.data (), RIG_VFO_CURR, &p);
@@ -1332,6 +1979,10 @@ void HamlibTransceiver::do_poll ()
         update_PTT (ptt_on_);
      }
    }
+  else if (!poll_ptt_state_)
+    {
+      update_PTT (ptt_on_);
+    }
 
   // 1.0.204 — throttle PWR/SWR polling: each rig_get_level RIG_LEVEL_SWR /
   // RFPOWER_METER_WATTS takes ~150ms on Yaesu FT-991 at 38400 baud. Running
@@ -1340,9 +1991,8 @@ void HamlibTransceiver::do_poll ()
   // telemetry when actually transmitting (so meters stay responsive), and
   // skip 3 out of 4 RX ticks otherwise — meters can also be updated by
   // schedule_transmit_telemetry_burst when PTT transitions.
-  bool const tx_active_for_meters = ptt_on_ || state ().ptt ();
-  bool const telemetry_enabled = do_pwr_ || do_pwr2_ || do_swr_;
-  if (telemetry_enabled && !tx_active_for_meters)
+  bool const telemetry_enabled = do_pwr_ || do_pwr2_ || do_swr_ || do_alc_;
+  if (telemetry_enabled && !tx_active)
     {
       ++telemetry_tick_;
       if (telemetry_tick_ < kTelemetrySkipRatio_)
@@ -1359,7 +2009,132 @@ void HamlibTransceiver::do_poll ()
   poll_transmit_telemetry (false);
 }
 
-void HamlibTransceiver::poll_transmit_telemetry (bool force_signal)
+void HamlibTransceiver::start_cat_keep_alive_timer ()
+{
+  if (!cat_keep_alive_
+      || poll_passive_state_
+      || poll_frequency_state_
+      || !m_->rig_
+      || m_->is_dummy_
+      || !m_->freq_query_works_)
+    {
+      return;
+    }
+
+  // Keep the serial CAT session quiet while the radio is genuinely off.  A
+  // powered-off NewCAT rig rejects ordinary VFO/mode queries with a protocol
+  // error; treating that as a lost COM port used to discard the very session
+  // needed to wake the radio.
+  if (rig_powered_off_)
+    {
+      return;
+    }
+
+  // The power-on command is accepted before some radios are ready to answer
+  // normal CAT queries.  Give their firmware a bounded settling window rather
+  // than immediately taking the just-restored session offline.
+  if (power_on_settle_clock_.isValid ())
+    {
+      if (power_on_settle_clock_.elapsed () < kPowerOnSettleMs_)
+        {
+          return;
+        }
+      power_on_settle_clock_.invalidate ();
+      qInfo ().noquote () << "[CATDBG] Hamlib power-on settle complete";
+    }
+
+  if (!cat_keep_alive_timer_)
+    {
+      cat_keep_alive_timer_ = new QTimer {this};
+      cat_keep_alive_timer_->setTimerType (Qt::CoarseTimer);
+      connect (cat_keep_alive_timer_, &QTimer::timeout,
+               this, &HamlibTransceiver::poll_cat_keep_alive);
+    }
+
+  cat_keep_alive_timer_->start (kCatKeepAliveIntervalMs_);
+  qInfo ().noquote ()
+    << "[CATDBG] Hamlib CAT keep-alive timer active"
+    << "interval_ms=" << kCatKeepAliveIntervalMs_;
+}
+
+void HamlibTransceiver::stop_cat_keep_alive_timer ()
+{
+  if (cat_keep_alive_timer_)
+    {
+      cat_keep_alive_timer_->stop ();
+    }
+}
+
+void HamlibTransceiver::poll_cat_keep_alive ()
+{
+  if (!cat_keep_alive_
+      || poll_passive_state_
+      || poll_frequency_state_
+      || !m_->freq_query_works_
+      || ptt_on_
+      || state ().ptt ())
+    {
+      return;
+    }
+
+  freq_t f {0};
+  int const rc = rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &f);
+  if (RIG_OK == rc)
+    {
+      cat_keep_alive_failures_ = 0;
+      CAT_TRACE ("rig_get_freq CAT keep-alive frequency=" << Radio::frequency (std::round (f)));
+      return;
+    }
+
+  if (-RIG_ENAVAIL == rc || -RIG_ENIMPL == rc)
+    {
+      cat_keep_alive_ = false;
+      stop_cat_keep_alive_timer ();
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib CAT keep-alive disabled: rig_get_freq unavailable rc=" << rc;
+      return;
+    }
+
+  ++cat_keep_alive_failures_;
+  qWarning ().noquote ()
+    << "[CATDBG] Hamlib CAT keep-alive failed"
+    << cat_keep_alive_failures_ << "/" << kCatKeepAliveMaxFailures_
+    << "rc=" << rc;
+  if (cat_keep_alive_failures_ >= kCatKeepAliveMaxFailures_)
+    {
+      cat_keep_alive_ = false;
+      stop_cat_keep_alive_timer ();
+      qWarning ().noquote ()
+        << "[CATDBG] Hamlib CAT keep-alive disabled for this connection after repeated failures";
+    }
+}
+
+void HamlibTransceiver::reset_qmx_swr_filter (bool tx_active, QString const& reason)
+{
+  if (!qmx_raw_swr_)
+    {
+      return;
+    }
+
+  qmx_swr_filter_.reset ();
+  qmx_swr_filter_tx_active_ = tx_active;
+  ++qmx_swr_transition_serial_;
+  qmx_swr_threshold_hundredths_ = configured_qmx_swr_threshold_hundredths ();
+  qmx_swr_transition_clock_.restart ();
+  update_swr (0);
+  qInfo ().noquote ()
+    << "[QMX-SWR] filter reset"
+    << "state=" << (tx_active ? QStringLiteral ("TX") : QStringLiteral ("RX"))
+    << "threshold=" << QString::number (qmx_swr_threshold_hundredths_ / 100.0, 'f', 2)
+    << "reason=" << reason;
+}
+
+// I due parametri del filtro QMX servono solo dentro #if HAVE_HAMLIB_SEND_RAW:
+// con una Hamlib priva di rig_send_raw quel blocco sparisce e restano
+// inutilizzati, che con -Werror=unused-parameter ferma la build.
+void HamlibTransceiver::poll_transmit_telemetry (bool force_signal,
+                                                 [[maybe_unused]] bool ignore_qmx_swr_sample,
+                                                 [[maybe_unused]] int scheduled_delay_ms)
 {
   auto * rig = m_->rig_.data ();
   if (!rig || !rig->caps)
@@ -1368,10 +2143,107 @@ void HamlibTransceiver::poll_transmit_telemetry (bool force_signal)
     }
 
   bool const tx_active = ptt_on_ || state ().ptt ();
+
+  // 1.0.581 — strumenti del finale. Uno schema solo, riusato da entrambi i rami
+  // della funzione: quattro varianti dello stesso schema sarebbero quattro
+  // posti dove sbagliare, e questa definizione sta PRIMA del bivio proprio
+  // perche' la prima versione stava dopo — nel ramo di trasmissione — e a
+  // riposo non veniva mai raggiunta. La manopola della potenza, che a riposo e'
+  // l'unica leggibile, non arrivava mai da nessuna parte.
+  auto const leggi_livello = [&] (bool attivo, setting_t livello, char const * nome,
+                                  auto&& applica) {
+    if (!attivo) return;
+    value_t v {};
+    int const rc_l = rig_get_level (rig, RIG_VFO_CURR, livello, &v);
+    if (RIG_OK == rc_l && std::isfinite (v.f))
+      {
+        applica (static_cast<double> (v.f), true);
+      }
+    else
+      {
+        CAT_TRACE ("rig_get_level " << nome << " failed with rc:" << rc_l << "ignoring");
+        applica (0.0, false);
+      }
+  };
+
+  auto const posa_temp = [this] (double v, bool ok) {
+    update_pa_temp (ok ? static_cast<int> (std::lround (v * 10.0)) : 0, ok);
+  };
+
+  auto const posa_vd = [this] (double v, bool ok) {
+    update_vd (ok ? static_cast<unsigned int> (std::lround (v * 100.0)) : 0u, ok);
+  };
+
+  auto const posa_id = [this] (double v, bool ok) {
+    update_id (ok ? static_cast<unsigned int> (std::lround (v * 100.0)) : 0u, ok);
+  };
+
+  if (qmx_raw_swr_ && tx_active != qmx_swr_filter_tx_active_)
+    {
+      reset_qmx_swr_filter (tx_active, QStringLiteral ("telemetry-state-transition"));
+    }
   if (!tx_active)
     {
       update_power (0);
       update_swr (0);
+      update_alc (0);
+
+      // In ricezione l'unica cosa che c'e' da misurare e' il segnale che
+      // arriva. Hamlib lo da' in dB rispetto a S9 (interi: -54 e' S0, 0 e'
+      // S9, +20 e' S9+20), che e' la scala con cui lo legge l'operatore.
+      if (do_strength_)
+        {
+          if (++strength_tick_ >= kStrengthSkipRatio_)
+            {
+              strength_tick_ = 0;
+              value_t s_meter;
+              int const rc_s = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_STRENGTH, &s_meter);
+              if (RIG_OK == rc_s)
+                {
+                  strength_failures_ = 0;
+                  update_level (s_meter.i);
+                }
+              else if (++strength_failures_ >= kStrengthMaxFailures_)
+                {
+                  // Un rig che dichiara l'S-meter e poi non risponde non va
+                  // interrogato per sempre: si smette, e il resto del CAT
+                  // non paga il conto.
+                  do_strength_ = false;
+                  qWarning ().noquote ()
+                    << "[CATDBG] S-meter polling disabled after repeated failures"
+                    << "rc=" << rc_s;
+                }
+              else
+                {
+                  CAT_TRACE ("rig_get_level RIG_LEVEL_STRENGTH failed with rc:" << rc_s << "ignoring");
+                }
+            }
+        }
+      // A riposo si leggono le quattro cose che a riposo significano qualcosa:
+      // la manopola della potenza — che e' un'impostazione, non una misura, e in
+      // trasmissione non cambia — la temperatura del finale, che si guarda
+      // proprio DOPO aver trasmesso mentre scende, e tensione e corrente di
+      // alimentazione, che a riposo raccontano lo stato dell'alimentatore.
+      // Senza queste due il gateway continuerebbe a spedire i valori
+      // dell'ultima trasmissione, e un numero vecchio su un quadrante non si
+      // distingue da uno appena letto. Restano fuori solo ALC, ROS, potenza
+      // diretta e compressione: a fermo non esistono.
+      //
+      // Ritmo rallentato: la manopola cambia quando la gira l'operatore, non
+      // dodici volte al secondo, e l'alimentazione a riposo non ha fretta.
+      if (++rx_meter_tick_ >= 4)
+        {
+          rx_meter_tick_ = 0;
+          leggi_livello (do_rfpower_, RIG_LEVEL_RFPOWER, "RIG_LEVEL_RFPOWER",
+                         [this] (double v, bool ok) {
+                           // Hamlib la da' come frazione 0..1 del massimo del rig.
+                           update_rfpower (ok ? static_cast<unsigned int> (std::lround (v * 1000.0)) : 0u, ok);
+                         });
+          leggi_livello (do_pa_temp_, RIG_LEVEL_TEMP_METER, "RIG_LEVEL_TEMP_METER", posa_temp);
+          leggi_livello (do_vd_, RIG_LEVEL_VD_METER, "RIG_LEVEL_VD_METER", posa_vd);
+          leggi_livello (do_id_, RIG_LEVEL_ID_METER, "RIG_LEVEL_ID_METER", posa_id);
+        }
+
       if (force_signal)
         {
           update_complete (true);
@@ -1383,29 +2255,197 @@ void HamlibTransceiver::poll_transmit_telemetry (bool force_signal)
   int rc {RIG_OK};
   if (do_swr_)
     {
-      rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_SWR, &strength);
-      if (RIG_OK == rc && tx_active)
+#if HAVE_HAMLIB_SEND_RAW
+      if (qmx_raw_swr_)
         {
-          update_swr (strength.f >= 1.000 ? static_cast<unsigned int> (strength.f * 100) : 0);
+          static unsigned char const command[] {'S', 'W', ';'};
+          unsigned char response[32] {};
+          unsigned char terminator[] {';', '\0'};
+          rc = rig_send_raw (rig, command, sizeof command, response, sizeof response, terminator);
+          QByteArray const frame = rc >= 0
+              ? QByteArray {reinterpret_cast<char const *> (response), rc}
+              : QByteArray {};
+          unsigned int swrHundredths = 0;
+          if (rc >= 0 && decodium::qmx_telemetry::parse_swr_hundredths (frame, &swrHundredths))
+            {
+              qmx_raw_swr_failures_ = 0;
+              qint64 const transition_ms = qmx_swr_transition_clock_.isValid ()
+                  ? qmx_swr_transition_clock_.elapsed () : -1;
+              bool const settling_sample = ignore_qmx_swr_sample
+                  || (transition_ms >= 0 && transition_ms < 200);
+              auto const filtered = qmx_swr_filter_.process (
+                  swrHundredths,
+                  qmx_swr_threshold_hundredths_,
+                  settling_sample);
+              update_swr (filtered.published_hundredths);
+              qInfo ().noquote ()
+                << "[QMX-SWR] sample"
+                << "raw=" << QString::number (filtered.raw_hundredths / 100.0, 'f', 2)
+                << "filtered=" << QString::number (filtered.filtered_hundredths / 100.0, 'f', 2)
+                << "published=" << QString::number (filtered.published_hundredths / 100.0, 'f', 2)
+                << "threshold=" << QString::number (qmx_swr_threshold_hundredths_ / 100.0, 'f', 2)
+                << "samples=" << filtered.samples
+                << "consecutive_high=" << filtered.consecutive_high
+                << "transition_ms=" << transition_ms
+                << "scheduled_ms=" << scheduled_delay_ms
+                << "stop=" << filtered.stop_eligible
+                << "reason=" << decodium::qmx_telemetry::swr_filter_decision_name (filtered.decision);
+            }
+          else
+            {
+              ++qmx_raw_swr_failures_;
+              CAT_TRACE ("QMX raw SW telemetry failed rc=" << rc << " reply=" << frame);
+              auto const filtered = qmx_swr_filter_.process (
+                  0, qmx_swr_threshold_hundredths_, false);
+              update_swr (filtered.published_hundredths);
+              qInfo ().noquote ()
+                << "[QMX-SWR] sample"
+                << "raw=invalid"
+                << "filtered=0.00"
+                << "published=0.00"
+                << "threshold=" << QString::number (qmx_swr_threshold_hundredths_ / 100.0, 'f', 2)
+                << "samples=" << filtered.samples
+                << "consecutive_high=" << filtered.consecutive_high
+                << "scheduled_ms=" << scheduled_delay_ms
+                << "stop=0"
+                << "reason=" << decodium::qmx_telemetry::swr_filter_decision_name (filtered.decision);
+              if (qmx_raw_swr_failures_ >= kQmxRawTelemetryMaxFailures_)
+                {
+                  do_swr_ = false;
+                  qWarning ().noquote ()
+                    << "[CATDBG] QMX raw SWR telemetry disabled after repeated failures"
+                    << "rc=" << rc << "reply=" << frame;
+                }
+            }
         }
       else
+#endif
         {
-          CAT_TRACE ("rig_get_level RIG_LEVEL_SWR failed with rc:" << rc << "ignoring");
-          update_swr (0);
+          rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_SWR, &strength);
+          if (RIG_OK == rc && tx_active)
+            {
+              update_swr (strength.f >= 1.000 ? static_cast<unsigned int> (strength.f * 100) : 0);
+            }
+          else
+            {
+              CAT_TRACE ("rig_get_level RIG_LEVEL_SWR failed with rc:" << rc << "ignoring");
+              update_swr (0);
+            }
         }
     }
 
-  if (do_pwr_)
+  // 1.0.323 — ALC: scala Hamlib 0.0..1.0 → 0..100. Some backends return an
+  // already scaled meter, so accept values above 1.5 as 0..100-ish directly.
+  if (do_alc_)
     {
-      rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_RFPOWER_METER_WATTS, &strength);
-      if (RIG_OK == rc)
+      rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_ALC, &strength);
+      if (RIG_OK == rc && tx_active)
         {
-          update_power (static_cast<unsigned int> (strength.f * 1000));
+          if (alc_probe_pending_)
+            {
+              alc_probe_pending_ = false;
+              qInfo ().noquote () << "[CATDBG] Hamlib ALC opportunistic probe succeeded";
+            }
+          double const rawAlc = std::isfinite (strength.f) ? strength.f : 0.0;
+          unsigned int alc = 0;
+          if (rawAlc > 1.5)
+            {
+              alc = static_cast<unsigned int> (std::round (rawAlc));
+            }
+          else if (rawAlc > 0.0)
+            {
+              alc = static_cast<unsigned int> (std::round (rawAlc * 100.0));
+            }
+          update_alc (alc, true);
         }
       else
         {
-          CAT_TRACE ("rig_get_level RFPOWER_METER_WATTS failed with rc:" << rc << "ignoring");
-          update_power (0);
+          CAT_TRACE ("rig_get_level RIG_LEVEL_ALC failed with rc:" << rc << "ignoring");
+          if (rc == -RIG_ENAVAIL || rc == -RIG_ENIMPL)
+            {
+              if (do_alc_)
+                {
+                  qInfo ().noquote () << "[CATDBG] Hamlib ALC unavailable; disabling ALC polling rc=" << rc;
+                }
+              do_alc_ = false;
+              alc_probe_pending_ = false;
+            }
+          else if (alc_probe_pending_)
+            {
+              // 1.0.352 - il probe ALC OPPORTUNISTICO (cap mask non dichiara ALC) ha
+              // fallito con rc != ENAVAIL/ENIMPL (es. -RIG_ETIMEOUT su seriale/Net
+              // congestionata). Senza questo, si ritenterebbe ad OGNI tick di TX
+              // (telemetry non throttlata in TX) -> transazione seriale inutile per
+              // tutta la durata del TX. Chiudi il probe best-effort. I rig che
+              // DICHIARANO ALC (alc_probe_pending_=false) non sono toccati.
+              qInfo ().noquote () << "[CATDBG] Hamlib ALC opportunistic probe failed rc=" << rc << "; disabling probe";
+              do_alc_ = false;
+              alc_probe_pending_ = false;
+            }
+          update_alc (0, false);
+        }
+    }
+
+  // Hamlib da' VD e ID in volt e ampere, la temperatura in gradi e la
+  // compressione in dB: le scale intere sono affare nostro, e stanno qui e
+  // basta perche' chi legge piu' avanti non debba ricordarsele.
+  // Tensione, corrente e compressione hanno senso solo mentre si trasmette, e
+  // fuori dalla trasmissione sarebbero tre transazioni per niente su un bus che
+  // e' gia' il collo di bottiglia. La temperatura no: quella si guarda DOPO,
+  // mentre il finale si raffredda, quindi si legge sempre.
+  leggi_livello (do_vd_, RIG_LEVEL_VD_METER, "RIG_LEVEL_VD_METER", posa_vd);
+  leggi_livello (do_id_, RIG_LEVEL_ID_METER, "RIG_LEVEL_ID_METER", posa_id);
+  leggi_livello (do_pa_temp_, RIG_LEVEL_TEMP_METER, "RIG_LEVEL_TEMP_METER", posa_temp);
+  leggi_livello (do_comp_ && tx_active, RIG_LEVEL_COMP_METER, "RIG_LEVEL_COMP_METER",
+                 [this] (double v, bool ok) {
+                   update_comp (ok ? static_cast<unsigned int> (std::lround (v * 10.0)) : 0u, ok);
+                 });
+
+  if (do_pwr_)
+    {
+#if HAVE_HAMLIB_SEND_RAW
+      if (qmx_raw_power_)
+        {
+          static unsigned char const command[] {'P', 'C', ';'};
+          unsigned char response[32] {};
+          unsigned char terminator[] {';', '\0'};
+          rc = rig_send_raw (rig, command, sizeof command, response, sizeof response, terminator);
+          QByteArray const frame = rc >= 0
+              ? QByteArray {reinterpret_cast<char const *> (response), rc}
+              : QByteArray {};
+          unsigned int milliwatts = 0;
+          if (rc >= 0 && decodium::qmx_telemetry::parse_power_milliwatts (frame, &milliwatts))
+            {
+              qmx_raw_power_failures_ = 0;
+              update_power (milliwatts);
+            }
+          else
+            {
+              ++qmx_raw_power_failures_;
+              CAT_TRACE ("QMX raw PC telemetry failed rc=" << rc << " reply=" << frame);
+              update_power (0);
+              if (qmx_raw_power_failures_ >= kQmxRawTelemetryMaxFailures_)
+                {
+                  do_pwr_ = false;
+                  qWarning ().noquote ()
+                    << "[CATDBG] QMX raw power telemetry disabled after repeated failures"
+                    << "rc=" << rc << "reply=" << frame;
+                }
+            }
+        }
+      else
+#endif
+        {
+          rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_RFPOWER_METER_WATTS, &strength);
+          if (RIG_OK == rc)
+            {
+              update_power (static_cast<unsigned int> (strength.f * 1000));
+            }
+          else
+            {
+              CAT_TRACE ("rig_get_level RFPOWER_METER_WATTS failed with rc:" << rc << "ignoring");
+              update_power (0);
+            }
         }
     }
   else if (do_pwr2_)
@@ -1443,18 +2483,28 @@ void HamlibTransceiver::poll_transmit_telemetry (bool force_signal)
 
 void HamlibTransceiver::schedule_transmit_telemetry_burst ()
 {
-  if (!do_pwr_ && !do_pwr2_ && !do_swr_)
+  if (!do_pwr_ && !do_pwr2_ && !do_swr_ && !do_alc_)
     {
       return;
     }
 
-  static constexpr int delays_ms[] {120, 350, 700, 1100};
-  for (int const delay_ms : delays_ms)
+  quint64 const qmx_transition_serial = qmx_swr_transition_serial_;
+  auto schedule_poll = [this, qmx_transition_serial] (int delay_ms)
     {
-      QTimer::singleShot (delay_ms, this, [this] {
+      QTimer::singleShot (delay_ms, this, [this, delay_ms, qmx_transition_serial] {
+        if (qmx_raw_swr_ && qmx_transition_serial != qmx_swr_transition_serial_)
+          {
+            qInfo ().noquote ()
+              << "[QMX-SWR] scheduled sample cancelled"
+              << "scheduled_ms=" << delay_ms
+              << "reason=PTT-transition-changed";
+            return;
+          }
         try
           {
-            poll_transmit_telemetry (true);
+            bool const ignore_qmx_sample = qmx_raw_swr_
+                && decodium::qmx_telemetry::ignore_scheduled_swr_sample (delay_ms);
+            poll_transmit_telemetry (true, ignore_qmx_sample, delay_ms);
           }
         catch (std::exception const& e)
           {
@@ -1465,6 +2515,22 @@ void HamlibTransceiver::schedule_transmit_telemetry_burst ()
             CAT_TRACE ("early PWR/SWR poll failed unexpectedly, ignoring");
           }
       });
+    };
+
+  if (qmx_raw_swr_)
+    {
+      for (int const delay_ms : decodium::qmx_telemetry::swr_poll_delays_ms)
+        {
+          schedule_poll (delay_ms);
+        }
+    }
+  else
+    {
+      static constexpr int delays_ms[] {120, 350, 700, 1100};
+      for (int const delay_ms : delays_ms)
+        {
+          schedule_poll (delay_ms);
+        }
     }
 }
 
@@ -1487,13 +2553,63 @@ void HamlibTransceiver::do_ptt (bool on)
     {
       if (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt)
         {
-          CAT_TRACE ("rig_set_ptt PTT=false");
-          m_->error_check (rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR, RIG_PTT_OFF), tr ("setting PTT off"));
-          ptt_on_ = false;  // set AFTER successful rig_set_ptt
+          // 1.0.366 — robust PTT release on EVERY TX-off (not just shutdown).
+          // The old path used error_check() which THROWS on the first hamlib
+          // error (e.g. Icom CI-V bus error / timeout on a congested COM port):
+          // a single failure left ptt_on_ true and the radio stuck in TX.
+          // Drop PTT best-effort instead — no throw, a few retries — so a
+          // transient bus glitch does not strand the rig in transmit. We do NOT
+          // signal a UI error here: a failed PTT-off must not abort the
+          // surrounding TX-teardown sequence. The PTT-on path above keeps
+          // throwing, since a failed TX start SHOULD surface to the user.
+          // 1.0.474 — use a dynamic cap: the Icom serial adaptive path gets
+          // one attempt to avoid compounding long Hamlib timeouts, while other
+          // rigs keep the previous bounded retry behavior.
+          int rc = -RIG_EIO;
+          int const attempts = ptt_off_attempt_limit (false);
+          for (int attempt = 0; attempt < attempts; ++attempt)
+            {
+              rc = rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR, RIG_PTT_OFF);
+              CAT_TRACE ("rig_set_ptt PTT=false attempt=" << attempt << " rc=" << rc);
+              if (RIG_OK == rc)
+                {
+                  break;
+                }
+            }
+          if (RIG_OK == rc)
+            {
+              ptt_on_ = false;  // set AFTER successful rig_set_ptt
+              ptt_off_failed_recently_ = false;
+            }
+          else
+            {
+              // Leave ptt_on_ true so do_stop()'s release retry (1.0.365) and
+              // any later TX-off attempt know the rig may still be keyed.
+              ptt_off_failed_recently_ = true;
+              qWarning ().noquote ()
+                << "[CATDBG] Hamlib PTT-off failed after retries rc=" << rc
+                << "attempts=" << attempts
+                << "— radio may still be transmitting (bus error/timeout)";
+            }
         }
     }
 
-  update_PTT (on);
+  // 1.0.367 — report the ACTUAL PTT state, not the requested one. If a PTT-off
+  // failed above (rig may still be keyed) ptt_on_ stays true; propagating
+  // update_PTT(false) would desync the app (UI thinks RX while the rig is still
+  // transmitting). Before 1.0.366 error_check() threw before reaching this
+  // line, so the inconsistency could not occur; the no-throw release reopened
+  // it. Use the real state when we control a PTT line; fall back to the
+  // requested value only when there is no PTT port (RIG_PTT_NONE / VOX).
+  bool const effective_ptt =
+      (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt) ? ptt_on_ : on;
+  if (qmx_raw_swr_ && effective_ptt != qmx_swr_filter_tx_active_)
+    {
+      reset_qmx_swr_filter (
+          effective_ptt,
+          effective_ptt ? QStringLiteral ("RX-to-TX") : QStringLiteral ("TX-to-RX"));
+    }
+  update_PTT (effective_ptt);
   if (on)
     {
       schedule_transmit_telemetry_burst ();
@@ -1501,6 +2617,227 @@ void HamlibTransceiver::do_ptt (bool on)
 }
 
 // pass in false if any post_action is needed for a rig -- don't know of any as of 2024-04-14
+bool HamlibTransceiver::supports_morse () const noexcept
+{
+  return m_->rig_ && m_->rig_->caps && m_->rig_->caps->send_morse;
+}
+
+bool HamlibTransceiver::supports_atu_control () const noexcept
+{
+  return m_->rig_ && m_->rig_->caps
+    && rig_has_set_func (m_->rig_.data (), RIG_FUNC_TUNER);
+}
+
+bool HamlibTransceiver::supports_power_control () const noexcept
+{
+  // Do not expose a Power button merely because a Hamlib session exists.
+  // Backends without set_powerstat() cannot implement either Power On or
+  // Power Off, and calling the generic wrapper would only produce ENAVAIL.
+  return m_->rig_ && m_->rig_->caps && m_->rig_->caps->set_powerstat;
+}
+
+int HamlibTransceiver::morse_text_limit () const noexcept
+{
+  return m_->rig_ && m_->rig_->caps->rig_model == RIG_MODEL_FT991
+    ? decodium::cw::ft991TextLimit : 0;
+}
+
+QString HamlibTransceiver::send_morse_checked (QString const& text, int wpm)
+{
+  if (!supports_morse ())
+    return tr ("The radio CAT CW keyer is unavailable");
+  QString payload = text;
+  if (m_->rig_->caps->rig_model == RIG_MODEL_FT991)
+    {
+      payload = decodium::cw::ft991MorsePayload (text);
+      if (payload.isEmpty ())
+        return tr ("FT-991A CW text must contain 1-49 characters without CAT delimiters");
+    }
+  if (payload.trimmed ().isEmpty ())
+    return tr ("CW text is empty");
+
+  // Hamlib's Yaesu CAT backend reserves a one-character send_morse() payload
+  // for memories 1-5 (and rejects other single characters such as '?').
+  // Decodium always means literal Morse text, so force the backend through
+  // its text-message path with a trailing word gap.  Without this, F5='?'
+  // and user macros containing one character are not transmitted reliably.
+  bool const literal_single_char = payload.size () == 1 && is_yaesu_rig (m_->rig_.data ());
+  if (literal_single_char)
+    payload += QLatin1Char (' ');
+
+  // Do not trust the UI/manager mode cache here.  In particular a NET
+  // rigctl bridge can acknowledge the preceding QSY before the DATA-U -> CW
+  // change has reached the radio.  Hamlib deliberately refuses send_morse()
+  // outside CW/CWR, so make the mode part of this same serialised keyer
+  // operation.  This sends only a mode command: native break-in remains in
+  // charge of keying and no continuous PTT is asserted.
+  rmode_t current_mode {RIG_MODE_NONE};
+  pbwidth_t current_width {RIG_PASSBAND_NOCHANGE};
+  int const get_mode_rc = rig_get_mode (m_->rig_.data (), RIG_VFO_CURR,
+                                        &current_mode, &current_width);
+  if (get_mode_rc != RIG_OK
+      || (current_mode != RIG_MODE_CW && current_mode != RIG_MODE_CWR))
+    {
+      int const set_mode_rc = rig_set_mode (m_->rig_.data (), RIG_VFO_CURR,
+                                            RIG_MODE_CW, RIG_PASSBAND_NOCHANGE);
+      if (set_mode_rc != RIG_OK)
+        return tr ("Setting CW mode before keying failed: %1 (%2)")
+          .arg (QString::fromLatin1 (rigerror (set_mode_rc))).arg (set_mode_rc);
+      qInfo ().noquote ()
+        << "[CW-CAT] CW mode reasserted immediately before native keyer send"
+        << "previous_mode=" << rig_strrmode (current_mode)
+        << "get_mode_rc=" << get_mode_rc;
+    }
+
+  if (wpm > 0)
+    {
+      value_t speed {}; speed.i = wpm;
+      int const rc = rig_set_level (m_->rig_.data (), RIG_VFO_CURR, RIG_LEVEL_KEYSPD, speed);
+      if (rc != RIG_OK)
+        {
+          // A NET rigctl/rigctld connection can expose send_morse() while
+          // deliberately not exposing the KEYSPD level.  That is a missing
+          // optional control, not a failure to send CW: continue with the
+          // speed configured in the radio.  Previously this early return
+          // released PTT without ever issuing rig_send_morse(), which made
+          // CW look completely broken through rigctld.
+          if (rc == -RIG_ENAVAIL || rc == -RIG_ENIMPL)
+            {
+              qWarning ().noquote ()
+                << "[CW-CAT] CW speed control unavailable; using the radio's configured speed"
+                << "rc=" << rc;
+            }
+          else
+            {
+              return tr ("Setting CW speed failed: %1 (%2)")
+                .arg (QString::fromLatin1 (rigerror (rc))).arg (rc);
+            }
+        }
+    }
+  QByteArray const bytes = payload.toLatin1 ();
+  int const rc = rig_send_morse (m_->rig_.data (), RIG_VFO_CURR, bytes.constData ());
+  qInfo ().noquote () << "[CW-CAT] send result=" << rc << "model=" << m_->rig_->caps->rig_model
+                     << "text_chars=" << text.size () << "payload_chars=" << payload.size ()
+                     << "literal_single_char=" << literal_single_char << "wpm=" << wpm;
+  return rc == RIG_OK ? QString {} : tr ("Sending CW failed: %1 (%2)")
+    .arg (QString::fromLatin1 (rigerror (rc))).arg (rc);
+}
+
+void HamlibTransceiver::send_morse (QString const& text, int wpm) noexcept
+{
+  try
+    {
+      QString const error = send_morse_checked (text, wpm);
+      if (!error.isEmpty ()) qWarning ().noquote () << "[CW-CAT]" << error;
+    }
+  catch (std::exception const& error)
+    {
+      qWarning () << "[CW-CAT] send exception:" << error.what ();
+    }
+  catch (...)
+    {
+      qWarning () << "[CW-CAT] unknown send exception";
+    }
+}
+
+void HamlibTransceiver::stop_morse () noexcept
+{
+  try
+    {
+      auto * rig = m_->rig_.data ();
+      if (!rig || !rig->caps)
+        return;
+
+      // This is the CW frame's emergency stop.  Do not rely on the cached
+      // TransceiverState::ptt(): native radio keyers own their break-in timing,
+      // so Decodium normally (and correctly) keeps that cache at false even
+      // while the radio is actually sending.  A normal set(ptt=false) would
+      // consequently be optimised away and several radios stayed in TX.
+      // Force the configured PTT release first.  This may be CAT, RTS, DTR or
+      // another Hamlib PTT route.
+      int ptt_rc = -RIG_EIO;
+      int const attempts = ptt_off_attempt_limit (false);
+      for (int attempt = 0; attempt < attempts; ++attempt)
+        {
+          ptt_rc = rig_set_ptt (rig, RIG_VFO_CURR, RIG_PTT_OFF);
+          CAT_TRACE ("CW emergency PTT=false attempt=" << attempt << " rc=" << ptt_rc);
+          if (RIG_OK == ptt_rc || -RIG_ENAVAIL == ptt_rc || -RIG_ENIMPL == ptt_rc)
+            break;
+        }
+
+      // Yaesu NewCAT radios can start their own message keyer with KY even
+      // when Hamlib's configured PTT route is RTS/DTR/NONE.  Those backends
+      // commonly expose send_morse but no stop_morse, so releasing only the
+      // configured line does not necessarily stop the radio.  Temporarily
+      // route this *off* operation through the CAT backend as well; for these
+      // radios that is the documented TX0; command.  Restore the user's PTT
+      // configuration immediately afterwards so normal TX remains untouched.
+      auto const configured_ptt = rig->state.pttport.type.ptt;
+      bool const configured_ptt_is_cat = RIG_PTT_RIG == configured_ptt
+        || RIG_PTT_RIG_MICDATA == configured_ptt;
+      bool const force_yaesu_cat_off = is_yaesu_rig (rig)
+        && !rig->caps->stop_morse
+        && rig->caps->set_ptt
+        && !configured_ptt_is_cat;
+      int cat_ptt_rc = -RIG_ENAVAIL;
+      if (force_yaesu_cat_off)
+        {
+          rig->state.pttport.type.ptt = RIG_PTT_RIG;
+          for (int attempt = 0; attempt < attempts; ++attempt)
+            {
+              cat_ptt_rc = rig_set_ptt (rig, RIG_VFO_CURR, RIG_PTT_OFF);
+              CAT_TRACE ("CW emergency Yaesu CAT PTT=false attempt=" << attempt
+                         << " rc=" << cat_ptt_rc);
+              if (RIG_OK == cat_ptt_rc || -RIG_ENAVAIL == cat_ptt_rc
+                  || -RIG_ENIMPL == cat_ptt_rc)
+                break;
+            }
+          rig->state.pttport.type.ptt = configured_ptt;
+        }
+
+      int const effective_ptt_rc = force_yaesu_cat_off ? cat_ptt_rc : ptt_rc;
+      if (RIG_OK == effective_ptt_rc)
+        {
+          ptt_on_ = false;
+          ptt_off_failed_recently_ = false;
+          update_PTT (false);
+        }
+      else if (-RIG_ENAVAIL != effective_ptt_rc && -RIG_ENIMPL != effective_ptt_rc)
+        {
+          ptt_off_failed_recently_ = true;
+          qWarning ().noquote ()
+            << "[CW-CAT] emergency PTT-off failed"
+            << "configured_rc=" << ptt_rc
+            << "cat_rc=" << cat_ptt_rc
+            << "attempts=" << attempts;
+        }
+
+      // Clear the radio's native CW buffer where the backend provides a real
+      // stop operation (Icom, several Kenwood models, newer radios, and the
+      // NET rigctl bridge).  Many Yaesu backends expose send_morse but no
+      // stop_morse; the unconditional PTT OFF above is therefore essential.
+      int stop_rc = -RIG_ENAVAIL;
+      if (rig->caps->stop_morse)
+        stop_rc = rig_stop_morse (rig, RIG_VFO_CURR);
+      qInfo ().noquote ()
+        << "[CW-CAT] emergency stop"
+        << "model=" << rig->caps->rig_model
+        << "ptt_off_rc=" << ptt_rc
+        << "yaesu_cat_off=" << force_yaesu_cat_off
+        << "yaesu_cat_off_rc=" << cat_ptt_rc
+        << "stop_morse_rc=" << stop_rc
+        << "has_stop_morse=" << (rig->caps->stop_morse != nullptr);
+    }
+  catch (std::exception const& error)
+    {
+      qWarning () << "[CW-CAT] emergency stop exception:" << error.what ();
+    }
+  catch (...)
+    {
+      qWarning () << "[CW-CAT] unknown emergency stop exception";
+    }
+}
+
 void HamlibTransceiver::do_tune (bool on)
 {
   CAT_TRACE ("Tune: " << on << " " << state ());
@@ -1526,4 +2863,372 @@ void HamlibTransceiver::do_tune (bool on)
         }
     }
 #endif
+}
+
+bool HamlibTransceiver::request_atu_tune (QString * error)
+{
+  auto * rig = m_->rig_.data ();
+  if (!rig) { if (error) *error = tr ("Radio disconnected"); return false; }
+  if (ptt_on_) { if (error) *error = tr ("Cannot start ATU tune while transmitting"); return false; }
+  if (!rig_has_set_func (rig, RIG_FUNC_TUNER)) {
+    if (error) *error = tr ("This radio does not expose an ATU tuner control through Hamlib");
+    return false;
+  }
+  int rc = rig_set_func (rig, RIG_VFO_CURR, RIG_FUNC_TUNER, 1);
+  if (rc == RIG_OK)
+    rc = rig_vfo_op (rig, RIG_VFO_CURR, RIG_OP_TUNE);
+  if (rc != RIG_OK) {
+    if (error) *error = QString::fromLocal8Bit (rigerror (rc));
+    return false;
+  }
+  return true;
+}
+
+bool HamlibTransceiver::request_atu_off (QString * error)
+{
+  auto * rig = m_->rig_.data ();
+  if (!rig) { if (error) *error = tr ("Radio disconnected"); return false; }
+  if (ptt_on_) { if (error) *error = tr ("Cannot disable the ATU while transmitting"); return false; }
+  if (!rig_has_set_func (rig, RIG_FUNC_TUNER)) {
+    if (error) *error = tr ("This radio does not expose ATU enable/disable through Hamlib");
+    return false;
+  }
+  int const rc = rig_set_func (rig, RIG_VFO_CURR, RIG_FUNC_TUNER, 0);
+  if (rc != RIG_OK) {
+    if (error) *error = QString::fromLocal8Bit (rigerror (rc));
+    return false;
+  }
+  return true;
+}
+
+bool HamlibTransceiver::read_atu_state (bool * enabled, QString * error)
+{
+  if (enabled) *enabled = false;
+  auto * rig = m_->rig_.data ();
+  if (!rig) { if (error) *error = tr ("Radio disconnected"); return false; }
+  if (!rig_has_get_func (rig, RIG_FUNC_TUNER)) {
+    if (error) *error = tr ("This radio does not expose ATU state through Hamlib");
+    return false;
+  }
+  int status = 0;
+  int const rc = rig_get_func (rig, RIG_VFO_CURR, RIG_FUNC_TUNER, &status);
+  if (rc != RIG_OK) {
+    if (error) *error = QString::fromLocal8Bit (rigerror (rc));
+    return false;
+  }
+  if (enabled) *enabled = status != 0;
+  return true;
+}
+
+bool HamlibTransceiver::request_power_on (QString * error)
+{
+  auto * rig = m_->rig_.data ();
+  if (!rig) { if (error) *error = tr ("Radio disconnected"); return false; }
+  if (!supports_power_control ()) {
+    if (error) *error = tr ("This radio does not expose power control through Hamlib");
+    return false;
+  }
+  if (ptt_on_) { if (error) *error = tr ("Cannot power on while transmitting"); return false; }
+  int rc = rig_set_powerstat (rig, RIG_POWER_ON);
+  if (rc != RIG_OK) {
+    if (error) *error = QString::fromLocal8Bit (rigerror (rc));
+    return false;
+  }
+  rig_powered_off_ = false;
+  power_off_probe_clock_.invalidate ();
+  power_on_settle_clock_.restart ();
+  qInfo ().noquote () << "[CATDBG] Hamlib power-on accepted; CAT reads paused for"
+                      << kPowerOnSettleMs_ << "ms";
+  return true;
+}
+
+bool HamlibTransceiver::request_power_off (QString * error)
+{
+  auto * rig = m_->rig_.data ();
+  if (!rig) { if (error) *error = tr ("Radio disconnected"); return false; }
+  if (!supports_power_control ()) {
+    if (error) *error = tr ("This radio does not expose power control through Hamlib");
+    return false;
+  }
+  if (ptt_on_) { if (error) *error = tr ("Cannot power off while transmitting"); return false; }
+  int rc = rig_set_powerstat (rig, RIG_POWER_OFF);
+  if (rc != RIG_OK) {
+    if (error) *error = QString::fromLocal8Bit (rigerror (rc));
+    return false;
+  }
+  rig_powered_off_ = true;
+  power_on_settle_clock_.invalidate ();
+  power_off_probe_clock_.restart ();
+  stop_cat_keep_alive_timer ();
+  qInfo ().noquote () << "[CATDBG] Hamlib power-off accepted; preserving CAT session for Power On";
+  return true;
+}
+
+
+namespace {
+// Altri comandi della sezione ricezione che Hamlib sa leggere e scrivere: la
+// finestra SSB li mostra solo se la radio li dichiara. kind: 0 percentuale,
+// 1 intero con limiti (Hz), 2 elenco di valori dB (preamplificatore),
+// 3 elenco di valori dB (attenuatore).
+struct SsbExtraLevel { const char* key; setting_t id; int kind; };
+struct SsbExtraFunc { const char* key; setting_t id; };
+const SsbExtraLevel kSsbExtraLevels[] = {
+  {"af", RIG_LEVEL_AF, 0}, {"sql", RIG_LEVEL_SQL, 0}, {"nr", RIG_LEVEL_NR, 0},
+  {"nb", RIG_LEVEL_NB, 0}, {"comp", RIG_LEVEL_COMP, 0}, {"voxgain", RIG_LEVEL_VOXGAIN, 0},
+  {"ifshift", RIG_LEVEL_IF, 1}, {"notchf", RIG_LEVEL_NOTCHF, 1},
+  {"preamp", RIG_LEVEL_PREAMP, 2}, {"att", RIG_LEVEL_ATT, 3},
+};
+const SsbExtraFunc kSsbExtraFuncs[] = {
+  {"nbOn", RIG_FUNC_NB}, {"nrOn", RIG_FUNC_NR}, {"anfOn", RIG_FUNC_ANF},
+  {"compOn", RIG_FUNC_COMP}, {"voxOn", RIG_FUNC_VOX}, {"lockOn", RIG_FUNC_LOCK},
+};
+
+QVariantList ssb_db_list (const int* values)
+{
+  QVariantList list;
+  list.append (0);
+  for (int i = 0; i < HAMLIB_MAXDBLSTSIZ && values[i]; ++i)
+    list.append (values[i]);
+  return list;
+}
+
+// Scrive un comando "extra": nullopt se la chiave non e' una di queste.
+std::optional<int> ssb_extra_write (RIG * rig, QString const& key, double value)
+{
+  for (auto const& l : kSsbExtraLevels)
+    {
+      if (key != QLatin1String (l.key)) continue;
+      if (!rig_has_set_level (rig, l.id)) return -RIG_ENAVAIL;
+      value_t v {};
+      if (l.kind == 0)
+        {
+          if (value < 0 || value > 100) return -RIG_EINVAL;
+          v.f = float (value / 100.);
+        }
+      else if (l.kind == 1)
+        {
+          if (value < -4000 || value > 4000) return -RIG_EINVAL;
+          v.i = int (value);
+        }
+      else
+        {
+          bool allowed = value == 0;
+          auto const* list = l.kind == 2 ? rig->caps->preamp : rig->caps->attenuator;
+          for (int i = 0; i < HAMLIB_MAXDBLSTSIZ && list[i]; ++i)
+            if (int (value) == list[i]) allowed = true;
+          if (!allowed) return -RIG_EINVAL;
+          v.i = int (value);
+        }
+      return rig_set_level (rig, RIG_VFO_CURR, l.id, v);
+    }
+  for (auto const& f : kSsbExtraFuncs)
+    {
+      if (key != QLatin1String (f.key)) continue;
+      if (!rig_has_set_func (rig, f.id)) return -RIG_ENAVAIL;
+      return rig_set_func (rig, RIG_VFO_CURR, f.id, value != 0.0 ? 1 : 0);
+    }
+  return std::nullopt;
+}
+
+void ssb_extra_read (RIG * rig, QVariantMap& result)
+{
+  for (auto const& l : kSsbExtraLevels)
+    {
+      QString const k = QString::fromLatin1 (l.key);
+      bool const canSet = rig_has_set_level (rig, l.id) != 0;
+      result[k + QStringLiteral ("Supported")] = canSet;
+      if (!canSet) continue;
+      value_t v {};
+      if (rig_has_get_level (rig, l.id) && rig_get_level (rig, RIG_VFO_CURR, l.id, &v) == RIG_OK)
+        result[k] = l.kind == 0 ? double (v.f) * 100. : double (v.i);
+      if (l.kind == 1)
+        {
+          int lo = -1200, hi = 1200;
+          int const idx = rig_setting2idx (l.id);
+          if (idx >= 0 && idx < RIG_SETTING_MAX && rig->caps->level_gran[idx].max.i > rig->caps->level_gran[idx].min.i)
+            {
+              lo = rig->caps->level_gran[idx].min.i;
+              hi = rig->caps->level_gran[idx].max.i;
+            }
+          else if (l.id == RIG_LEVEL_NOTCHF) { lo = 0; hi = 3000; }
+          result[k + QStringLiteral ("Min")] = lo;
+          result[k + QStringLiteral ("Max")] = hi;
+        }
+      else if (l.kind == 2) result[k + QStringLiteral ("Values")] = ssb_db_list (rig->caps->preamp);
+      else if (l.kind == 3) result[k + QStringLiteral ("Values")] = ssb_db_list (rig->caps->attenuator);
+    }
+  for (auto const& f : kSsbExtraFuncs)
+    {
+      QString const k = QString::fromLatin1 (f.key);
+      bool const canSet = rig_has_set_func (rig, f.id) != 0;
+      result[k + QStringLiteral ("Supported")] = canSet;
+      if (!canSet) continue;
+      int status = 0;
+      if (rig_has_get_func (rig, f.id) && rig_get_func (rig, RIG_VFO_CURR, f.id, &status) == RIG_OK)
+        result[k] = status != 0;
+    }
+}
+}
+
+QVariantMap HamlibTransceiver::voice_controls(QString const& key, double value, bool write)
+{
+    QVariantMap result;
+    auto* rig=m_->rig_.data();
+    if(!rig || !rig->caps) return {{"error",QStringLiteral("Radio disconnected")}};
+    QString const modelName = QString::fromLatin1(rig->caps->model_name ? rig->caps->model_name : "");
+    QString const manufacturerName = QString::fromLatin1(rig->caps->mfg_name ? rig->caps->mfg_name : "");
+    bool const isIcomIc7300 = modelName.contains(QStringLiteral("IC-7300"), Qt::CaseInsensitive)
+        || (manufacturerName.contains(QStringLiteral("Icom"), Qt::CaseInsensitive)
+            && modelName.contains(QStringLiteral("7300"), Qt::CaseInsensitive));
+    struct Level { const char* name; setting_t id; };
+    const Level levels[]={{"power",RIG_LEVEL_RFPOWER},{"rf",RIG_LEVEL_RF},
+                          {"mic",RIG_LEVEL_MICGAIN},{"agc",RIG_LEVEL_AGC}};
+    QString error;
+    bool agcOffWriteSucceeded=false;
+    int writeRc=-RIG_EINVAL;
+    if(write) {
+        int rc=-RIG_EINVAL;
+        if(!std::isfinite(value)) return {{"error",QStringLiteral("Invalid control value")}};
+        bool extraHandled=false;
+        if(auto extra=ssb_extra_write(rig,key,value)) {rc=*extra;extraHandled=true;}
+        if(extraHandled) {
+        } else if(key=="filter") {
+            rmode_t mode=RIG_MODE_NONE;pbwidth_t width=0;
+            rc=rig_get_mode(rig,RIG_VFO_CURR,&mode,&width);
+            if(rc==RIG_OK && (mode==RIG_MODE_USB || mode==RIG_MODE_LSB || mode==RIG_MODE_PKTUSB || mode==RIG_MODE_PKTLSB)
+               && value>=300 && value<=4000)
+                rc=rig_set_mode(rig,RIG_VFO_CURR,mode,pbwidth_t(value));
+            else rc=-RIG_EINVAL;
+        } else if(key=="agc" && isIcomIc7300 && value==double(RIG_AGC_OFF)
+                  && rig_has_set_level(rig,RIG_LEVEL_AGC_TIME)) {
+            // On the IC-7300 the CI-V AGC preset command (16/12/00) is
+            // rejected by the rig. AGC OFF is represented by the AGC time
+            // constant command (14/04/00), which Hamlib exposes as
+            // RIG_LEVEL_AGC_TIME.
+            value_t agcTime{};
+            agcTime.f=0.0f;
+            rc=rig_set_level(rig,RIG_VFO_CURR,RIG_LEVEL_AGC_TIME,agcTime);
+            agcOffWriteSucceeded=(rc==RIG_OK);
+            qInfo().noquote() << "[CATDBG] Hamlib AGC write model=" << modelName
+                              << "value=" << value << "path=AGC_TIME(0)" << "rc=" << rc;
+        } else for(const auto& l:levels) if(key==l.name && rig_has_set_level(rig,l.id)) {
+            value_t v{};
+            if(l.id==RIG_LEVEL_AGC) {
+                bool allowed=false;
+                for(int i=0;i<rig->caps->agc_level_count;++i) if(value==rig->caps->agc_levels[i])allowed=true;
+                // Some Hamlib IC-7300 profiles advertise only OFF/FAST/MEDIUM
+                // in agc_level_count even though the backend and the radio
+                // accept the SLOW preset (CI-V AGC value 03).  SLOW is added
+                // to the UI below for that case, so it must also bypass this
+                // incomplete capability list here.
+                if(isIcomIc7300 && value==double(RIG_AGC_SLOW))
+                    allowed=true;
+                if(rig->caps->agc_level_count==0)allowed=value>=0 && value<=8 && value==int(value);
+                if(!allowed)break;
+                v.i=int(value);
+            } else {if(value<0 || value>100)break;v.f=float(value/100.);}
+            rc=rig_set_level(rig,RIG_VFO_CURR,l.id,v);break;
+        }
+        // An IC-7300 can acknowledge the AGC preset command while keeping a
+        // zero AGC time constant after AGC OFF.  Program the standard SSB
+        // time constant too, so active presets really leave OFF on the rig.
+        if(key=="agc" && isIcomIc7300 && rc==RIG_OK
+           && value!=double(RIG_AGC_OFF) && rig_has_set_level(rig,RIG_LEVEL_AGC_TIME)) {
+            float agcTime=-1.0f;
+            if(value==double(RIG_AGC_FAST)) agcTime=0.3f;
+            else if(value==double(RIG_AGC_MEDIUM)) agcTime=2.0f;
+            else if(value==double(RIG_AGC_SLOW)) agcTime=6.0f;
+            if(agcTime>0.0f) {
+                value_t time{};
+                time.f=agcTime;
+                int const timeRc=rig_set_level(rig,RIG_VFO_CURR,RIG_LEVEL_AGC_TIME,time);
+                qInfo().noquote() << "[CATDBG] Hamlib AGC time model=" << modelName
+                                  << "value=" << value << "time=" << agcTime
+                                  << "path=AGC_TIME" << "rc=" << timeRc;
+                if(timeRc!=RIG_OK)
+                    rc=timeRc;
+            }
+        }
+        if(key=="agc" && !(isIcomIc7300 && value==double(RIG_AGC_OFF)
+                            && rig_has_set_level(rig,RIG_LEVEL_AGC_TIME)))
+            qInfo().noquote() << "[CATDBG] Hamlib AGC write model=" << modelName
+                              << "value=" << value << "path=AGC" << "rc=" << rc;
+        writeRc=rc;
+        if(rc!=RIG_OK)error=QStringLiteral("%1: %2").arg(key,QString::fromLatin1(rigerror(rc)));
+    }
+    for(const auto& l:levels) {
+        bool canSet=rig_has_set_level(rig,l.id)!=0;
+        result[QString::fromLatin1(l.name)+"Supported"]=canSet;
+        value_t v{};
+        bool const readOk=rig_has_get_level(rig,l.id)
+            && rig_get_level(rig,RIG_VFO_CURR,l.id,&v)==RIG_OK;
+        if(readOk) {
+            result[l.name]=l.id==RIG_LEVEL_AGC ? double(v.i) : double(v.f)*100.;
+            if(write && (key==QString::fromLatin1(l.name))
+               && (l.id==RIG_LEVEL_RFPOWER || l.id==RIG_LEVEL_RF))
+                qInfo().noquote() << "[CATDBG] Hamlib level readback model=" << modelName
+                                  << "key=" << l.name << "requested=" << value
+                                  << "readback=" << result.value(l.name)
+                                  << "write_rc=" << writeRc;
+        } else if(write && key==QString::fromLatin1(l.name)
+                  && (l.id==RIG_LEVEL_RFPOWER || l.id==RIG_LEVEL_RF)) {
+            qInfo().noquote() << "[CATDBG] Hamlib level readback unavailable model=" << modelName
+                              << "key=" << l.name << "requested=" << value
+                              << "write_rc=" << writeRc;
+        }
+    }
+
+    ssb_extra_read(rig,result);
+
+    // AGC_TIME is not a reliable mode readback on every IC-7300 firmware:
+    // after FAST/MEDIUM/SLOW the radio may report 0 even though AGC itself
+    // correctly reports the selected preset.  Never overwrite a valid AGC
+    // read with that ambiguous AGC_TIME value.
+    if(isIcomIc7300 && rig_has_get_level(rig,RIG_LEVEL_AGC_TIME)) {
+        value_t agcTime{};
+        if(rig_get_level(rig,RIG_VFO_CURR,RIG_LEVEL_AGC_TIME,&agcTime)==RIG_OK
+           && agcTime.f<=0.0001f && !result.contains(QStringLiteral("agc")))
+            result["agc"]=double(RIG_AGC_OFF);
+    }
+    if(agcOffWriteSucceeded)
+        result["agc"]=double(RIG_AGC_OFF);
+    QVariantList agc;
+    auto agcLabel = [&](int level) {
+        if(isIcomIc7300) {
+            switch(level) {
+            case RIG_AGC_FAST:   return QStringLiteral("FAST (0.3 s)");
+            case RIG_AGC_MEDIUM: return QStringLiteral("MID (2.0 s)");
+            case RIG_AGC_SLOW:   return QStringLiteral("SLOW (6.0 s)");
+            default: break;
+            }
+        }
+        return QString::fromLatin1(rig_stragclevel(agc_level_e(level)));
+    };
+    auto appendAgc = [&](int level) {
+        agc.append(QVariantMap{{"name",agcLabel(level)}, {"value",level}});
+    };
+    for(int i=0;i<rig->caps->agc_level_count;++i) {
+        const auto level=rig->caps->agc_levels[i];
+        appendAgc(int(level));
+    }
+    if(agc.isEmpty())for(int v:{0,2,3,5,6})appendAgc(v);
+
+    // Hamlib 4.x profiles seen in the field can advertise only OFF/FAST/MEDIUM
+    // for the IC-7300 even though the rig and the CI-V protocol support SLOW.
+    // Do not add SLOW to every radio: for this specific model it is a valid
+    // control and omitting it makes the QML selector incomplete.
+    if(isIcomIc7300 && rig_has_set_level(rig,RIG_LEVEL_AGC)) {
+        constexpr int slowAgc = 3; // Hamlib's RIG_AGC_SLOW / CI-V 03.
+        bool hasSlow = false;
+        for(const auto& mode : agc)
+            if(mode.toMap().value(QStringLiteral("value")).toInt() == slowAgc) { hasSlow = true; break; }
+        if(!hasSlow)
+            appendAgc(slowAgc);
+    }
+    result["agcModes"]=agc;
+    result["filterSupported"]=rig->caps->set_mode!=nullptr;
+    rmode_t mode=RIG_MODE_NONE;pbwidth_t width=0;
+    if(rig_get_mode(rig,RIG_VFO_CURR,&mode,&width)==RIG_OK)result["filter"]=double(width);
+    result["error"]=error;
+    return result;
 }

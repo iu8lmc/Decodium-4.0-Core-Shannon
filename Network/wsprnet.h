@@ -6,6 +6,7 @@
 #include <QString>
 #include <QList>
 #include <QUrlQuery>
+#include <QUrl>
 #include <QQueue>
 
 class QNetworkAccessManager;
@@ -19,6 +20,7 @@ class WSPRNet : public QObject
 
 public:
   explicit WSPRNet (QNetworkAccessManager *, QObject *parent = nullptr);
+  WSPRNet (QNetworkAccessManager *, QUrl const& post_url, QObject *parent = nullptr);
   void upload (QString const& call, QString const& grid, QString const& rfreq, QString const& tfreq,
                QString const& mode, float TR_peirod, QString const& tpct, QString const& dbm,
                QString const& version, QString const& fileName);
@@ -34,12 +36,14 @@ public slots:
   void abortOutstandingRequests ();
 
 private:
+  void scheduleQueuedSpots (int previous_queue_size);
   bool decodeLine (QString const& line, SpotQueue::value_type& query) const;
   SpotQueue::value_type urlEncodeNoSpot () const;
   SpotQueue::value_type urlEncodeSpot (SpotQueue::value_type& spot) const;
   QString encode_mode () const;
 
   QNetworkAccessManager * network_manager_;
+  QUrl post_url_;
   QList<QNetworkReply *> m_outstandingRequests;
   QString m_call;
   QString m_grid;;
@@ -54,7 +58,7 @@ private:
   int spots_to_send_;
   SpotQueue spot_queue_;
   QTimer upload_timer_;
-  int m_uploadType;
+  int m_uploadType {0};
 };
 
 #endif // WSPRNET_H

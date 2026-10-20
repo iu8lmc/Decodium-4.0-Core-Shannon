@@ -12,7 +12,7 @@ For current Decodium macOS releases:
 - install the app by dragging it to `/Applications`
 - if Gatekeeper blocks startup, use:
 
-  sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
+  sudo xattr -r -d com.apple.quarantine /Applications/Decodium4.app
 
 Important
 ---------

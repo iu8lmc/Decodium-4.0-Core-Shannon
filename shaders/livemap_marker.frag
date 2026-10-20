@@ -7,6 +7,8 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     vec4 markerColor;
+    vec4 viewParams;
+    vec4 rectParams;
 };
 
 void main()

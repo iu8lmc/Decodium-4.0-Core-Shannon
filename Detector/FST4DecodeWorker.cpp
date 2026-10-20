@@ -175,6 +175,94 @@ namespace
     return QString::fromLatin1 (value.constData (), value.size ());
   }
 
+  bool is_grid_token (QString token)
+  {
+    token = token.trimmed ().toUpper ();
+    if (token.size () != 4 && token.size () != 6)
+      {
+        return false;
+      }
+    if (!token[0].isLetter () || !token[1].isLetter ()
+        || !token[2].isDigit () || !token[3].isDigit ())
+      {
+        return false;
+      }
+    if (token.size () == 6
+        && (!token[4].isLetter () || !token[5].isLetter ()))
+      {
+        return false;
+      }
+    return true;
+  }
+
+  bool is_report_token (QString token)
+  {
+    token = token.trimmed ().toUpper ();
+    if (token == QStringLiteral ("73")
+        || token == QStringLiteral ("RRR")
+        || token == QStringLiteral ("RR73"))
+      {
+        return true;
+      }
+    if (token.size () == 3
+        && (token[0] == QLatin1Char ('+') || token[0] == QLatin1Char ('-'))
+        && token[1].isDigit () && token[2].isDigit ())
+      {
+        return true;
+      }
+    if (token.size () == 4
+        && token[0] == QLatin1Char ('R')
+        && (token[1] == QLatin1Char ('+') || token[1] == QLatin1Char ('-'))
+        && token[2].isDigit () && token[3].isDigit ())
+      {
+        return true;
+      }
+    return false;
+  }
+
+  bool is_actionable_fst4_text (QByteArray const& decoded)
+  {
+    QString text = QString::fromLatin1 (trimmed_field (decoded)).trimmed ();
+    if (text.isEmpty ())
+      {
+        return false;
+      }
+    if (text.contains (QStringLiteral ("<...>"))
+        || text.contains (QLatin1Char (';'))
+        || text.contains (QLatin1Char ('?')))
+      {
+        return false;
+      }
+
+    QStringList tokens = text.toUpper ().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    if (tokens.isEmpty ())
+      {
+        return false;
+      }
+    if (tokens.first () == QStringLiteral ("CQ"))
+      {
+        return tokens.size () >= 2
+            && (tokens.size () == 2 || is_grid_token (tokens.last ()));
+      }
+    if (tokens.first () == QStringLiteral ("QRZ")
+        || tokens.first () == QStringLiteral ("DE"))
+      {
+        return tokens.size () >= 2;
+      }
+    if (tokens.contains (QStringLiteral ("RR73"))
+        || tokens.contains (QStringLiteral ("RRR"))
+        || tokens.contains (QStringLiteral ("73")))
+      {
+        return tokens.size () >= 2;
+      }
+    if (tokens.size () >= 3
+        && (is_grid_token (tokens.last ()) || is_report_token (tokens.last ())))
+      {
+        return true;
+      }
+    return false;
+  }
+
   QString build_row (QString const& utcPrefix, DecodedLine const& line, int ntrperiod)
   {
     QString decoded = decode_text (line.decoded);
@@ -1137,6 +1225,34 @@ namespace
         lines.push_back (std::move (line));
       }
   }
+
+  void suppress_strong_fst4_artifacts (std::vector<DecodedLine>& lines)
+  {
+    if (lines.size () < 2)
+      {
+        return;
+      }
+
+    auto const best = std::max_element (lines.begin (), lines.end (),
+                                        [] (DecodedLine const& a, DecodedLine const& b) {
+                                          return a.snr < b.snr;
+                                        });
+    if (best == lines.end () || best->snr < 30)
+      {
+        return;
+      }
+
+    int const bestSnr = best->snr;
+    lines.erase (std::remove_if (lines.begin (), lines.end (),
+                                 [bestSnr] (DecodedLine const& line) {
+                                   if (line.snr >= bestSnr - 20)
+                                     {
+                                       return false;
+                                     }
+                                   return true;
+                                 }),
+                 lines.end ());
+  }
 }
 
 namespace decodium
@@ -1516,7 +1632,10 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
                           line.bits77 = message77;
                           line.fmid = fmid;
                           line.w50 = w50;
-                          append_unique_line (rows, seen, std::move (line));
+                          if (is_actionable_fst4_text (line.decoded))
+                            {
+                              append_unique_line (rows, seen, std::move (line));
+                            }
                           candidateDone = true;
                         }
                     }
@@ -1626,6 +1745,10 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
   if (newCallsign && cfg.doK50Decode && request.iwspr != 0)
     {
       save_wcalls (state, dataDir);
+    }
+  if (request.iwspr == 0)
+    {
+      suppress_strong_fst4_artifacts (rows);
     }
 
   return rows;

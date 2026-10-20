@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "source": "dnet/pySSTV",
+  "sourceCommit": "d998fad154d3e6ad2d73af5add49beec0d2ab59f",
+  "sourceLicense": "MIT",
+  "sampleRate": 12000,
+  "method": "Executed the pinned pySSTV gen_freq_bits path with a mode-sized RGB image and converted cumulative segment durations to floor(sampleRate*time). No upstream PCM, image or Python code is copied into Decodium.",
+  "scope": "Independent developer timing and component-order landmarks only. pySSTV does not implement PD50, which is intentionally absent.",
+  "componentOrder": ["Y-even", "Cr-average", "Cb-average", "Y-odd"],
+  "modes": [
+    {
+      "modeId": "pd-90",
+      "visPayload": 99,
+      "width": 320,
+      "height": 256,
+      "pixelDurationNanoseconds": 532000,
+      "pairDurationNanoseconds": 703040000,
+      "imageFrames": 1079869,
+      "totalFramesWithHeader": 1090789,
+      "firstPairFrames": {"sync": 0, "porch": 240, "yEven": 264, "cr": 2307, "cb": 4350, "yOdd": 6393, "nextSync": 8436}
+    },
+    {
+      "modeId": "pd-120",
+      "visPayload": 95,
+      "width": 640,
+      "height": 496,
+      "pixelDurationNanoseconds": 190000,
+      "pairDurationNanoseconds": 508480000,
+      "imageFrames": 1513236,
+      "totalFramesWithHeader": 1524156,
+      "firstPairFrames": {"sync": 0, "porch": 240, "yEven": 264, "cr": 1724, "cb": 3183, "yOdd": 4642, "nextSync": 6101}
+    },
+    {
+      "modeId": "pd-160",
+      "visPayload": 98,
+      "width": 512,
+      "height": 400,
+      "pixelDurationNanoseconds": 382000,
+      "pairDurationNanoseconds": 804416000,
+      "imageFrames": 1930598,
+      "totalFramesWithHeader": 1941518,
+      "firstPairFrames": {"sync": 0, "porch": 240, "yEven": 264, "cr": 2611, "cb": 4958, "yOdd": 7305, "nextSync": 9652}
+    },
+    {
+      "modeId": "pd-180",
+      "visPayload": 96,
+      "width": 640,
+      "height": 496,
+      "pixelDurationNanoseconds": 286000,
+      "pairDurationNanoseconds": 754240000,
+      "imageFrames": 2244618,
+      "totalFramesWithHeader": 2255538,
+      "firstPairFrames": {"sync": 0, "porch": 240, "yEven": 264, "cr": 2461, "cb": 4657, "yOdd": 6854, "nextSync": 9050}
+    },
+    {
+      "modeId": "pd-240",
+      "visPayload": 97,
+      "width": 640,
+      "height": 496,
+      "pixelDurationNanoseconds": 382000,
+      "pairDurationNanoseconds": 1000000000,
+      "imageFrames": 2976000,
+      "totalFramesWithHeader": 2986920,
+      "firstPairFrames": {"sync": 0, "porch": 240, "yEven": 264, "cr": 3198, "cb": 6132, "yOdd": 9066, "nextSync": 12000}
+    },
+    {
+      "modeId": "pd-290",
+      "visPayload": 94,
+      "width": 800,
+      "height": 616,
+      "pixelDurationNanoseconds": 286000,
+      "pairDurationNanoseconds": 937280000,
+      "imageFrames": 3464186,
+      "totalFramesWithHeader": 3475106,
+      "firstPairFrames": {"sync": 0, "porch": 240, "yEven": 264, "cr": 3010, "cb": 5756, "yOdd": 8501, "nextSync": 11247}
+    }
+  ]
+}

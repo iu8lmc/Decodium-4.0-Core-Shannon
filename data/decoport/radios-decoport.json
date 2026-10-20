@@ -1,0 +1,59 @@
+{
+ "format": 1,
+ "source": "DecoPort",
+ "comment": "Quello che DecoPort sa e Hamlib no: come si presentano le radio al sistema operativo, e le lacune delle tabelle di riconoscimento. Le voci di 'usb', 'names' e 'interfaces' sono quelle che il rilevatore usava prima della libreria, invariate.",
+ "usb": [
+  {
+   "vid": "10C4",
+   "pid": "EA70",
+   "label": "Yaesu FT-991 / FT-991A / FT-DX10",
+   "token": "FT-991",
+   "catHint": "enhanced",
+   "baud": 38400,
+   "confidence": 75,
+   "protocol": "newcat",
+   "evidence": "CP2105 a doppia porta (VID 10C4, PID EA70): tipico di questi Yaesu"
+  },
+  {
+   "vid": "0C26",
+   "pid": "0000",
+   "label": "Icom (interfaccia USB propria)",
+   "token": "",
+   "catHint": "",
+   "baud": 19200,
+   "confidence": 60,
+   "protocol": "civ",
+   "evidence": "costruttore USB dichiarato Icom (VID 0C26)"
+  }
+ ],
+ "names": [
+  {"token": "IC-7300",  "label": "Icom IC-7300",    "baud": 19200,  "civ": "0x94"},
+  {"token": "IC-7610",  "label": "Icom IC-7610",    "baud": 19200,  "civ": "0x98"},
+  {"token": "IC-9700",  "label": "Icom IC-9700",    "baud": 19200,  "civ": "0xA2"},
+  {"token": "IC-705",   "label": "Icom IC-705",     "baud": 19200,  "civ": "0xA4"},
+  {"token": "IC-7600",  "label": "Icom IC-7600",    "baud": 19200,  "civ": "0x7A"},
+  {"token": "FT-991",   "label": "Yaesu FT-991",    "baud": 38400,  "civ": "0x00"},
+  {"token": "FTDX10",   "label": "Yaesu FT-DX10",   "baud": 38400,  "civ": "0x00"},
+  {"token": "FT-DX10",  "label": "Yaesu FT-DX10",   "baud": 38400,  "civ": "0x00"},
+  {"token": "FTDX101",  "label": "Yaesu FT-DX101D", "baud": 38400,  "civ": "0x00"},
+  {"token": "FT-DX101", "label": "Yaesu FT-DX101D", "baud": 38400,  "civ": "0x00"},
+  {"token": "TS-590",   "label": "Kenwood TS-590S", "baud": 57600,  "civ": "0x00"},
+  {"token": "TS-890",   "label": "Kenwood TS-890S", "baud": 115200, "civ": "0x00"},
+  {"token": "TS-2000",  "label": "Kenwood TS-2000", "baud": 57600,  "civ": "0x00"}
+ ],
+ "interfaces": [
+  {"token": "digirig",    "label": "Digirig"},
+  {"token": "rigblaster", "label": "RIGblaster"},
+  {"token": "signalink",  "label": "SignaLink"},
+  {"token": "ch340",      "label": "adattatore USB-seriale CH340"},
+  {"token": "cp210",      "label": "adattatore USB-seriale Silicon Labs"},
+  {"token": "ft232",      "label": "adattatore USB-seriale FTDI"},
+  {"token": "prolific",   "label": "adattatore USB-seriale Prolific"}
+ ],
+ "identify": {
+  "civ": [
+   {"civ": "0xA4", "models": [3085], "note": "IC-705: manca dalla tabella icom_addr_list di Hamlib 4.7.0"}
+  ],
+  "elecraftIds": ["017"]
+ }
+}
