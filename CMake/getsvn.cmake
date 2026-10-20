@@ -59,8 +59,27 @@ elseif (EXISTS "${SOURCE_DIR}/.git")
     message (STATUS "Checking for gitrevision information")
     include (${SOURCE_DIR}/CMake/Modules/GetGitRevisionDescription.cmake)
     get_git_head_revision (${SOURCE_DIR} GIT_REFSPEC GIT_SHA1)
-    # Avoid full-tree Git scans on slow Windows-backed workspaces.
+    # 1.0.538 iu8lmc - qui GIT_SANITARY era cablato a "DIRTY", quindi il
+    # controllo subito sotto era sempre vero e OGNI build usciva marcata
+    # "-dirty", anche partendo da un albero pulito. I collettori esterni
+    # leggono quella stringa e la interpretano come build non ufficiale.
+    # Si torna a misurare davvero, ma con --untracked-files=no: la scansione
+    # dei file non tracciati era la parte lenta su Windows, e i file non
+    # tracciati non entrano comunque nel binario.
+    find_package (Git QUIET)
     set (GIT_SANITARY "DIRTY")
+    if (GIT_EXECUTABLE)
+      execute_process (
+        COMMAND ${GIT_EXECUTABLE} --git-dir=${SOURCE_DIR}/.git --work-tree=${SOURCE_DIR}
+                status --porcelain --untracked-files=no
+        RESULT_VARIABLE __git_status_result
+        OUTPUT_VARIABLE __git_status_output
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      if (__git_status_result EQUAL 0 AND "${__git_status_output}" STREQUAL "")
+        set (GIT_SANITARY "CLEAN")
+      endif ()
+    endif ()
     string (SUBSTRING "${GIT_SHA1}" 0 6 SCS_VERSION)
     if ("${GIT_SANITARY}" STREQUAL "DIRTY")
       message (STATUS "Source tree based on revision ${GIT_REFSPEC} ${SCS_VERSION} appears to have local changes")

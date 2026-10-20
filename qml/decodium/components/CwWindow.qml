@@ -1,0 +1,1326 @@
+/* CwWindow - il modulo CW di Decodium: decodificatore, macro e manipolatore.
+ *
+ * Viene da DecoDXLog. Il testo parte come audio (sidetone) dal percorso di
+ * trasmissione di Decodium, e per questo funziona anche con una radio remota
+ * (DecoPort, Decolink); in alternativa da un manipolatore su una porta seriale
+ * (DTR/RTS) o da un K1EL WinKeyer. Il decodificatore ascolta l'audio della
+ * radio, locale o remota.
+ * By IU8LMC
+ */
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Controls.Material
+import QtQuick.Layouts
+import QtQuick.Window
+
+GlassWindow {
+    id: win
+
+    readonly property var eng: (typeof appEngine !== 'undefined' ? appEngine : null)
+    readonly property var cw: (typeof cwModule !== 'undefined' ? cwModule : null)
+    // Aprire la finestra e' la sola cosa che avvia il modulo CW.
+    Component.onCompleted: {
+        restoreTrafficSplitRatio()
+        if (cw) cw.ensureStarted()
+    }
+    readonly property var tm: eng ? eng.themeManager : null
+    readonly property bool liquidGlassEnabled: !!(tm && tm.isGlassTheme
+                                                    && tm.glassTransparencySupported)
+    readonly property color cBg:     tm ? tm.bgDeep        : "#0a0f14"
+    // CW is a dense operational window: on a transparent top-level surface,
+    // the usual 58% panel alpha makes the controls and copied CW text hard to
+    // read.  Keep the glass frame, but give its working surface enough
+    // contrast to remain usable over a bright desktop or waterfall.
+    readonly property color cContentSurface: liquidGlassEnabled
+                                             ? Qt.rgba(cBg.r, cBg.g, cBg.b, 0.96)
+                                             : cBg
+    readonly property color cPanel:  liquidGlassEnabled
+                                      ? Qt.rgba(tm.panelColor.r, tm.panelColor.g, tm.panelColor.b, 0.94)
+                                      : (tm ? tm.panelColor : "#111a22")
+    readonly property color cInputSurface: liquidGlassEnabled
+                                           ? Qt.rgba(cBg.r, cBg.g, cBg.b, 0.98)
+                                           : Qt.darker(cPanel, 1.12)
+    readonly property color cReadSurface: liquidGlassEnabled
+                                          ? Qt.rgba(cBg.r, cBg.g, cBg.b, 0.985)
+                                          : Qt.darker(cPanel, 1.20)
+    readonly property color cBorder: tm ? tm.borderColor   : "#22303c"
+    readonly property color cText:   tm ? tm.textPrimary   : "#dbe4ea"
+    readonly property color cDim:    tm ? tm.textSecondary : "#7d8b96"
+    readonly property color cAccent: tm ? tm.accentColor   : "#19d0ff"
+    readonly property color cOk:     tm ? tm.successColor  : "#25d366"
+    readonly property color cWarn:   tm ? tm.warningColor  : "#ffb84a"
+    readonly property color cBad:    "#ff5c5c"
+    readonly property string mono:   (typeof decodiumMonoFontFamily !== 'undefined') ? decodiumMonoFontFamily : "monospace"
+    property bool transmitWhileTyping: false
+    property string queuedTypedText: ""
+    property bool flushingTypedInput: false
+    property int lastTypedPosition: 0
+    property string lastTypedText: ""
+    // The receive and transmit transcripts have deliberately independent
+    // widths.  The saved value is a ratio, so the chosen split follows the
+    // window when it is resized or restored on a different display.
+    property real trafficSplitRatio: 0.5
+    readonly property real trafficMinimumPaneWidth: 180
+    readonly property int trafficDividerWidth: 14
+
+    readonly property bool canSend: !!(cw && cw.canSend)
+    readonly property bool tuneReady: !!(eng && eng.catConnected && !eng.transmitting && cw && !cw.sending)
+    readonly property bool remote: !!(eng && eng.decoPortUseRemote)
+
+    title: qsTr("CW") + (eng && eng.catConnected ? " - " + eng.catRigName : "")
+    width: 920
+    height: 760
+    minimumWidth: 640
+    minimumHeight: width < 820 ? 760 : 620
+    color: transparentCorners ? "transparent" : glassSurfaceColor
+
+    // Le proprieta' Material si attaccano all'albero di UNA finestra: questa e'
+    // una finestra a se', e senza queste righe ogni ComboBox e Slider resta col
+    // tema chiaro di serie.
+    Material.theme: (tm && tm.isLightTheme) ? Material.Light : Material.Dark
+    Material.accent: cAccent
+    Material.foreground: cText
+    Material.background: cContentSurface
+
+    // Il decodificatore riceve l'audio solo mentre la finestra e' aperta.
+    onVisibleChanged: if (eng) eng.cwInAscolto = visible
+    Component.onDestruction: if (eng) eng.cwInAscolto = false
+
+    function clampTrafficSplitRatio(value, availableWidth) {
+        var ratio = Number(value)
+        if (!isFinite(ratio)) ratio = 0.5
+        var usableWidth = Number(availableWidth)
+        if (!isFinite(usableWidth) || usableWidth <= 0)
+            usableWidth = Math.max(1, width - 24 - trafficDividerWidth)
+        // When the minimum window size cannot accommodate two 180 px panes,
+        // a centred split remains the only non-overlapping safe choice.
+        if (usableWidth <= trafficMinimumPaneWidth * 2)
+            return 0.5
+        var minimumRatio = trafficMinimumPaneWidth / usableWidth
+        return Math.max(minimumRatio, Math.min(1 - minimumRatio, ratio))
+    }
+    function restoreTrafficSplitRatio() {
+        if (!eng || typeof eng.getSetting !== "function") return
+        trafficSplitRatio = clampTrafficSplitRatio(
+                    eng.getSetting("uiCwTrafficSplitRatio", 0.5),
+                    width - 24 - trafficDividerWidth)
+    }
+    function persistTrafficSplitRatio() {
+        if (eng && typeof eng.setSetting === "function")
+            eng.setSetting("uiCwTrafficSplitRatio", trafficSplitRatio)
+    }
+    function setTrafficSplitFromX(x, availableWidth) {
+        var usableWidth = Math.max(1, Number(availableWidth))
+        trafficSplitRatio = clampTrafficSplitRatio(Number(x) / usableWidth, usableWidth)
+    }
+
+    function ctx() {
+        return {
+            call: callField.text.trim(),
+            rst: rstField.text.trim(),
+            nr: nrField.text.trim(),
+            exch: exchField.text.trim(),
+            name: nameField.text.trim()
+        }
+    }
+    function useDecodedCall(value) {
+        const call = String(value || "").trim().toUpperCase()
+        if (!call) return
+
+        // Keep the application DX call and the CW field in sync. The macro
+        // text is not overwritten: its {CALL} placeholder is expanded from
+        // this field when the operator presses a macro key.
+        if (win.eng) win.eng.dxCall = call
+        callField.text = call
+        win.say(qsTr("%1 loaded into Call and CW macros").arg(call), "info")
+    }
+    function say(text, level) {
+        statusText.text = text
+        statusText.color = level === "warning" ? cWarn : cDim
+        statusTimer.restart()
+    }
+    function transmitWarningText() {
+        if (!cw) return ""
+        if (cw.txSetupError.length > 0)
+            return cw.txSetupError
+        var backend = cw.effectiveBackend
+        if (backend === "rigkey")
+            return qsTr("The radio CAT keyer is not currently available. Check the CAT connection and the radio's CW keyer support. The decoder works anyway.")
+        if (backend === "serial")
+            return qsTr("The serial keyer is not open: choose its port in Setup. The decoder works anyway.")
+        if (backend === "winkeyer")
+            return qsTr("The WinKeyer is not open: choose its port in Setup. The decoder works anyway.")
+        if (eng && eng.mode === "CW" && backend === "audio")
+            return qsTr("CW transmit is unavailable: choose a working serial keyer or WinKeyer in Setup, or use a radio with a supported CAT CW keyer.")
+        if (backend === "audio")
+            return qsTr("CW transmit is not ready: it needs the radio connected and a transmit audio output. The decoder works anyway, it only needs the radio audio.")
+        return qsTr("CW transmit is not ready. Check the selected keyer and its connection. The decoder works anyway.")
+    }
+    function queueTypedInput(value) {
+        if (!transmitWhileTyping) return
+        // Track edits by their common prefix so inserting in the middle of the
+        // field does not silently skip the new characters.
+        var prefix = 0
+        var limit = Math.min(lastTypedText.length, value.length)
+        while (prefix < limit && lastTypedText.charAt(prefix) === value.charAt(prefix)) prefix++
+        var suffix = 0
+        while (suffix < limit - prefix
+               && lastTypedText.charAt(lastTypedText.length - 1 - suffix)
+                    === value.charAt(value.length - 1 - suffix)) suffix++
+        var added = value.substring(prefix, value.length - suffix)
+        lastTypedText = value
+        lastTypedPosition = value.length
+        if (added.length > 0) {
+            queuedTypedText += added.toUpperCase()
+            flushTypedInput()
+        }
+    }
+    function stopSending() {
+        queuedTypedText = ""
+        if (cw) cw.stop()
+    }
+    function flushTypedInput() {
+        if (!transmitWhileTyping || !cw || cw.sending || !canSend || queuedTypedText.length === 0) return
+        // Keep a standalone space until the next letter, so each chunk
+        // preserves the word boundary rather than losing it in macro expansion.
+        if (queuedTypedText.trim().length === 0) return
+        var chunk = queuedTypedText
+        queuedTypedText = ""
+        flushingTypedInput = true
+        var accepted = cw.sendTypedText(chunk)
+        flushingTypedInput = false
+        if (!accepted) queuedTypedText = chunk + queuedTypedText
+    }
+
+    Connections {
+        target: win.cw
+        function onMessage(text, level) { win.say(text, level) }
+    }
+    Connections {
+        target: win.eng
+        function onDxCallChanged() { if (win.eng) callField.text = win.eng.dxCall }
+    }
+    Timer { id: statusTimer; interval: 7000; onTriggered: statusText.text = "" }
+    Connections {
+        target: win.cw
+        function onSendingChanged() {
+            if (!win.flushingTypedInput && win.transmitWhileTyping && win.cw && !win.cw.sending && win.queuedTypedText.length > 0)
+                Qt.callLater(win.flushTypedInput)
+        }
+    }
+
+    component Lbl: Text {
+        color: win.cDim
+        font.pixelSize: 11
+    }
+    component Btn: Rectangle {
+        id: btn
+        property string label: ""
+        property bool danger: false
+        property bool live: true
+        property bool armed: false
+        signal clicked()
+        implicitWidth: btnTxt.implicitWidth + 22
+        implicitHeight: 28
+        radius: 5
+        opacity: btn.live ? 1.0 : 0.4
+        readonly property color tone: btn.danger ? win.cBad : win.cAccent
+        color: btn.armed ? Qt.rgba(tone.r, tone.g, tone.b, 0.30)
+                         : (btnMA.containsMouse && btn.live ? Qt.rgba(tone.r, tone.g, tone.b, 0.16) : "transparent")
+        border.width: 1
+        border.color: btn.tone
+        Text {
+            id: btnTxt
+            anchors.centerIn: parent
+            text: btn.label
+            color: btn.tone
+            font.pixelSize: 11
+            font.bold: true
+        }
+        MouseArea {
+            id: btnMA
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: btn.live ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (btn.live) btn.clicked()
+        }
+    }
+    component Field: TextField {
+        color: win.cText
+        placeholderTextColor: win.cDim
+        selectByMouse: true
+        font.pixelSize: 12
+        font.family: win.mono
+        background: Rectangle {
+            radius: 4
+            color: win.cInputSurface
+            border.width: 1
+            border.color: parent.activeFocus ? win.cAccent : win.cBorder
+        }
+    }
+
+    // ── Le macro si scrivono qui ──────────────────────────────────────────
+    Popup {
+        id: macroEditor
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        focus: true
+        width: Math.min(win.width - 40, 760)
+        height: Math.min(win.height - 60, 560)
+        padding: 14
+        background: Rectangle { color: win.cPanel; border.color: win.cBorder; radius: 8 }
+        onOpened: macroList.model = win.cw ? win.cw.macros : []
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+            Text {
+                text: qsTr("MACROS")
+                color: win.cAccent
+                font.pixelSize: 10
+                font.bold: true
+                font.letterSpacing: 1.4
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: win.cDim
+                font.pixelSize: 11
+                text: qsTr("Holes filled when sent: {MYCALL} {CALL} {RST} {NR} {EXCH} {NAME}. Anything left empty is dropped.")
+            }
+            ListView {
+                id: macroList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 4
+                ScrollBar.vertical: ScrollBar {}
+                delegate: RowLayout {
+                    required property var modelData
+                    required property int index
+                    width: macroList.width - 12
+                    spacing: 6
+                    Field {
+                        Layout.preferredWidth: 130
+                        text: modelData.label
+                        onEditingFinished: win.cw.setMacro(index, text, modelData.text)
+                    }
+                    Field {
+                        Layout.fillWidth: true
+                        text: modelData.text
+                        onEditingFinished: win.cw.setMacro(index, modelData.label, text)
+                    }
+                    Btn {
+                        label: "×"
+                        danger: true
+                        live: macroList.count > 1
+                        onClicked: win.cw.removeMacro(index)
+                    }
+                }
+            }
+            RowLayout {
+                spacing: 8
+                Btn { label: qsTr("Add a key"); onClicked: win.cw.addMacro() }
+                Btn { label: qsTr("Restore the defaults"); danger: true; onClicked: win.cw.resetMacros() }
+                Item { Layout.fillWidth: true }
+                Btn { label: qsTr("Close"); onClicked: macroEditor.close() }
+            }
+        }
+    }
+    Connections {
+        target: win.cw
+        function onMacrosChanged() { if (macroEditor.visible) macroList.model = win.cw.macros }
+    }
+
+    // ── Come si manda il CW ───────────────────────────────────────────────
+    Popup {
+        id: setup
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        focus: true
+        width: Math.min(win.width - 40, 560)
+        padding: 16
+        background: Rectangle { color: win.cPanel; border.color: win.cBorder; radius: 8 }
+
+        contentItem: ScrollView {
+            id: setupScroll
+            clip: true
+            implicitHeight: Math.min(win.height - 100, setupFields.implicitHeight)
+            contentWidth: availableWidth
+        ColumnLayout {
+            id: setupFields
+            width: setupScroll.availableWidth
+            spacing: 10
+            Text {
+                text: qsTr("CW TRANSMIT")
+                color: win.cAccent
+                font.pixelSize: 10
+                font.bold: true
+                font.letterSpacing: 1.4
+            }
+            GridLayout {
+                columns: 2
+                columnSpacing: 10
+                rowSpacing: 8
+                Layout.fillWidth: true
+                Lbl { text: qsTr("Send CW as") }
+                ComboBox {
+                implicitHeight: 36
+                    id: backendBox
+                    Layout.fillWidth: true
+                    readonly property var keys: ["audio", "serial", "winkeyer"]
+                    model: [qsTr("Audio tone (works with a remote radio)"),
+                            qsTr("Serial keyer (DTR / RTS)"),
+                            qsTr("K1EL WinKeyer")]
+                    currentIndex: Math.max(0, keys.indexOf(win.cw ? win.cw.txBackend : "audio"))
+                    onActivated: (i) => win.cw.txBackend = keys[i]
+                    onCurrentIndexChanged: Qt.callLater(function() {
+                        if (!win.cw || !portBox)
+                            return
+                        portBox.editText = currentIndex === 1 ? win.cw.keyerPort : win.cw.winKeyerPort
+                    })
+                }
+                Lbl { text: qsTr("Port"); visible: backendBox.currentIndex > 0 }
+                RowLayout {
+                    visible: backendBox.currentIndex > 0
+                    Layout.fillWidth: true
+                    ComboBox {
+                implicitHeight: 36
+                        id: portBox
+                        Layout.fillWidth: true
+                        editable: true
+                        model: win.cw ? win.cw.availablePorts() : []
+                        function refresh() { model = win.cw ? win.cw.availablePorts() : [] }
+                        onAccepted: apply(editText)
+                        onActivated: apply(currentText)
+                        function apply(p) {
+                            const serial = backendBox.currentIndex === 1
+                            if (serial) win.cw.keyerPort = p
+                            else win.cw.winKeyerPort = p
+                            // The controller rejects TCP endpoints.  Restore the
+                            // actual accepted value instead of leaving a fake
+                            // host:port visible in this editable ComboBox.
+                            editText = serial ? win.cw.keyerPort : win.cw.winKeyerPort
+                        }
+                        Component.onCompleted: editText = backendBox.currentIndex === 1
+                                                          ? win.cw.keyerPort : win.cw.winKeyerPort
+                    }
+                    Btn { label: qsTr("Refresh"); onClicked: portBox.refresh() }
+                }
+                Text {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: !!win.cw && win.cw.txSetupError.length > 0
+                    wrapMode: Text.Wrap
+                    color: win.cWarn
+                    font.pixelSize: 11
+                    text: win.cw ? win.cw.txSetupError : ""
+                }
+                Lbl { text: qsTr("Key line"); visible: backendBox.currentIndex === 1 }
+                ComboBox {
+                implicitHeight: 36
+                    visible: backendBox.currentIndex === 1
+                    model: ["DTR", "RTS"]
+                    currentIndex: win.cw && win.cw.keyerLine === "RTS" ? 1 : 0
+                    onActivated: (i) => win.cw.keyerLine = model[i]
+                }
+            }
+            CheckBox {
+                text: qsTr("TX sidetone on this computer")
+                checked: win.eng ? win.eng.cwMonitorEnabled : true
+                onToggled: win.eng.cwMonitorEnabled = checked
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Lbl { text: qsTr("TX sidetone volume") }
+                Slider {
+                    Layout.fillWidth: true
+                    from: 0; to: 100; stepSize: 1
+                    value: win.eng ? win.eng.cwMonitorVolume : 35
+                    onMoved: win.eng.cwMonitorVolume = Math.round(value)
+                }
+                Lbl { text: (win.eng ? win.eng.cwMonitorVolume : 35) + "%" }
+                Btn { label: qsTr("TX tone test"); onClicked: win.eng.testCwMonitor() }
+            }
+            ComboBox {
+                implicitHeight: 36
+                id: monitorOutput
+                Layout.fillWidth: true
+                textRole: "label"
+                valueRole: "id"
+                model: win.eng ? win.eng.cwMonitorOutputs() : []
+                function refresh() {
+                    model = win.eng ? win.eng.cwMonitorOutputs() : []
+                    currentIndex = indexOfValue(win.eng ? win.eng.cwMonitorDevice : "")
+                }
+                Component.onCompleted: refresh()
+                onPressedChanged: if (pressed) refresh()
+                onActivated: win.eng.cwMonitorDevice = currentValue
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: win.cDim
+                font.pixelSize: 10
+                text: qsTr("TX tone test plays a local V on the selected output; it does not key the radio. Use Test (V) below to test the configured CW transmitter.")
+            }
+            // Con una radio remota la scelta di sopra non conta: si decide qui
+            // come arriva il CW alla radio lontana.
+            RowLayout {
+                visible: win.remote
+                Layout.fillWidth: true
+                spacing: 10
+                CheckBox {
+                    text: qsTr("Send the key, not audio (Decolink)")
+                    checked: win.cw ? win.cw.remoteKey : true
+                    onToggled: win.cw.remoteKey = checked
+                }
+                Lbl { text: qsTr("Tone"); visible: !!win.cw && win.cw.remoteKey }
+                Slider {
+                    visible: !!win.cw && win.cw.remoteKey
+                    Layout.preferredWidth: 140
+                    from: 400
+                    to: 1000
+                    stepSize: 10
+                    value: win.cw ? win.cw.toneHz : 700
+                    onMoved: win.cw.toneHz = Math.round(value)
+                }
+                Text {
+                    visible: !!win.cw && win.cw.remoteKey
+                    color: win.cText
+                    font.family: win.mono
+                    font.pixelSize: 11
+                    text: qsTr("%1 Hz").arg(win.cw ? win.cw.toneHz : 700)
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: win.remote ? win.cWarn : win.cDim
+                font.pixelSize: 11
+                text: win.remote
+                      ? (win.cw && win.cw.effectiveBackend === "remotekey"
+                         ? qsTr("A remote radio is in use: only the key timing goes over the link, and the gateway next to the radio makes the tone.")
+                         : qsTr("A remote radio is in use: the CW goes out as an audio tone through the link, whatever is chosen above."))
+                      : (win.cw && win.cw.effectiveBackend === "rigkey"
+                         ? qsTr("The radio's built-in CAT keyer sends CW while the rig stays in CW mode. It cannot always be interrupted: some radios finish the text they already received, even after Stop.")
+                         : qsTr("The audio tone needs the radio in USB or DATA-U. A serial keyer or a WinKeyer keys the radio's own key input and needs the radio in CW."))
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: !!win.cw && !win.remote && !!win.eng && win.eng.catConnected
+                         && !win.cw.catCwKeyerAvailable
+                wrapMode: Text.Wrap
+                color: win.cWarn
+                font.pixelSize: 11
+                text: qsTr("CW via the current CAT connection is unavailable: the radio or rigctld server does not expose Hamlib send_morse. A rigctld host:port belongs in CAT settings, not in Serial keyer or WinKeyer.")
+            }
+            RowLayout {
+                spacing: 8
+                Btn { label: qsTr("Test (V)"); live: win.canSend; onClicked: win.cw.testKeyer() }
+                Text {
+                    color: win.cDim
+                    font.pixelSize: 11
+                    visible: !!win.cw && win.cw.winKeyerVersion > 0
+                    text: qsTr("WinKeyer version %1").arg(win.cw ? win.cw.winKeyerVersion : 0)
+                }
+                Item { Layout.fillWidth: true }
+                Btn { label: qsTr("Close"); onClicked: setup.close() }
+            }
+        }
+        }
+    }
+
+    // ── La finestra ────────────────────────────────────────────────────────
+    // The exterior stays on the common glass shell.  This inner surface is
+    // deliberately almost opaque in Liquid Glass: CW is read for long
+    // periods and must not inherit the desktop's luminance.
+    Rectangle {
+        id: cwReadabilitySurface
+        anchors.fill: parent
+        anchors.margins: win.transparentCorners ? 2 : 0
+        radius: win.transparentCorners ? Math.max(4, win.frameRadius - 1) : 0
+        color: win.cContentSurface
+        border.width: win.liquidGlassEnabled ? 1 : 0
+        border.color: win.liquidGlassEnabled
+                      ? Qt.rgba(win.cBorder.r, win.cBorder.g, win.cBorder.b, 0.90)
+                      : "transparent"
+        z: -1
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 12
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            spacing: 8
+            Rectangle {
+                width: 10; height: 10; radius: 5
+                color: win.canSend ? win.cOk : win.cDim
+            }
+            Text {
+                color: win.cText
+                font.pixelSize: 12
+                font.family: win.mono
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                text: (win.eng && win.eng.catConnected
+                       ? (win.eng.frequency / 1e6).toFixed(6) + " MHz  " + win.eng.catMode
+                       : qsTr("no CAT")) + "   ·   "
+                      + (win.cw ? (win.cw.effectiveBackend === "audio" ? qsTr("audio tone")
+                                   : win.cw.effectiveBackend === "remotekey" ? qsTr("remote key")
+                                   : win.cw.effectiveBackend === "rigkey"
+                                     ? qsTr("radio CAT keyer") + (win.cw.txBackend === "audio" ? " (" + qsTr("audio tone selected") + ")" : "")
+                                   : win.cw.effectiveBackend === "serial" ? qsTr("serial keyer") : "WinKeyer") : "")
+                      + (win.remote ? "   ·   " + qsTr("remote radio") : "")
+            }
+            Btn {
+                objectName: "cwStopButton"
+                label: qsTr("Stop")
+                danger: true
+                armed: !!win.cw && win.cw.sending
+                onClicked: win.stopSending()
+            }
+            Btn { label: qsTr("Macros…"); onClicked: macroEditor.open() }
+            Btn { label: qsTr("Setup…"); onClicked: setup.open() }
+        }
+
+        Text {
+            objectName: "cwCatKeyerStopNotice"
+            Layout.fillWidth: true
+            visible: !!win.cw && !win.remote && win.cw.effectiveBackend === "rigkey"
+            wrapMode: Text.Wrap
+            color: win.cWarn
+            font.pixelSize: 11
+            text: (win.cw && win.cw.txBackend === "audio"
+                   ? qsTr("In CW mode the audio tone is replaced by the radio's CAT keyer. ")
+                   : "")
+                  + qsTr("Stop releases the PTT, but some radios (for example the Yaesu FT-991) have no command to empty their keyer and finish the text they already received. For an immediate stop choose a serial keyer in Setup.")
+        }
+
+        RowLayout {
+            visible: win.remote
+            Layout.fillWidth: true
+            CheckBox {
+                text: qsTr("Radio RX audio")
+                checked: !!(win.eng && win.eng.decoPortMonitor)
+                onToggled: win.eng.setDecoPortMonitor(checked)
+            }
+            Lbl { text: qsTr("RX volume") }
+            Slider {
+                Layout.preferredWidth: 110
+                from: 0; to: 100; stepSize: 1
+                value: win.eng ? win.eng.remoteRxVolume : 70
+                onMoved: win.eng.remoteRxVolume = Math.round(value)
+            }
+            ComboBox {
+                implicitHeight: 36
+                id: rxOutput
+                Layout.fillWidth: true
+                Layout.minimumWidth: 120
+                textRole: "label"
+                valueRole: "id"
+                model: win.eng ? win.eng.cwMonitorOutputs() : []
+                function refresh() {
+                    model = win.eng ? win.eng.cwMonitorOutputs() : []
+                    currentIndex = indexOfValue(win.eng ? win.eng.remoteRxDevice : "")
+                }
+                Component.onCompleted: refresh()
+                onPressedChanged: if (pressed) refresh()
+                onActivated: win.eng.remoteRxDevice = currentValue
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: !win.canSend
+            wrapMode: Text.Wrap
+            color: win.cWarn
+            font.pixelSize: 12
+            text: win.transmitWarningText()
+        }
+
+        // ── Con chi si parla ────────────────────────────────────────────
+        GridLayout {
+            Layout.fillWidth: true
+            columns: win.width < 820 ? 6 : 13
+            columnSpacing: 6
+            rowSpacing: 4
+            Lbl { text: qsTr("Call") }
+            Field { id: callField; Layout.preferredWidth: 120; text: win.eng ? win.eng.dxCall : ""; font.capitalization: Font.AllUppercase }
+            Lbl { text: qsTr("RST") }
+            Field { id: rstField; Layout.preferredWidth: 56; text: "599" }
+            Lbl { text: qsTr("Rcvd") }
+            Field { id: rcvdField; Layout.preferredWidth: 56; text: "599" }
+            Lbl { text: qsTr("Nr") }
+            Field { id: nrField; Layout.preferredWidth: 64 }
+            Lbl { text: qsTr("Exch") }
+            Field { id: exchField; Layout.preferredWidth: 90; font.capitalization: Font.AllUppercase }
+            Lbl { text: qsTr("Name") }
+            Field { id: nameField; Layout.fillWidth: true }
+            Btn {
+                label: qsTr("Log QSO")
+                live: !!win.eng && callField.text.trim().length > 0
+                onClicked: {
+                    const ok = win.eng.registraQsoCw(callField.text, rstField.text, rcvdField.text,
+                                                     nameField.text, "", "")
+                    win.say(ok ? qsTr("QSO logged") : qsTr("Nothing to log: enter the call"),
+                            ok ? "info" : "warning")
+                }
+            }
+        }
+
+        // ── Le macro: tasti tutti uguali, tasto destro per cambiarli ────
+        GridLayout {
+            Layout.fillWidth: true
+            columns: win.width > 860 ? 6 : 4
+            columnSpacing: 6
+            rowSpacing: 6
+            Repeater {
+                id: macroKeys
+                model: win.cw ? win.cw.macros : []
+                delegate: Item {
+                    id: keyItem
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.minimumWidth: 0
+                    implicitHeight: 30
+                    readonly property bool active: !!win.cw && win.cw.activeMacroIndex === index
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 5
+                        opacity: win.canSend ? 1.0 : 0.45
+                        color: keyItem.active ? Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.30)
+                               : (keyMA.pressed ? Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.22)
+                                  : (keyMA.containsMouse ? Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.12) : "transparent"))
+                        border.width: 1
+                        border.color: keyItem.active ? win.cAccent : win.cBorder
+                        Text {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            text: keyItem.modelData.label.trim().length > 0 ? keyItem.modelData.label : "F" + (keyItem.index + 1)
+                            elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            color: keyItem.active ? win.cAccent : win.cText
+                            font.family: win.mono
+                            font.pixelSize: 12
+                            font.bold: true
+                        }
+                    }
+                    MouseArea {
+                        id: keyMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton) macroEditor.open()
+                            else if (win.canSend) win.cw.sendMacro(keyItem.index, win.ctx())
+                        }
+                    }
+                    ToolTip.visible: keyMA.containsMouse
+                    ToolTip.delay: 600
+                    ToolTip.text: keyItem.modelData.text + "\n" + qsTr("Right click: change it")
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            spacing: 8
+            Lbl { text: qsTr("Speed") }
+            Slider {
+                Layout.fillWidth: true
+                from: 5
+                to: 60
+                stepSize: 1
+                value: win.cw ? win.cw.wpm : 20
+                onMoved: win.cw.wpm = Math.round(value)
+            }
+            Text {
+                text: qsTr("%1 wpm").arg(win.cw ? win.cw.wpm : 20)
+                color: win.cText
+                font.family: win.mono
+                font.pixelSize: 12
+                font.bold: true
+            }
+        }
+
+        // ── Scrivere a mano quello che non sta in una macro ─────────────
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            spacing: 6
+            CheckBox {
+                text: qsTr("TX while typing")
+                checked: win.transmitWhileTyping
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Transmit each new character as soon as the keyer is ready.")
+                onToggled: {
+                    win.transmitWhileTyping = checked
+                    win.queuedTypedText = ""
+                    win.lastTypedPosition = freeText.text.length
+                    win.lastTypedText = freeText.text
+                }
+            }
+            Field {
+                id: freeText
+                Layout.fillWidth: true
+                font.capitalization: Font.AllUppercase
+                placeholderText: qsTr("write here and press Enter: it goes out in CW")
+                enabled: win.canSend || (win.transmitWhileTyping && win.cw && win.cw.sending)
+                onTextEdited: win.queueTypedInput(text)
+                onAccepted: {
+                    if (win.transmitWhileTyping) { win.flushTypedInput(); text = ""; win.lastTypedPosition = 0; win.lastTypedText = "" }
+                    else if (win.canSend) { win.cw.sendText(text, win.ctx()); text = ""; win.lastTypedPosition = 0; win.lastTypedText = "" }
+                }
+            }
+            Btn {
+                label: qsTr("Send")
+                visible: !win.transmitWhileTyping
+                live: win.canSend && freeText.text.trim().length > 0
+                onClicked: { win.cw.sendText(freeText.text, win.ctx()); freeText.text = ""; win.lastTypedPosition = 0; win.lastTypedText = "" }
+            }
+        }
+
+        // ── Il decodificatore ──────────────────────────────────────────
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            spacing: 8
+            Switch {
+                text: qsTr("Decoder")
+                font.pixelSize: win.width < 820 ? 11 : 14
+                checked: win.cw ? win.cw.decoderOn : true
+                onToggled: win.cw.decoderOn = checked
+            }
+            Lbl { text: "VFO" }
+            Field {
+                id: cwVfo
+                objectName: "cwVfoFrequency"
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    enabled: win.tuneReady
+                    onWheel: (wheel) => {
+                        if (wheel.angleDelta.y !== 0) {
+                            win.cw.tuneBy((wheel.angleDelta.y > 0 ? 1 : -1) * Number(cwStep.currentText))
+                            wheel.accepted = true
+                        }
+                    }
+                }
+                Layout.fillWidth: true
+                Layout.minimumWidth: 125
+                Layout.preferredWidth: 170
+                font.pixelSize: 18
+                font.bold: true
+                color: win.cAccent
+                enabled: win.tuneReady
+                text: win.eng ? (win.eng.frequency / 1e6).toFixed(6) : "0.000000"
+                validator: DoubleValidator { bottom: 0.001; top: 1000000; decimals: 6; locale: "C" }
+                onAccepted: {
+                    const hz = Number(text.replace(",", ".")) * 1e6
+                    if (acceptableInput && win.cw.tuneTo(hz)) focus = false
+                }
+                Connections {
+                    target: win.eng
+                    function onFrequencyChanged() {
+                        if (!cwVfo.activeFocus) cwVfo.text = (win.eng.frequency / 1e6).toFixed(6)
+                    }
+                }
+                onActiveFocusChanged: if (!activeFocus && win.eng) text = (win.eng.frequency / 1e6).toFixed(6)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Frequency in MHz. Press Enter to tune.")
+            }
+            Lbl { text: "MHz" }
+            Btn { label: "−"; live: win.tuneReady; onClicked: win.cw.tuneBy(-Number(cwStep.currentText)) }
+            Btn { label: "+"; live: win.tuneReady; onClicked: win.cw.tuneBy(Number(cwStep.currentText)) }
+            ComboBox {
+                implicitHeight: 36
+                id: cwStep
+                implicitWidth: 82
+                model: ["1", "10", "50", "100", "1000"]
+                currentIndex: 1
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("VFO step in Hz")
+            }
+            Btn {
+                objectName: "cwAutoCenter"
+                label: qsTr("Center CW")
+                live: win.tuneReady && win.cw.decoderOn
+                onClicked: win.cw.centerSignal()
+            }
+        }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: win.width < 820 ? 4 : 7
+            columnSpacing: 8
+            rowSpacing: 4
+            Lbl { text: qsTr("Center tone") }
+            ComboBox {
+                implicitHeight: 36
+                implicitWidth: 120
+                readonly property var tones: [400, 500, 550, 600, 650, 700, 750, 800, 900, 1000]
+                model: tones.map(v => v + " Hz")
+                currentIndex: win.cw ? tones.indexOf(win.cw.toneHz) : 5
+                onActivated: (i) => win.cw.toneHz = tones[i]
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Match the radio's CW pitch / sidetone.")
+            }
+            ColumnLayout {
+                spacing: 1
+                Lbl { text: qsTr("CW receive sideband") }
+                ComboBox {
+                    implicitHeight: 36
+                    implicitWidth: 96
+                    model: ["CW-U", "CW-L"]
+                    currentIndex: win.cw && win.cw.tuningLowerSideband ? 1 : 0
+                    onActivated: (i) => win.cw.tuningLowerSideband = i === 1
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Decoder/centering polarity only. It does not change the radio CAT mode; select the same sideband shown by the rig.")
+                }
+            }
+            ColumnLayout {
+                spacing: 1
+                Lbl { text: qsTr("Decoder tone") }
+                ComboBox {
+                implicitHeight: 36
+                    id: toneBox
+                    implicitWidth: 120
+                    readonly property var choices: [0, 400, 500, 550, 570, 575, 600, 610, 615, 620, 625, 630, 650, 700, 800, 1000]
+                    model: choices.map(hz => hz === 0 ? qsTr("Auto") : hz + " Hz")
+                    currentIndex: win.cw ? choices.indexOf(win.cw.decoderToneLock) : 0
+                    onActivated: (row) => win.cw.decoderToneLock = choices[row]
+                }
+            }
+            ColumnLayout {
+                spacing: 1
+                Lbl { text: qsTr("Decoder speed") }
+                ComboBox {
+                implicitHeight: 36
+                    id: speedBox
+                    implicitWidth: 116
+                    readonly property var choices: [0, 10, 12, 15, 16, 17, 18, 19, 20, 22, 25, 27, 30, 35, 40, 45, 50]
+                    model: choices.map(w => w === 0 ? qsTr("Auto") : w + " WPM")
+                    currentIndex: win.cw ? choices.indexOf(win.cw.decoderSpeedLock) : 0
+                    onActivated: (row) => win.cw.decoderSpeedLock = choices[row]
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                readonly property var info: win.cw ? win.cw.decoderScope : null
+                readonly property bool readingNow: !!info && info.reading === true
+                visible: !!win.cw && win.cw.decoderOn
+                elide: Text.ElideRight
+                text: {
+                    if (!info) return ""
+                    const speed = win.cw.decoderSpeedLock > 0 ? qsTr("fixed %1 WPM").arg(win.cw.decoderSpeedLock)
+                                                              : qsTr("%1 WPM").arg(Math.round(info.wpm || 0))
+                    if (win.cw.decoderToneLock > 0)
+                        return readingNow ? qsTr("fixed %1 Hz · %2").arg(win.cw.decoderToneLock).arg(speed)
+                                          : qsTr("fixed %1 Hz · noise").arg(win.cw.decoderToneLock)
+                    return readingNow ? qsTr("auto · %1 · %2 Hz").arg(speed).arg(Math.round(info.pitch || 0))
+                                      : qsTr("listening…")
+                }
+                color: readingNow ? win.cOk : win.cWarn
+                font.family: win.mono
+                font.pixelSize: 11
+            }
+            Btn { label: qsTr("Clear"); onClicked: win.cw.clearDecoder() }
+        }
+
+        // Il grafico come quello di ggmorse: sopra i segni come li sta
+        // leggendo, sotto il segnale filtrato sul tono con la soglia.
+        Rectangle {
+            id: scope
+            Layout.fillWidth: true
+            Layout.preferredHeight: 92
+            visible: !!win.cw && win.cw.decoderOn
+            color: win.cReadSurface
+            border.color: win.cBorder
+            radius: 4
+            clip: true
+
+            readonly property var info: win.cw ? win.cw.decoderScope : null
+            readonly property var trace: info && info.signal ? info.signal : []
+            readonly property real level: info && info.level !== undefined ? info.level : 0
+            readonly property bool reading: info ? info.reading === true : false
+            onInfoChanged: plot.requestPaint()
+
+            Canvas {
+                id: plot
+                anchors.fill: parent
+                anchors.margins: 4
+                anchors.bottomMargin: 18
+                renderStrategy: Canvas.Cooperative
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    const sig = scope.trace
+                    const n = sig.length
+                    if (n < 2 || width <= 0)
+                        return
+                    const keyH = 12
+                    const top = keyH + 6
+                    const h = height - top
+                    const dx = width / (n - 1)
+                    ctx.fillStyle = win.cOk
+                    ctx.globalAlpha = scope.reading ? 0.9 : 0.25
+                    let start = -1
+                    for (let i = 0; i <= n; ++i) {
+                        const on = i < n && sig[i] > scope.level
+                        if (on && start < 0) start = i
+                        else if (!on && start >= 0) {
+                            ctx.fillRect(start * dx, 1, Math.max(1.5, (i - start) * dx), keyH - 2)
+                            start = -1
+                        }
+                    }
+                    ctx.globalAlpha = 1
+                    ctx.beginPath()
+                    ctx.moveTo(0, top + h)
+                    for (let i = 0; i < n; ++i) ctx.lineTo(i * dx, top + h - sig[i] * h)
+                    ctx.lineTo(width, top + h)
+                    ctx.closePath()
+                    ctx.fillStyle = Qt.rgba(0.95, 0.55, 0.16, 0.25)
+                    ctx.fill()
+                    ctx.beginPath()
+                    for (let i = 0; i < n; ++i) {
+                        const y = top + h - sig[i] * h
+                        if (i === 0) ctx.moveTo(0, y); else ctx.lineTo(i * dx, y)
+                    }
+                    ctx.strokeStyle = "#f28c28"
+                    ctx.lineWidth = 1.2
+                    ctx.stroke()
+                    const ly = Math.round(top + h - scope.level * h) + 0.5
+                    ctx.setLineDash([4, 3])
+                    ctx.strokeStyle = win.cDim
+                    ctx.lineWidth = 1
+                    ctx.beginPath()
+                    ctx.moveTo(0, ly)
+                    ctx.lineTo(width, ly)
+                    ctx.stroke()
+                }
+            }
+            Text {
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 6
+                anchors.bottomMargin: 3
+                text: scope.trace.length === 0 ? qsTr("waiting for audio…")
+                      : qsTr("F: %1 Hz · S: %2 WPM · C: %3")
+                          .arg(Number(scope.info.pitch || 0).toFixed(1))
+                          .arg(Math.round(scope.info.wpm || 0))
+                          .arg(Number(scope.info.cost || 0).toFixed(3))
+                color: scope.reading ? win.cText : win.cDim
+                font.family: win.mono
+                font.pixelSize: 10
+            }
+            Text {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: 6
+                anchors.bottomMargin: 3
+                visible: scope.trace.length > 0
+                text: scope.reading ? qsTr("reading") : qsTr("noise")
+                color: scope.reading ? win.cOk : win.cDim
+                font.pixelSize: 10
+                font.bold: scope.reading
+            }
+        }
+
+        // RX e TX restano separati: il testo trasmesso comprende le macro
+        // gia' espanse, mentre il testo ricevuto continua a provenire dal
+        // decoder CW.  I due colori rendono immediata la distinzione.
+        Item {
+            id: cwTraffic
+            objectName: "cwTraffic"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 100
+            Layout.minimumWidth: 0
+            readonly property real availablePaneWidth: Math.max(1, width - win.trafficDividerWidth)
+            readonly property real effectiveSplitRatio: win.clampTrafficSplitRatio(
+                                                            win.trafficSplitRatio, availablePaneWidth)
+            readonly property real rxPaneWidth: Math.round(availablePaneWidth * effectiveSplitRatio)
+            readonly property real txPaneWidth: Math.max(0, availablePaneWidth - rxPaneWidth)
+
+            ColumnLayout {
+                id: rxTrafficPane
+                x: 0
+                width: cwTraffic.rxPaneWidth
+                height: cwTraffic.height
+                spacing: 4
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: qsTr("RX / RECEIVED")
+                        color: win.cOk
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.letterSpacing: 1.0
+                    }
+                    Item { Layout.fillWidth: true }
+                    Btn { label: qsTr("Clear RX"); onClicked: win.cw.clearDecoder() }
+                }
+                RowLayout {
+                    id: decodedCallsRow
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
+                    spacing: 6
+                    visible: !!(win.cw && win.cw.decoderCalls && win.cw.decoderCalls.length > 0)
+
+                    Text {
+                        text: qsTr("Stations")
+                        color: win.cDim
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+                    ListView {
+                        id: decodedCallsView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        orientation: ListView.Horizontal
+                        spacing: 4
+                        clip: true
+                        model: win.cw ? win.cw.decoderCalls : []
+
+                        delegate: Rectangle {
+                            width: decodedCallText.implicitWidth + 16
+                            height: 24
+                            radius: 4
+                            color: callMouse.containsMouse
+                                   ? Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.22)
+                                   : Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.10)
+                            border.width: 1
+                            border.color: win.cAccent
+
+                            Text {
+                                id: decodedCallText
+                                anchors.centerIn: parent
+                                text: modelData
+                                color: win.cAccent
+                                font.family: win.mono
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: callMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: win.useDecodedCall(modelData)
+                            }
+                            ToolTip.visible: callMouse.containsMouse
+                            ToolTip.delay: 500
+                            ToolTip.text: qsTr("Click to load %1 into Call and CW macros; no TX").arg(modelData)
+                        }
+                    }
+                }
+                // Keep the transcript content physically inside a dedicated,
+                // clipped panel.  A TextArea used as ScrollView content does
+                // not itself define the viewport's visual boundary on every
+                // Qt Quick style, which previously allowed the first TX line
+                // to appear in the gap above the apparent box.
+                Rectangle {
+                    id: rxTranscriptBox
+                    objectName: "cwRxTranscriptBox"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 70
+                    color: win.cReadSurface
+                    border.color: win.cBorder
+                    border.width: 1
+                    radius: 4
+                    clip: true
+
+                    ScrollView {
+                        id: decodedScroll
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        clip: true
+                        contentWidth: availableWidth
+                        background: Item { }
+                        TextArea {
+                            id: decoded
+                            objectName: "cwRxTranscriptText"
+                            width: decodedScroll.availableWidth
+                            height: Math.max(decodedScroll.availableHeight, implicitHeight)
+                            readOnly: true
+                            wrapMode: TextArea.WrapAnywhere
+                            leftPadding: 8
+                            rightPadding: 8
+                            topPadding: 7
+                            bottomPadding: 7
+                            text: win.cw ? win.cw.decoderText : ""
+                            color: win.cOk
+                            font.family: win.mono
+                            font.pixelSize: 14
+                            background: Item { }
+                            onTextChanged: cursorPosition = length
+                        }
+                    }
+                }
+            }
+
+            Item {
+                id: cwTrafficDivider
+                objectName: "cwTrafficDivider"
+                x: cwTraffic.rxPaneWidth
+                width: win.trafficDividerWidth
+                height: cwTraffic.height
+                z: 2
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: cwTrafficDividerMouse.containsMouse || cwTrafficDividerMouse.pressed ? 3 : 1
+                    height: Math.max(30, parent.height - 4)
+                    radius: width / 2
+                    color: cwTrafficDividerMouse.containsMouse || cwTrafficDividerMouse.pressed
+                           ? win.cAccent : Qt.rgba(win.cBorder.r, win.cBorder.g, win.cBorder.b, 0.95)
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 6
+                    height: 28
+                    radius: 3
+                    color: cwTrafficDividerMouse.containsMouse || cwTrafficDividerMouse.pressed
+                           ? Qt.rgba(win.cAccent.r, win.cAccent.g, win.cAccent.b, 0.36)
+                           : Qt.rgba(win.cPanel.r, win.cPanel.g, win.cPanel.b, 0.92)
+                    border.width: 1
+                    border.color: win.cBorder
+                }
+                MouseArea {
+                    id: cwTrafficDividerMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: Qt.SizeHorCursor
+                    property bool dragging: false
+                    onPressed: function(mouse) {
+                        dragging = true
+                        var point = mapToItem(cwTraffic, mouse.x, mouse.y)
+                        win.setTrafficSplitFromX(point.x, cwTraffic.availablePaneWidth)
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!dragging) return
+                        var point = mapToItem(cwTraffic, mouse.x, mouse.y)
+                        win.setTrafficSplitFromX(point.x, cwTraffic.availablePaneWidth)
+                    }
+                    onReleased: {
+                        if (dragging) win.persistTrafficSplitRatio()
+                        dragging = false
+                    }
+                    onCanceled: {
+                        if (dragging) win.persistTrafficSplitRatio()
+                        dragging = false
+                    }
+                    onDoubleClicked: {
+                        win.trafficSplitRatio = 0.5
+                        win.persistTrafficSplitRatio()
+                    }
+                    ToolTip.visible: containsMouse
+                    ToolTip.delay: 700
+                    ToolTip.text: qsTr("Drag to resize RX and TX. Double-click to centre.")
+                }
+            }
+
+            ColumnLayout {
+                id: txTrafficPane
+                x: cwTraffic.rxPaneWidth + win.trafficDividerWidth
+                width: cwTraffic.txPaneWidth
+                height: cwTraffic.height
+                spacing: 4
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: qsTr("TX / TRANSMITTED")
+                        color: win.cWarn
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.letterSpacing: 1.0
+                    }
+                    Item { Layout.fillWidth: true }
+                    Btn { label: qsTr("Clear TX"); onClicked: win.cw.clearTxTranscript() }
+                }
+                Rectangle {
+                    id: txTranscriptBox
+                    objectName: "cwTxTranscriptBox"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 70
+                    color: win.cReadSurface
+                    border.color: win.cBorder
+                    border.width: 1
+                    radius: 4
+                    clip: true
+
+                    ScrollView {
+                        id: txScroll
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        clip: true
+                        contentWidth: availableWidth
+                        background: Item { }
+                        TextArea {
+                            id: transmitted
+                            objectName: "cwTxTranscriptText"
+                            width: txScroll.availableWidth
+                            height: Math.max(txScroll.availableHeight, implicitHeight)
+                            readOnly: true
+                            wrapMode: TextArea.WrapAnywhere
+                            leftPadding: 8
+                            rightPadding: 8
+                            topPadding: 7
+                            bottomPadding: 7
+                            text: win.cw ? win.cw.txText : ""
+                            color: win.cWarn
+                            font.family: win.mono
+                            font.pixelSize: 14
+                            background: Item { }
+                            onTextChanged: cursorPosition = length
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            id: statusText
+            Layout.fillWidth: true
+            color: win.cDim
+            font.pixelSize: 11
+            elide: Text.ElideRight
+            text: ""
+        }
+    }
+
+    // I tasti funzione, quando la finestra ha il fuoco; Esc ferma tutto.
+    Repeater {
+        model: Math.min(12, win.cw ? win.cw.macros.length : 0)
+            Item {
+            required property int index
+            Shortcut {
+                sequence: "F" + (index + 1)
+                // The main dashboard also has global F1/F2/F3/F4/F11
+                // shortcuts.  This window-local scope is what makes the
+                // CW macro win whenever the operator is working in CW.
+                context: Qt.WindowShortcut
+                enabled: win.active && win.canSend && !macroEditor.visible && !setup.visible
+                onActivated: win.cw.sendMacro(index, win.ctx())
+            }
+        }
+    }
+    Shortcut { sequence: "Esc"; enabled: win.active && !macroEditor.visible && !setup.visible; onActivated: win.stopSending() }
+}
