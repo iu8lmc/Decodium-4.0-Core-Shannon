@@ -59,6 +59,13 @@ bool mayAdvanceRogerReportToRr73 (bool freshAutoCqCaller,
                                   bool ownReportWasSentToSamePartner,
                                   bool priorReplyFromSamePartnerAccepted);
 
+// A low-confidence decode rebuilt by the a-priori memory (marked '?') may keep
+// a QSO moving, but it must never CLOSE one: a 73, RR73 or RRR (or a "TU" quick
+// close) coming from it can be a phantom made from the tail of our own signal
+// or from an old message, and would log a contact that never happened.
+// `message` is the decoded text, trailing '?' included.
+bool mayFeedRescuedDecodeToSequencer (const QString& message);
+
 // A Fox/Hound backend change must not interrupt the final TX5/73 or an open
 // log confirmation. Both states still belong to the QSO being completed.
 bool specialOperationTransitionRequiresDeferral (bool ownFinal73Pending,

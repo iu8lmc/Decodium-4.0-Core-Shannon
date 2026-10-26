@@ -43,6 +43,7 @@ class TestQsoSequencerRules final : public QObject
   Q_OBJECT
 
 private slots:
+    void rescuedDecodeNeverClosesTheQso ();
   void ftxUserCapIsAbsolute ()
   {
     // FT2/FT4/FT8: lo spinbox utente è un valore assoluto, conservative NON lo gonfia
@@ -440,6 +441,24 @@ private slots:
     QVERIFY (!messageIsSentByCall (QString {}, "IQ8DO", "IQ8DO"));
   }
 };
+
+void TestQsoSequencerRules::rescuedDecodeNeverClosesTheQso ()
+{
+    // 26/10/2026, report from T77RN: QSOs were closed and logged on the strength
+    // of low-confidence a-priori decodes. They can keep an exchange moving but
+    // never end it.
+    using decodium::seq::mayFeedRescuedDecodeToSequencer;
+    QVERIFY (!mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL 73 ?")));
+    QVERIFY (!mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL RR73 ?")));
+    QVERIFY (!mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL RRR")));
+    QVERIFY (!mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL R+05 TU ?")));
+    QVERIFY (!mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL 73?")));
+    QVERIFY (!mayFeedRescuedDecodeToSequencer (QString ()));
+    // the weak-partner cases the shortcut was made for stay allowed
+    QVERIFY (mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL IN69 ?")));
+    QVERIFY (mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL -05 ?")));
+    QVERIFY (mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL R-09 ?")));
+}
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)
 #include "test_qso_sequencer_rules.moc"

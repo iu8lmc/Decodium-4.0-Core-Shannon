@@ -2,6 +2,7 @@
 // Qualsiasi modifica alla logica va fatta QUI (desktop e mobile la condividono).
 #include "Sequencer/QsoSequencerRules.hpp"
 
+#include <QStringList>
 #include <QtGlobal>
 
 namespace decodium
@@ -102,6 +103,26 @@ bool mayAdvanceRogerReportToRr73 (bool freshAutoCqCaller,
     return !freshAutoCqCaller
         && ownReportWasSentToSamePartner
         && priorReplyFromSamePartnerAccepted;
+}
+
+bool mayFeedRescuedDecodeToSequencer (const QString& message)
+{
+    QStringList tokens = message.simplified ().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    while (!tokens.isEmpty () && tokens.last () == QLatin1String ("?"))
+        tokens.removeLast ();
+    if (tokens.isEmpty ())
+        return false;
+    QString last = tokens.last ();
+    if (last.endsWith (QLatin1Char ('?')))
+        last.chop (1);
+    if (last.compare (QLatin1String ("73"), Qt::CaseInsensitive) == 0
+        || last.compare (QLatin1String ("RR73"), Qt::CaseInsensitive) == 0
+        || last.compare (QLatin1String ("RRR"), Qt::CaseInsensitive) == 0)
+        return false;
+    // "<call> <call> R+05 TU" / "+05 TU": the peer considers the QSO complete.
+    if (last.compare (QLatin1String ("TU"), Qt::CaseInsensitive) == 0)
+        return false;
+    return true;
 }
 
 bool specialOperationTransitionRequiresDeferral (bool ownFinal73Pending,

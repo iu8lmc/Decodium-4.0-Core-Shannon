@@ -41,6 +41,7 @@ private slots:
     void lowConfidenceDecodeDoesNotRewriteTheReportSnr();
     void rr73SentToAStationThatLeftIsLoggedAndNotRepeatedForever();
     void aStationNeverCalledIsNotDroppedAsSilent();
+    void aLowConfidenceSignoffNeverClosesAQso();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -185,6 +186,24 @@ void TestMamTxPayloadPolicy::aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBud
     const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
     QVERIFY(!cpp.isEmpty());
     QVERIFY(cpp.contains(QStringLiteral("s.partnerSnrDb = (qSnr == -10) ? 127 : qSnr;")));
+}
+
+void TestMamTxPayloadPolicy::aLowConfidenceSignoffNeverClosesAQso()
+{
+    // 26/10/2026, report from T77RN: PA0BTR was closed on a "73" he never sent,
+    // read from a low-confidence a-priori decode. Both sequencers must refuse it.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    const QString mam = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::mamIngestDecode"),
+        QStringLiteral("void DecodiumBridge::mamPruneSlots"));
+    QVERIFY(mam.contains(QStringLiteral("decodium::seq::mayFeedRescuedDecodeToSequencer(message)")));
+    const QString seq = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::autoSequenceStep"),
+        QStringLiteral("QString localHashPartner;"));
+    QVERIFY(seq.contains(QStringLiteral("mayFeedRescuedDecodeToSequencer(msg)")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()

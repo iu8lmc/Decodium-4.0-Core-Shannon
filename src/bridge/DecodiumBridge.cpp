@@ -26315,6 +26315,11 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
     if (partnerBase.isEmpty() || partnerBase == myBaseUpper) {
         return;
     }
+    if (!decodium::seq::mayFeedRescuedDecodeToSequencer(message)) {
+        bridgeLog(QStringLiteral("MAM: low-confidence signoff from %1 ignored, it cannot close a QSO: %2")
+                      .arg(partnerBase, message));
+        return;
+    }
     if (m_ft2ElasticFox) {
         m_foxElastic.decodeHeard(partnerBase.toStdString(), QDateTime::currentMSecsSinceEpoch(),
                                  !message.trimmed().endsWith(QLatin1Char('?')));
@@ -42094,6 +42099,14 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     if (f.size() < 5) return;
 
     QString msg = f[4].trimmed();
+    // A low-confidence decode ('?') can keep an exchange moving but can never
+    // close one: a phantom 73/RR73/RRR/TU made by the a-priori memory from the
+    // tail of our own signal or from an old message would log a QSO that did
+    // not happen (T77RN: PA0BTR closed on a "73" he never sent).
+    if (msg.endsWith(QLatin1Char('?')) && !decodium::seq::mayFeedRescuedDecodeToSequencer(msg)) {
+        bridgeLog(QStringLiteral("autoSequenceStep: low-confidence signoff ignored, it cannot close the QSO: %1").arg(msg));
+        return;
+    }
     QString const autoSeqDecodeIdentity =
         QStringLiteral("%1|%2").arg(normalizeUtcDisplayToken(f.value(0)), msg);
     QString localHashPartner;
@@ -51571,6 +51584,14 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
                 if (!rescuedFromActivePartner) {
                     bridgeLog(QStringLiteral("FT2 autoSeq: AP-cache-rescued decode is display-only, not feeding AutoSeq/TX: %1")
                                   .arg(f[4]));
+                    continue;
+                }
+                if (!decodium::seq::mayFeedRescuedDecodeToSequencer(f[4])) {
+                    // A low-confidence rescue may keep the exchange moving but never
+                    // close it: a phantom 73/RR73/RRR/TU would log a QSO that did not
+                    // happen (report from T77RN, 26/10/2026).
+                    bridgeLog(QStringLiteral("FT2 autoSeq: AP-rescued signoff from active partner %1 ignored, a rescue cannot close the QSO: %2")
+                                  .arg(activeDx, f[4]));
                     continue;
                 }
                 bridgeLog(QStringLiteral("FT2 autoSeq: AP-rescued decode dal partner attivo %1 -> feed al sequencer: %2")
