@@ -41323,6 +41323,15 @@ void DecodiumBridge::checkAndStartPeriodicTx()
     }
 
     auto finishAutoSequenceQso = [&](QString const& reason, bool logNow) {
+        // "log anyway" at a retry cap is the old policy of accepting a QSO whose last
+        // acknowledgement never arrived. It is only honest when the exchange really
+        // happened: if the partner never sent a report (M0PWL, 26/10) nothing is
+        // logged, and nothing goes to QRZ.
+        if (logNow && reason.contains(QLatin1String("log anyway")) && !m_reportReceivedReal) {
+            bridgeLog(QStringLiteral("QSO NOT logged: retry cap reached but %1 never sent a report (%2)")
+                          .arg(inferredPartnerForAutolog(), reason));
+            logNow = false;
+        }
         bridgeLog(reason);
         QString completedPartner = inferredPartnerForAutolog();
         if (logNow) {
@@ -41492,7 +41501,7 @@ void DecodiumBridge::checkAndStartPeriodicTx()
                 if (requiredWaitMs > 0 && waitedMs < requiredWaitMs) {
                     return true;
                 }
-                finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred FT2 RR73 log-only wait cap %1/%2 elapsed=%3ms -> log anyway, partner left")
+                finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred FT2 RR73 log-only wait cap %1/%2 elapsed=%3ms -> log anyway, retry cap reached")
                                           .arg(m_nTx73)
                                           .arg(signoffCap)
                                           .arg(waitedMs), true);
@@ -41517,7 +41526,7 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             if (m_autoCqRepeat) {
                 armLateAutoLogSnapshot();
             }
-            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 mode=%2 retry cap %3/%4 -> log anyway, partner left")
+            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 mode=%2 retry cap %3/%4 -> log anyway, retry cap reached")
                                       .arg(m_currentTx)
                                       .arg(m_mode)
                                       .arg(effSignoffCount)
@@ -41922,7 +41931,7 @@ void DecodiumBridge::checkAndStartPeriodicTx()
                                                                      m_ft4SignoffRetryCap, m_ft8SignoffRetryCap,
                                                                      m_ftxWeakSignoffBoost, m_ftxWeakSnrThreshold, m_ftxWeakSignoffBonus);
             if (m_currentTx == m_lastNtx && m_txRetryCount >= tx3SignoffCap) {
-                finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: TX3 R+report mode=%1 progress=%2 retry cap %3/%4 -> log anyway, partner left")
+                finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: TX3 R+report mode=%1 progress=%2 retry cap %3/%4 -> log anyway, retry cap reached")
                                           .arg(m_mode)
                                           .arg(m_qsoProgress)
                                           .arg(m_txRetryCount)

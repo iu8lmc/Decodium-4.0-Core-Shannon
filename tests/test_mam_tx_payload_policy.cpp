@@ -43,6 +43,7 @@ private slots:
     void aStationNeverCalledIsNotDroppedAsSilent();
     void aLowConfidenceSignoffNeverClosesAQso();
     void adifFieldsAreWhatActuallyHappened();
+    void logAnywayNeedsAReportFromThePartner();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -223,6 +224,20 @@ void TestMamTxPayloadPolicy::adifFieldsAreWhatActuallyHappened()
     QVERIFY(snap.contains(QStringLiteral("m_reportReceivedReal ? m_reportReceived.trimmed() : QString()")));
     QVERIFY(!cpp.contains(QStringLiteral("rstRcvd.isEmpty() ? QStringLiteral(\"-10\") : rstRcvd")));
     QVERIFY(cpp.count(QStringLiteral("setReportReceivedPlaceholder(QStringLiteral(\"-10\"))")) == 3);
+}
+
+void TestMamTxPayloadPolicy::logAnywayNeedsAReportFromThePartner()
+{
+    // 26/10/2026, report from T77RN: QSOs were logged and sent to QRZ at the retry
+    // cap with no report from the partner, and the log said "partner left" even
+    // when the partner was still transmitting (KV4T).
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    QVERIFY(cpp.contains(QStringLiteral(
+        "logNow && reason.contains(QLatin1String(\"log anyway\")) && !m_reportReceivedReal")));
+    QVERIFY(cpp.contains(QStringLiteral("QSO NOT logged: retry cap reached but")));
+    QVERIFY(!cpp.contains(QStringLiteral("-> log anyway, partner left\")")));
+    QCOMPARE(cpp.count(QStringLiteral("-> log anyway, retry cap reached\")")), 3);
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()
