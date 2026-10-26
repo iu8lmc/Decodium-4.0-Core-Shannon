@@ -953,6 +953,8 @@ public:
     void setReportSent(const QString& v);
     QString reportReceived() const { return m_reportReceived; }
     void setReportReceived(const QString& v);
+    // Placeholder shown before the partner has sent any report: it must never reach the log.
+    void setReportReceivedPlaceholder(const QString& v);
     bool sendRR73() const { return m_sendRR73; }
     void setSendRR73(bool v);
     bool multiAnswerMode() const { return m_multiAnswerMode; }
@@ -3865,6 +3867,8 @@ private:
     // Ciclo elastico della Fox FT2 (opt-in, default OFF).
     bool m_ft2ElasticFox {false};
     bool m_foxElasticGo {false};
+    bool m_reportReceivedReal {false};     // RST_RCVD comes from a report the partner really sent
+    QString m_lastReportTxMessage;         // last transmitted message that carried a numeric report
     bool m_foxElasticTxNow {false};   // the elastic cycle starts off the slot grid: skip the late-start guard
     decodium::foxelastic::Cycle m_foxElastic;
     QTimer* m_foxElasticTimer {nullptr};

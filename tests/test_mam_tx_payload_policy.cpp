@@ -42,6 +42,7 @@ private slots:
     void rr73SentToAStationThatLeftIsLoggedAndNotRepeatedForever();
     void aStationNeverCalledIsNotDroppedAsSilent();
     void aLowConfidenceSignoffNeverClosesAQso();
+    void adifFieldsAreWhatActuallyHappened();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -204,6 +205,24 @@ void TestMamTxPayloadPolicy::aLowConfidenceSignoffNeverClosesAQso()
         QStringLiteral("void DecodiumBridge::autoSequenceStep"),
         QStringLiteral("QString localHashPartner;"));
     QVERIFY(seq.contains(QStringLiteral("mayFeedRescuedDecodeToSequencer(msg)")));
+}
+
+void TestMamTxPayloadPolicy::adifFieldsAreWhatActuallyHappened()
+{
+    // 26/10/2026, report from T77RN: M0PWL was logged with RST_RCVD -10 never
+    // received and an empty grid; KV4T with RST_SENT -01 while +05 and -02 had
+    // been transmitted.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    const QString snap = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::capturePendingAutoLogSnapshot"),
+        QStringLiteral("QDateTime DecodiumBridge::effectiveQsoLogTimeOnUtc"));
+    QVERIFY(snap.contains(QStringLiteral("m_pendingAutoLogGrid = lookupWorldMapGrid(snapshotCall)")));
+    QVERIFY(snap.contains(QStringLiteral("m_lastReportTxMessage")));
+    QVERIFY(snap.contains(QStringLiteral("m_reportReceivedReal ? m_reportReceived.trimmed() : QString()")));
+    QVERIFY(!cpp.contains(QStringLiteral("rstRcvd.isEmpty() ? QStringLiteral(\"-10\") : rstRcvd")));
+    QVERIFY(cpp.count(QStringLiteral("setReportReceivedPlaceholder(QStringLiteral(\"-10\"))")) == 3);
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()

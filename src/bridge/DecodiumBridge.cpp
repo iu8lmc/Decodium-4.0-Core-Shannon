@@ -16055,6 +16055,9 @@ void DecodiumBridge::appendTxDecodeEntry(const QString& message)
     m_lastTransmittedMessage = msg;
     m_lastTxActivityUtc = QDateTime::currentDateTimeUtc();
     QString const transmittedReport = decodium::seq::signalReportFromMessage(msg);
+    if (!transmittedReport.isEmpty()) {
+        m_lastReportTxMessage = msg;
+    }
     if (!transmittedReport.isEmpty() && m_reportSent != transmittedReport) {
         m_reportSent = transmittedReport;
         emit reportSentChanged();
@@ -18611,7 +18614,7 @@ void DecodiumBridge::resetStartupTransientQsoState()
     m_tx4.clear();
     m_tx5.clear();
     m_reportSent.clear();
-    m_reportReceived = QStringLiteral("-10");
+    m_reportReceived = QStringLiteral("-10"); m_reportReceivedReal = false;
     m_txRetryCount = 0;
     m_lastNtx = -1;
     m_nTx73 = 0;
@@ -20930,9 +20933,21 @@ void DecodiumBridge::setReportSent(const QString& v)
     }
 }
 
+void DecodiumBridge::setReportReceivedPlaceholder(const QString& v)
+{
+    QString const normalized = normalizeSignalReportText(v);
+    m_reportReceivedReal = false;
+    if (m_reportReceived != normalized) {
+        m_reportReceived = normalized;
+        emit reportReceivedChanged();
+        regenerateTxMessages();
+    }
+}
+
 void DecodiumBridge::setReportReceived(const QString& v)
 {
     QString const normalized = normalizeSignalReportText(v);
+    m_reportReceivedReal = true;
     if (m_reportReceived != normalized) {
         m_reportReceived = normalized;
         emit reportReceivedChanged();
@@ -24871,7 +24886,7 @@ void DecodiumBridge::clearTxMessages()
         emit reportSentChanged();
     }
     if (m_reportReceived != "-10") {
-        m_reportReceived = "-10";
+        m_reportReceived = "-10"; m_reportReceivedReal = false;
         emit reportReceivedChanged();
     }
 
@@ -36161,7 +36176,7 @@ void DecodiumBridge::udpSendLoggedQso(const QString& dxCall, const QString& dxGr
     }
 
     QString const reportSent = rstSent.trimmed().isEmpty() ? QStringLiteral("-10") : rstSent.trimmed();
-    QString const reportRcvd = rstRcvd.trimmed().isEmpty() ? QStringLiteral("-10") : rstRcvd.trimmed();
+    QString const reportRcvd = rstRcvd.trimmed();   // empty stays empty: nothing was received
     QString const txPower = m_stationPowerWatts > 0 ? QString::number(m_stationPowerWatts) : QString();
     QString const cleanComments = comments.trimmed();
     QString const cleanPropMode = propMode.trimmed();
@@ -38650,7 +38665,21 @@ void DecodiumBridge::capturePendingAutoLogSnapshot()
     m_pendingAutoLogValid = true;
     m_pendingAutoLogCall = snapshotCall;
     m_pendingAutoLogGrid = !m_dxGrid.trimmed().isEmpty() ? m_dxGrid.trimmed() : m_autoCqLockedGrid.trimmed();
+    if (m_pendingAutoLogGrid.isEmpty()) {
+        // The grid the partner sent was cleared with the QSO state (M0PWL, 26/10):
+        // the one remembered from its decodes is still known.
+        m_pendingAutoLogGrid = lookupWorldMapGrid(snapshotCall);
+    }
     m_pendingAutoLogRptSent = m_reportSent.trimmed();
+    // RST_SENT is the report we actually put on the air for this partner, not the
+    // last SNR measured on it (KV4T: sent +05 and -02, logged -01).
+    if (!m_lastReportTxMessage.isEmpty()
+        && messageContainsCallToken(m_lastReportTxMessage, snapshotCall, normalizedBaseCall(snapshotCall))) {
+        QString const sentOnAir = decodium::seq::signalReportFromMessage(m_lastReportTxMessage).trimmed();
+        if (!sentOnAir.isEmpty()) {
+            m_pendingAutoLogRptSent = sentOnAir;
+        }
+    }
     if (m_pendingAutoLogRptSent.isEmpty()) {
         m_pendingAutoLogRptSent =
             decodium::seq::signalReportFromMessage(m_lastTransmittedMessage);
@@ -38659,7 +38688,9 @@ void DecodiumBridge::capturePendingAutoLogSnapshot()
         m_pendingAutoLogRptSent =
             decodium::seq::signalReportFromMessage(buildCurrentTxMessage());
     }
-    m_pendingAutoLogRptRcvd = m_reportReceived.trimmed();
+    // RST_RCVD only if the partner really sent a report: the -10 shown before that
+    // is a placeholder, not something received.
+    m_pendingAutoLogRptRcvd = m_reportReceivedReal ? m_reportReceived.trimmed() : QString();
     QDateTime const effectiveLogOn = effectiveQsoLogTimeOnUtc();
     m_pendingAutoLogOn = effectiveLogOn.isValid() ? effectiveLogOn : nowUtc;
     m_pendingAutoLogOff = nowUtc < m_pendingAutoLogOn ? m_pendingAutoLogOn : nowUtc;
@@ -42890,7 +42921,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         cqModeAcceptedFreshCaller = !existingExchangeForCaller;
 
         if (Radio::base_callsign(m_dxCall).trimmed().compare(callerBase, Qt::CaseInsensitive) != 0) {
-            setReportReceived(QStringLiteral("-10"));
+            setReportReceivedPlaceholder(QStringLiteral("-10"));
             setDxCall(messagePartner);
             m_qsoStartedOn = QDateTime::currentDateTimeUtc();
             m_qsoFirstReplyOn = QDateTime {};
@@ -43122,7 +43153,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
                 return;
             }
             if (Radio::base_callsign(m_dxCall).trimmed().compare(messagePartnerBase, Qt::CaseInsensitive) != 0) {
-                setReportReceived(QStringLiteral("-10"));
+                setReportReceivedPlaceholder(QStringLiteral("-10"));
                 setDxCall(messagePartner);
                 m_qsoStartedOn = QDateTime::currentDateTimeUtc();
                 m_qsoFirstReplyOn = QDateTime {};
@@ -46759,7 +46790,7 @@ void DecodiumBridge::clearCompletedQsoTxFields(const QString& completedCall, con
         emit reportSentChanged();
     }
     if (m_reportReceived != QStringLiteral("-10")) {
-        m_reportReceived = QStringLiteral("-10");
+        m_reportReceived = QStringLiteral("-10"); m_reportReceivedReal = false;
         emit reportReceivedChanged();
     }
 
@@ -58267,7 +58298,7 @@ void DecodiumBridge::processNextInQueue()
         m_qsoStartedOn = QDateTime::currentDateTimeUtc();
         m_qsoFirstReplyOn = QDateTime {};
         setReportSent(QString::number(snr));
-        setReportReceived(QStringLiteral("-10"));
+        setReportReceivedPlaceholder(QStringLiteral("-10"));
 
         setDxCall(nextCall);
         setDxGrid(QString());
@@ -60093,7 +60124,7 @@ static QString bridgeAdifRecordText(const QString& dxCall, const QString& dxGrid
         record += bridgeAdifField(QStringLiteral("MODE"), normalizedMode);
     }
     record += bridgeAdifField(QStringLiteral("RST_SENT"), rstSent.isEmpty() ? QStringLiteral("-10") : rstSent)
-            + bridgeAdifField(QStringLiteral("RST_RCVD"), rstRcvd.isEmpty() ? QStringLiteral("-10") : rstRcvd)
+            + (rstRcvd.isEmpty() ? QString() : bridgeAdifField(QStringLiteral("RST_RCVD"), rstRcvd))
             + bridgeAdifField(QStringLiteral("QSO_DATE"), qsoDate)
             + bridgeAdifField(QStringLiteral("TIME_ON"), qsoTime)
             + bridgeAdifField(QStringLiteral("QSO_DATE_OFF"), qsoDateOff)
