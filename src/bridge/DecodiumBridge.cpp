@@ -40464,8 +40464,17 @@ bool DecodiumBridge::deferFt8AutoTxForDecode()
     bool const isEven = context.slot % 2 == 0;
     if (bridgeTxPeriodIsEven(m_txPeriod) != isEven) return true;
     int const elapsedMs = int(correctedUtcEpochMs() % Gate::periodMs);
-    auto const decision = m_ft8AutoTxDecodeGate.decision(context, elapsedMs);
-    if (decision == Gate::Decision::Ready) return false;
+    // TX4 (RR73) and TX5 (73) were fixed by the previous exchange: no reply can change them.
+    bool const finalMessage = m_currentTx == 4 || m_currentTx == 5;
+    auto const decision = m_ft8AutoTxDecodeGate.decision(context, elapsedMs, finalMessage);
+    if (decision == Gate::Decision::Ready) {
+        if (m_ft8AutoTxDecodeGate.lateDecoderBypass(finalMessage)
+            && m_ft8AutoTxDecodeGate.armTimer(context)) {
+            bridgeLog(QStringLiteral("FT8 auto TX: decoder late for %1 slot(s), sending TX%2 without waiting for the RX result elapsed=%3ms")
+                          .arg(m_ft8AutoTxDecodeGate.lateStreak()).arg(m_currentTx).arg(elapsedMs));
+        }
+        return false;
+    }
 
     // One timer per slot/lifecycle, shared by ALL automatic TX entry points.
     // A result callback releases this gate only after auto-seq has run. At
@@ -40483,10 +40492,18 @@ bool DecodiumBridge::deferFt8AutoTxForDecode()
                     || !usesFt8AutoTxDecodeGate() || m_manualTxHold
                     || !m_monitoring || m_transmitting || m_tuning) return;
                 int const elapsed = int(correctedUtcEpochMs() % Gate::periodMs);
-                if (m_ft8AutoTxDecodeGate.decision(context, elapsed) != Gate::Decision::Ready) {
-                    bridgeLog(QStringLiteral("FT8 auto TX: decode deadline expired, skip stale TX%1 in this slot")
-                                  .arg(m_currentTx));
-                    return;
+                bool const finalMessage = m_currentTx == 4 || m_currentTx == 5;
+                if (m_ft8AutoTxDecodeGate.decision(context, elapsed, finalMessage) != Gate::Decision::Ready) {
+                    // The RX result is late: count it, so a decoder that keeps missing the
+                    // deadline stops starving the sequencer (eldiablo.log, 26/10/2026).
+                    m_ft8AutoTxDecodeGate.deadlineExpired(context);
+                    if (m_ft8AutoTxDecodeGate.decision(context, elapsed, finalMessage) != Gate::Decision::Ready) {
+                        bridgeLog(QStringLiteral("FT8 auto TX: decode deadline expired, skip stale TX%1 in this slot")
+                                      .arg(m_currentTx));
+                        return;
+                    }
+                    bridgeLog(QStringLiteral("FT8 auto TX: decoder late for %1 slot(s), sending TX%2 without the RX result elapsed=%3ms")
+                                  .arg(m_ft8AutoTxDecodeGate.lateStreak()).arg(m_currentTx).arg(elapsed));
                 }
                 checkAndStartPeriodicTx();
             });

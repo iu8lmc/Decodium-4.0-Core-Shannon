@@ -103,6 +103,38 @@ private slots:
         }
     }
 
+    void aLateDecoderDoesNotStarveTheSequencer()
+    {
+        // eldiablo.log, 26/10/2026: the decode took 2.3-2.9 s against a 1.2 s deadline,
+        // so TX5 (73 to R6ACD) was skipped slot after slot and the QSO never closed.
+        Gate gate;
+        Gate::Context const rx {1000, 2, 7};
+        Gate::Context const tx {1001, 2, 7};
+        gate.decoded(rx, 800);                              // healthy decoder
+        QCOMPARE(gate.lateStreak(), 0);
+        QVERIFY(gate.armTimer(tx));
+        QCOMPARE(gate.decision(tx, 1100, true), Decision::Wait);
+        gate.deadlineExpired(tx);                           // first late slot
+        QCOMPARE(gate.lateStreak(), 1);
+        QCOMPARE(gate.decision(tx, 1200, true), Decision::Ready);   // 73/RR73 goes out
+        QCOMPARE(gate.decision(tx, 1200, false), Decision::SkipSlot); // others still wait
+        QCOMPARE(gate.decision(tx, 1400, true), Decision::SkipSlot);  // never past the commit deadline
+        gate.decoded(tx, 2450);                             // the late result of the same slot
+        QCOMPARE(gate.lateStreak(), 1);                     // one miss per slot
+        gate.committed(tx);
+        QCOMPARE(gate.decision(tx, 1250, true), Decision::SkipSlot);  // no second frame
+        Gate::Context const rx2 {1002, 2, 7};
+        gate.decoded(rx2, 2268);                            // second late slot
+        QCOMPARE(gate.lateStreak(), 2);
+        Gate::Context const tx2 {1003, 2, 7};
+        QCOMPARE(gate.decision(tx2, 100, false), Decision::Ready);   // now any message
+        gate.decoded(tx2, 800);                             // the decoder recovers
+        QCOMPARE(gate.lateStreak(), 0);
+        Gate::Context const tx3 {1005, 2, 7};
+        QCOMPARE(gate.decision(tx3, 100, false), Decision::Wait);
+        QCOMPARE(gate.decision(tx3, 100, true), Decision::Wait);
+    }
+
     void completeWaveformStaysInsideSlot()
     {
         constexpr int payloadMs = 79 * 160; // Complete FT8 frame, including Costas.
@@ -134,6 +166,10 @@ private slots:
         QVERIFY(ready.indexOf(QStringLiteral("autoSequenceStep(fields)"))
                 < ready.indexOf(QStringLiteral("m_ft8AutoTxDecodeGate.decoded")));
         QVERIFY(ready.contains(QStringLiteral("autoSeqGotResponse || ft8AutoTxDecodeSettled")));
+        QString const defer = body("bool DecodiumBridge::deferFt8AutoTxForDecode()",
+                                   "bool DecodiumBridge::shouldDeferAutoTxUntilTimeSyncDecode(");
+        QVERIFY(defer.contains(QStringLiteral("m_ft8AutoTxDecodeGate.deadlineExpired(context)")));
+        QVERIFY(defer.contains(QStringLiteral("decision(context, elapsedMs, finalMessage)")));
         QCOMPARE(cpp.count(QStringLiteral("syncTxCommitDeadlineMs(")), 3); // helper and both guards
         QCOMPARE(cpp.count(QStringLiteral("validateFt8AutoTxAudioStart(txPlaybackMs)")), 3); // macOS, Windows, Linux
         QVERIFY(cpp.contains(QStringLiteral("m_activeFt8AutoTxFullFrame) return 0")));
