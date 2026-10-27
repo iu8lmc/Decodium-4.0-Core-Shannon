@@ -135,6 +135,45 @@ private slots:
         QCOMPARE(gate.decision(tx3, 100, true), Decision::Wait);
     }
 
+    void aDecoderHoveringAroundTheDeadlineKeepsTheCycle()
+    {
+        // mattei.log, 27/10/2026: results at 1.1-1.7 s against a 1.2 s deadline lost
+        // every other TX cycle to a few milliseconds ("waits 4 turns to call again").
+        Gate gate;
+        int const results[] = {1225, 1678, 1155, 1101, 2181, 1357};
+        std::int64_t slot = 1000;
+        for (int elapsed : results) gate.decoded(Gate::Context {slot++, 2, 7}, elapsed);
+        QVERIFY(gate.slowDecoder());
+        QCOMPARE(gate.decodeDeadline(), 1600);
+        QCOMPARE(gate.commitDeadline(), 1800);
+        Gate::Context const tx {slot + 1, 2, 7};
+        QVERIFY(gate.armTimer(tx));
+        QCOMPARE(gate.decision(tx, 1250, false), Decision::Wait);   // used to be SkipSlot
+        gate.decoded(tx, 1300);                                     // result in the extended window
+        QVERIFY(gate.resultReady(tx));
+        QCOMPARE(gate.decision(tx, 1300, false), Decision::Ready);
+        // no result at all: send at the extended deadline rather than lose the cycle
+        Gate::Context const tx2 {slot + 3, 2, 7};
+        QCOMPARE(gate.decision(tx2, 1599, false), Decision::Wait);
+        QCOMPARE(gate.decision(tx2, 1600, false), Decision::Ready);
+        QVERIFY(!gate.resultReady(tx2));
+        QCOMPARE(gate.decision(tx2, 1800, false), Decision::SkipSlot);  // never past the commit deadline
+    }
+
+    void aHealthyDecoderKeepsTheOriginalDeadlines()
+    {
+        Gate gate;
+        std::int64_t slot = 2000;
+        for (int elapsed : {430, 620, 510, 1300, 480, 590, 700}) // one late sample only
+            gate.decoded(Gate::Context {slot++, 2, 7}, elapsed);
+        QVERIFY(!gate.slowDecoder());
+        QCOMPARE(gate.decodeDeadline(), 1200);
+        QCOMPARE(gate.commitDeadline(), 1400);
+        Gate::Context const tx {slot + 1, 2, 7};
+        QCOMPARE(gate.decision(tx, 1200, false), Decision::SkipSlot);
+        QCOMPARE(gate.decision(tx, 1000, false), Decision::Wait);
+    }
+
     void completeWaveformStaysInsideSlot()
     {
         constexpr int payloadMs = 79 * 160; // Complete FT8 frame, including Costas.
@@ -170,6 +209,8 @@ private slots:
                                    "bool DecodiumBridge::shouldDeferAutoTxUntilTimeSyncDecode(");
         QVERIFY(defer.contains(QStringLiteral("m_ft8AutoTxDecodeGate.deadlineExpired(context)")));
         QVERIFY(defer.contains(QStringLiteral("decision(context, elapsedMs, finalMessage)")));
+        QVERIFY(defer.contains(QStringLiteral("m_ft8AutoTxDecodeGate.decodeDeadline()")));
+        QVERIFY(defer.contains(QStringLiteral("resultReady(context)")));
         QCOMPARE(cpp.count(QStringLiteral("syncTxCommitDeadlineMs(")), 3); // helper and both guards
         QCOMPARE(cpp.count(QStringLiteral("validateFt8AutoTxAudioStart(txPlaybackMs)")), 3); // macOS, Windows, Linux
         QVERIFY(cpp.contains(QStringLiteral("m_activeFt8AutoTxFullFrame) return 0")));

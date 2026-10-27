@@ -40436,7 +40436,7 @@ decodium::Ft8AutoTxDecodeGate::Context DecodiumBridge::ft8AutoTxDecodeContext() 
 
 int DecodiumBridge::syncTxCommitDeadlineMs(bool relaxed) const
 {
-    if (usesFt8AutoTxDecodeGate()) return decodium::Ft8AutoTxDecodeGate::commitDeadlineMs;
+    if (usesFt8AutoTxDecodeGate()) return m_ft8AutoTxDecodeGate.commitDeadline();
     return latestD3CompatibleSyncTxStartMs(m_mode, effectivePeriodMsForMode(m_mode), relaxed);
 }
 
@@ -40483,9 +40483,11 @@ bool DecodiumBridge::deferFt8AutoTxForDecode()
         if (decision == Gate::Decision::SkipSlot) {
             bridgeLog(QStringLiteral("FT8 auto TX: skip slot, RX result not ready in time elapsed=%1ms").arg(elapsedMs));
         } else {
-            int const delayMs = qMax(1, Gate::decodeDeadlineMs - elapsedMs);
-            bridgeLog(QStringLiteral("FT8 auto TX: waiting for previous RX slot, deadline=%1ms remaining=%2ms")
-                          .arg(Gate::decodeDeadlineMs).arg(delayMs));
+            int const deadlineMs = m_ft8AutoTxDecodeGate.decodeDeadline();
+            int const delayMs = qMax(1, deadlineMs - elapsedMs);
+            bridgeLog(QStringLiteral("FT8 auto TX: waiting for previous RX slot, deadline=%1ms remaining=%2ms%3")
+                          .arg(deadlineMs).arg(delayMs)
+                          .arg(m_ft8AutoTxDecodeGate.slowDecoder() ? QStringLiteral(" (slow decoder)") : QString()));
             QTimer::singleShot(delayMs, Qt::PreciseTimer, this, [this, context]() {
                 if (!(context == ft8AutoTxDecodeContext())
                     || !m_ft8AutoTxDecodeGate.matches(context)
@@ -40493,7 +40495,12 @@ bool DecodiumBridge::deferFt8AutoTxForDecode()
                     || !m_monitoring || m_transmitting || m_tuning) return;
                 int const elapsed = int(correctedUtcEpochMs() % Gate::periodMs);
                 bool const finalMessage = m_currentTx == 4 || m_currentTx == 5;
-                if (m_ft8AutoTxDecodeGate.decision(context, elapsed, finalMessage) != Gate::Decision::Ready) {
+                if (m_ft8AutoTxDecodeGate.decision(context, elapsed, finalMessage) == Gate::Decision::Ready
+                    && !m_ft8AutoTxDecodeGate.resultReady(context)) {
+                    // Slow decoder: the extended wait ran out, send instead of losing the cycle.
+                    bridgeLog(QStringLiteral("FT8 auto TX: slow decoder, sending TX%1 without the RX result elapsed=%2ms")
+                                  .arg(m_currentTx).arg(elapsed));
+                } else if (m_ft8AutoTxDecodeGate.decision(context, elapsed, finalMessage) != Gate::Decision::Ready) {
                     // The RX result is late: count it, so a decoder that keeps missing the
                     // deadline stops starving the sequencer (eldiablo.log, 26/10/2026).
                     m_ft8AutoTxDecodeGate.deadlineExpired(context);
