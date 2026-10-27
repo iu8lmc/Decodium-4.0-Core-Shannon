@@ -44,6 +44,7 @@ class TestQsoSequencerRules final : public QObject
 
 private slots:
     void rescuedDecodeNeverClosesTheQso ();
+    void ourRr73CountsAsSomethingSentToThePartner ();
   void ftxUserCapIsAbsolute ()
   {
     // FT2/FT4/FT8: lo spinbox utente è un valore assoluto, conservative NON lo gonfia
@@ -458,6 +459,22 @@ void TestQsoSequencerRules::rescuedDecodeNeverClosesTheQso ()
     QVERIFY (mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL IN69 ?")));
     QVERIFY (mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL -05 ?")));
     QVERIFY (mayFeedRescuedDecodeToSequencer (QStringLiteral ("T77RN M0PWL R-09 ?")));
+}
+
+void TestQsoSequencerRules::ourRr73CountsAsSomethingSentToThePartner ()
+{
+    // 27/10/2026: LY5A answered our RR73 with RR73; the barrier saw no numeric report
+    // in our last message and restarted the QSO at TX2 instead of sending 73 and logging.
+    using decodium::seq::lastTxJustifiesSignoff;
+    QVERIFY (lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC -03")));
+    QVERIFY (lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC R-03")));
+    QVERIFY (lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC RR73")));
+    QVERIFY (lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC RRR")));
+    QVERIFY (lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC 73")));
+    // a grid or a CQ is not enough: the stale-closing protection stays
+    QVERIFY (!lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC JN71")));
+    QVERIFY (!lastTxJustifiesSignoff (QStringLiteral ("CQ IU8LMC JN71")));
+    QVERIFY (!lastTxJustifiesSignoff (QString ()));
 }
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)

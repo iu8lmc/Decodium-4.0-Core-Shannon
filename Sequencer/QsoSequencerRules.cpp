@@ -1,6 +1,7 @@
 // Corpo spostato VERBATIM da DecodiumBridge.cpp (era static a file scope).
 // Qualsiasi modifica alla logica va fatta QUI (desktop e mobile la condividono).
 #include "Sequencer/QsoSequencerRules.hpp"
+#include "Sequencer/MessageTokenRules.hpp"
 
 #include <QStringList>
 #include <QtGlobal>
@@ -103,6 +104,19 @@ bool mayAdvanceRogerReportToRr73 (bool freshAutoCqCaller,
     return !freshAutoCqCaller
         && ownReportWasSentToSamePartner
         && priorReplyFromSamePartnerAccepted;
+}
+
+bool lastTxJustifiesSignoff (const QString& message)
+{
+    if (!signalReportFromMessage (message).trimmed ().isEmpty ())
+        return true;
+    QStringList const tokens = message.simplified ().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    if (tokens.isEmpty ())
+        return false;
+    QString const last = tokens.last ();
+    return last.compare (QLatin1String ("RR73"), Qt::CaseInsensitive) == 0
+        || last.compare (QLatin1String ("RRR"), Qt::CaseInsensitive) == 0
+        || last == QLatin1String ("73");
 }
 
 bool mayFeedRescuedDecodeToSequencer (const QString& message)

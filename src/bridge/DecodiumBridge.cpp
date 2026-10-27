@@ -43238,10 +43238,10 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         // carry a stale closing state across callers; a grid decode from the
         // new caller must then restart at TX2 instead of inheriting TX5.
         if (nextTx == 5 && !messagePartnerBase.isEmpty()) {
-            QString const lastTxReport =
-                decodium::seq::signalReportFromMessage(m_lastTransmittedMessage).trimmed();
+            // 1.0.718: our own RR73/RRR/73 also counts. A partner who answers our RR73 with
+            // RR73 (LY5A, 27/10/2026) was restarted at TX2 three times and never logged.
             bool const reportWasSentToThisPartner =
-                !lastTxReport.isEmpty()
+                decodium::seq::lastTxJustifiesSignoff(m_lastTransmittedMessage)
                 && messageContainsCallToken(m_lastTransmittedMessage,
                                              messagePartner,
                                              messagePartnerBase);

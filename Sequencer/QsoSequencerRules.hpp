@@ -66,6 +66,13 @@ bool mayAdvanceRogerReportToRr73 (bool freshAutoCqCaller,
 // `message` is the decoded text, trailing '?' included.
 bool mayFeedRescuedDecodeToSequencer (const QString& message);
 
+// The TX5/73 safety barrier asks whether the partner has received something
+// from us that justifies closing: a numeric report, or a closing message
+// (RR73, RRR, 73) of our own. A partner who answers our RR73 with RR73 must
+// get its 73 and be logged, not be restarted at TX2 (LY5A, 27/10/2026).
+// `message` is the last message we transmitted.
+bool lastTxJustifiesSignoff (const QString& message);
+
 // A Fox/Hound backend change must not interrupt the final TX5/73 or an open
 // log confirmation. Both states still belong to the QSO being completed.
 bool specialOperationTransitionRequiresDeferral (bool ownFinal73Pending,
