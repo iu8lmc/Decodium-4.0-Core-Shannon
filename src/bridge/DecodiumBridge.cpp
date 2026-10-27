@@ -40524,12 +40524,13 @@ bool DecodiumBridge::advanceQsoState(int txNum)
 
 bool DecodiumBridge::usesFt8AutoTxDecodeGate() const
 {
-    // 1.0.722: the FT8 decode gate (1.0.714) is OFF. On a PC whose decoder takes about as long
-    // as its deadline it skipped TX cycles (IT9MRM, 721: two cycles lost after every click,
-    // and a TX refused 6 ms past the start limit), while 1.0.712, which sends at the normal
-    // time, was stable. DECODIUM_FT8_TX_GATE=1 turns it back on for testing.
-    static bool const gateEnabled = truthyEnvironmentFlag("DECODIUM_FT8_TX_GATE");
-    if (!gateEnabled) {
+    // The FT8 decode gate (1.0.714) keeps a stale TX1/TX3 from going out when the previous
+    // slot's decode changes what must be sent. 1.0.722 stops it from losing TX cycles on a PC
+    // whose decoder is about as slow as its deadline (IT9MRM, 721): it never skips a slot for a
+    // late result once the decoder has been seen to be slow, and it remembers that across
+    // clicks, HALTs and QSOs. DECODIUM_FT8_TX_GATE_OFF=1 switches it off altogether.
+    static bool const gateDisabled = truthyEnvironmentFlag("DECODIUM_FT8_TX_GATE_OFF");
+    if (gateDisabled) {
         return false;
     }
     return m_mode == QStringLiteral("FT8")

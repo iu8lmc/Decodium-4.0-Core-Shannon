@@ -23,14 +23,14 @@ public:
     static constexpr int lateStreakForFinalMessage = 1;
     static constexpr int lateStreakForAnyMessage = 2;
     // A decoder that hovers around the deadline (1.1-1.7 s, IT9MRM 27/10/2026) loses
-    // every other cycle to a few milliseconds. When 2 of the last 8 results took 1 s or
-    // more the gate waits a little longer for it, and past that point sends instead of
-    // skipping. The extended wait stays well under the 1.8 s start limit: on a busy PC the
+    // every other cycle to a few milliseconds. As soon as one of the last 8 results took
+    // 1 s or more the gate waits a little longer for it, and past that point sends instead
+    // of skipping: waiting for the result is only worth a slot when the result is in time. The extended wait stays well under the 1.8 s start limit: on a busy PC the
     // timer that ends the wait can fire 150-300 ms late (IT9MRM, 721: TX skipped at 1806 ms).
     // The bar is 1 s, not the 1.2 s deadline, so that results clustering just below the
     // deadline keep the mode on instead of letting it lapse after two quick ones.
     static constexpr int slowWindow = 8;
-    static constexpr int slowLateSamples = 2;
+    static constexpr int slowLateSamples = 1;
     static constexpr int slowLateMs = 1000;
     static constexpr int slowDecodeDeadlineMs = 1400;
     static constexpr int slowCommitDeadlineMs = 1800;

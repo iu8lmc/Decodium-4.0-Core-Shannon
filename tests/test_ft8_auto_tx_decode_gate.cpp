@@ -64,7 +64,10 @@ private slots:
         QCOMPARE(gate.decision(context, 1199), Decision::Wait);
         QCOMPARE(gate.decision(context, 1200), Decision::SkipSlot);
         gate.decoded(context, 1201);
-        QCOMPARE(gate.decision(context, 1201), Decision::SkipSlot);
+        // the decoder has now been seen to be slow: the slot waits a little longer, and
+        // past the extended deadline it sends instead of being skipped
+        QCOMPARE(gate.decision(context, 1201), Decision::Wait);
+        QCOMPARE(gate.decision(context, 1400), Decision::Ready);
         // A stalled decoder must not hold all future slots.
         Gate::Context const next {12347, 2, 7};
         QVERIFY(gate.armTimer(next));
@@ -76,7 +79,7 @@ private slots:
     {
         Gate gate;
         Gate::Context const context {12345, 2, 7};
-        gate.decoded(context, 1199);
+        gate.decoded(context, 900);   // in time and not slow: the original 1.2 s / 1.4 s limits
         QCOMPARE(gate.decision(context, 1399), Decision::Ready);
         QCOMPARE(gate.decision(context, 1400), Decision::SkipSlot);
         QCOMPARE(gate.decision(context, 5000), Decision::SkipSlot);
@@ -117,8 +120,9 @@ private slots:
         gate.deadlineExpired(tx);                           // first late slot
         QCOMPARE(gate.lateStreak(), 1);
         QCOMPARE(gate.decision(tx, 1200, true), Decision::Ready);   // 73/RR73 goes out
-        QCOMPARE(gate.decision(tx, 1200, false), Decision::SkipSlot); // others still wait
-        QCOMPARE(gate.decision(tx, 1400, true), Decision::SkipSlot);  // never past the commit deadline
+        QCOMPARE(gate.decision(tx, 1200, false), Decision::Wait);     // others wait a little longer
+        QCOMPARE(gate.decision(tx, 1400, false), Decision::Ready);    // and then send, not skip
+        QCOMPARE(gate.decision(tx, 1800, true), Decision::SkipSlot);  // never past the commit deadline
         gate.decoded(tx, 2450);                             // the late result of the same slot
         QCOMPARE(gate.lateStreak(), 1);                     // one miss per slot
         gate.committed(tx);
@@ -183,7 +187,7 @@ private slots:
     {
         Gate gate;
         std::int64_t slot = 2000;
-        for (int elapsed : {430, 620, 510, 1300, 480, 590, 700}) // one late sample only
+        for (int elapsed : {430, 620, 510, 980, 480, 590, 700}) // none reaches 1 s
             gate.decoded(Gate::Context {slot++, 2, 7}, elapsed);
         QVERIFY(!gate.slowDecoder());
         QCOMPARE(gate.decodeDeadline(), 1200);
@@ -191,6 +195,9 @@ private slots:
         Gate::Context const tx {slot + 1, 2, 7};
         QCOMPARE(gate.decision(tx, 1200, false), Decision::SkipSlot);
         QCOMPARE(gate.decision(tx, 1000, false), Decision::Wait);
+        // one result of 1 s or more is enough to stop skipping slots
+        gate.decoded(Gate::Context {slot, 2, 7}, 1300);
+        QVERIFY(gate.slowDecoder());
     }
 
     void completeWaveformStaysInsideSlot()
@@ -236,10 +243,10 @@ private slots:
         QCOMPARE(cpp.count(QStringLiteral("syncTxCommitDeadlineMs(")), 3); // helper and both guards
         QCOMPARE(cpp.count(QStringLiteral("validateFt8AutoTxAudioStart(txPlaybackMs)")), 3); // macOS, Windows, Linux
         QVERIFY(cpp.contains(QStringLiteral("m_activeFt8AutoTxFullFrame) return 0")));
-        // 1.0.722: the gate is off unless explicitly enabled for testing
+        // the gate stays on by default; DECODIUM_FT8_TX_GATE_OFF switches it off
         QString const uses = body("bool DecodiumBridge::usesFt8AutoTxDecodeGate() const", "decodium::Ft8AutoTxDecodeGate::Context DecodiumBridge::ft8AutoTxDecodeContext()");
-        QVERIFY(uses.contains(QStringLiteral("truthyEnvironmentFlag(\"DECODIUM_FT8_TX_GATE\")")));
-        QVERIFY(uses.indexOf(QStringLiteral("if (!gateEnabled)")) < uses.indexOf(QStringLiteral("m_mode == QStringLiteral(\"FT8\")")));
+        QVERIFY(uses.contains(QStringLiteral("truthyEnvironmentFlag(\"DECODIUM_FT8_TX_GATE_OFF\")")));
+        QVERIFY(uses.indexOf(QStringLiteral("if (gateDisabled)")) < uses.indexOf(QStringLiteral("m_mode == QStringLiteral(\"FT8\")")));
         QString const deferred = body("bool DecodiumBridge::tryStartDeferredManualSyncTx()",
                                       "void DecodiumBridge::clearDeferredManualSyncTx(");
         QVERIFY(deferred.contains(QStringLiteral("auto-ft8-rx-rendezvous")));
