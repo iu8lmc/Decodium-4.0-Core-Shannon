@@ -4938,6 +4938,11 @@ static QString legacyPaletteNameForUiIndex(int index)
 namespace
 {
 constexpr int kRecentDuplicateLogWindowSeconds {90};
+// A completed QSO keeps its partner out of AutoCQ/MAM for longer than the log window: a station
+// that did not hear our RR73 goes on calling for minutes, and at 90 s it was reopened and
+// answered again (Z32AW, 27/10/2026: RR73 sent 4 more times; EA4HUK: 4 TX2). The log
+// de-duplication window stays at 90 s.
+constexpr int kRecentAutoCqPartnerWindowSeconds {300};
 constexpr int kLateAutoLogGraceWindowSeconds {45};
 // The short in-memory QSO cooldown only breaks immediate 73/RR73 loops.  It
 // must never become a session-long "worked before" list, especially when the
@@ -4955,6 +4960,12 @@ bool isWithinRecentDuplicateWindow(QDateTime const& seenAt, QDateTime const& now
     return deltaSec >= 0 && deltaSec <= kRecentDuplicateLogWindowSeconds;
 }
 
+bool isWithinRecentAutoCqPartnerWindow(QDateTime const& seenAt, QDateTime const& nowUtc)
+{
+    qint64 const deltaSec = seenAt.secsTo(nowUtc);
+    return deltaSec >= 0 && deltaSec <= kRecentAutoCqPartnerWindowSeconds;
+}
+
 void pruneRecentDuplicateCache(QHash<QString, QDateTime>& cache, QDateTime const& nowUtc)
 {
     if (cache.size() <= 512) {
@@ -4962,7 +4973,7 @@ void pruneRecentDuplicateCache(QHash<QString, QDateTime>& cache, QDateTime const
     }
 
     for (auto it = cache.begin(); it != cache.end(); ) {
-        if (it.value().secsTo(nowUtc) > 3 * kRecentDuplicateLogWindowSeconds) {
+        if (it.value().secsTo(nowUtc) > 3 * kRecentAutoCqPartnerWindowSeconds) {
             it = cache.erase(it);
         } else {
             ++it;
@@ -38332,7 +38343,7 @@ bool DecodiumBridge::isRecentAutoCqDuplicate(const QString& call, double freqHz,
 
     auto const workedIt = m_recentAutoCqWorkedUtcByKey.constFind(dedupeKey);
     if (workedIt != m_recentAutoCqWorkedUtcByKey.constEnd()) {
-        return isWithinRecentDuplicateWindow(workedIt.value(), nowUtc);
+        return isWithinRecentAutoCqPartnerWindow(workedIt.value(), nowUtc);
     }
 
     auto const loggedIt = m_recentQsoLogUtcByKey.constFind(dedupeKey);
@@ -38340,7 +38351,7 @@ bool DecodiumBridge::isRecentAutoCqDuplicate(const QString& call, double freqHz,
         return false;
     }
 
-    return isWithinRecentDuplicateWindow(loggedIt.value(), nowUtc);
+    return isWithinRecentAutoCqPartnerWindow(loggedIt.value(), nowUtc);
 }
 
 bool DecodiumBridge::isRecentAutoCqWorkedOrLoggedDuplicate(const QString& call,
@@ -38363,7 +38374,7 @@ bool DecodiumBridge::isRecentAutoCqWorkedOrLoggedDuplicate(const QString& call,
 
     auto const workedIt = m_recentAutoCqWorkedUtcByKey.constFind(dedupeKey);
     if (workedIt != m_recentAutoCqWorkedUtcByKey.constEnd()) {
-        return isWithinRecentDuplicateWindow(workedIt.value(), nowUtc);
+        return isWithinRecentAutoCqPartnerWindow(workedIt.value(), nowUtc);
     }
 
     auto const loggedIt = m_recentQsoLogUtcByKey.constFind(dedupeKey);
@@ -38371,7 +38382,23 @@ bool DecodiumBridge::isRecentAutoCqWorkedOrLoggedDuplicate(const QString& call,
         return false;
     }
 
-    return isWithinRecentDuplicateWindow(loggedIt.value(), nowUtc);
+    return isWithinRecentAutoCqPartnerWindow(loggedIt.value(), nowUtc);
+}
+
+void DecodiumBridge::touchRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode)
+{
+    QString const dedupeCall = Radio::base_callsign(call).trimmed().toUpper();
+    QString const dedupeBand = autoCqBandKeyForFrequency(freqHz).trimmed().toUpper();
+    QString const dedupeMode = (mode.isEmpty() ? m_mode : mode).trimmed().toUpper();
+    if (dedupeCall.isEmpty() || dedupeBand.isEmpty() || dedupeBand == QStringLiteral("--")
+        || dedupeMode.isEmpty()) {
+        return;
+    }
+    QString const dedupeKey = QStringLiteral("%1|%2|%3").arg(dedupeCall, dedupeBand, dedupeMode);
+    auto const it = m_recentAutoCqWorkedUtcByKey.find(dedupeKey);
+    if (it != m_recentAutoCqWorkedUtcByKey.end()) {
+        it.value() = QDateTime::currentDateTimeUtc();
+    }
 }
 
 void DecodiumBridge::clearRecentAutoCqAbandoned(const QString& call,
@@ -42625,6 +42652,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
             if (isRecentAutoCqWorkedOrLoggedDuplicate(messagePartnerBase, m_frequency, m_mode)) {
                 bridgeLog(QStringLiteral("autoSeq: skip recently worked/logged AutoCQ partner %1 msg=%2")
                               .arg(messagePartnerBase, msg));
+                touchRecentAutoCqWorked(messagePartnerBase, m_frequency, m_mode);
                 removeCallerFromQueue(messagePartnerBase);
                 return;
             }

@@ -45,6 +45,7 @@ private slots:
     void adifFieldsAreWhatActuallyHappened();
     void logAnywayNeedsAReportFromThePartner();
     void tx3SignoffCapCoversFt8AndFt4();
+    void aWorkedPartnerStaysOutForFiveMinutes();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -259,6 +260,34 @@ void TestMamTxPayloadPolicy::tx3SignoffCapCoversFt8AndFt4()
     QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT2\")")));
     QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT4\")")));
     QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT8\")")));
+}
+
+void TestMamTxPayloadPolicy::aWorkedPartnerStaysOutForFiveMinutes()
+{
+    // 27/10/2026: Z32AW (T77RN's PC) and EA4HUK were reopened ~100 s after the QSO because
+    // the already-worked window was 90 s, and answered again.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    QVERIFY(cpp.contains(QStringLiteral("constexpr int kRecentAutoCqPartnerWindowSeconds {300};")));
+    QVERIFY(cpp.contains(QStringLiteral("constexpr int kRecentDuplicateLogWindowSeconds {90};")));
+    const QString dup = functionBody(
+        cpp,
+        QStringLiteral("bool DecodiumBridge::isRecentAutoCqDuplicate"),
+        QStringLiteral("bool DecodiumBridge::isRecentAutoCqWorkedOrLoggedDuplicate"));
+    QVERIFY(dup.contains(QStringLiteral("isWithinRecentAutoCqPartnerWindow(workedIt.value()")));
+    QVERIFY(dup.contains(QStringLiteral("isWithinRecentAutoCqPartnerWindow(loggedIt.value()")));
+    // an abandoned partner (no answer) is still skipped for 90 s only
+    QVERIFY(dup.contains(QStringLiteral("isWithinRecentDuplicateWindow(abandonedIt.value()")));
+    const QString wl = functionBody(
+        cpp,
+        QStringLiteral("bool DecodiumBridge::isRecentAutoCqWorkedOrLoggedDuplicate"),
+        QStringLiteral("void DecodiumBridge::touchRecentAutoCqWorked"));
+    QVERIFY(wl.contains(QStringLiteral("isWithinRecentAutoCqPartnerWindow(workedIt.value()")));
+    QVERIFY(wl.contains(QStringLiteral("isWithinRecentAutoCqPartnerWindow(loggedIt.value()")));
+    // the window slides while the partner keeps calling
+    QVERIFY(cpp.contains(QStringLiteral("touchRecentAutoCqWorked(messagePartnerBase, m_frequency, m_mode);")));
+    // the log de-duplication window must not have grown
+    QVERIFY(cpp.contains(QStringLiteral("suppressDuplicateLog = isWithinRecentDuplicateWindow(it.value(), nowUtc);")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()

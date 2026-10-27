@@ -2728,6 +2728,8 @@ private:
     bool isRecentAutoCqDuplicate(const QString& call,
                                  double freqHz = -1.0,
                                  const QString& mode = QString()) const;
+    // A partner who is still calling after a completed QSO keeps the already-worked window open.
+    void touchRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
     bool isRecentAutoCqWorkedOrLoggedDuplicate(const QString& call,
                                                double freqHz = -1.0,
                                                const QString& mode = QString()) const;
