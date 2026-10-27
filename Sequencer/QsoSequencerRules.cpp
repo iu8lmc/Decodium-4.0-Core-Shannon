@@ -119,6 +119,23 @@ bool lastTxJustifiesSignoff (const QString& message)
         || last == QLatin1String ("73");
 }
 
+bool courtesySignoffDue (const QString& message, int sentInWindow, int maxPerWindow)
+{
+    if (sentInWindow >= maxPerWindow)
+        return false;
+    QStringList const tokens = message.simplified ().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    if (tokens.size () < 3)
+        return false;
+    QString const last = tokens.last ();
+    if (last.endsWith (QLatin1Char ('?')) || last == QLatin1String ("?"))
+        return false;   // a low-confidence decode must not make us transmit
+    if (last == QLatin1String ("73"))
+        return false;   // the partner has already closed
+    if (tokens.first ().compare (QLatin1String ("CQ"), Qt::CaseInsensitive) == 0)
+        return false;   // not directed to us
+    return true;
+}
+
 bool mayFeedRescuedDecodeToSequencer (const QString& message)
 {
     QStringList tokens = message.simplified ().split (QLatin1Char (' '), Qt::SkipEmptyParts);

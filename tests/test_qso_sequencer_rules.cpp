@@ -45,6 +45,7 @@ class TestQsoSequencerRules final : public QObject
 private slots:
     void rescuedDecodeNeverClosesTheQso ();
     void ourRr73CountsAsSomethingSentToThePartner ();
+    void courtesySignoffIsOneShotAndNeverFromAGuess ();
   void ftxUserCapIsAbsolute ()
   {
     // FT2/FT4/FT8: lo spinbox utente è un valore assoluto, conservative NON lo gonfia
@@ -475,6 +476,27 @@ void TestQsoSequencerRules::ourRr73CountsAsSomethingSentToThePartner ()
     QVERIFY (!lastTxJustifiesSignoff (QStringLiteral ("LY5A IU8LMC JN71")));
     QVERIFY (!lastTxJustifiesSignoff (QStringLiteral ("CQ IU8LMC JN71")));
     QVERIFY (!lastTxJustifiesSignoff (QString ()));
+}
+
+void TestQsoSequencerRules::courtesySignoffIsOneShotAndNeverFromAGuess ()
+{
+    // 27/10/2026: EA4HUK, RW0AR and T77RN's partners go on calling after the QSO is logged
+    // because they did not hear our closing message.
+    using decodium::seq::courtesySignoffDue;
+    QVERIFY (courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK IN80"), 0, 2));
+    QVERIFY (courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK R-07"), 1, 2));
+    QVERIFY (courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK RR73"), 0, 2));
+    // limit per window
+    QVERIFY (!courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK IN80"), 2, 2));
+    // the partner already closed
+    QVERIFY (!courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK 73"), 0, 2));
+    // a low-confidence decode is never a reason to key the transmitter
+    QVERIFY (!courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK IN80 ?"), 0, 2));
+    QVERIFY (!courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK R-07?"), 0, 2));
+    // not directed at us / too short
+    QVERIFY (!courtesySignoffDue (QStringLiteral ("CQ EA4HUK IN80"), 0, 2));
+    QVERIFY (!courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK"), 0, 2));
+    QVERIFY (!courtesySignoffDue (QString (), 0, 2));
 }
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)

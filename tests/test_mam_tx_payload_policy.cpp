@@ -46,6 +46,7 @@ private slots:
     void logAnywayNeedsAReportFromThePartner();
     void tx3SignoffCapCoversFt8AndFt4();
     void aWorkedPartnerStaysOutForFiveMinutes();
+    void courtesySignoffNeverLogsTwice();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -288,6 +289,46 @@ void TestMamTxPayloadPolicy::aWorkedPartnerStaysOutForFiveMinutes()
     QVERIFY(cpp.contains(QStringLiteral("touchRecentAutoCqWorked(messagePartnerBase, m_frequency, m_mode);")));
     // the log de-duplication window must not have grown
     QVERIFY(cpp.contains(QStringLiteral("suppressDuplicateLog = isWithinRecentDuplicateWindow(it.value(), nowUtc);")));
+}
+
+void TestMamTxPayloadPolicy::courtesySignoffNeverLogsTwice()
+{
+    // 1.0.720: a one-shot 73 to a partner whose QSO is already logged must be released
+    // without logging by every exit that can finish a QSO.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    const QString fromSignoff = functionBody(
+        cpp,
+        QStringLiteral("bool DecodiumBridge::finishAutoSequenceQsoFromCompletedSignoff"),
+        QStringLiteral("void DecodiumBridge::checkAndStartPeriodicTx"));
+    QVERIFY(fromSignoff.left(300).contains(QStringLiteral("releaseCourtesySignoffIfActive(reason)")));
+    // the two finishAutoSequenceQso lambdas
+    QCOMPARE(cpp.count(QStringLiteral("if (releaseCourtesySignoffIfActive(reason)) {\n            return;")), 2);
+    // release never logs and restores the worked entry that finishing without a log removes
+    const QString release = functionBody(
+        cpp,
+        QStringLiteral("bool DecodiumBridge::releaseCourtesySignoffIfActive"),
+        QStringLiteral("void DecodiumBridge::clearRecentAutoCqAbandoned"));
+    QVERIFY(release.contains(QStringLiteral("complete, QSO was already logged\").arg(base), false)")));
+    QVERIFY(release.contains(QStringLiteral("clearRecentAutoCqAbandoned(base")));
+    QVERIFY(release.contains(QStringLiteral("rememberRecentAutoCqWorked(base")));
+    // only when idle in CQ, for a worked/logged partner, at most twice
+    const QString start = functionBody(
+        cpp,
+        QStringLiteral("bool DecodiumBridge::maybeStartCourtesySignoff"),
+        QStringLiteral("bool DecodiumBridge::releaseCourtesySignoffIfActive"));
+    QVERIFY(start.contains(QStringLiteral("m_currentTx != 6")));
+    QVERIFY(start.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase")));
+    QVERIFY(start.contains(QStringLiteral("courtesySignoffDue(msg, int(sent.size()), 2)")));
+    QVERIFY(start.contains(QStringLiteral("m_qsoLogged = true;")));
+    // triggered from both "already worked" skip branches, only for messages directed at us
+    QCOMPARE(cpp.count(QStringLiteral("maybeStartCourtesySignoff(messagePartner, messagePartnerBase, msg);")), 2);
+    // the flag never outlives the QSO state
+    const QString reset = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::resetQsoStateForNextSequence"),
+        QStringLiteral("bool DecodiumBridge::finishAutoSequenceQsoFromCompletedSignoff"));
+    QVERIFY(reset.contains(QStringLiteral("m_courtesySignoffBase.clear();")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()

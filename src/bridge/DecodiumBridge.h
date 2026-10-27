@@ -2728,6 +2728,10 @@ private:
     bool isRecentAutoCqDuplicate(const QString& call,
                                  double freqHz = -1.0,
                                  const QString& mode = QString()) const;
+    // One-shot 73 to a partner whose QSO is already logged but who keeps calling (1.0.720).
+    bool maybeStartCourtesySignoff(const QString& partnerCall, const QString& partnerBase,
+                                   const QString& msg);
+    bool releaseCourtesySignoffIfActive(const QString& reason);
     // A partner who is still calling after a completed QSO keeps the already-worked window open.
     void touchRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
     bool isRecentAutoCqWorkedOrLoggedDuplicate(const QString& call,
@@ -4176,6 +4180,8 @@ private:
     QString m_lastAutoSeqDecodeIdentity;
     QHash<QString, QDateTime> m_recentAutoCqAbandonedUtcByKey;
     QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
+    QString m_courtesySignoffBase;                         // base call of the courtesy 73 in progress
+    QHash<QString, QList<qint64>> m_courtesySignoffSentMs; // when courtesy 73 were sent, per partner
     QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
 
     // B6 — cty.dat

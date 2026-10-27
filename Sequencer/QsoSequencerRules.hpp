@@ -73,6 +73,13 @@ bool mayFeedRescuedDecodeToSequencer (const QString& message);
 // `message` is the last message we transmitted.
 bool lastTxJustifiesSignoff (const QString& message);
 
+// A partner whose QSO is already complete keeps calling because it did not hear our closing
+// message. Decide whether a one-shot courtesy 73 is due for the directed message `message`
+// (trailing '?' included): never for a low-confidence decode, never when the partner already
+// sent its own 73, and never more than `maxPerWindow` times (`sentInWindow` already sent in
+// the current window).
+bool courtesySignoffDue (const QString& message, int sentInWindow, int maxPerWindow);
+
 // A Fox/Hound backend change must not interrupt the final TX5/73 or an open
 // log confirmation. Both states still belong to the QSO being completed.
 bool specialOperationTransitionRequiresDeferral (bool ownFinal73Pending,
