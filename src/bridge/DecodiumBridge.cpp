@@ -42065,11 +42065,18 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             && (m_qsoProgress == 4 || m_qsoProgress == 5)
             && (m_mode == QStringLiteral("FT2") || m_mode == QStringLiteral("FT4")
                 || m_mode == QStringLiteral("FT8"))) {
-            int const tx3SignoffCap = deferredSignoffRetryCapForMode(m_mode, m_maxCallerRetries,
-                                                                     m_currentPartnerSnrDb, m_ft2Conservative,
-                                                                     m_ft2QuickGiveUpStrong, m_ft2SignoffRetryCap,
-                                                                     m_ft4SignoffRetryCap, m_ft8SignoffRetryCap,
-                                                                     m_ftxWeakSignoffBoost, m_ftxWeakSnrThreshold, m_ftxWeakSignoffBonus);
+            int tx3SignoffCap = deferredSignoffRetryCapForMode(m_mode, m_maxCallerRetries,
+                                                               m_currentPartnerSnrDb, m_ft2Conservative,
+                                                               m_ft2QuickGiveUpStrong, m_ft2SignoffRetryCap,
+                                                               m_ft4SignoffRetryCap, m_ft8SignoffRetryCap,
+                                                               m_ftxWeakSignoffBoost, m_ftxWeakSnrThreshold, m_ftxWeakSignoffBonus);
+            // 1.0.721: in FT8/FT4 the TX3 R-report is still waiting for the DX station's RR73, and
+            // a DX in a pile-up can take many cycles to come back. The operator's own "Caller
+            // retries" is the patience he asked for (IT9MRM, 20): the signoff cap of 3 closed
+            // those QSOs after 90 s without a confirmation. FT2 keeps its own cap.
+            if (m_mode != QStringLiteral("FT2")) {
+                tx3SignoffCap = qMax(tx3SignoffCap, m_maxCallerRetries);
+            }
             if (m_currentTx == m_lastNtx && m_txRetryCount >= tx3SignoffCap) {
                 finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: TX3 R+report mode=%1 progress=%2 retry cap %3/%4 -> log anyway, retry cap reached")
                                           .arg(m_mode)

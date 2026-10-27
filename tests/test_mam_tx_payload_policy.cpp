@@ -253,14 +253,14 @@ void TestMamTxPayloadPolicy::tx3SignoffCapCoversFt8AndFt4()
         cpp,
         QStringLiteral("void DecodiumBridge::checkAndStartPeriodicTx"),
         QStringLiteral("void DecodiumBridge::autoSequenceStep("));
-    const int cap = body.indexOf(QStringLiteral("const int tx3SignoffCap")) >= 0
-        ? body.indexOf(QStringLiteral("const int tx3SignoffCap"))
-        : body.indexOf(QStringLiteral("int const tx3SignoffCap"));
+    const int cap = body.indexOf(QStringLiteral("int tx3SignoffCap = "));
     QVERIFY(cap > 0);
     const QString guard = body.left(cap).right(420);
     QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT2\")")));
     QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT4\")")));
     QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT8\")")));
+    // the FT8/FT4 cap follows the operator's own Caller retries when it is higher (IT9MRM, 27/10/2026)
+    QVERIFY(body.contains(QStringLiteral("tx3SignoffCap = qMax(tx3SignoffCap, m_maxCallerRetries);")));
 }
 
 void TestMamTxPayloadPolicy::aWorkedPartnerStaysOutForFiveMinutes()
