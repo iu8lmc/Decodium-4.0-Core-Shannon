@@ -41939,9 +41939,13 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         // LOGGA prima di azzerare e popola cooldown + recentWorked cache, quindi un
         // RR73 tardivo viene scartato dal gate cooldown in autoSequenceStep (no doppio
         // log, no riavvio TX1). Copre QuickQSO (progress5) e R+report normale (progress4).
+        // 1.0.716: the cap was FT2 only. In FT8/FT4 a QuickQSO TX3 "R-16 TU" (or a TX3
+        // R+report) to a partner who vanished was repeated until someone pressed HALT
+        // (DD8HG, 26/10/2026: 41 identical transmissions in 20 minutes).
         if (m_currentTx == 3
             && (m_qsoProgress == 4 || m_qsoProgress == 5)
-            && m_mode == QStringLiteral("FT2")) {
+            && (m_mode == QStringLiteral("FT2") || m_mode == QStringLiteral("FT4")
+                || m_mode == QStringLiteral("FT8"))) {
             int const tx3SignoffCap = deferredSignoffRetryCapForMode(m_mode, m_maxCallerRetries,
                                                                      m_currentPartnerSnrDb, m_ft2Conservative,
                                                                      m_ft2QuickGiveUpStrong, m_ft2SignoffRetryCap,

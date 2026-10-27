@@ -44,6 +44,7 @@ private slots:
     void aLowConfidenceSignoffNeverClosesAQso();
     void adifFieldsAreWhatActuallyHappened();
     void logAnywayNeedsAReportFromThePartner();
+    void tx3SignoffCapCoversFt8AndFt4();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -238,6 +239,26 @@ void TestMamTxPayloadPolicy::logAnywayNeedsAReportFromThePartner()
     QVERIFY(cpp.contains(QStringLiteral("QSO NOT logged: retry cap reached but")));
     QVERIFY(!cpp.contains(QStringLiteral("-> log anyway, partner left\")")));
     QCOMPARE(cpp.count(QStringLiteral("-> log anyway, retry cap reached\")")), 3);
+}
+
+void TestMamTxPayloadPolicy::tx3SignoffCapCoversFt8AndFt4()
+{
+    // 26/10/2026: a QuickQSO TX3 "R-16 TU" to DD8HG, who never answered, was sent 41
+    // times in 20 minutes in FT8 because the TX3 signoff cap was FT2 only.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    const QString body = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::checkAndStartPeriodicTx"),
+        QStringLiteral("void DecodiumBridge::autoSequenceStep("));
+    const int cap = body.indexOf(QStringLiteral("const int tx3SignoffCap")) >= 0
+        ? body.indexOf(QStringLiteral("const int tx3SignoffCap"))
+        : body.indexOf(QStringLiteral("int const tx3SignoffCap"));
+    QVERIFY(cap > 0);
+    const QString guard = body.left(cap).right(420);
+    QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT2\")")));
+    QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT4\")")));
+    QVERIFY(guard.contains(QStringLiteral("m_mode == QStringLiteral(\"FT8\")")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()
