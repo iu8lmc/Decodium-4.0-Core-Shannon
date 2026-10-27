@@ -144,7 +144,7 @@ private slots:
         std::int64_t slot = 1000;
         for (int elapsed : results) gate.decoded(Gate::Context {slot++, 2, 7}, elapsed);
         QVERIFY(gate.slowDecoder());
-        QCOMPARE(gate.decodeDeadline(), 1600);
+        QCOMPARE(gate.decodeDeadline(), 1400);
         QCOMPARE(gate.commitDeadline(), 1800);
         Gate::Context const tx {slot + 1, 2, 7};
         QVERIFY(gate.armTimer(tx));
@@ -154,10 +154,29 @@ private slots:
         QCOMPARE(gate.decision(tx, 1300, false), Decision::Ready);
         // no result at all: send at the extended deadline rather than lose the cycle
         Gate::Context const tx2 {slot + 3, 2, 7};
-        QCOMPARE(gate.decision(tx2, 1599, false), Decision::Wait);
-        QCOMPARE(gate.decision(tx2, 1600, false), Decision::Ready);
+        QCOMPARE(gate.decision(tx2, 1399, false), Decision::Wait);
+        QCOMPARE(gate.decision(tx2, 1400, false), Decision::Ready);
         QVERIFY(!gate.resultReady(tx2));
         QCOMPARE(gate.decision(tx2, 1800, false), Decision::SkipSlot);  // never past the commit deadline
+    }
+
+    void aNewSlotOrQsoDoesNotForgetHowSlowTheDecoderIs()
+    {
+        // IT9MRM, 721: after every double click, HALT or finished QSO the learned speed was
+        // wiped and the next two cycles were skipped again before it was learned anew.
+        Gate gate;
+        std::int64_t slot = 3000;
+        for (int elapsed : {1167, 1228, 1153, 1257, 1202, 1317})
+            gate.decoded(Gate::Context {slot++, 2, 7}, elapsed);
+        QVERIFY(gate.slowDecoder());
+        gate.resetKeepingSpeed();                       // what a new QSO or a HALT now does
+        QVERIFY(gate.slowDecoder());
+        Gate::Context const tx {slot + 2, 2, 7};
+        QCOMPARE(gate.decision(tx, 1250, false), Decision::Wait);   // not SkipSlot
+        QCOMPARE(gate.decision(tx, 1400, false), Decision::Ready);  // and it sends, not skips
+        gate.reset();                                   // a full reset still forgets everything
+        QVERIFY(!gate.slowDecoder());
+        QCOMPARE(gate.decision(tx, 1250, false), Decision::SkipSlot);
     }
 
     void aHealthyDecoderKeepsTheOriginalDeadlines()
@@ -211,9 +230,16 @@ private slots:
         QVERIFY(defer.contains(QStringLiteral("decision(context, elapsedMs, finalMessage)")));
         QVERIFY(defer.contains(QStringLiteral("m_ft8AutoTxDecodeGate.decodeDeadline()")));
         QVERIFY(defer.contains(QStringLiteral("resultReady(context)")));
+        // the learned decoder speed survives the reset done at every new QSO, HALT or click
+        QVERIFY(cpp.contains(QStringLiteral("m_ft8AutoTxDecodeGate.resetKeepingSpeed();")));
+        QVERIFY(!cpp.contains(QStringLiteral("m_ft8AutoTxDecodeGate.reset();")));
         QCOMPARE(cpp.count(QStringLiteral("syncTxCommitDeadlineMs(")), 3); // helper and both guards
         QCOMPARE(cpp.count(QStringLiteral("validateFt8AutoTxAudioStart(txPlaybackMs)")), 3); // macOS, Windows, Linux
         QVERIFY(cpp.contains(QStringLiteral("m_activeFt8AutoTxFullFrame) return 0")));
+        // 1.0.722: the gate is off unless explicitly enabled for testing
+        QString const uses = body("bool DecodiumBridge::usesFt8AutoTxDecodeGate() const", "decodium::Ft8AutoTxDecodeGate::Context DecodiumBridge::ft8AutoTxDecodeContext()");
+        QVERIFY(uses.contains(QStringLiteral("truthyEnvironmentFlag(\"DECODIUM_FT8_TX_GATE\")")));
+        QVERIFY(uses.indexOf(QStringLiteral("if (!gateEnabled)")) < uses.indexOf(QStringLiteral("m_mode == QStringLiteral(\"FT8\")")));
         QString const deferred = body("bool DecodiumBridge::tryStartDeferredManualSyncTx()",
                                       "void DecodiumBridge::clearDeferredManualSyncTx(");
         QVERIFY(deferred.contains(QStringLiteral("auto-ft8-rx-rendezvous")));

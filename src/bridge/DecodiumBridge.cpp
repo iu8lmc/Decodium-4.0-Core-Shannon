@@ -20730,7 +20730,7 @@ void DecodiumBridge::invalidateDeferredTxRequests(const QString& reason)
         || m_explicitManualTxRequest > 0;
 
     ++m_txRequestGeneration;
-    m_ft8AutoTxDecodeGate.reset();
+    m_ft8AutoTxDecodeGate.resetKeepingSpeed();
     m_periodicTxCheckScheduled = false;
     m_syncTxRetryScheduled = false;
     ++m_syncTxRetrySerial;
@@ -40524,6 +40524,14 @@ bool DecodiumBridge::advanceQsoState(int txNum)
 
 bool DecodiumBridge::usesFt8AutoTxDecodeGate() const
 {
+    // 1.0.722: the FT8 decode gate (1.0.714) is OFF. On a PC whose decoder takes about as long
+    // as its deadline it skipped TX cycles (IT9MRM, 721: two cycles lost after every click,
+    // and a TX refused 6 ms past the start limit), while 1.0.712, which sends at the normal
+    // time, was stable. DECODIUM_FT8_TX_GATE=1 turns it back on for testing.
+    static bool const gateEnabled = truthyEnvironmentFlag("DECODIUM_FT8_TX_GATE");
+    if (!gateEnabled) {
+        return false;
+    }
     return m_mode == QStringLiteral("FT8")
         && !usingLegacyBackendForTx() && !usingTciAudioInput() && !m_decoPortUseRemote
         && !mamMultiStreamSequencerActive()

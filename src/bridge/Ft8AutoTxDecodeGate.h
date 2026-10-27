@@ -23,11 +23,16 @@ public:
     static constexpr int lateStreakForFinalMessage = 1;
     static constexpr int lateStreakForAnyMessage = 2;
     // A decoder that hovers around the deadline (1.1-1.7 s, IT9MRM 27/10/2026) loses
-    // every other cycle to a few milliseconds. When 2 of the last 6 results were late
-    // the gate waits longer for it, and past that point sends instead of skipping.
-    static constexpr int slowWindow = 6;
+    // every other cycle to a few milliseconds. When 2 of the last 8 results took 1 s or
+    // more the gate waits a little longer for it, and past that point sends instead of
+    // skipping. The extended wait stays well under the 1.8 s start limit: on a busy PC the
+    // timer that ends the wait can fire 150-300 ms late (IT9MRM, 721: TX skipped at 1806 ms).
+    // The bar is 1 s, not the 1.2 s deadline, so that results clustering just below the
+    // deadline keep the mode on instead of letting it lapse after two quick ones.
+    static constexpr int slowWindow = 8;
     static constexpr int slowLateSamples = 2;
-    static constexpr int slowDecodeDeadlineMs = 1600;
+    static constexpr int slowLateMs = 1000;
+    static constexpr int slowDecodeDeadlineMs = 1400;
     static constexpr int slowCommitDeadlineMs = 1800;
 
     struct Context {
@@ -45,6 +50,17 @@ public:
 
     void reset() { *this = Ft8AutoTxDecodeGate {}; }
 
+    // A new slot, session or QSO needs a clean rendezvous, but how fast the decoder is belongs
+    // to the PC, not to the QSO: a double click, a HALT or the end of a QSO used to wipe it, and
+    // the next two cycles were skipped again while it was learned anew (IT9MRM, 721: two cycles
+    // lost after every manual click).
+    void resetKeepingSpeed()
+    {
+        Speed const keep = speed();
+        reset();
+        restore(keep);
+    }
+
     bool matches(const Context& context) const { return m_context == context; }
 
     // True when the RX result for this slot arrived in time and was applied.
@@ -54,7 +70,7 @@ public:
     {
         int late = 0;
         for (int i = 0; i < m_sampleCount; ++i)
-            if (m_samples[i] >= decodeDeadlineMs) ++late;
+            if (m_samples[i] >= slowLateMs) ++late;
         return late >= slowLateSamples;
     }
 
@@ -138,9 +154,8 @@ private:
         std::int64_t lastSampleSlot = -1;
     };
 
-    void select(const Context& context)
+    Speed speed() const
     {
-        if (matches(context)) return;
         Speed keep;
         keep.lateStreak = m_lateStreak;
         keep.lastLateSlot = m_lastLateSlot;
@@ -148,14 +163,26 @@ private:
         keep.sampleCount = m_sampleCount;
         keep.samplePos = m_samplePos;
         keep.lastSampleSlot = m_lastSampleSlot;
-        reset();
-        m_context = context;
+        return keep;
+    }
+
+    void restore(Speed const& keep)
+    {
         m_lateStreak = keep.lateStreak;
         m_lastLateSlot = keep.lastLateSlot;
         for (int i = 0; i < slowWindow; ++i) m_samples[i] = keep.samples[i];
         m_sampleCount = keep.sampleCount;
         m_samplePos = keep.samplePos;
         m_lastSampleSlot = keep.lastSampleSlot;
+    }
+
+    void select(const Context& context)
+    {
+        if (matches(context)) return;
+        Speed const keep = speed();
+        reset();
+        m_context = context;
+        restore(keep);
     }
 
     void noteLate(const Context& context)
