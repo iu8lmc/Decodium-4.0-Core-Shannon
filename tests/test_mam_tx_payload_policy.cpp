@@ -48,6 +48,7 @@ private slots:
     void aWorkedPartnerStaysOutForFiveMinutes();
     void courtesySignoffNeverLogsTwice();
     void mamPileUpClosesSlotsHonestly();
+    void mamReopenAndResumeFixes();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -359,6 +360,37 @@ void TestMamTxPayloadPolicy::mamPileUpClosesSlotsHonestly()
     QVERIFY(ingest.contains(QStringLiteral("message.trimmed().endsWith(QLatin1Char('?'))")));
     // the stale-TX6 guard line is rate limited
     QVERIFY(cpp.contains(QStringLiteral("static qint64 lastStaleTx6LogMs = 0;")));
+}
+
+void TestMamTxPayloadPolicy::mamReopenAndResumeFixes()
+{
+    // 1.0.724, from the 28/10 pile-up: I5IIL, RL3AW, KN0L, LA1K, SP9SIL reopened at once after a
+    // drop; R4AGO was promoted after being logged.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    const QString ingest = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::mamIngestDecode"),
+        QStringLiteral("void DecodiumBridge::mamPruneSlots"));
+    // (1) a dropped exchange is remembered as abandoned
+    const QString prune = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::mamPruneSlots"),
+        QStringLiteral("void DecodiumBridge::mamPromoteLateReportRecoveries"));
+    QVERIFY(prune.contains(QStringLiteral("rememberRecentAutoCqAbandoned(s.call, m_frequency, m_mode);")));
+    // (2) the resume count is carried to the reopened slot
+    QVERIFY(prune.contains(QStringLiteral("m_mamResumeCarry.insert(s.call, carry);")));
+    QVERIFY(ingest.contains(QStringLiteral("s.lateResumes = qMax(s.lateResumes, carryIt->lateResumes);")));
+    // (3) a '?' grid does not open a slot; recovery traffic is let through the duplicate check
+    QVERIFY(ingest.contains(QStringLiteral("low-confidence grid from %1 does not open a slot")));
+    QVERIFY(ingest.contains(QStringLiteral("!recoveryTraffic")));
+    // (4) a worked/logged station is not promoted nor resumed from a recovery
+    const QString promote = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::mamPromoteLateReportRecoveries"),
+        QStringLiteral("void DecodiumBridge::mamPromoteFromQueue"));
+    QVERIFY(promote.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(it->slot.call")));
+    QVERIFY(ingest.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()

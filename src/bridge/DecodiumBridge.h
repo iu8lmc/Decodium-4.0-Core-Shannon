@@ -3895,6 +3895,13 @@ private:
         bool readyForSlot {false};
     };
     QHash<QString, MamLateReportRecovery> m_mamLateReportRecoveries;
+    // 1.0.724: the resume counter of a dropped MAM slot, carried to the slot a later decode opens
+    // for the same station, so the two-resume cap cannot be reset by reopening it.
+    struct MamResumeCarry {
+        int lateResumes {0};
+        qint64 expiresMs {0};
+    };
+    QHash<QString, MamResumeCarry> m_mamResumeCarry;
     int                 m_mamMaxStreams {3};
     // 1.0.569+ — riempi gli slot liberi con CQ paralleli (modello DX-pedition:
     // chiamo CQ su piu' frequenze insieme e ogni risposta si prende il suo slot).

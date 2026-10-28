@@ -26386,8 +26386,17 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
 
     // Anti-riapertura: stazioni gia' lavorate di recente o in cooldown non
     // devono riaprire uno slot (eviterebbe loop su 73 ripetuti).
-    if (isRecentAutoCqDuplicate(partnerBase, m_frequency, m_mode)
-        || m_qsoCooldown.contains(partnerBase)) {
+    // 1.0.724: a station whose exchange was just dropped may still send its final 73 or a late
+    // report: that is recovery traffic, not a new caller, and is let through.
+    QStringList const earlyTokens = normalizedMessageTokens(message);
+    QString const earlyLast = earlyTokens.isEmpty() ? QString() : earlyTokens.last().trimmed().toUpper();
+    bool const recoveryTraffic = m_mamLateReportRecoveries.contains(partnerBase)
+        && (earlyLast == QStringLiteral("73") || earlyLast == QStringLiteral("RR73")
+            || earlyLast == QStringLiteral("RRR")
+            || QRegularExpression(QStringLiteral("^R?[+-][0-9]+$")).match(earlyLast).hasMatch());
+    if ((isRecentAutoCqDuplicate(partnerBase, m_frequency, m_mode)
+         || m_qsoCooldown.contains(partnerBase))
+        && !recoveryTraffic) {
         return;
     }
 
@@ -26455,6 +26464,11 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
             auto recoveryIt = m_mamLateReportRecoveries.find(partnerBase);
             if (recoveryIt != m_mamLateReportRecoveries.end()) {
                 MamLateReportRecovery& recovery = recoveryIt.value();
+                if (isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)) {
+                    // 1.0.724: already in the log: resuming would log it again (R4AGO, 28/10)
+                    m_mamLateReportRecoveries.erase(recoveryIt);
+                    return;
+                }
                 if (isFinal73) {
                     MamQsoSlot completed = recovery.slot;
                     completed.lastHeardMs = nowMs;
@@ -26528,6 +26542,13 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
             && hasPlainReport
             && !hasRogerReport
             && !hasSignoff;
+        // 1.0.724: a low-confidence grid ('?') does not open a slot: wait for a clean decode
+        // (I5IIL, 28/10: a '?' grid reopened a dropped slot at once).
+        if (message.trimmed().endsWith(QLatin1Char('?')) && !plainReportReply) {
+            bridgeLog(QStringLiteral("MAM: low-confidence grid from %1 does not open a slot: %2")
+                          .arg(partnerBase, message));
+            return;
+        }
         if (!hasGrid && !plainReportReply) {
             return;
         }
@@ -26591,6 +26612,13 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
                               .arg(s.audioFreqHz));
             }
             return;
+        }
+        {
+            auto const carryIt = m_mamResumeCarry.constFind(s.call);
+            if (carryIt != m_mamResumeCarry.constEnd() && carryIt->expiresMs > nowMs) {
+                s.lateResumes = qMax(s.lateResumes, carryIt->lateResumes);
+            }
+            m_mamResumeCarry.remove(s.call);
         }
         m_mamSlots.append(s);
         bridgeLog(QStringLiteral("MAM slot opened: %1 grid=%2 freq=%3Hz tx=%4 sent=%5 rcvd=%6 (slots=%7)")
@@ -26723,6 +26751,15 @@ void DecodiumBridge::mamPruneSlots()
             drop = true;
             dropReason = QStringLiteral("silent > 6 periods");
         }
+        if (drop && !dropReason.isEmpty() && !s.logged) {
+            // 1.0.724: a dropped exchange is remembered as abandoned for the duplicate window, so the
+            // next decode from that station does not reopen it at once (I5IIL, LA1K, SP9SIL, 28/10).
+            rememberRecentAutoCqAbandoned(s.call, m_frequency, m_mode);
+            MamResumeCarry carry;
+            carry.lateResumes = s.lateResumes;
+            carry.expiresMs = nowMs + 10 * 60 * 1000;
+            m_mamResumeCarry.insert(s.call, carry);
+        }
         if (drop && !dropReason.isEmpty()) {
             // A sent RR73 is not evidence that the partner received it. Do
             // not log on retry/silence: retain the exchange briefly so only a
@@ -26790,6 +26827,11 @@ void DecodiumBridge::mamPromoteLateReportRecoveries()
         }
         if (!it->readyForSlot) {
             ++it;
+            continue;
+        }
+        if (isRecentAutoCqWorkedOrLoggedDuplicate(it->slot.call, m_frequency, m_mode)) {
+            // 1.0.724: already logged recently: do not promote a copy of the exchange (R4AGO, 28/10)
+            it = m_mamLateReportRecoveries.erase(it);
             continue;
         }
         MamQsoSlot restored = it->slot;
