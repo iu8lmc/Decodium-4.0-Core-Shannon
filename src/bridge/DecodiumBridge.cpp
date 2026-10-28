@@ -38007,10 +38007,18 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
             } else if (last.length() >= 2 &&
                        last[0] == 'R' &&
                        (last[1] == '-' || last[1] == '+' || last[1].isDigit())) {
-                if (incomingDirectedToMe) newCurrentTx = 4; // ricevuto R+report -> mandiamo RR73
+                if (incomingDirectedToMe) {
+                    newCurrentTx = 4; // ricevuto R+report -> mandiamo RR73
+                    // 1.0.726: the report we clicked is the partner's real report: record it, or the
+                    // final-signoff rule refuses the QSO as "never sent a report" (paul log, FT4, 28/10)
+                    setReportReceived(last.startsWith(QLatin1Char('R')) ? last.mid(1) : last);
+                }
             } else if (last.length() >= 2 &&
                        (last[0] == '-' || last[0] == '+') && last[1].isDigit()) {
-                if (incomingDirectedToMe) newCurrentTx = 3; // ricevuto report -> mandiamo R + nostro report al DX
+                if (incomingDirectedToMe) {
+                    newCurrentTx = 3; // ricevuto report -> mandiamo R + nostro report al DX
+                    setReportReceived(last); // 1.0.726: a plain report from the partner is real too
+                }
             }
             bool const qsoPayloadWouldAdvance =
                 isGridTokenStrict(last) ||

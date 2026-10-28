@@ -43,6 +43,7 @@ class TestQsoSequencerRules final : public QObject
   Q_OBJECT
 
 private slots:
+    void ft4FinalSignoffTakesAtLeastTwoRr73 ();
     void rescuedDecodeNeverClosesTheQso ();
     void ourRr73CountsAsSomethingSentToThePartner ();
     void courtesySignoffIsOneShotAndNeverFromAGuess ();
@@ -517,6 +518,15 @@ void TestQsoSequencerRules::aWeakSignoffAfterOurRr73FreesTheSlot ()
     // a clean 73 is the normal sequencer's business, a weak report is not a signoff
     QVERIFY (!weakSignoffEndsRr73Repeats (QStringLiteral ("IU8LMC LZ1DD 73"), 5, 4, 4, 1, true));
     QVERIFY (!weakSignoffEndsRr73Repeats (QStringLiteral ("IU8LMC LZ1DD R-05 ?"), 5, 4, 4, 1, true));
+}
+
+void TestQsoSequencerRules::ft4FinalSignoffTakesAtLeastTwoRr73 ()
+{
+    // 28/10/2026 (paul log): with the operator's FT4 cap at 1, the QSO was closed on the first RR73.
+    using decodium::seq::deferredSignoffRetryCapForMode;
+    QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT4"), 1, 127, false, false, 4, 1, 3, false, -10, 0) >= 2);
+    QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT4"), 1, 127, false, false, 4, 4, 3, false, -10, 0) == 4);
+    QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT8"), 1, 127, false, false, 4, 4, 1, false, -10, 0) == 1);
 }
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)

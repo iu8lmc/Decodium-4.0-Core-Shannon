@@ -31,7 +31,10 @@ int deferredSignoffRetryCapForMode (const QString& mode, int configuredMaxRetrie
     else if (normalized == QStringLiteral("FT4")) userCap = ft4SignoffCap;
     else if (normalized == QStringLiteral("FT8")) userCap = ft8SignoffCap;
     if (userCap >= 0) {
-        int cap = qBound(1, userCap, 8);
+        // 1.0.726: FT4 closes with at least 2 RR73: with 1 the QSO was closed on the first RR73,
+        // before the partner could send its 73 (paul log, 28/10)
+        int const minCap = (normalized == QStringLiteral("FT4")) ? 2 : 1;
+        int cap = qBound(minCap, userCap, 8);
         // 1.0.437 - opt-in: extra signoff retries per partner debole (default OFF = byte-identico).
         if (weakBoost && partnerSnrDb != 127 && partnerSnrDb <= weakSnrThreshold)
             cap = qBound(1, cap + qBound(1, weakBonus, 6), 8);

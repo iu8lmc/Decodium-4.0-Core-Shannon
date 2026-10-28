@@ -49,6 +49,7 @@ private slots:
     void courtesySignoffNeverLogsTwice();
     void mamPileUpClosesSlotsHonestly();
     void mamReopenAndResumeFixes();
+    void clickedReportIsRecordedAsReceived();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -391,6 +392,15 @@ void TestMamTxPayloadPolicy::mamReopenAndResumeFixes()
         QStringLiteral("void DecodiumBridge::mamPromoteFromQueue"));
     QVERIFY(promote.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(it->slot.call")));
     QVERIFY(ingest.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
+}
+
+void TestMamTxPayloadPolicy::clickedReportIsRecordedAsReceived()
+{
+    // 28/10/2026 (paul log, FT4): a double-clicked R-report of the partner must be recorded.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    QVERIFY(cpp.contains(QStringLiteral("setReportReceived(last.startsWith(QLatin1Char('R')) ? last.mid(1) : last);")));
+    QVERIFY(cpp.contains(QStringLiteral("setReportReceived(last); // 1.0.726")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()
