@@ -26774,6 +26774,7 @@ void DecodiumBridge::mamPruneSlots()
                 mamLogSlot(s);
                 bridgeLog(QStringLiteral("MAM slot %1 logged on RR73 (partner left)").arg(s.callFull));
             }
+            bool retainedForLateReport = false;
             if (!s.logged && s.progress >= 2 && s.progress <= 4) {
                 MamLateReportRecovery recovery;
                 recovery.slot = s;
@@ -26784,6 +26785,7 @@ void DecodiumBridge::mamPruneSlots()
                 int const retainSecs = m_callerQueue.isEmpty() ? 120 : 60;
                 recovery.expiresMs = nowMs + qint64(retainSecs) * 1000;
                 m_mamLateReportRecoveries.insert(s.call, recovery);
+                retainedForLateReport = true;
                 bridgeLog(QStringLiteral("MAM slot %1 retained pending final 73 (%2s)")
                               .arg(s.callFull).arg(retainSecs));
             }
@@ -26791,6 +26793,10 @@ void DecodiumBridge::mamPruneSlots()
             // logged the QSO (LZ1DD, EA1FJD, EB3JT...: 21 "dropped", 8 really not logged).
             if (s.logged) {
                 bridgeLog(QStringLiteral("MAM slot %1 closed, QSO logged (%2)")
+                              .arg(s.callFull, dropReason));
+            } else if (retainedForLateReport) {
+                // 1.0.725: not a failure: the exchange is kept for a late report or final 73
+                bridgeLog(QStringLiteral("MAM slot %1 held for a late report, not logged yet: %2")
                               .arg(s.callFull, dropReason));
             } else {
                 bridgeLog(QStringLiteral("MAM slot %1 dropped without log: %2")
@@ -38789,7 +38795,7 @@ void DecodiumBridge::maybeEnqueueMamCallerFromMessage(const QString& message,
 
     if (isRecentAutoCqDuplicate(partnerBase, m_frequency, m_mode)) {
         removeCallerFromQueue(partnerBase);
-        bridgeLog(QStringLiteral("MAM queue: skip recent completed %1 msg=%2")
+        bridgeLog(QStringLiteral("MAM queue: skip recently completed or abandoned partner %1 msg=%2")
                       .arg(partnerBase, msg));
         return;
     }
