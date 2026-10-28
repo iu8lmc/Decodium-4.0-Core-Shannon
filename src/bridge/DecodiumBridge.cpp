@@ -20707,8 +20707,22 @@ bool DecodiumBridge::txDispatchGuardAllows(const QString& reason)
         && !m_autoCqRepeat
         && !m_multiAnswerMode
         && !explicitManual) {
-        bridgeLog(QStringLiteral("TX guard: blocked stale TX6 because AutoCQ is off (%1)")
-                      .arg(reason));
+        // Logged at most once a minute: with AutoCQ off the periodic check hits this every 15 s
+        // (188 lines in one session).
+        static qint64 lastStaleTx6LogMs = 0;
+        static int suppressedStaleTx6 = 0;
+        qint64 const nowStaleMs = QDateTime::currentMSecsSinceEpoch();
+        if (nowStaleMs - lastStaleTx6LogMs >= 60000) {
+            bridgeLog(QStringLiteral("TX guard: blocked stale TX6 because AutoCQ is off (%1)%2")
+                          .arg(reason,
+                               suppressedStaleTx6 > 0
+                                   ? QStringLiteral(", +%1 repeats").arg(suppressedStaleTx6)
+                                   : QString()));
+            lastStaleTx6LogMs = nowStaleMs;
+            suppressedStaleTx6 = 0;
+        } else {
+            ++suppressedStaleTx6;
+        }
         if (m_txEnabled) {
             m_txEnabled = false;
             emit txEnabledChanged();
@@ -26341,9 +26355,28 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
     if (partnerBase.isEmpty() || partnerBase == myBaseUpper) {
         return;
     }
-    if (!decodium::seq::mayFeedRescuedDecodeToSequencer(message)) {
+    // Only a LOW-CONFIDENCE signoff ('?') is refused. Since 1.0.715 this test ran on every decode,
+    // so in MAM every clean 73/RR73 from a partner was thrown away too: no slot could ever be closed
+    // by its partner's 73 and it stayed until the RR73 retry limit (T77RN, 28/10/2026).
+    if (message.trimmed().endsWith(QLatin1Char('?'))
+        && !decodium::seq::mayFeedRescuedDecodeToSequencer(message)) {
         bridgeLog(QStringLiteral("MAM: low-confidence signoff from %1 ignored, it cannot close a QSO: %2")
                       .arg(partnerBase, message));
+        // It cannot close the QSO, but a 73 after our RR73 from a station that acknowledged our
+        // report means it has stopped waiting: free the slot instead of repeating RR73 up to the
+        // retry limit while callers queue (LZ1DD, 28/10/2026: RR73 x4, 11 of 20 QSOs).
+        int const weakIdx = mamSlotIndexForCall(partnerBase);
+        if (weakIdx >= 0) {
+            MamQsoSlot& weak = m_mamSlots[weakIdx];
+            if (!weak.logged && !weak.weakFinalAck
+                && decodium::seq::weakSignoffEndsRr73Repeats(message, weak.progress, weak.currentTx,
+                                                              weak.lastNtx, weak.retryCount,
+                                                              !weak.reportReceived.trimmed().isEmpty())) {
+                weak.weakFinalAck = true;
+                bridgeLog(QStringLiteral("MAM slot %1: low-confidence 73 after our RR73 x%2, no more RR73")
+                              .arg(weak.callFull).arg(weak.retryCount));
+            }
+        }
         return;
     }
     if (m_ft2ElasticFox) {
@@ -26671,6 +26704,9 @@ void DecodiumBridge::mamPruneSlots()
         QString dropReason;
         if (s.logged || s.state == MamQsoSlot::State::Done) {
             drop = true;
+        } else if (s.weakFinalAck) {
+            drop = true;
+            dropReason = QStringLiteral("low-confidence 73 after our RR73");
         } else if (s.retryCount > maxRetry) {
             drop = true;
             dropReason = QStringLiteral("retry limit %1").arg(maxRetry);
@@ -26706,13 +26742,23 @@ void DecodiumBridge::mamPruneSlots()
                 recovery.slot = s;
                 recovery.slot.lastNtx = -1;
                 recovery.slot.retryCount = 0;
-                recovery.expiresMs = nowMs + 2 * 60 * 1000;
+                // With callers queued the exchange waits for its final 73 for half the time:
+                // a recovered station is promoted ahead of the queue (R6AC, F4IIX waited 2-3 min).
+                int const retainSecs = m_callerQueue.isEmpty() ? 120 : 60;
+                recovery.expiresMs = nowMs + qint64(retainSecs) * 1000;
                 m_mamLateReportRecoveries.insert(s.call, recovery);
-                bridgeLog(QStringLiteral("MAM slot %1 retained pending final 73 (120s)")
-                              .arg(s.callFull));
+                bridgeLog(QStringLiteral("MAM slot %1 retained pending final 73 (%2s)")
+                              .arg(s.callFull).arg(retainSecs));
             }
-            bridgeLog(QStringLiteral("MAM slot %1 dropped without log: %2")
-                          .arg(s.callFull, dropReason));
+            // The message used to say "dropped without log" even when the line just above had
+            // logged the QSO (LZ1DD, EA1FJD, EB3JT...: 21 "dropped", 8 really not logged).
+            if (s.logged) {
+                bridgeLog(QStringLiteral("MAM slot %1 closed, QSO logged (%2)")
+                              .arg(s.callFull, dropReason));
+            } else {
+                bridgeLog(QStringLiteral("MAM slot %1 dropped without log: %2")
+                              .arg(s.callFull, dropReason));
+            }
         }
         if (drop) {
             m_mamSlots.removeAt(i);

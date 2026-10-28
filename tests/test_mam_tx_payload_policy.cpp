@@ -47,6 +47,7 @@ private slots:
     void tx3SignoffCapCoversFt8AndFt4();
     void aWorkedPartnerStaysOutForFiveMinutes();
     void courtesySignoffNeverLogsTwice();
+    void mamPileUpClosesSlotsHonestly();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -331,6 +332,35 @@ void TestMamTxPayloadPolicy::courtesySignoffNeverLogsTwice()
     QVERIFY(reset.contains(QStringLiteral("m_courtesySignoffBase.clear();")));
 }
 
+void TestMamTxPayloadPolicy::mamPileUpClosesSlotsHonestly()
+{
+    // 28/10/2026, T77RN's pile-up with 1.0.722.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    const QString prune = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::mamPruneSlots"),
+        QStringLiteral("void DecodiumBridge::mamPromoteLateReportRecoveries"));
+    // (a) a weak 73 after our RR73 closes the slot, and it is logged by the usual RR73 rule
+    QVERIFY(prune.contains(QStringLiteral("else if (s.weakFinalAck)")));
+    QVERIFY(prune.indexOf(QStringLiteral("else if (s.weakFinalAck)"))
+            < prune.indexOf(QStringLiteral("else if (s.retryCount > maxRetry)")));
+    // (b) the message does not say "without log" for a logged QSO
+    QVERIFY(prune.contains(QStringLiteral("closed, QSO logged (%2)")));
+    QVERIFY(prune.contains(QStringLiteral("if (s.logged) {")));
+    // (c) the wait for the final 73 is shorter with callers queued
+    QVERIFY(prune.contains(QStringLiteral("m_callerQueue.isEmpty() ? 120 : 60")));
+    const QString ingest = functionBody(
+        cpp,
+        QStringLiteral("void DecodiumBridge::mamIngestDecode"),
+        QStringLiteral("void DecodiumBridge::mamPruneSlots"));
+    QVERIFY(ingest.contains(QStringLiteral("weakSignoffEndsRr73Repeats(message")));
+    // the refusal applies to low-confidence decodes only: a clean 73/RR73 must reach the slot
+    QVERIFY(ingest.contains(QStringLiteral("message.trimmed().endsWith(QLatin1Char('?'))")));
+    // the stale-TX6 guard line is rate limited
+    QVERIFY(cpp.contains(QStringLiteral("static qint64 lastStaleTx6LogMs = 0;")));
+}
+
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()
 {
     const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
@@ -453,7 +483,7 @@ void TestMamTxPayloadPolicy::lateRogerReportResumesRetryExpiredMamSlot()
         cpp,
         QStringLiteral("void DecodiumBridge::mamPruneSlots"),
         QStringLiteral("void DecodiumBridge::mamPromoteLateReportRecoveries"));
-    QVERIFY(prune.contains(QStringLiteral("MAM slot %1 retained pending final 73 (120s)")));
+    QVERIFY(prune.contains(QStringLiteral("MAM slot %1 retained pending final 73 (%2s)")));
     QVERIFY(prune.contains(QStringLiteral("s.progress >= 2 && s.progress <= 4")));
     QVERIFY(!prune.contains(QStringLiteral("-> log anyway")));
     // Native MAM bypasses the legacy auto-sequencer cleanup.  Its signoff

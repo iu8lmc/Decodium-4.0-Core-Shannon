@@ -46,6 +46,7 @@ private slots:
     void rescuedDecodeNeverClosesTheQso ();
     void ourRr73CountsAsSomethingSentToThePartner ();
     void courtesySignoffIsOneShotAndNeverFromAGuess ();
+    void aWeakSignoffAfterOurRr73FreesTheSlot ();
   void ftxUserCapIsAbsolute ()
   {
     // FT2/FT4/FT8: lo spinbox utente è un valore assoluto, conservative NON lo gonfia
@@ -497,6 +498,25 @@ void TestQsoSequencerRules::courtesySignoffIsOneShotAndNeverFromAGuess ()
     QVERIFY (!courtesySignoffDue (QStringLiteral ("CQ EA4HUK IN80"), 0, 2));
     QVERIFY (!courtesySignoffDue (QStringLiteral ("IU8LMC EA4HUK"), 0, 2));
     QVERIFY (!courtesySignoffDue (QString (), 0, 2));
+}
+
+void TestQsoSequencerRules::aWeakSignoffAfterOurRr73FreesTheSlot ()
+{
+    // 28/10/2026 (T77RN's pile-up): a low-confidence 73 after our RR73 left the slot repeating
+    // RR73 x4 while callers waited.
+    using decodium::seq::weakSignoffEndsRr73Repeats;
+    QString const weak = QStringLiteral ("IU8LMC LZ1DD 73 ?");
+    QVERIFY (weakSignoffEndsRr73Repeats (weak, 5, 4, 4, 1, true));
+    QVERIFY (weakSignoffEndsRr73Repeats (QStringLiteral ("IU8LMC LZ1DD RR73?"), 4, 4, 4, 3, true));
+    // the partner never acknowledged our report: nothing to free
+    QVERIFY (!weakSignoffEndsRr73Repeats (weak, 5, 4, 4, 1, false));
+    // RR73 not sent yet (or we are not at that step)
+    QVERIFY (!weakSignoffEndsRr73Repeats (weak, 5, 4, 4, 0, true));
+    QVERIFY (!weakSignoffEndsRr73Repeats (weak, 5, 3, 3, 2, true));
+    QVERIFY (!weakSignoffEndsRr73Repeats (weak, 3, 4, 4, 2, true));
+    // a clean 73 is the normal sequencer's business, a weak report is not a signoff
+    QVERIFY (!weakSignoffEndsRr73Repeats (QStringLiteral ("IU8LMC LZ1DD 73"), 5, 4, 4, 1, true));
+    QVERIFY (!weakSignoffEndsRr73Repeats (QStringLiteral ("IU8LMC LZ1DD R-05 ?"), 5, 4, 4, 1, true));
 }
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)

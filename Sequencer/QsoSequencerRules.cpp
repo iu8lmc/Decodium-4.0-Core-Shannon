@@ -136,6 +136,26 @@ bool courtesySignoffDue (const QString& message, int sentInWindow, int maxPerWin
     return true;
 }
 
+bool weakSignoffEndsRr73Repeats (const QString& message, int slotProgress, int slotCurrentTx,
+                                 int slotLastNtx, int slotRetryCount, bool reportReceived)
+{
+    if (!reportReceived || slotProgress < 4 || slotCurrentTx != 4 || slotLastNtx != 4
+        || slotRetryCount < 1)
+        return false;
+    // only a low-confidence signoff ('?'): a clean one is handled by the normal sequencer
+    if (!message.trimmed ().endsWith (QLatin1Char ('?')))
+        return false;
+    QStringList tokens = message.simplified ().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    while (!tokens.isEmpty () && tokens.last () == QLatin1String ("?"))
+        tokens.removeLast ();
+    if (tokens.isEmpty ())
+        return false;
+    QString last = tokens.last ();
+    if (last.endsWith (QLatin1Char ('?')))
+        last.chop (1);
+    return last == QLatin1String ("73") || last.compare (QLatin1String ("RR73"), Qt::CaseInsensitive) == 0;
+}
+
 bool mayFeedRescuedDecodeToSequencer (const QString& message)
 {
     QStringList tokens = message.simplified ().split (QLatin1Char (' '), Qt::SkipEmptyParts);

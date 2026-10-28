@@ -3867,6 +3867,7 @@ private:
         int     linkSnrDb {127};    // its SNR on a full-scale stream, from its own report (127 = unknown)
         int     waitFrames {0};     // frames the power budget left it out of
         int     lateResumes {0};    // times a dropped exchange was resumed by the partner's late R+report
+        bool    weakFinalAck {false}; // a low-confidence 73 came after our RR73: stop repeating it
         enum class State { Active, Signoff, Done } state {State::Active};
     };
     QVector<MamQsoSlot> m_mamSlots;

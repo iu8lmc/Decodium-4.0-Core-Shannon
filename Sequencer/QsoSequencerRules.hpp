@@ -80,6 +80,15 @@ bool lastTxJustifiesSignoff (const QString& message);
 // the current window).
 bool courtesySignoffDue (const QString& message, int sentInWindow, int maxPerWindow);
 
+// MAM pile-up: a slot that has already sent RR73 to a partner who acknowledged our report
+// goes on repeating RR73 until the retry limit when the partner's 73 is a low-confidence decode
+// (LZ1DD, 28/10/2026: RR73 x4 in two minutes while two callers waited). Such a decode cannot
+// close a QSO (see mayFeedRescuedDecodeToSequencer), but it is good evidence that the partner has
+// stopped waiting for more RR73s. True when `message` is a low-confidence signoff and the slot is
+// in exactly that state: partner report received, RR73 (TX4) sent at least once.
+bool weakSignoffEndsRr73Repeats (const QString& message, int slotProgress, int slotCurrentTx,
+                                 int slotLastNtx, int slotRetryCount, bool reportReceived);
+
 // A Fox/Hound backend change must not interrupt the final TX5/73 or an open
 // log confirmation. Both states still belong to the QSO being completed.
 bool specialOperationTransitionRequiresDeferral (bool ownFinal73Pending,
