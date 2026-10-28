@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git blame:*)",
+      "Bash(git branch:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git describe:*)",
+      "Bash(git shortlog:*)",
+      "Bash(git remote -v)",
+      "Bash(git fetch:*)",
+
+      "Bash(cmake -S:*)",
+      "Bash(cmake --build:*)",
+      "Bash(cmake --version)",
+      "Bash(ctest:*)",
+      "Bash(ninja -C:*)",
+      "Bash(make -C:*)",
+      "Bash(pkg-config:*)",
+
+      "Bash(scripts/ci/validate-repository-layout.sh:*)",
+      "Bash(scripts/ci/resolve-release-version.sh:*)",
+      "Bash(scripts/ci/build-librtlsdr.sh:*)",
+      "Bash(scripts/build/build-linux.sh:*)",
+      "Bash(scripts/build/build-arm.sh:*)",
+      "Bash(scripts/build/build-intel-x64.sh:*)",
+      "Bash(scripts/build/docker-build-linux.sh:*)",
+
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(file:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/id_rsa*)",
+      "Read(./**/*.p12)"
+    ]
+  }
+}
