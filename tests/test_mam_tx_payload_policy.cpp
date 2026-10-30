@@ -50,6 +50,7 @@ private slots:
     void mamPileUpClosesSlotsHonestly();
     void mamReopenAndResumeFixes();
     void clickedReportIsRecordedAsReceived();
+    void mamDoesNotReopenWorkedPartnerWithin300s();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
     void legacyMirrorRoutesMultiStreamDecodesToSlotState();
     void legacyMirrorCompletesExistingMamQsoAfterMamIsDisabled();
@@ -401,6 +402,14 @@ void TestMamTxPayloadPolicy::clickedReportIsRecordedAsReceived()
     QVERIFY(!cpp.isEmpty());
     QVERIFY(cpp.contains(QStringLiteral("setReportReceived(last.startsWith(QLatin1Char('R')) ? last.mid(1) : last);")));
     QVERIFY(cpp.contains(QStringLiteral("setReportReceived(last); // 1.0.726")));
+}
+
+void TestMamTxPayloadPolicy::mamDoesNotReopenWorkedPartnerWithin300s()
+{
+    // 1.0.727: PA3GHO, logged at 23:01, was reopened from a directed decode at 23:03 (inside 5 min).
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    QVERIFY(cpp.contains(QStringLiteral("|| isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()

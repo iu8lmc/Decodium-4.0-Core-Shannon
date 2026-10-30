@@ -26394,7 +26394,10 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
         && (earlyLast == QStringLiteral("73") || earlyLast == QStringLiteral("RR73")
             || earlyLast == QStringLiteral("RRR")
             || QRegularExpression(QStringLiteral("^R?[+-][0-9]+$")).match(earlyLast).hasMatch());
+    // 1.0.727: a station worked or logged within the 5-minute window is not reopened by a
+    // directed decode, whatever the queue (PA3GHO reopened 3.5 min after its log, 29/10).
     if ((isRecentAutoCqDuplicate(partnerBase, m_frequency, m_mode)
+         || isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)
          || m_qsoCooldown.contains(partnerBase))
         && !recoveryTraffic) {
         return;
