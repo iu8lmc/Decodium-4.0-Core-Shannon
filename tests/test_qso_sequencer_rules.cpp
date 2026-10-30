@@ -60,7 +60,7 @@ private slots:
 
   void ftxUserCapClamped ()
   {
-    QCOMPARE (deferredSignoffRetryCapForMode ("FT2", 10, 127, false, false, 0, 4, 3), 1);   // min 1
+    QCOMPARE (deferredSignoffRetryCapForMode ("FT2", 10, 127, false, false, 0, 4, 3), 2);   // 1.0.727: min 2
     QCOMPARE (deferredSignoffRetryCapForMode ("FT2", 10, 127, false, false, 99, 4, 3), 8);  // max 8
   }
 
@@ -526,7 +526,8 @@ void TestQsoSequencerRules::ft4FinalSignoffTakesAtLeastTwoRr73 ()
     using decodium::seq::deferredSignoffRetryCapForMode;
     QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT4"), 1, 127, false, false, 4, 1, 3, false, -10, 0) >= 2);
     QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT4"), 1, 127, false, false, 4, 4, 3, false, -10, 0) == 4);
-    QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT8"), 1, 127, false, false, 4, 4, 1, false, -10, 0) == 1);
+    QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT8"), 1, 127, false, false, 4, 4, 1, false, -10, 0) >= 2);
+    QVERIFY (deferredSignoffRetryCapForMode (QStringLiteral ("FT2"), 1, 127, false, false, 1, 4, 3, false, -10, 0) >= 2);
 }
 
 QTEST_APPLESS_MAIN (TestQsoSequencerRules)
