@@ -326,7 +326,9 @@ Item {
         clip: true
         spacing: 1
         cacheBuffer: 600
-        reuseItems: true
+        // 1.0.728: rows are not reused: a reused row kept the text of an earlier decode, and two
+        // messages were drawn over each other when the list updated quickly (screenshot 31/10).
+        reuseItems: false
         model: (root.bridge && root.bridge.fullSpectrumModel) ? root.bridge.fullSpectrumModel : null
 
         property bool followTail: true
