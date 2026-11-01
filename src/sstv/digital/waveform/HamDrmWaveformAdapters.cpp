@@ -6,6 +6,8 @@
 #include "HamDrmWaveformCodec.h"
 #include "../../dsp/SstvResampler.h"
 
+#include <QDebug>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -115,16 +117,30 @@ public:
     HamDrmStatus status;
 };
 
+constexpr std::size_t kHeaderRepetitionsPerSide = 8U;
+
 std::vector<std::vector<std::uint8_t>> orderedGroups(
     HamDrmEncodedObject object)
 {
+    // Repeat the MOT header while a peer acquires OFDM/FAC and fills its
+    // interleaver. Otherwise a short single-shot object can lose its only
+    // header before the receiver is ready.
     std::vector<std::vector<std::uint8_t>> groups;
-    groups.reserve(object.headerGroups.size() + object.bodyGroups.size());
-    for (auto& group : object.headerGroups) {
-        groups.push_back(std::move(group));
+    groups.reserve(object.headerGroups.size() * kHeaderRepetitionsPerSide * 2U + object.bodyGroups.size());
+    for (std::size_t repeat = 0; repeat < kHeaderRepetitionsPerSide; ++repeat) {
+        for (const auto& group : object.headerGroups) {
+            groups.push_back(group);
+        }
     }
     for (auto& group : object.bodyGroups) {
         groups.push_back(std::move(group));
+    }
+    // Continue valid carrier frames after the body so receivers can drain
+    // their interleaver and buffered demodulator before the signal ends.
+    for (std::size_t repeat = 0; repeat < kHeaderRepetitionsPerSide; ++repeat) {
+        for (const auto& group : object.headerGroups) {
+            groups.push_back(group);
+        }
     }
     return groups;
 }
@@ -866,8 +882,12 @@ private:
             callbackSession = sessionId;
         }
         try {
-            callbackSink->hamDrmRxProgress(
-                callbackSession, batch.synchronized ? 0.5 : 0.0);
+            // Synchronization can be lost and recovered within one RX
+            // session. Progress is monotonic; it is not a live lock flag.
+            // Reporting zero after lock makes the controller cancel RX.
+            if (batch.synchronized) {
+                callbackSink->hamDrmRxProgress(callbackSession, 0.5);
+            }
             for (const auto& group : batch.dataGroups) {
                 const QByteArray encoded(
                     reinterpret_cast<const char*>(group.data()),
@@ -892,6 +912,7 @@ private:
             std::unique_ptr<SstvResampler> resampler;
             std::uint32_t inputRate = 0U;
             std::uint64_t workerGeneration = 0U;
+            std::size_t loggedFrames = 0U;
             for (;;) {
                 Chunk chunk;
                 std::optional<HamDrmStatus> fatal;
@@ -962,6 +983,17 @@ private:
                 }
                 const HamDrmWaveformReceiveBatch batch = receiver.pushPcm(
                     pcm.data(), pcm.size(), false);
+                if (qEnvironmentVariableIsSet("DECODIUM_HAMDRM_RX_TRACE")
+                    && batch.statistics.receivedFrames != loggedFrames) {
+                    loggedFrames = batch.statistics.receivedFrames;
+                    qInfo() << "[HAMDRM RX trace] frames" << loggedFrames
+                            << "pilot failures" << batch.statistics.pilotFailures
+                            << "FAC failures" << batch.statistics.facFailures
+                            << "MSC failures" << batch.statistics.mscFailures
+                            << "groups" << batch.statistics.validatedDataGroups
+                            << "CFO" << batch.statistics.estimatedFrequencyOffsetHz
+                            << "status" << QString::fromStdString(batch.status.detail);
+                }
                 if (!deliverBatch(batch, chunk.generation)) {
                     return;
                 }
@@ -1129,17 +1161,26 @@ public:
                 HamDrmErrorCode::InvalidArgument,
                 "Decodium station callsign cannot be represented in HAMDRM FAC"));
         }
-        const std::size_t groupCount = object.headerGroups.size()
+        constexpr std::size_t headerRepetitions = 2U * kHeaderRepetitionsPerSide;
+        if (object.headerGroups.size() > limits.maximumTxGroups / headerRepetitions
+            || object.bodyGroups.size() > limits.maximumTxGroups
+                - object.headerGroups.size() * headerRepetitions) {
+            return reject(HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
+                                                "HAMDRM repeated headers exceed group limit"));
+        }
+        const std::size_t groupCount = object.headerGroups.size() * headerRepetitions
             + object.bodyGroups.size();
         std::size_t groupBytes = 0U;
-        for (const auto& group : object.headerGroups) {
-            if (group.size() > limits.maximumTxQueuedBytes - std::min(
-                    limits.maximumTxQueuedBytes, groupBytes)) {
-                return reject(HamDrmStatus::failure(
-                    HamDrmErrorCode::LimitExceeded,
-                    "HAMDRM TX object exceeds the adapter byte limit"));
+        for (std::size_t repeat = 0; repeat < headerRepetitions; ++repeat) {
+            for (const auto& group : object.headerGroups) {
+                if (group.size() > limits.maximumTxQueuedBytes - std::min(
+                        limits.maximumTxQueuedBytes, groupBytes)) {
+                    return reject(HamDrmStatus::failure(
+                        HamDrmErrorCode::LimitExceeded,
+                        "HAMDRM TX object exceeds the adapter byte limit"));
+                }
+                groupBytes += group.size();
             }
-            groupBytes += group.size();
         }
         for (const auto& group : object.bodyGroups) {
             if (group.size() > limits.maximumTxQueuedBytes - std::min(

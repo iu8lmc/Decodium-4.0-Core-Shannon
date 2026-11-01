@@ -5,6 +5,7 @@
 #include "SstvShareSecurity.h"
 
 #include <QCryptographicHash>
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -279,41 +280,12 @@ bool commonInputValid(const QString& privateStagingRoot,
 
 } // namespace
 
-SstvIncomingMediaValidationResult validateAndStageIncomingMedia(
-    const QString& sourcePath,
-    const QString& privateStagingRoot,
-    const QString& localTransferId,
-    const QString& incomingId,
-    const SstvShareManifestV1& manifest,
-    const QDateTime& receivedUtc,
-    const QDateTime& expiresUtc,
-    const SstvIncomingMediaLimits& limits)
+static SstvIncomingMediaValidationResult stageDecodedIncomingMedia(
+    QIODevice& source, const QString& privateStagingRoot,
+    const QString& localTransferId, const QString& incomingId,
+    const SstvShareManifestV1& manifest, const QDateTime& receivedUtc,
+    const QDateTime& expiresUtc, const SstvIncomingMediaLimits& limits)
 {
-    if (!commonInputValid(privateStagingRoot, localTransferId, incomingId,
-                          manifest, receivedUtc, expiresUtc, limits)) {
-        return failure(SstvShareProviderFailure::Validation,
-                       QStringLiteral("incoming media validation request is invalid"));
-    }
-    const QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists() || !sourceInfo.isFile() || sourceInfo.isSymLink()
-        || sourceInfo.size() <= 0
-        || static_cast<quint64>(sourceInfo.size()) != manifest.byteSize) {
-        return failure(SstvShareProviderFailure::Integrity,
-                       QStringLiteral("incoming source is not the declared regular file"));
-    }
-    quint64 sourceBytes = 0U;
-    const auto sourceHash = hashFile(
-        sourcePath, limits.maximumSourceBytes, &sourceBytes);
-    if (!sourceHash || sourceBytes != manifest.byteSize
-        || *sourceHash != manifest.sha256) {
-        return failure(SstvShareProviderFailure::Integrity,
-                       QStringLiteral("incoming source SHA-256 did not match its manifest"));
-    }
-    QFile source(sourcePath);
-    if (!source.open(QIODevice::ReadOnly)) {
-        return failure(SstvShareProviderFailure::Integrity,
-                       QStringLiteral("incoming source could not be opened"));
-    }
     const QByteArray prefix = source.peek(8);
     if (!magicMatchesMime(prefix, manifest.mimeType)) {
         return failure(SstvShareProviderFailure::Validation,
@@ -384,6 +356,73 @@ SstvIncomingMediaValidationResult validateAndStageIncomingMedia(
     }
     return buildHandoff(stagedPath, canonicalRoot, localTransferId,
                         incomingId, manifest, receivedUtc, expiresUtc, limits);
+}
+
+SstvIncomingMediaValidationResult validateAndStageIncomingMedia(
+    const QString& sourcePath,
+    const QString& privateStagingRoot,
+    const QString& localTransferId,
+    const QString& incomingId,
+    const SstvShareManifestV1& manifest,
+    const QDateTime& receivedUtc,
+    const QDateTime& expiresUtc,
+    const SstvIncomingMediaLimits& limits)
+{
+    if (!commonInputValid(privateStagingRoot, localTransferId, incomingId,
+                          manifest, receivedUtc, expiresUtc, limits)) {
+        return failure(SstvShareProviderFailure::Validation,
+                       QStringLiteral("incoming media validation request is invalid"));
+    }
+    if (manifest.encryption.mode != SstvShareEncryptionMode::TransportTls) {
+        return failure(SstvShareProviderFailure::Validation,
+                       QStringLiteral("encrypted media must be authenticated before decoding"));
+    }
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile() || sourceInfo.isSymLink()
+        || sourceInfo.size() <= 0
+        || static_cast<quint64>(sourceInfo.size()) != manifest.byteSize) {
+        return failure(SstvShareProviderFailure::Integrity,
+                       QStringLiteral("incoming source is not the declared regular file"));
+    }
+    quint64 sourceBytes = 0U;
+    const auto sourceHash = hashFile(
+        sourcePath, limits.maximumSourceBytes, &sourceBytes);
+    if (!sourceHash || sourceBytes != manifest.byteSize
+        || *sourceHash != manifest.sha256) {
+        return failure(SstvShareProviderFailure::Integrity,
+                       QStringLiteral("incoming source SHA-256 did not match its manifest"));
+    }
+    QFile source(sourcePath);
+    if (!source.open(QIODevice::ReadOnly)) {
+        return failure(SstvShareProviderFailure::Integrity,
+                       QStringLiteral("incoming source could not be opened"));
+    }
+    return stageDecodedIncomingMedia(source, privateStagingRoot, localTransferId,
+                                     incomingId, manifest, receivedUtc, expiresUtc, limits);
+}
+
+SstvIncomingMediaValidationResult validateAndStageAuthenticatedIncomingMedia(
+    const QByteArray& authenticatedPlaintext, const QString& privateStagingRoot,
+    const QString& localTransferId, const QString& incomingId,
+    const SstvShareManifestV1& manifest, const QDateTime& receivedUtc,
+    const QDateTime& expiresUtc, const SstvIncomingMediaLimits& limits)
+{
+    if (!commonInputValid(privateStagingRoot, localTransferId, incomingId,
+                          manifest, receivedUtc, expiresUtc, limits)
+        || manifest.encryption.mode != SstvShareEncryptionMode::EndToEnd
+        || authenticatedPlaintext.isEmpty()
+        || static_cast<quint64>(authenticatedPlaintext.size()) > limits.maximumSourceBytes) {
+        return failure(SstvShareProviderFailure::Validation,
+                       QStringLiteral("authenticated incoming media request is invalid"));
+    }
+    QBuffer source;
+    source.setData(authenticatedPlaintext);
+    if (!source.open(QIODevice::ReadOnly)) {
+        return failure(SstvShareProviderFailure::Integrity,
+                       QStringLiteral("authenticated incoming media could not be read"));
+    }
+    return stageDecodedIncomingMedia(source, privateStagingRoot, localTransferId,
+                                     incomingId, manifest, receivedUtc, expiresUtc, limits);
 }
 
 SstvIncomingMediaValidationResult inspectStagedIncomingMedia(

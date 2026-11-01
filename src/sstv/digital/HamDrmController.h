@@ -174,6 +174,8 @@ class HamDrmController final : public QObject,
                NOTIFY selectedObjectChanged)
     Q_PROPERTY(bool canBuildBsr READ canBuildBsr NOTIFY selectedObjectChanged)
     Q_PROPERTY(QString bsrText READ bsrText NOTIFY bsrChanged)
+    Q_PROPERTY(QString receivedBsrText READ receivedBsrText NOTIFY receivedBsrChanged)
+    Q_PROPERTY(bool canRepairReceivedBsr READ canRepairReceivedBsr NOTIFY repairStateChanged)
     Q_PROPERTY(QVariantMap lastImageValidation READ lastImageValidation
                NOTIFY imageValidationChanged)
 
@@ -227,6 +229,8 @@ public:
     QString missingSegmentsText() const;
     bool canBuildBsr() const;
     QString bsrText() const;
+    QString receivedBsrText() const;
+    bool canRepairReceivedBsr() const;
     QVariantMap lastImageValidation() const;
 
     Q_INVOKABLE bool startRx();
@@ -238,6 +242,8 @@ public:
     Q_INVOKABLE bool selectObject(int transportId);
     Q_INVOKABLE QString buildBsr(int transportId,
                                  bool qsstvExtended = true);
+    Q_INVOKABLE bool startBsrTx(int transportId, bool qsstvExtended = true);
+    Q_INVOKABLE bool startBsrRepair();
     Q_INVOKABLE bool resumePartial(int transportId);
     Q_INVOKABLE bool discardObject(int transportId);
     Q_INVOKABLE void clearError();
@@ -255,6 +261,9 @@ signals:
     void inboxChanged();
     void selectedObjectChanged();
     void bsrChanged();
+    void receivedBsrChanged();
+    void repairStateChanged();
+    void bsrReceived(quint16 objectTransportId, quint16 requestedTransportId);
     void imageValidationChanged();
     // Emitted only after the waveform backend has accepted a validated TX
     // object. The image is an in-memory normalized snapshot; no caller path
@@ -339,6 +348,14 @@ private:
     double txProgress_ {0.0};
     QString error_;
     QString bsrText_;
+    QString receivedBsrText_;
+    struct RepairSource final {
+        HamDrmEncodedObject object;
+        std::size_t segmentBytes {0U};
+        QString profileId;
+    };
+    std::optional<RepairSource> pendingRepairSource_;
+    std::optional<RepairSource> lastRepairSource_;
     QVariantMap lastImageValidation_;
     std::map<std::uint16_t, std::unique_ptr<InboxRecord>> inbox_;
     std::size_t completedObjects_ {0U};

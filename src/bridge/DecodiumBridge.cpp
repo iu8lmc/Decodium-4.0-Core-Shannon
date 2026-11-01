@@ -1,4 +1,9 @@
 #include "DecodiumBridge.h"
+#if defined(Q_OS_MACOS)
+#include <execinfo.h>
+#include <cstdlib>
+#endif
+#include "SettingsAsyncHandoff.h"
 #include "AlcCalibrationMath.h"
 #include "AdifExportSanitizer.h"
 #include "Network/AdifUdpPayload.hpp"
@@ -37214,13 +37219,18 @@ void DecodiumBridge::saveSettingsInternal(bool asynchronous)
         return;
     }
 
+    // Both QSettings objects were constructed and mutated on this thread.
+    // Detach their QObject affinity before handing them to the worker: a
+    // queued QSettings update must never race the worker's sync/destruction.
+    // A parentless object with no affinity may be pulled by the current
+    // worker thread (including Qt versions where moveToThread returns void).
+    decodium::detachSettingsForWorker(stagedSettings);
+    decodium::detachSettingsForWorker(stagedLegacySettings);
     QPointer<DecodiumBridge> guard(this);
     settingsWriteThreadPool().start(QRunnable::create(
         [stagedSettings, stagedLegacySettings, guard]() {
-            stagedSettings->sync();
-            stagedLegacySettings->sync();
-            delete stagedLegacySettings;
-            delete stagedSettings;
+            decodium::flushDetachedSettings(stagedSettings);
+            decodium::flushDetachedSettings(stagedLegacySettings);
 
             if (guard) {
                 QMetaObject::invokeMethod(guard.data(), [guard]() {
@@ -55818,6 +55828,17 @@ void DecodiumBridge::restartAudioCaptureFromWatchdog(const QString& reason)
 
 void DecodiumBridge::stopAudioCapture()
 {
+#if defined(Q_OS_MACOS)
+    if (qEnvironmentVariableIntValue("DECODIUM_LAB_AUDIO_LIFECYCLE") == 1) {
+        void* frames[20];
+        const int count = backtrace(frames, 20);
+        char** symbols = backtrace_symbols(frames, count);
+        if (symbols) {
+            for (int i = 0; i < count; ++i) qInfo() << "[LAB][AUDIO] stop caller" << symbols[i];
+            std::free(symbols);
+        }
+    }
+#endif
     // Cancel a pending watchdog fallback before any deliberate stop (mode or
     // device change) can replace the capture configuration.
     ++m_audioWatchdogRecoverySerial;

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "src/sstv/sharing/SstvShareQueueManager.h"
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+#include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#endif
 
 #include <QCoreApplication>
 #include <QBuffer>
@@ -299,6 +302,7 @@ struct FakeBackend final
     QHash<QString, QByteArray> downloads;
     QVector<SstvShareIncomingItem> incoming;
     QVector<quint64> requestedDownloadOffsets;
+    bool encryptedEnvelopes {false};
     bool failNextUploadChunk {false};
     bool chunkedUpload {true};
     bool resumableUpload {true};
@@ -353,6 +357,7 @@ public:
         value.revocation = m_backend->revocation;
         value.remoteDelete = m_backend->remoteDelete;
         value.incomingList = true;
+        value.endToEndEncryptionEnvelope = m_backend->encryptedEnvelopes;
         value.strictTlsRequired = true;
         value.maximumChunkBytes = 1'024U;
         value.maximumResponseBytes = 1'024U;
@@ -1038,6 +1043,190 @@ bool singleShotUploadRehydratesAndReplaysAfterRestart()
     CHECK(backend->resumeCalls == 0);
     CHECK(backend->uploaded == bytes);
     CHECK(QFileInfo::exists(source));
+    return true;
+}
+
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+class TestKeyBackend final : public secure_settings::Backend {
+public:
+    mutable QHash<QString, QString> values;
+    bool available() const override { return true; }
+    bool supports_private_key_storage() const override { return true; }
+    secure_settings::LookupResult lookup(const QString& service, const QString& account) const override {
+        const QString key = service + QLatin1Char('/') + account;
+        secure_settings::LookupResult result; result.backend_available = true;
+        result.found = values.contains(key); result.value = values.value(key); return result;
+    }
+    secure_settings::InsertResult store_if_absent(const QString& service, const QString& account, const QString& value) const override {
+        const QString key = service + QLatin1Char('/') + account;
+        if (values.contains(key)) return secure_settings::InsertResult::AlreadyExists;
+        values.insert(key, value); return secure_settings::InsertResult::Created;
+    }
+    bool store(const QString& service, const QString& account, const QString& value, QString*) const override {
+        values.insert(service + QLatin1Char('/') + account, value); return true;
+    }
+    bool remove(const QString& service, const QString& account, QString*) const override {
+        values.remove(service + QLatin1Char('/') + account); return true;
+    }
+};
+
+bool encryptedQueueRoundTripWithRealCrypto()
+{
+    auto keys = std::make_shared<TestKeyBackend>();
+    SstvShareKeyStore sender(*keys, QStringLiteral("sender-profile"));
+    SstvShareKeyStore receiver(*keys, QStringLiteral("receiver-profile"));
+    const auto recipient = receiver.createOrLoadPublicKey();
+    CHECK(recipient.ok());
+    CHECK(sender.pinRecipient("queue-test", "station:local", *recipient.key,
+          sstvShareX25519Fingerprint(*recipient.key)) == SstvShareKeyStoreError::None);
+    for (int scenario = 0; scenario < 3; ++scenario) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        backend->encryptedEnvelopes = true;
+        const QByteArray image = pngPayload(52, 40, static_cast<char>('a' + scenario));
+        auto manifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.chunkCount = static_cast<quint32>((image.size() + 16 + 1023) / 1024);
+        auto envelope = sstvShareSealPinnedEnvelope(sender, manifest, image);
+        CHECK(envelope);
+        if (scenario == 2) {
+            envelope->bytes[0] = static_cast<char>(envelope->bytes[0] ^ 1);
+            envelope->manifest.sha256 = sha256Hex(envelope->bytes);
+        }
+        const auto path = fixture.uploadRoot + QStringLiteral("/encrypted.bin");
+        CHECK(writeFile(path, envelope->bytes));
+        fixture.config.openEncryptedPayload = sstvShareMakeStoredEnvelopeOpener(
+            keys, QStringLiteral("receiver-profile"), QStringLiteral("queue-test"),
+            QStringLiteral("station:local"));
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        QString error;
+        const auto upload = manager->queueUpload(envelope->manifest, path, &error);
+        if (upload.isEmpty()) std::cerr << error.toStdString() << '\n';
+        CHECK(!upload.isEmpty());
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(upload); return r && r->state == SstvManagedTransferState::Completed; }));
+        CHECK(backend->uploaded == envelope->bytes && backend->uploaded != image);
+        backend->incoming = {incomingFor(QStringLiteral("incoming:crypto"), envelope->manifest, fixture.clock)};
+        backend->downloads.insert(QStringLiteral("incoming:crypto"), backend->uploaded);
+        bool refreshed = false;
+        manager->refreshInboxAsync(QStringLiteral("queue-test"), [&](SstvShareProviderResult r) { refreshed = r.ok(); });
+        CHECK(spinUntil([&] { return refreshed; }));
+        const auto download = manager->queueDownload(QStringLiteral("queue-test"), QStringLiteral("incoming:crypto"),
+                                                     QStringLiteral("received.png"), &error);
+        CHECK(!download.isEmpty());
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(download); return r &&
+            (r->state == SstvManagedTransferState::AwaitingAcceptance || r->state == SstvManagedTransferState::Failed); }));
+        const auto record = manager->store().transfer(download);
+        CHECK(record->state == (scenario == 2 ? SstvManagedTransferState::Failed : SstvManagedTransferState::AwaitingAcceptance));
+        if (scenario == 2) {
+            CHECK(record->lastFailure == SstvShareProviderFailure::Integrity);
+            CHECK(record->lastErrorRedacted == QStringLiteral("encrypted payload authentication or decryption failed"));
+        } else {
+            CHECK(manager->acceptDownload(download, &error));
+            const auto handoff = manager->validatedIncomingHandoff(download, &error);
+            CHECK(handoff);
+            CHECK(QImage(handoff->stagedCanonicalPath).convertToFormat(QImage::Format_RGB32)
+                  == QImage::fromData(image).convertToFormat(QImage::Format_RGB32));
+        }
+    }
+    return true;
+}
+#endif
+
+bool encryptedDownloadRequiresAuthenticatedOpen()
+{
+    for (bool allow : {false, true}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        backend->encryptedEnvelopes = true;
+        const QByteArray ciphertext("test encrypted payload");
+        const QByteArray image = pngPayload(52, 40, 'q');
+        auto manifest = manifestFor(ciphertext, fixture.clock,
+            QStringLiteral("station:remote"), QStringLiteral("station:local"));
+        manifest.width = 52; manifest.height = 40;
+        manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+        manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+        manifest.encryption.keyId = QStringLiteral("test-key");
+        manifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+        manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+        manifest.encryption.manifestBoundAsAuthenticatedData = true;
+        manifest.transport.providerCanReadContent = false;
+        CHECK(manifest.validate(false).ok());
+        backend->incoming = {incomingFor(QStringLiteral("incoming:encrypted"), manifest, fixture.clock)};
+        backend->downloads.insert(QStringLiteral("incoming:encrypted"), ciphertext);
+        int calls = 0;
+        fixture.config.openEncryptedPayload = [&](const SstvShareManifestV1& supplied, const QByteArray& bytes)
+            -> std::optional<QByteArray> {
+            ++calls;
+            if (!allow || bytes != ciphertext || supplied.transferId != manifest.transferId) return std::nullopt;
+            return image;
+        };
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool refreshed = false;
+        manager->refreshInboxAsync(QStringLiteral("queue-test"),
+            [&](SstvShareProviderResult result) { refreshed = result.ok(); });
+        CHECK(spinUntil([&] { return refreshed; }));
+        QString error;
+        const auto id = manager->queueDownload(QStringLiteral("queue-test"),
+            QStringLiteral("incoming:encrypted"), QStringLiteral("encrypted/image.png"), &error, true);
+        CHECK(!id.isEmpty());
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] {
+            const auto record = manager->store().transfer(id);
+            return record && (record->state == SstvManagedTransferState::AwaitingAcceptance
+                           || record->state == SstvManagedTransferState::Failed);
+        }));
+        const auto record = manager->store().transfer(id);
+        CHECK(calls == 1);
+        CHECK(record->state == (allow ? SstvManagedTransferState::AwaitingAcceptance
+                                      : SstvManagedTransferState::Failed));
+        CHECK(readFile(record->stagingPath) == ciphertext);
+        if (allow) {
+            CHECK(manager->acceptDownload(id, &error));
+            const auto handoff = manager->validatedIncomingHandoff(id, &error);
+            CHECK(handoff && handoff->sourceSha256 == manifest.sha256);
+        }
+    }
+    return true;
+}
+
+bool encryptionRequiredRejectsTlsOnlyAB()
+{
+    for (const bool requireEncryption : {false, true}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        backend->encryptedEnvelopes = true;
+        const QByteArray image = pngPayload(20, 16, 'r');
+        const auto manifest = manifestFor(image, fixture.clock,
+            QStringLiteral("station:remote"), QStringLiteral("station:local"));
+        backend->incoming = {incomingFor(QStringLiteral("incoming:tls-only"), manifest, fixture.clock)};
+        backend->downloads.insert(QStringLiteral("incoming:tls-only"), image);
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool refreshed = false;
+        manager->refreshInboxAsync(QStringLiteral("queue-test"),
+            [&](SstvShareProviderResult result) { refreshed = result.ok(); });
+        CHECK(spinUntil([&] { return refreshed; }));
+        QString error;
+        const auto id = manager->queueDownload(QStringLiteral("queue-test"),
+            QStringLiteral("incoming:tls-only"), QStringLiteral("tls/image.png"),
+            &error, requireEncryption);
+        if (requireEncryption) {
+            CHECK(id.isEmpty());
+            CHECK(error.contains(QStringLiteral("requires end-to-end encryption")));
+            CHECK(backend->downloadCalls == 0);
+        } else {
+            CHECK(!id.isEmpty());
+            CHECK(manager->processDue(&error) == 1);
+            CHECK(spinUntil([&] {
+                const auto record = manager->store().transfer(id);
+                return record && record->state == SstvManagedTransferState::AwaitingAcceptance;
+            }));
+        }
+    }
     return true;
 }
 
@@ -2245,6 +2434,11 @@ int main(int argc, char** argv)
          inboxDownloadAcceptanceAckAndRejectAreExplicit},
         {"singleShotUploadRehydratesAndReplaysAfterRestart",
          singleShotUploadRehydratesAndReplaysAfterRestart},
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+        {"encryptedQueueRoundTripWithRealCrypto", encryptedQueueRoundTripWithRealCrypto},
+#endif
+        {"encryptedDownloadRequiresAuthenticatedOpen", encryptedDownloadRequiresAuthenticatedOpen},
+        {"encryptionRequiredRejectsTlsOnlyAB", encryptionRequiredRejectsTlsOnlyAB},
         {"downloadCrashBoundaryResumesFromDurableFileOffset",
          downloadCrashBoundaryResumesFromDurableFileOffset},
         {"completedRemoteCopyRemovalIsCapabilityGatedDurableAndCancellable",

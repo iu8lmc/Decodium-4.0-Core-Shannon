@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "src/sstv/models/SstvShareController.h"
+#ifdef DECODIUM_TEST_MAC_E2EE
+#include "src/security/MacKeychainBackend.h"
+#include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#include "src/sstv/sharing/SstvLocalIntegrationShareProvider.h"
+#include <Security/Security.h>
+#include <QSettings>
+#endif
 
 #include <QtTest/QtTest>
 
@@ -52,6 +59,199 @@ class TestSstvShareQml final : public QObject
     Q_OBJECT
 
 private slots:
+#ifdef DECODIUM_TEST_MAC_E2EE
+    void uiQueuesEncryptedAndPlainUploads()
+    {
+        using namespace decodium::sstv::sharing;
+        QTemporaryDir storage;
+        QVERIFY(storage.isValid());
+        QCoreApplication::setOrganizationName(QStringLiteral("DecodiumUiE2eeTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("UiSharing"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, storage.path());
+        QSettings settings; settings.clear(); settings.sync();
+        const QByteArray path = storage.filePath(QStringLiteral("test.keychain-db")).toUtf8();
+        const QByteArray password("temporary-ui-test-keychain");
+        SecKeychainRef raw = nullptr;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        SecKeychainSetUserInteractionAllowed(false);
+        const auto status = SecKeychainCreate(path.constData(), UInt32(password.size()), password.constData(), false, nullptr, &raw);
+#pragma clang diagnostic pop
+        QVERIFY(status == errSecSuccess && raw);
+        struct Cleanup { SecKeychainRef keychain; ~Cleanup() {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            SecKeychainDelete(keychain);
+#pragma clang diagnostic pop
+            CFRelease(keychain);
+        }} cleanup {raw};
+        secure_settings::MacKeychainBackend backend(QString::fromUtf8(path));
+        SstvLocalIntegrationShareProvider::Config config;
+        config.localRecipientId = QStringLiteral("station-local");
+        config.participantIds = {QStringLiteral("station-local")};
+        config.encryptedEnvelopes = true;
+        config.maximumTotalBytes = 4U * 1024U * 1024U;
+        config.maximumPendingOperations = 64;
+        auto provider = std::make_shared<SstvLocalIntegrationShareProvider>(config);
+        QVERIFY(provider->isConfigurationValid());
+        decodium::sstv::SstvShareController controller(&backend, provider);
+        QSignalSpy operations(&controller, &decodium::sstv::SstvShareController::operationFinished);
+        controller.setStorageRoot(storage.path(), QStringLiteral("station-local"));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 5000);
+        QVERIFY(controller.setEnabled(true));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.enabled(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.encryptedSharingAvailable(), 5000);
+        ShareEngineFixture fixture(&controller);
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_SHARE_QML_SOURCE)), QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QScopedPointer<QObject> page(component.createWithInitialProperties({{"engine", QVariant::fromValue(static_cast<QObject*>(&fixture))}}));
+        QVERIFY2(page, qPrintable(qmlErrors(component.errors())));
+        auto child = [&](const char* name) { return page->findChild<QObject*>(QString::fromLatin1(name)); };
+        QObject* create = child("sstvShareCreateIdentity");
+        QObject* recipient = child("sstvShareRecipient");
+        QObject* key = child("sstvSharePeerPublicKey");
+        QObject* fingerprint = child("sstvSharePeerFingerprint");
+        QObject* verified = child("sstvShareFingerprintConfirmed");
+        QObject* pin = child("sstvSharePinRecipient");
+        QObject* encrypt = child("sstvShareEncryptUpload");
+        QObject* uploadPrivacy = child("sstvShareUploadPrivacy");
+        QObject* confirmed = child("sstvShareRecipientConfirmed");
+        QObject* metered = child("sstvShareAllowMetered");
+        QObject* upload = child("sstvShareUpload");
+        QObject* policy = child("sstvShareRequireIncomingEncryption");
+        QVERIFY(create && recipient && key && fingerprint && verified && pin && encrypt && uploadPrivacy && confirmed && metered && upload);
+        QVERIFY(policy);
+        QVERIFY(QMetaObject::invokeMethod(create, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(!page->property("sharingPublicKey").toString().isEmpty(), 5000);
+        recipient->setProperty("text", QStringLiteral("station-local"));
+        key->setProperty("text", page->property("sharingPublicKey"));
+        fingerprint->setProperty("text", page->property("sharingFingerprint"));
+        verified->setProperty("checked", true);
+        operations.clear();
+        QVERIFY(QMetaObject::invokeMethod(pin, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-pin"));
+        QVERIFY(operations.last().at(1).toBool());
+        const QString imagePath = storage.filePath(QStringLiteral("image.png"));
+        QImage image(32, 24, QImage::Format_RGB32); image.fill(Qt::red);
+        QVERIFY(image.save(imagePath));
+        page->setProperty("selectedUpload", QUrl::fromLocalFile(imagePath));
+        confirmed->setProperty("checked", true); metered->setProperty("checked", true);
+        encrypt->setProperty("checked", true);
+        QVERIFY(uploadPrivacy->property("text").toString().contains("Sender identity is not authenticated"));
+        QVERIFY(!uploadPrivacy->property("text").toString().contains("provider can read content"));
+        QVERIFY(upload->property("enabled").toBool());
+        QVERIFY(controller.setEnabled(false));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.enabled(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!encrypt->property("enabled").toBool(), 5000);
+        QVERIFY(encrypt->property("checked").toBool());
+        QVERIFY(!upload->property("enabled").toBool());
+        QVERIFY(uploadPrivacy->property("text").toString().contains("Upload is blocked"));
+        QVERIFY(controller.setEnabled(true));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.encryptedSharingAvailable(), 5000);
+        QVERIFY(encrypt->property("checked").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(upload->property("enabled").toBool(), 5000);
+        recipient->setProperty("text", QStringLiteral("station-other"));
+        QVERIFY(!confirmed->property("checked").toBool());
+        QVERIFY(!upload->property("enabled").toBool());
+        recipient->setProperty("text", QStringLiteral("station-local"));
+        QVERIFY(!confirmed->property("checked").toBool());
+        confirmed->setProperty("checked", true);
+        QVERIFY(upload->property("enabled").toBool());
+        operations.clear();
+        QVERIFY(QMetaObject::invokeMethod(upload, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("upload"));
+        QVERIFY(operations.last().at(1).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.diagnostics().value("uploadedBytes").toULongLong() > 0, 8000);
+        image.fill(Qt::blue); QVERIFY(image.save(imagePath));
+        encrypt->setProperty("checked", false);
+        QVERIFY(uploadPrivacy->property("text").toString().contains("provider can read content"));
+        recipient->setProperty("text", QStringLiteral("station-other"));
+        QVERIFY(!confirmed->property("checked").toBool());
+        QVERIFY(!upload->property("enabled").toBool());
+        recipient->setProperty("text", QStringLiteral("station-local"));
+        confirmed->setProperty("checked", true);
+        QVERIFY(upload->property("enabled").toBool());
+        operations.clear();
+        QVERIFY(QMetaObject::invokeMethod(upload, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("upload"));
+        QVERIFY(operations.last().at(1).toBool());
+        QVector<SstvShareIncomingItem> items;
+        bool listed = false;
+        for (int attempt = 0; attempt < 30 && items.size() < 2; ++attempt) {
+            listed = false;
+            provider->listIncomingAsync(10, [&](SstvShareProviderResult result, QVector<SstvShareIncomingItem> rows) {
+                if (result.ok()) items = std::move(rows); listed = true;
+            });
+            QTRY_VERIFY_WITH_TIMEOUT(listed, 2000);
+            if (items.size() < 2) QTest::qWait(100);
+        }
+        QCOMPARE(items.size(), 2);
+        QSet<SstvShareEncryptionMode> modes;
+        QString encryptedId;
+        QString tlsId;
+        for (const auto& item : items) {
+            const auto parsed = parseSstvShareManifestV1(item.canonicalManifestJson);
+            QVERIFY(parsed.ok());
+            modes.insert(parsed.manifest->encryption.mode);
+            QByteArray bytes; bool downloaded = false; bool downloadOk = false;
+            provider->downloadAsync(item.opaqueId, 0, 64U * 1024U, {}, [&](SstvShareProviderResult result) {
+                downloadOk = result.ok(); bytes = result.boundedPayload(); downloaded = true;
+            });
+            QTRY_VERIFY_WITH_TIMEOUT(downloaded, 2000);
+            QVERIFY(downloadOk);
+            if (parsed.manifest->encryption.mode == SstvShareEncryptionMode::EndToEnd) {
+                encryptedId = item.opaqueId;
+                SstvShareKeyStore receiver(backend, QStringLiteral("STATION-LOCAL"));
+                const auto plaintext = sstvShareOpenStoredEnvelope(receiver, "local-integration", "station-local", *parsed.manifest, bytes);
+                QVERIFY(plaintext.has_value());
+                QCOMPARE(QImage::fromData(*plaintext).pixelColor(0, 0), QColor(Qt::red));
+            } else {
+                tlsId = item.opaqueId;
+                QCOMPARE(QImage::fromData(bytes).pixelColor(0, 0), QColor(Qt::blue));
+            }
+        }
+        QVERIFY(modes.contains(SstvShareEncryptionMode::EndToEnd));
+        QVERIFY(modes.contains(SstvShareEncryptionMode::TransportTls));
+        QVERIFY(controller.refreshInbox());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.inbox()->rowCount(), 2, 5000);
+        policy->setProperty("checked", true);
+        QVERIFY(QMetaObject::invokeMethod(policy, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.requireIncomingEncryption(), 5000);
+        operations.clear();
+        QVERIFY(controller.download(tlsId, QStringLiteral("plain.png")));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("download"));
+        QVERIFY(!operations.last().at(1).toBool());
+        operations.clear();
+        QVERIFY(controller.download(encryptedId, QStringLiteral("encrypted.png")));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("download"));
+        QVERIFY(operations.last().at(1).toBool());
+        QVERIFY(controller.setRequireIncomingEncryption(false));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.requireIncomingEncryption(), 5000);
+        operations.clear();
+        QVERIFY(controller.download(tlsId, QStringLiteral("plain-allowed.png")));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("download"));
+        QVERIFY(operations.last().at(1).toBool());
+        QVERIFY(controller.setRequireIncomingEncryption(true));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.requireIncomingEncryption(), 5000);
+        controller.shutdown();
+        decodium::sstv::SstvShareController restored(&backend, provider);
+        restored.setStorageRoot(storage.path(), QStringLiteral("station-local"));
+        QTRY_VERIFY_WITH_TIMEOUT(restored.ready(), 5000);
+        QVERIFY(restored.requireIncomingEncryption());
+        QVERIFY(restored.setRequireIncomingEncryption(false));
+        QTRY_VERIFY_WITH_TIMEOUT(!restored.requireIncomingEncryption(), 5000);
+        restored.shutdown();
+    }
+#endif
+
     void pageCreatesWithPrivacyOffAndRenders()
     {
         QTemporaryDir storage;
@@ -99,6 +299,28 @@ private slots:
             QStringLiteral("sstvShareCredential"));
         QObject* upload = page->findChild<QObject*>(
             QStringLiteral("sstvShareUpload"));
+        QObject* encrypt = page->findChild<QObject*>(QStringLiteral("sstvShareEncryptUpload"));
+        QObject* peerKey = page->findChild<QObject*>(QStringLiteral("sstvSharePeerPublicKey"));
+        QObject* peerFingerprint = page->findChild<QObject*>(QStringLiteral("sstvSharePeerFingerprint"));
+        QObject* verified = page->findChild<QObject*>(QStringLiteral("sstvShareFingerprintConfirmed"));
+        QObject* recipientInput = page->findChild<QObject*>(QStringLiteral("sstvShareRecipient"));
+        QVERIFY(encrypt && peerKey && peerFingerprint && verified && recipientInput);
+        QVERIFY(!controller.encryptedSharingAvailable());
+        QVERIFY(!encrypt->property("enabled").toBool());
+        QVERIFY(!encrypt->property("checked").toBool());
+        QObject* uploadLayout = page->findChild<QObject*>(QStringLiteral("sstvShareUploadLayout"));
+        QVERIFY(uploadLayout);
+        QVERIFY(uploadLayout->findChild<QObject*>(QStringLiteral("sstvShareEncryptUpload")) == encrypt);
+        verified->setProperty("checked", true);
+        peerKey->setProperty("text", QStringLiteral("abc"));
+        QVERIFY(!verified->property("checked").toBool());
+        verified->setProperty("checked", true);
+        peerFingerprint->setProperty("text", QStringLiteral("def"));
+        QVERIFY(!verified->property("checked").toBool());
+        verified->setProperty("checked", true);
+        recipientInput->setProperty("text", QStringLiteral("peer"));
+        QVERIFY(!verified->property("checked").toBool());
+
         QObject* remoteDialog = page->findChild<QObject*>(
             QStringLiteral("sstvShareRemoteRemovalDialog"));
         QObject* remoteAcknowledgement = page->findChild<QObject*>(

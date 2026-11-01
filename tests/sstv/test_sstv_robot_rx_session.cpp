@@ -297,6 +297,36 @@ private slots:
                  static_cast<std::uint64_t>(spec.height));
     }
 
+    void canonicalAndCompatibilityTimingChooseSafeEnd()
+    {
+        const SstvRobotMapper mapper({SstvRobotMode::Bw8, kRate, 0});
+        const std::uint64_t canonicalEnd = kImageStart + mapper.imageSampleCount();
+        for (const std::uint64_t lineSamples : {792U, 804U}) {
+            auto config = sessionConfig(SstvRobotMode::Bw8);
+            config.preserveTerminalGuard = false;
+            SstvRobotRxSession session(config);
+            std::uint64_t sequence = 1U;
+            for (std::uint64_t line = 0; line < 120U; ++line) {
+                std::vector<SstvFrequencyObservation> observations;
+                const std::uint64_t syncSamples = lineSamples == 792U ? 120U : 84U;
+                for (std::uint64_t sample = 0; sample < lineSamples; ++sample) {
+                    observations.push_back(makeObservation(
+                        kImageStart + line * lineSamples + sample,
+                        sequence++, sample < syncSamples ? 1200.0 : 1900.0));
+                }
+                session.consume(observations);
+            }
+            if (lineSamples == 792U) {
+                QCOMPARE(session.imageEndSample(), canonicalEnd);
+            } else {
+                QVERIFY(session.imageEndSample() >= kImageStart + 120U * lineSamples);
+                QVERIFY(session.imageEndSample() > canonicalEnd);
+            }
+            session.finish();
+            QVERIFY(session.snapshot().coverage() > 0.90);
+        }
+    }
+
     void invalidConfigsAreRejected()
     {
         auto config = sessionConfig(SstvRobotMode::Colour36);

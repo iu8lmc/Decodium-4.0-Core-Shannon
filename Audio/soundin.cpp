@@ -274,7 +274,7 @@ bool SoundInput::isActiveFor (QAudioDevice const& device,
 void SoundInput::audioQueueInputCallback (void * userData,
                                           AudioQueueRef queue,
                                           AudioQueueBufferRef buffer,
-                                          AudioTimeStamp const *,
+                                          AudioTimeStamp const * startTime,
                                           UInt32 packetCount,
                                           AudioStreamPacketDescription const *)
 {
@@ -283,6 +283,7 @@ void SoundInput::audioQueueInputCallback (void * userData,
     {
       return;
     }
+  self->m_nativeCallbackCount.fetch_add (1, std::memory_order_relaxed);
 
   Q_UNUSED (packetCount);
   if (buffer->mAudioData && buffer->mAudioDataByteSize > 0)
@@ -290,8 +291,23 @@ void SoundInput::audioQueueInputCallback (void * userData,
       AudioDevice * sink = self->m_sink.data ();
       if (sink && sink->isOpen ())
         {
-          sink->write (static_cast<char const *> (buffer->mAudioData),
-                       static_cast<qint64> (buffer->mAudioDataByteSize));
+          const double sampleRate = self->m_nativeInputFormat.sampleRate ();
+          if (startTime && (startTime->mFlags & kAudioTimeStampSampleTimeValid)
+              && std::isfinite (startTime->mSampleTime)
+              && startTime->mSampleTime >= 0.0 && sampleRate > 0.0
+              && startTime->mSampleTime / sampleRate < 9.0e9)
+            {
+              const qint64 sourceNs = static_cast<qint64> (
+                  std::llround (startTime->mSampleTime * 1.0e9 / sampleRate));
+              sink->writeWithSourceTime (static_cast<char const *> (buffer->mAudioData),
+                                         static_cast<qint64> (buffer->mAudioDataByteSize),
+                                         sourceNs);
+            }
+          else
+            {
+              sink->write (static_cast<char const *> (buffer->mAudioData),
+                           static_cast<qint64> (buffer->mAudioDataByteSize));
+            }
         }
     }
 
@@ -508,6 +524,7 @@ bool SoundInput::startNativeMacInput (QAudioDevice const& device,
     }
 
   m_audioQueue = queue;
+  m_nativeCallbackCount.store (0, std::memory_order_relaxed);
   m_nativeInputFormat = format;
   m_audioQueueBuffers.clear ();
 
@@ -573,6 +590,21 @@ bool SoundInput::startNativeMacInput (QAudioDevice const& device,
            << "callbackMs="
            << QString::number (1000.0 * bufferFrames / format.sampleRate (),
                                'f', 2);
+  if (qEnvironmentVariableIntValue ("DECODIUM_LAB_AUDIO_LIFECYCLE") == 1)
+    {
+      qInfo () << "[LAB][AUDIO] queue start" << static_cast<void *> (this) << static_cast<void *> (m_audioQueue);
+      AudioQueueRef const expected = m_audioQueue;
+      for (int delay : {3000, 7000}) QTimer::singleShot (delay, this, [this, expected] {
+        if (m_audioQueue != expected) return;
+        UInt32 running = 0;
+        UInt32 size = sizeof (running);
+        OSStatus const result = AudioQueueGetProperty (
+            expected, kAudioQueueProperty_IsRunning, &running, &size);
+        qInfo () << "[LAB][AUDIO] queue running" << static_cast<void *> (this)
+                 << static_cast<void *> (expected) << running << "status" << result
+                 << "callbacks" << m_nativeCallbackCount.load (std::memory_order_relaxed);
+      });
+    }
   cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
   emitStatusIfChanged (tr ("Receiving"), QAudio::ActiveState);
   return true;
@@ -588,6 +620,8 @@ void SoundInput::stopNativeMacInput ()
     }
 
   AudioQueueRef queue = m_audioQueue;
+  if (qEnvironmentVariableIntValue ("DECODIUM_LAB_AUDIO_LIFECYCLE") == 1)
+    qInfo () << "[LAB][AUDIO] queue stop" << static_cast<void *> (this) << static_cast<void *> (queue);
   m_audioQueue = nullptr;
   AudioQueueStop (queue, true);
   AudioQueueDispose (queue, true);
@@ -1132,6 +1166,8 @@ void SoundInput::suspend ()
 
   // A delayed recovery must not undo a newer TX-side suspension.
   ++m_deferredRestartGeneration;
+  if (qEnvironmentVariableIntValue ("DECODIUM_LAB_AUDIO_LIFECYCLE") == 1)
+    qInfo () << "[LAB][AUDIO] suspend requested" << static_cast<void *> (this);
   if (m_stream)
     {
       if (m_stream->state () == QAudio::ActiveState
@@ -1165,6 +1201,8 @@ void SoundInput::resume ()
       return;
     }
 
+  if (qEnvironmentVariableIntValue ("DECODIUM_LAB_AUDIO_LIFECYCLE") == 1)
+    qInfo () << "[LAB][AUDIO] resume requested" << static_cast<void *> (this);
   if (m_sink)
     {
       m_sink->reset ();

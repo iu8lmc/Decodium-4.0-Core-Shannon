@@ -141,7 +141,10 @@ public:
     void hamDrmRxProgress(std::uint64_t, double value) override
     {
         const std::lock_guard<std::mutex> lock(mutex);
+        if (value < progress) progressRegressed = true;
         progress = value;
+        ++progressEvents;
+        changed.notify_all();
     }
 
     void hamDrmRxMotGroup(std::uint64_t sessionId,
@@ -184,6 +187,8 @@ public:
     std::uint64_t groupSession {0U};
     std::uint64_t finishSession {0U};
     double progress {0.0};
+    std::size_t progressEvents {0U};
+    bool progressRegressed {false};
     bool finished {false};
 };
 
@@ -382,6 +387,15 @@ void testRxAdapterLoopbackAndBounds()
                                group.size()) == 0,
             "RX adapter delivered different MOT bytes");
     backend.resetAudioStream();
+    require(backend.submitPcm16(acquisitionTail.data(),
+                                acquisitionTail.size(), 12'000U),
+            "RX adapter rejected silence after stream reset");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    {
+        const std::lock_guard<std::mutex> lock(sink.mutex);
+        require(sink.progress > 0.0 && !sink.progressRegressed,
+                "RX progress regressed after synchronization was lost");
+    }
     backend.cancel(11U);
     require(!backend.active() && activations.load() == 1U
                 && deactivations.load() == 1U,

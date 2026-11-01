@@ -2078,6 +2078,7 @@ set (DECODIUM_QML_LEGACY_SRCS
   )
 add_executable (decodium_qml
   src/app/main_qml.cpp
+  src/app/SstvShareLabSession.h
   src/app/DecodiumStorageMigration.cpp
   src/app/DecodiumStorageMigration.hpp
   src/app/DecodiumSelfCheck.cpp

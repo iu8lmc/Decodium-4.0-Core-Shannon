@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <random>
@@ -378,6 +379,49 @@ void testMixedRadixTransform()
         "FFT maximum size was not enforced");
 }
 
+void testIndependentQsstvOfdmSymbols()
+{
+    std::ifstream fixture(DECODIUM_QSSTV_OFDM_FIXTURE);
+    require(fixture.good(), "QSSTV OFDM fixture missing");
+    const std::array<HamDrmRobustness, 3> modes {
+        HamDrmRobustness::A, HamDrmRobustness::B, HamDrmRobustness::E};
+    const std::array<HamDrmOccupiedBandwidth, 2> widths {
+        HamDrmOccupiedBandwidth::Hz2300, HamDrmOccupiedBandwidth::Hz2500};
+    for (int mode = 0; mode < 3; ++mode) for (int width = 0; width < 2; ++width) for (int variant = 0; variant < 2; ++variant) {
+        int fixtureMode = -1, fixtureWidth = -1, fixtureVariant = -1, carrierCount = 0, sampleCount = 0;
+        require(bool(fixture >> fixtureMode >> fixtureWidth >> fixtureVariant >> carrierCount >> sampleCount), "truncated OFDM fixture header");
+        const auto params = hamDrmOfdmParameters(modes[mode], widths[width]);
+        require(params && fixtureMode == mode && fixtureWidth == width
+                && fixtureVariant == variant && carrierCount == static_cast<int>(params->carrierCount())
+                && sampleCount == static_cast<int>(params->symbolSamples()), "OFDM fixture parameters differ");
+        std::vector<HamDrmComplex> carriers;
+        std::uint32_t seed = 0x4f46444dU + static_cast<std::uint32_t>(variant);
+        for (int i = 0; i < carrierCount; ++i) {
+            seed = seed * 1664525U + 1013904223U; const double re = (seed & 0x80000000U) ? 1.0 : -1.0;
+            seed = seed * 1664525U + 1013904223U; const double im = (seed & 0x80000000U) ? 1.0 : -1.0;
+            carriers.emplace_back(re, im);
+        }
+        HamDrmOfdmModem modem(*params);
+        auto native = modem.modulateSymbol(carriers);
+        for (auto& sample : native) sample *= static_cast<double>(params->fftSize);
+        const auto shifted = hamDrmMixFrequency(native, params->sampleRateHz, 350.0).samples;
+        std::vector<HamDrmComplex> reference;
+        for (int i = 0; i < sampleCount; ++i) {
+            double real = 0, imaginary = 0;
+            require(bool(fixture >> real >> imaginary), "truncated OFDM fixture samples");
+            reference.emplace_back(real, imaginary);
+            requireNear(shifted[static_cast<std::size_t>(i)], reference.back(), 2.0e-7,
+                        "QSSTV OFDM sample mismatch");
+        }
+        const auto baseband = hamDrmMixFrequency(reference, params->sampleRateHz, -350.0).samples;
+        auto normalized = baseband;
+        for (auto& sample : normalized) sample /= static_cast<double>(params->fftSize);
+        const auto recovered = modem.demodulateSymbol(normalized, 0);
+        for (std::size_t i = 0; i < carriers.size(); ++i)
+            requireNear(recovered[i], carriers[i], 2.0e-7, "QSSTV OFDM carrier mismatch");
+    }
+}
+
 void testOfdmCyclicPrefixAndInjection()
 {
     const auto parameters = hamDrmOfdmParameters(
@@ -648,10 +692,11 @@ struct NamedTest final
 
 int main()
 {
-    const std::array<NamedTest, 8U> tests {{
+    const std::array<NamedTest, 9U> tests {{
         {"parameter matrix", &testParameterMatrix},
         {"QAM mappings", &testQamMappings},
         {"mixed-radix transform", &testMixedRadixTransform},
+        {"QSSTV independent OFDM symbols", &testIndependentQsstvOfdmSymbols},
         {"OFDM cyclic prefix and injection", &testOfdmCyclicPrefixAndInjection},
         {"frequency mixer continuity", &testFrequencyMixContinuity},
         {"OFDM offset/noise round trip", &testOfdmRoundTripWithOffsetAndNoise},

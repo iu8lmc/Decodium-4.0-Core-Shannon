@@ -193,32 +193,40 @@ std::optional<SstvAvtMode> SstvAvtProtocol::normalModeForVis(
     }
 }
 
-double SstvAvtProtocol::frequencyForValue(std::uint8_t value) noexcept
+double SstvAvtProtocol::frequencyForValue(std::uint8_t value, SstvAvtVariant variant) noexcept
 {
-    return BlackFrequencyHz
-        + (WhiteFrequencyHz - BlackFrequencyHz)
+    const double black = SstvAvtSyncCodec::isNarrow(variant) ? 1700.0 : BlackFrequencyHz;
+    const double white = SstvAvtSyncCodec::isNarrow(variant) ? 2100.0 : WhiteFrequencyHz;
+    return black
+        + (white - black)
             * static_cast<double>(value) / 255.0;
 }
 
-std::uint8_t SstvAvtProtocol::valueForFrequency(double frequencyHz) noexcept
+std::uint8_t SstvAvtProtocol::valueForFrequency(double frequencyHz, SstvAvtVariant variant) noexcept
 {
-    if (!std::isfinite(frequencyHz) || frequencyHz <= BlackFrequencyHz) {
+    const double black = SstvAvtSyncCodec::isNarrow(variant) ? 1700.0 : BlackFrequencyHz;
+    const double white = SstvAvtSyncCodec::isNarrow(variant) ? 2100.0 : WhiteFrequencyHz;
+    if (!std::isfinite(frequencyHz) || frequencyHz <= black) {
         return 0U;
     }
-    if (frequencyHz >= WhiteFrequencyHz) {
+    if (frequencyHz >= white) {
         return 255U;
     }
     return static_cast<std::uint8_t>(std::lround(
-        (frequencyHz - BlackFrequencyHz) * 255.0
-        / (WhiteFrequencyHz - BlackFrequencyHz)));
+        (frequencyHz - black) * 255.0
+        / (white - black)));
 }
 
-std::vector<SstvAvtToneSegment> SstvAvtProtocol::normalHeader(
-    SstvAvtMode mode)
+std::vector<SstvAvtToneSegment> SstvAvtProtocol::normalHeader(SstvAvtMode mode)
 {
-    const SstvAvtModeSpec modeSpec = spec(mode);
+    return header(mode, SstvAvtVariant::Normal);
+}
+
+std::vector<SstvAvtToneSegment> SstvAvtProtocol::header(
+    SstvAvtMode mode, SstvAvtVariant variant)
+{
     const SstvVisEncodedFrame vis = SstvVisCodec::encodeStandard(
-        modeSpec.visPayload);
+        SstvAvtSyncCodec::visPayload(mode, variant));
     if (vis.symbols.size() != StandardVisSegmentCount - 3U) {
         throw std::logic_error("unexpected AVT standard VIS symbol count");
     }
@@ -238,7 +246,7 @@ std::vector<SstvAvtToneSegment> SstvAvtProtocol::normalHeader(
     }
 
     const std::vector<SstvAvtSyncTone> countdown =
-        SstvAvtSyncCodec::encodeCountdown(mode, false);
+        SstvAvtSyncCodec::encodeCountdown(mode, SstvAvtSyncCodec::isNarrow(variant));
     for (const SstvAvtSyncTone& tone : countdown) {
         result.push_back({tone.frequencyHz, tone.duration});
     }
@@ -350,8 +358,13 @@ SstvAvtPosition SstvAvtMapper::makePosition(
     std::uint64_t startPicoseconds,
     std::uint64_t endPicoseconds) const
 {
+    const std::uint32_t rasterLine = SstvAvtSyncCodec::isQrm(config_.variant)
+        ? (line < (spec_.height + 1U) / 2U
+               ? line * 2U
+               : (line - (spec_.height + 1U) / 2U) * 2U + 1U)
+        : line;
     return {SstvAvtRegion::Pixel,
-            line,
+            rasterLine,
             component,
             pixel,
             samplesAtProtocolTime(startPicoseconds),
@@ -502,9 +515,9 @@ SstvAvtEncoder::SstvAvtEncoder(const SstvRgbPixel* pixels,
     : config_(config)
     , spec_(SstvAvtProtocol::spec(config.mode))
     , pixels_(validatedPixels(pixels, count, config.mode))
-    , mapper_({config.mode, config.sampleRate, config.clockErrorPpm})
+    , mapper_({config.mode, config.sampleRate, config.clockErrorPpm, config.variant})
     , generator_(config.sampleRate, config.headroom)
-    , header_(SstvAvtProtocol::normalHeader(config.mode))
+    , header_(SstvAvtProtocol::header(config.mode, config.variant))
     , headerBoundaries_(makeHeaderBoundaries(config.sampleRate, header_))
 {
     if (!std::isfinite(config.level)
@@ -577,7 +590,7 @@ double SstvAvtEncoder::imageFrequency(
     default:
         throw std::logic_error("AVT mapped an invalid colour component");
     }
-    return SstvAvtProtocol::frequencyForValue(value);
+    return SstvAvtProtocol::frequencyForValue(value, config_.variant);
 }
 
 SstvAvtEncoderPosition SstvAvtEncoder::position() const
@@ -799,7 +812,7 @@ void SstvAvtDecoder::validateConfig(const SstvAvtDecoderConfig& config)
 SstvAvtDecoder::SstvAvtDecoder(SstvAvtDecoderConfig config)
     : config_(config)
     , spec_(SstvAvtProtocol::spec(config.mode))
-    , mapper_({config.mode, config.sampleRate, config.clockErrorPpm})
+    , mapper_({config.mode, config.sampleRate, config.clockErrorPpm, config.variant})
     , frame_(std::make_unique<SstvImageFrame>(
           spec_.width, spec_.height, config.maximumPendingDirtyEvents))
     , accumulators_(static_cast<std::size_t>(spec_.width) * 3U)
@@ -944,7 +957,7 @@ bool SstvAvtDecoder::reconstructComponent(
     values.resize(width);
     for (std::size_t pixel = 0U; pixel < width; ++pixel) {
         values[pixel] = SstvAvtProtocol::valueForFrequency(
-            frequencies[pixel] - config_.frequencyOffsetHz);
+            frequencies[pixel] - config_.frequencyOffsetHz, config_.variant);
     }
     return true;
 }
@@ -1324,7 +1337,8 @@ SstvAvtCountdownDetector::tryDecodeCandidate(
     }
 
     const SstvAvtDecodedSyncFrame decoded = SstvAvtSyncCodec::decodeFrame(
-        tones, false, config_.toneToleranceHz);
+        tones, SstvAvtSyncCodec::isNarrow(config_.variant),
+        config_.toneToleranceHz);
     if (!decoded.valid || !decoded.mode.has_value()
         || *decoded.mode != config_.expectedMode) {
         rejectCandidate();
@@ -1334,6 +1348,7 @@ SstvAvtCountdownDetector::tryDecodeCandidate(
     SstvAvtCountdownDetection result;
     result.acquired = true;
     result.mode = *decoded.mode;
+    result.variant = config_.variant;
     result.counter = decoded.counter;
     result.frameStartSample = candidateStartSample_;
     const std::uint64_t beforeFrame = samplesFor(Picoseconds {

@@ -46,6 +46,7 @@ struct HamDrmController::InboxRecord final
     bool persisted {false};
     bool rejected {false};
     bool jpeg2000Decoded {false};
+    bool bsrRollover {false};
 };
 
 namespace {
@@ -341,6 +342,7 @@ void HamDrmController::setSelectedProfileId(const QString& profileId)
     selectedProfileId_ = canonical;
     clearError();
     emit selectedProfileChanged();
+    emit repairStateChanged();
 }
 
 HamDrmWaveformCapability HamDrmController::rxCapability() const
@@ -710,6 +712,26 @@ QString HamDrmController::bsrText() const
     return bsrText_;
 }
 
+QString HamDrmController::receivedBsrText() const
+{
+    return receivedBsrText_;
+}
+
+bool HamDrmController::canRepairReceivedBsr() const
+{
+    if (!lastRepairSource_ || receivedBsrText_.isEmpty()
+        || selectedProfileId_ != lastRepairSource_->profileId) return false;
+    const QByteArray bytes = receivedBsrText_.toLatin1();
+    const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                         std::size_t(bytes.size()), config_.limits);
+    if (!request.ok() || request.value->transportId != lastRepairSource_->object.metadata.transportId
+        || request.value->segmentSize != lastRepairSource_->segmentBytes
+        || (request.value->filename && *request.value->filename != lastRepairSource_->object.metadata.filename))
+        return false;
+    return std::all_of(request.value->missingSegments.begin(), request.value->missingSegments.end(),
+        [this](std::uint16_t index) { return index < lastRepairSource_->object.bodyGroups.size(); });
+}
+
 QVariantMap HamDrmController::lastImageValidation() const
 {
     return lastImageValidation_;
@@ -876,6 +898,23 @@ bool HamDrmController::startRx()
         setRxState(OperationState::Error, 0.0);
         return reject(QStringLiteral("rx"),
                       tr("Selected HAMDRM profile is invalid"));
+    }
+
+    // BSR objects use a fixed filename and therefore normally reuse the same
+    // transport ID. Preserve completed images, but release old completed BSRs
+    // at the start of a new receive session so a later request can be received.
+    std::vector<std::uint16_t> oldBsrIds;
+    for (const auto& entry : inbox_) {
+        if (entry.second->completedObject && entry.second->metadata
+            && entry.second->metadata->mimeType == "application/x-hamdrm-bsr")
+            oldBsrIds.push_back(entry.first);
+    }
+    for (const auto id : oldBsrIds)
+        static_cast<void>(takeCompletedObject(id));
+    if (!receivedBsrText_.isEmpty()) {
+        receivedBsrText_.clear();
+        emit receivedBsrChanged();
+        emit repairStateChanged();
     }
 
     clearError();
@@ -1145,6 +1184,12 @@ bool HamDrmController::startTx(const QUrl& localImage)
                                    "HAMDRM MOT object encoding failed"));
     }
 
+    // Retain only one bounded candidate and publish it for repair only after
+    // the waveform backend reports a completed transmission.
+    const std::size_t segmentBytes = std::min(config_.txBodySegmentBytes,
+                                              std::size_t(candidate.value->bytes.size()));
+    pendingRepairSource_ = RepairSource {*encoded.value, segmentBytes, selectedProfileId_};
+
     clearError();
     txSessionId_ = nextSessionId();
     const std::uint64_t session = txSessionId_;
@@ -1162,6 +1207,7 @@ bool HamDrmController::startTx(const QUrl& localImage)
             "HAMDRM waveform TX backend threw an unknown exception");
     }
     if (!status.ok()) {
+        pendingRepairSource_.reset();
         if (txSessionId_ == session) {
             txSessionId_ = 0U;
             setTxState(OperationState::Error, 0.0);
@@ -1214,6 +1260,7 @@ bool HamDrmController::cancelTx()
     const std::uint64_t session = txSessionId_;
     setTxState(OperationState::Cancelling, txProgress_);
     backends_.waveformTx->cancel(session);
+    pendingRepairSource_.reset();
     if (txSessionId_ == session) {
         txSessionId_ = 0U;
         setTxState(OperationState::Cancelled, txProgress_);
@@ -1351,6 +1398,32 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
     if (!assembled.ok()) {
         return assembled.status;
     }
+    if (assembled.value->metadata.mimeType == "application/x-hamdrm-bsr") {
+        const auto parsed = parseHamDrmBsr(assembled.value->originalBytes.data(),
+                                            assembled.value->originalBytes.size(), config_.limits);
+        if (!parsed.ok()) return parsed.status;
+        const std::size_t size = assembled.value->originalBytes.size();
+        if (completedObjects_ >= config_.maximumCompletedObjects
+            || size > config_.maximumCompletedBytes - completedBytes_) {
+            return HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
+                                         "completed HAMDRM inbox capacity is exhausted");
+        }
+        if (partialStore_) {
+            const auto removed = partialStore_->remove(record.progress.transportId);
+            if (!removed.ok()) return removed;
+        }
+        record.progress = record.assembler->progress();
+        record.metadata = assembled.value->metadata;
+        record.persisted = false;
+        record.completedObject = std::move(*assembled.value);
+        record.assembler.reset();
+        record.headerSegments.clear();
+        record.headerBytes = 0U;
+        record.totalHeaderSegments.reset();
+        ++completedObjects_;
+        completedBytes_ += size;
+        return HamDrmStatus::success();
+    }
     const auto image = validateHamDrmImage(
         assembled.value->metadata,
         assembled.value->originalBytes.data(),
@@ -1451,6 +1524,34 @@ HamDrmStatus HamDrmController::ingestMotGroup(
     }
     const std::uint16_t transportId = parsed.value->transportId;
     auto found = inbox_.find(transportId);
+    bool bsrRollover = false;
+    if (found != inbox_.end() && found->second->completedObject
+        && found->second->metadata
+        && found->second->metadata->mimeType == "application/x-hamdrm-bsr"
+        && parsed.value->kind == HamDrmMotGroupKind::Header
+        && parsed.value->segmentNumber == 0U) {
+        // BSR uses a fixed transport ID. A new header starts the next request;
+        // never evict a completed image or an unfinished object on collision.
+        static_cast<void>(takeCompletedObject(transportId));
+        found = inbox_.end();
+        bsrRollover = true;
+    }
+    if (found != inbox_.end() && found->second->bsrRollover
+        && parsed.value->kind == HamDrmMotGroupKind::Header
+        && parsed.value->segmentNumber == 0U) {
+        const auto previous = found->second->headerSegments.find(0U);
+        if (found->second->rejected
+            || (previous != found->second->headerSegments.end()
+                && previous->second != parsed.value->payload)) {
+            // A previous carousel header can trail a completed BSR. Replace
+            // only this BSR rollover candidate when a different header starts.
+            if (!discardObject(transportId))
+                return HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                             "could not discard old BSR candidate");
+            found = inbox_.end();
+            bsrRollover = true;
+        }
+    }
     if (found == inbox_.end()) {
         if (inbox_.size() >= config_.maximumInboxObjects) {
             const HamDrmStatus status = HamDrmStatus::failure(
@@ -1462,6 +1563,7 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         found = inbox_.emplace(
             transportId,
             std::make_unique<InboxRecord>(transportId, config_.limits)).first;
+        found->second->bsrRollover = bsrRollover;
     }
     InboxRecord& record = *found->second;
     if (!record.assembler || record.rejected
@@ -1511,9 +1613,18 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         }
         clearError();
         publishInbox(transportId);
-        emit objectCompleted(
-            transportId,
-            QString::fromStdString(record.metadata->filename));
+        if (record.metadata->mimeType == "application/x-hamdrm-bsr") {
+            const auto& b = record.completedObject->originalBytes;
+            const auto parsedBsr = parseHamDrmBsr(b.data(), b.size(), config_.limits);
+            Q_ASSERT(parsedBsr.ok());
+            receivedBsrText_ = QString::fromLatin1(
+                reinterpret_cast<const char*>(b.data()), static_cast<qsizetype>(b.size()));
+            emit receivedBsrChanged();
+            emit repairStateChanged();
+            emit bsrReceived(transportId, parsedBsr.value->transportId);
+        } else {
+            emit objectCompleted(transportId, QString::fromStdString(record.metadata->filename));
+        }
         return HamDrmStatus::success();
     }
 
@@ -1616,6 +1727,78 @@ QString HamDrmController::buildBsr(int transportId, bool qsstvExtended)
     emit selectedObjectChanged();
     emit bsrChanged();
     return bsrText_;
+}
+
+bool HamDrmController::startBsrTx(int transportId, bool qsstvExtended)
+{
+    if (!ownerThread()) return false;
+    if (busy()) return reject(QStringLiteral("bsr-tx"), tr("Another HAMDRM RX/TX operation is active"));
+    const auto capability = txCapability();
+    if (!capability.completeBackend || !backends_.waveformTx)
+        return reject(QStringLiteral("bsr-tx"), tr("Complete HAMDRM waveform TX backend is not connected"));
+    const auto* profile = currentProfile();
+    if (!profile) return reject(QStringLiteral("bsr-tx"), tr("Selected HAMDRM profile is invalid"));
+    const QString text = buildBsr(transportId, qsstvExtended);
+    if (text.isEmpty()) return false;
+    const QByteArray body = text.toLatin1();
+    HamDrmMotObjectMetadata metadata;
+    metadata.filename = "bsr.bin";
+    metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+    const auto encoded = encodeHamDrmObject(metadata, byteVector(body), config_.txBodySegmentBytes, config_.limits);
+    if (!encoded.ok()) return reject(QStringLiteral("bsr-tx"), statusDetail(encoded.status, "HAMDRM BSR encoding failed"));
+    clearError();
+    txSessionId_ = nextSessionId();
+    const std::uint64_t session = txSessionId_;
+    setTxState(OperationState::Starting, 0.0);
+    HamDrmStatus status;
+    try {
+        status = backends_.waveformTx->start(*profile, *encoded.value, session, *this);
+    } catch (const std::exception& exception) {
+        status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, exception.what());
+    } catch (...) {
+        status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, "HAMDRM BSR TX backend failed");
+    }
+    if (!status.ok()) {
+        if (txSessionId_ == session) { txSessionId_ = 0U; setTxState(OperationState::Error, 0.0); }
+        return reject(QStringLiteral("bsr-tx"), statusDetail(status, "HAMDRM BSR TX start failed"));
+    }
+    if (txSessionId_ == session && txState_ == OperationState::Starting)
+        setTxState(OperationState::Active, 0.0);
+    return true;
+}
+
+bool HamDrmController::startBsrRepair()
+{
+    if (!ownerThread()) return false;
+    if (busy()) return reject(QStringLiteral("bsr-repair"), tr("Another HAMDRM RX/TX operation is active"));
+    if (!backends_.waveformTx || !txCapability().completeBackend || !canRepairReceivedBsr())
+        return reject(QStringLiteral("bsr-repair"), tr("BSR does not match the last completed image transmission"));
+    const QByteArray bytes = receivedBsrText_.toLatin1();
+    const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                         std::size_t(bytes.size()), config_.limits);
+    if (!request.ok()) return reject(QStringLiteral("bsr-repair"), tr("Received BSR is invalid"));
+    HamDrmEncodedObject repair;
+    repair.metadata = lastRepairSource_->object.metadata;
+    repair.headerGroups = lastRepairSource_->object.headerGroups;
+    for (const auto index : request.value->missingSegments)
+        repair.bodyGroups.push_back(lastRepairSource_->object.bodyGroups[index]);
+    const auto* profile = currentProfile();
+    if (!profile) return reject(QStringLiteral("bsr-repair"), tr("Selected HAMDRM profile is invalid"));
+    clearError();
+    txSessionId_ = nextSessionId();
+    const auto session = txSessionId_;
+    setTxState(OperationState::Starting, 0.0);
+    HamDrmStatus status;
+    try { status = backends_.waveformTx->start(*profile, std::move(repair), session, *this); }
+    catch (const std::exception& e) { status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, e.what()); }
+    catch (...) { status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, "HAMDRM repair TX backend failed"); }
+    if (!status.ok()) {
+        if (txSessionId_ == session) { txSessionId_ = 0U; setTxState(OperationState::Error, 0.0); }
+        return reject(QStringLiteral("bsr-repair"), statusDetail(status, "HAMDRM repair TX start failed"));
+    }
+    if (txSessionId_ == session && txState_ == OperationState::Starting)
+        setTxState(OperationState::Active, 0.0);
+    return true;
 }
 
 bool HamDrmController::resumePartial(int transportId)
@@ -1796,6 +1979,7 @@ void HamDrmController::handleTxProgress(std::uint64_t sessionId,
         const std::uint64_t active = txSessionId_;
         txSessionId_ = 0U;
         backends_.waveformTx->cancel(active);
+        pendingRepairSource_.reset();
         setTxState(OperationState::Error, txProgress_);
         static_cast<void>(reject(
             QStringLiteral("tx"),
@@ -1813,9 +1997,15 @@ void HamDrmController::handleTxFinished(std::uint64_t sessionId,
     }
     txSessionId_ = 0U;
     if (status.ok()) {
+        if (pendingRepairSource_) {
+            lastRepairSource_ = std::move(pendingRepairSource_);
+            pendingRepairSource_.reset();
+            emit repairStateChanged();
+        }
         clearError();
         setTxState(OperationState::Completed, 1.0);
     } else {
+        pendingRepairSource_.reset();
         setTxState(OperationState::Error, txProgress_);
         static_cast<void>(reject(
             QStringLiteral("tx"),

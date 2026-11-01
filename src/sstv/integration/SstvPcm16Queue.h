@@ -27,6 +27,7 @@ struct SstvPcm16Chunk final
     std::chrono::nanoseconds startTime {0};
     std::uint64_t sequence {0U};
     std::uint64_t generation {0U};
+    bool sourceDiscontinuity {false};
 };
 
 // Multi-producer/single-or-multi-consumer bounded queue.  Chunk slots are

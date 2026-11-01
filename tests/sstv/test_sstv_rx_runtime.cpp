@@ -3,6 +3,8 @@
 #include <QtTest/QtTest>
 
 #include "../../src/sstv/analog/SstvAvt.h"
+#include "../../src/sstv/fax/SstvRadiofax.h"
+#include "../../src/sstv/image/SstvImageFrame.h"
 #include "../../src/sstv/analog/SstvMartinM1.h"
 #include "../../src/sstv/analog/SstvMmsstvExtended.h"
 #include "../../src/sstv/analog/SstvPd.h"
@@ -13,9 +15,11 @@
 #include "../../src/sstv/core/SstvVisCodec.h"
 #include "../../src/sstv/diagnostics/SstvDiagnosticLogging.h"
 #include "../../src/sstv/integration/SstvRxRuntime.h"
+#include "../../src/sstv/integration/SstvTxSources.h"
 #include "../../src/sstv/tx/SstvToneGenerator.h"
 
 #include <QElapsedTimer>
+#include <QFile>
 #include <QSignalSpy>
 
 #include <algorithm>
@@ -317,7 +321,8 @@ std::vector<std::int16_t> pdPrefix(SstvPdMode mode,
 }
 
 std::vector<std::int16_t> avtPrefix(SstvAvtMode mode,
-                                    std::uint32_t imageLines)
+                                    std::uint32_t imageLines,
+                                    SstvAvtVariant variant = SstvAvtVariant::Normal)
 {
     const SstvAvtModeSpec spec = SstvAvtProtocol::spec(mode);
     std::vector<SstvRgbPixel> pixels(
@@ -325,6 +330,7 @@ std::vector<std::int16_t> avtPrefix(SstvAvtMode mode,
         SstvRgbPixel {210U, 70U, 145U});
     SstvAvtEncoderConfig encoderConfig;
     encoderConfig.mode = mode;
+    encoderConfig.variant = variant;
     encoderConfig.sampleRate = kRate;
     SstvAvtEncoder encoder(pixels, encoderConfig);
     SstvAvtMapper mapper({mode, static_cast<std::uint32_t>(kRate), 0});
@@ -414,6 +420,47 @@ class TestSstvRxRuntime final : public QObject
     Q_OBJECT
 
 private slots:
+    void avtCapturedHeaderPhaseRegression()
+    {
+        const QString path=QFINDTESTDATA("fixtures/avt-90-narrow-qrm-captured-48k.s16");
+        QVERIFY(!path.isEmpty());
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray raw=file.readAll();
+        QVERIFY(raw.size()>0 && raw.size()%2==0);
+        std::vector<std::int16_t> captured(static_cast<std::size_t>(raw.size()/2));
+        for (std::size_t i=0;i<captured.size();++i) {
+            const auto lo=static_cast<unsigned char>(raw[static_cast<qsizetype>(2*i)]);
+            const auto hi=static_cast<unsigned char>(raw[static_cast<qsizetype>(2*i+1)]);
+            captured[i]=static_cast<std::int16_t>(lo | (unsigned(hi)<<8));
+        }
+        for (const std::size_t phase : {std::size_t{0},std::size_t{96}}) {
+            const std::vector<std::int16_t> pcm(captured.begin()+phase,captured.end());
+            auto config=smallConfig();
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.setRxModeControl(SstvRxModeControl::Manual,"avt-90-narrow-qrm"));
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay,123U+phase));
+            std::uint64_t chunks=0;
+            constexpr int rate=48'000;
+            constexpr std::size_t block=960;
+            for (std::size_t offset=0;offset<pcm.size();offset+=block) {
+                const auto n=std::min(block,pcm.size()-offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm,offset,n),rate,runtime.routeToken(),
+                    static_cast<qint64>(offset*1'000'000'000ULL/rate)));
+                ++chunks;
+                QElapsedTimer wait;wait.start();
+                while (runtime.snapshot().chunksProcessed<chunks && wait.elapsed()<4000)
+                    QTest::qWait(1);
+                QCOMPARE(runtime.snapshot().chunksProcessed,chunks);
+            }
+            const auto summary=runtime.snapshot();
+            QVERIFY2(summary.vis.valid, phase==0 ? "phase A VIS" : "phase B VIS");
+            QCOMPARE(summary.vis.primaryPayload,71);
+            QVERIFY(summary.image.available);
+            QVERIFY(runtime.stop());
+        }
+    }
+
     void initTestCase()
     {
         qRegisterMetaType<SstvRxRuntime::State>();
@@ -535,6 +582,50 @@ private slots:
         QVERIFY(!timeline.propose(std::numeric_limits<qint64>::max(),
                                   1U,
                                   12'000U).valid);
+    }
+
+    void sourceClockSeparatesCallbackJitterFromMissingSamples()
+    {
+        SstvSourceClockMapper source;
+        SstvMonotonicTimeline sourceTimeline;
+        SstvMonotonicTimeline arrivalTimeline;
+        const std::array<qint64, 4U> sampleTimes {{0, 20'000'000, 40'000'000, 65'000'000}};
+        const std::array<qint64, 4U> arrivals {{1'000'000'000, 1'035'000'000, 1'042'000'000, 1'082'000'000}};
+        for (std::size_t i = 0; i < sampleTimes.size(); ++i) {
+            const auto mapped = source.map(sampleTimes[i], arrivals[i]);
+            QVERIFY(mapped.has_value());
+            const auto device = sourceTimeline.propose(*mapped, 240U, 12'000U, true);
+            const auto callback = arrivalTimeline.propose(arrivals[i], 240U, 12'000U);
+            QVERIFY(device.valid && callback.valid);
+            if (i == 1U) {
+                QVERIFY(!device.preservedGap);
+                QVERIFY(callback.preservedGap); // same samples, late callback
+            }
+            if (i == 3U) {
+                QVERIFY(device.preservedGap);
+                QCOMPARE(device.gapNs, qint64 {5'000'000});
+            }
+            QVERIFY(sourceTimeline.commit(device));
+            QVERIFY(arrivalTimeline.commit(callback));
+        }
+        QVERIFY(!source.map(60'000'000, 1'100'000'000));
+        source.reset();
+        QCOMPARE(source.map(1, 2), std::optional<qint64> {2});
+        QVERIFY(!source.map(-1, 3));
+    }
+
+    void sourceClockResetForcesDiscontinuityWithoutDroppingBlock()
+    {
+        SstvRxRuntime runtime(smallConfig());
+        QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 103U));
+        const auto route = runtime.routeToken();
+        QVERIFY(runtime.enqueuePcm16At(tone(240U), kRate, route, 0, true));
+        QVERIFY(runtime.enqueuePcm16At(tone(240U), kRate, route,
+                                       20'000'000, false, true));
+        QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, std::uint64_t {2U}, 4'000);
+        QCOMPARE(runtime.snapshot().discontinuities, std::uint64_t {1U});
+        QCOMPARE(runtime.snapshot().processingFailures, std::uint64_t {0U});
+        QVERIFY(runtime.stop());
     }
 
     void lifecycleWakeCancelRestartAndShutdownAreDeterministic()
@@ -838,6 +929,213 @@ private slots:
         QCOMPARE(runtime.state(), SstvRxRuntime::State::Shutdown);
         QVERIFY(!runtime.snapshot().workerRunning);
         QCOMPARE(runtime.snapshot().chunksProcessed, std::uint64_t {0U});
+    }
+
+    void radiofaxConfigurationOnlyChangesWhenStopped()
+    {
+        SstvRxRuntime runtime(smallConfig());
+        SstvFaxConfig fax;
+        fax.width = 32U;
+        fax.height = 4U;
+        QVERIFY(runtime.setRadiofaxConfig(fax));
+        QVERIFY(runtime.radiofaxConfig().has_value());
+        auto invalid = fax;
+        invalid.width = 0;
+        QVERIFY(!runtime.setRadiofaxConfig(invalid));
+        QCOMPARE(runtime.radiofaxConfig()->width, fax.width);
+        QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 44U));
+        QVERIFY(!runtime.setRadiofaxConfig(std::nullopt));
+        QVERIFY(runtime.radiofaxConfig().has_value());
+        QVERIFY(runtime.stop());
+        QVERIFY(runtime.setRadiofaxConfig(std::nullopt));
+        QVERIFY(!runtime.radiofaxConfig().has_value());
+    }
+
+    void radiofaxManualRuntimeReceivesAcrossChunkSizes()
+    {
+        SstvFaxConfig fax;
+        fax.width = 32U;
+        fax.height = 4U;
+        std::vector<std::uint8_t> pixels(fax.width * fax.height);
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+            pixels[i] = std::uint8_t(((i % fax.width) * 7U + (i / fax.width) * 43U) % 256U);
+        SstvRadiofaxEncoder encoder(fax, pixels);
+        const auto frames = encoder.mapper().imageEndSample() + 3U * fax.sampleRate;
+        std::vector<std::int16_t> pcm(static_cast<std::size_t>(frames));
+        std::size_t generated = 0;
+        while (generated < pcm.size()) {
+            const auto count = std::min(std::size_t {8192U}, pcm.size() - generated);
+            generated += encoder.pullPcm16(pcm.data() + generated, count);
+        }
+        std::vector<SstvImageSnapshot> images;
+        for (const std::size_t block : {std::size_t {4093U}, std::size_t {8191U}}) {
+            auto config = smallConfig();
+            config.ingress.maximumQueuedSamples = 65'536U;
+            config.ingress.maximumSamplesPerCall = 16'384U;
+            config.radiofax = fax;
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 44U));
+            std::uint64_t chunks = 0U;
+            for (std::size_t offset = 0; offset < pcm.size(); offset += block) {
+                const auto count = std::min(block, pcm.size() - offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), kRate,
+                    runtime.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+                ++chunks;
+                QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+            }
+            const auto summary = runtime.snapshot();
+            QVERIFY2(summary.image.available, "radiofax image not acquired");
+            QVERIFY(summary.image.complete || summary.image.partial);
+            QCOMPARE(summary.image.mode, QStringLiteral("hffax-experimental"));
+            QVERIFY(summary.image.coverage > 0.90);
+            const auto image = runtime.latestImageSnapshot();
+            QVERIFY(image);
+            images.push_back(*image);
+            QVERIFY(runtime.stop());
+        }
+        QCOMPARE(images.size(), std::size_t {2U});
+        QCOMPARE(images[0].channelCoverage, images[1].channelCoverage);
+        double error = 0;
+        for (std::size_t i = 0; i < pixels.size(); ++i) {
+            QCOMPARE(images[0].pixels[i].red, images[1].pixels[i].red);
+            error += std::abs(int(images[0].pixels[i].red) - int(pixels[i]));
+        }
+        QVERIFY(error / pixels.size() < 25.0);
+    }
+
+    void radiofaxTxAudioReachesRxRuntimeAt48k()
+    {
+        SstvFaxConfig rx;
+        rx.width = 32U; rx.height = 4U;
+        auto tx = rx; tx.sampleRate = 48'000U;
+        rx.height = 8U; // configured ceiling exceeds the transmitted four lines
+        std::vector<std::uint8_t> pixels(tx.width * tx.height);
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+            pixels[i] = std::uint8_t(((i % rx.width) * 7U + (i / rx.width) * 43U) % 256U);
+        auto source = makeRadiofaxPcm16Source(pixels, tx);
+        SstvRadiofaxMapper mapper(tx);
+        std::vector<std::int16_t> pcm(static_cast<std::size_t>(mapper.imageEndSample() + 3U * tx.sampleRate));
+        std::size_t generated = 0;
+        while (generated < pcm.size()) {
+            const auto n = std::min(std::size_t {8192U}, pcm.size() - generated);
+            generated += source->pullPcm16(pcm.data() + generated, n);
+        }
+        auto config = smallConfig();
+        config.ingress.maximumQueuedSamples = 131'072U;
+        config.ingress.maximumSamplesPerCall = 16'384U;
+        config.radiofax = rx;
+        SstvRxRuntime runtime(config);
+        QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 45U));
+        QVERIFY(runtime.enqueuePcm16At(QVector<short>(4800, 0), 48'000,
+                                      runtime.routeToken(), 0));
+        QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, std::uint64_t {1U}, 4'000);
+        std::uint64_t chunks = 1U;
+        constexpr std::size_t block = 16'381U;
+        for (std::size_t offset = 0; offset < pcm.size(); offset += block) {
+            const auto count = std::min(block, pcm.size() - offset);
+            QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), 48'000,
+                runtime.routeToken(), static_cast<qint64>(3'000'000'000ULL + offset * 1'000'000'000ULL / 48'000U)));
+            ++chunks;
+            QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+        }
+        const auto result = runtime.snapshot();
+        QVERIFY(result.image.available);
+        QVERIFY(result.image.partial);
+        QVERIFY(result.image.radiofaxStopDetected);
+        QVERIFY(result.image.coverage > 0.45 && result.image.coverage < 0.55);
+        const auto image = runtime.latestImageSnapshot();
+        QVERIFY(image);
+        double error = 0;
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+            error += std::abs(int(image->pixels[i].red) - int(pixels[i]));
+        QVERIFY(error / pixels.size() < 25.0);
+        QVERIFY(runtime.stop());
+    }
+
+    void fax480AutomaticRuntimeProfilesAB()
+    {
+        for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::Qsstv500, SstvFax480Profile::LibsstvVis480}) {
+            const auto value=profile==SstvFax480Profile::Dayton480 ? std::uint8_t(64)
+                : (profile==SstvFax480Profile::Qsstv500 ? std::uint8_t(192) : std::uint8_t(128));
+            const SstvFax480Mapper mapper(profile,kRate);
+            SstvFax480Encoder encoder(profile,kRate,std::vector<std::uint8_t>(std::size_t(mapper.height())*512U,value));
+            std::vector<std::int16_t> pcm(mapper.totalSamples()+kRate,0);
+            std::size_t made=0;
+            while (!encoder.complete()) {
+                const auto n=encoder.pull(pcm.data()+made,std::min<std::size_t>(8192,mapper.totalSamples()-made));
+                QVERIFY(n>0); made+=n;
+            }
+            auto config=smallConfig();
+            config.ingress.maximumQueuedSamples=65'536U;
+            config.ingress.maximumSamplesPerCall=16'384U;
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.setFax480Config(profile));
+            QVERIFY(!runtime.setRadiofaxConfig(SstvFaxConfig {}));
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay,46U));
+            QVERIFY(!runtime.setFax480Config(std::nullopt));
+            const std::size_t block=profile==SstvFax480Profile::Dayton480 ? 4093U : 8191U;
+            std::uint64_t chunks=0;
+            for (std::size_t offset=0;offset<pcm.size();offset+=block) {
+                const auto count=std::min(block,pcm.size()-offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm,offset,count),kRate,runtime.routeToken(),
+                    static_cast<qint64>(offset*1'000'000'000ULL/kRate)));
+                ++chunks;
+                QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed,chunks,4'000);
+            }
+            const auto result=runtime.snapshot();
+            QVERIFY2(result.image.available,"FAX480 runtime did not publish image");
+            QVERIFY(result.image.complete);
+            QCOMPARE(result.image.width,512U);
+            QCOMPARE(result.image.height,mapper.height());
+            QVERIFY(result.image.coverage>0.90);
+            const auto image=runtime.latestImageSnapshot();
+            QVERIFY(image);
+            QVERIFY(std::abs(int(image->pixel(256U,100U).red)-int(value))<12);
+            QCOMPARE(result.processingFailures,std::uint64_t(0));
+            QVERIFY(runtime.stop());
+        }
+    }
+
+    void radiofaxDirectAudioStopReachesRuntimeAcrossChunkSizes()
+    {
+        SstvFaxConfig tx;
+        tx.width = 32U; tx.height = 4U; tx.linesPerMinute = 240U;
+        auto rx = tx; rx.height = 12U;
+        std::vector<std::uint8_t> pixels(tx.width * tx.height, 128U);
+        SstvRadiofaxEncoder encoder(tx, pixels);
+        const auto imageEnd = encoder.mapper().imageEndSample();
+        std::vector<std::int16_t> pcm(static_cast<std::size_t>(imageEnd + 2U * tx.sampleRate));
+        std::size_t generated = 0U;
+        while (generated < imageEnd) {
+            const auto n = std::min<std::size_t>(8192U, imageEnd - generated);
+            generated += encoder.pullPcm16(pcm.data() + generated, n);
+        }
+        for (const std::size_t block : {4093U, 8191U}) {
+            const double stopFrequency = block == 4093U ? 437.0 : 463.0;
+            for (std::size_t i = generated; i < pcm.size(); ++i)
+                pcm[i] = static_cast<std::int16_t>(12'000.0 * std::sin(
+                    2.0 * std::acos(-1.0) * stopFrequency * double(i - generated) / tx.sampleRate));
+            auto config = smallConfig();
+            config.ingress.maximumQueuedSamples = 65'536U;
+            config.ingress.maximumSamplesPerCall = 16'384U;
+            config.radiofax = rx;
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 46U));
+            std::uint64_t chunks = 0U;
+            for (std::size_t offset = 0; offset < pcm.size(); offset += block) {
+                const auto count = std::min(block, pcm.size() - offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), kRate,
+                    runtime.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+                ++chunks;
+                QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+            }
+            const auto result = runtime.snapshot();
+            QVERIFY(result.image.available);
+            QVERIFY(result.image.partial);
+            QVERIFY(result.image.radiofaxStopDetected);
+            QVERIFY(result.image.coverage > 0.30 && result.image.coverage < 0.38);
+            QVERIFY(runtime.stop());
+        }
     }
 
     void martinM1AcquiresWithAndWithoutLongVoxPreamble()
@@ -1610,18 +1908,68 @@ private slots:
         }
     }
 
+    void avtManualQrmAcquiresVisAndCountdown()
+    {
+        auto config = smallConfig();
+        config.ingress.maximumQueuedSamples = 65'536U;
+        config.ingress.maximumSamplesPerCall = 16'384U;
+        SstvRxRuntime runtime(config);
+        QVERIFY(runtime.setRxModeControl(SstvRxModeControl::Manual, "avt-24-qrm"));
+        QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 172U));
+        const auto pcm = avtPrefix(SstvAvtMode::Avt24, 8U, SstvAvtVariant::Qrm);
+        std::uint64_t chunks = 0U;
+        for (std::size_t offset = 0; offset < pcm.size(); offset += 4093U) {
+            const auto count = std::min(std::size_t {4093U}, pcm.size() - offset);
+            QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), kRate,
+                runtime.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+            ++chunks;
+            QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+        }
+        const auto snapshot = runtime.snapshot();
+        QVERIFY(snapshot.vis.valid);
+        QVERIFY(snapshot.image.available);
+        QCOMPARE(snapshot.image.mode, QStringLiteral("avt-24-qrm"));
+        QVERIFY(snapshot.image.coverage > 0.01);
+        QVERIFY(runtime.stop());
+
+        SstvRxRuntime mismatch(config);
+        QVERIFY(mismatch.setRxModeControl(SstvRxModeControl::Manual, "avt-24-qrm"));
+        QVERIFY(mismatch.start(SstvAudioSourceKind::Replay, 173U));
+        const auto other = avtPrefix(SstvAvtMode::Avt24, 8U, SstvAvtVariant::Normal);
+        chunks = 0U;
+        for (std::size_t offset = 0; offset < other.size(); offset += 4093U) {
+            const auto count = std::min(std::size_t {4093U}, other.size() - offset);
+            QVERIFY(mismatch.enqueuePcm16At(pcmChunk(other, offset, count), kRate,
+                mismatch.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+            ++chunks;
+            QTRY_COMPARE_WITH_TIMEOUT(mismatch.snapshot().chunksProcessed, chunks, 4'000);
+        }
+        QVERIFY(!mismatch.snapshot().image.available);
+        QVERIFY(mismatch.stop());
+    }
+
     void avtNormalVisAndProtectedCountdownSelectEveryNativeSession()
     {
         const struct {
             SstvAvtMode mode;
+            SstvAvtVariant variant;
             const char* id;
             std::uint32_t width;
             std::uint32_t height;
             int payload;
         } cases[] {
-            {SstvAvtMode::Avt24, "avt-24", 128U, 120U, 64},
-            {SstvAvtMode::Avt90, "avt-90", 320U, 240U, 68},
-            {SstvAvtMode::Avt94, "avt-94", 320U, 200U, 72},
+            {SstvAvtMode::Avt24, SstvAvtVariant::Normal, "avt-24", 128U, 120U, 64},
+            {SstvAvtMode::Avt24, SstvAvtVariant::Narrow, "avt-24-narrow", 128U, 120U, 65},
+            {SstvAvtMode::Avt24, SstvAvtVariant::Qrm, "avt-24-qrm", 128U, 120U, 66},
+            {SstvAvtMode::Avt24, SstvAvtVariant::NarrowQrm, "avt-24-narrow-qrm", 128U, 120U, 67},
+            {SstvAvtMode::Avt90, SstvAvtVariant::Normal, "avt-90", 320U, 240U, 68},
+            {SstvAvtMode::Avt90, SstvAvtVariant::Narrow, "avt-90-narrow", 320U, 240U, 69},
+            {SstvAvtMode::Avt90, SstvAvtVariant::Qrm, "avt-90-qrm", 320U, 240U, 70},
+            {SstvAvtMode::Avt90, SstvAvtVariant::NarrowQrm, "avt-90-narrow-qrm", 320U, 240U, 71},
+            {SstvAvtMode::Avt94, SstvAvtVariant::Normal, "avt-94", 320U, 200U, 72},
+            {SstvAvtMode::Avt94, SstvAvtVariant::Narrow, "avt-94-narrow", 320U, 200U, 73},
+            {SstvAvtMode::Avt94, SstvAvtVariant::Qrm, "avt-94-qrm", 320U, 200U, 74},
+            {SstvAvtMode::Avt94, SstvAvtVariant::NarrowQrm, "avt-94-narrow-qrm", 320U, 200U, 75},
         };
 
         std::uint64_t sourceHandle = 170U;
@@ -1629,7 +1977,7 @@ private slots:
             SstvRxRuntime::Config config = smallConfig();
             config.ingress.maximumChunks = 16U;
             config.ingress.maximumQueuedSamples = 65'536U;
-            const std::vector<std::int16_t> pcm = avtPrefix(item.mode, 8U);
+            const std::vector<std::int16_t> pcm = avtPrefix(item.mode, 8U, item.variant);
             QVERIFY(pcm.size() > 100'000U);
 
             SstvRxRuntime runtime(config);

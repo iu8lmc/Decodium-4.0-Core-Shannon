@@ -154,19 +154,14 @@ is never reproduced. All seven remain implemented, not verified: no live radio
 or cross-application exchange has measured long-duration AFC, slant or terminal
 compatibility, and PD50 still lacks a second independent executable lineage.
 
-Current AVT tranche: normal AVT24/90/94 share one cumulative, sync-free RGB
-mapper plus a fixed-memory protected-countdown detector. The existing runtime
-requires a mapped normal standard VIS and a valid inverse-protected 32x17
-countdown before starting a progressive image session; it does not invent
-per-line anchors after a discontinuity. TX, the SoundOutput/PTT coordinator,
-atomic WAV export and Studio use the same native pull source. AVT90 preserves
-the Handbook's 256x240 effective resolution separately from the audited
-320x240 prepared/wire raster and uses prefix `101`, not the pinned MMSSTV
-`010` defect. The complete AVT24 PCM runtime loopback and pinned source
-landmarks are deterministic developer evidence only, so all three normal modes
-remain implemented rather than verified. Narrow/QRM/Narrow-QRM VIS identities
-are catalogued but deliberately have no RX, TX, autodetect, WAV or Studio
-capability until complete picture semantics and independent evidence exist.
+Current AVT tranche: normal, Narrow, QRM and Narrow-QRM AVT24/90/94
+share a cumulative sync-free RGB mapper and protected-countdown detector.
+The runtime selects variants by VIS; TX, WAV and Studio use the same native
+source. AVT90 retains 256 effective columns separately from its 320-column
+prepared raster and uses prefix `101`. Local tests cover progressive RX for
+all twelve modes, TX PCM for all variants, and complete Studio loopback for all twelve modes with bounded RGB error.
+Independent applications, two instances and RF remain
+to be tested; see [AVT_PROTOCOL.md](AVT_PROTOCOL.md).
 
 ### M4: storage, gallery and native QML workspace
 

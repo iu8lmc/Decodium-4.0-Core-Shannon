@@ -22,6 +22,7 @@ struct SstvAvtRxSessionConfig final
     std::uint32_t maximumInterpolationGapPixels {4U};
     std::size_t maximumPendingDirtyEvents {
         SstvImageFrame::kDefaultMaximumDirtyEvents};
+    SstvAvtVariant variant {SstvAvtVariant::Normal};
 };
 
 enum class SstvAvtRxSessionState : std::uint8_t
@@ -77,6 +78,7 @@ public:
     void cancel() noexcept;
 
     SstvAvtMode mode() const noexcept;
+    SstvAvtVariant variant() const noexcept;
     SstvAvtRxSessionState state() const noexcept;
     std::uint64_t imageStartSample() const noexcept;
     std::uint64_t imageEndSample() const noexcept;

@@ -26,6 +26,8 @@ public:
         QSet<QString> participantIds {
             QStringLiteral("station:local"),
             QStringLiteral("station:remote")};
+        // Explicit developer-harness opt-in; this adapter is never a production provider.
+        bool encryptedEnvelopes {false};
         quint64 maximumChunkBytes {64U * 1024U};
         quint64 maximumTotalBytes {128U * 1024U * 1024U};
         qsizetype maximumSessions {128};

@@ -24,6 +24,7 @@ SstvAvtDecoderConfig decoderConfig(const SstvAvtRxSessionConfig& config)
     result.maximumInterpolationGapPixels =
         config.maximumInterpolationGapPixels;
     result.maximumPendingDirtyEvents = config.maximumPendingDirtyEvents;
+    result.variant = config.variant;
     return result;
 }
 
@@ -206,6 +207,11 @@ void SstvAvtRxSession::updateState() noexcept
 SstvAvtMode SstvAvtRxSession::mode() const noexcept
 {
     return decoder_.mode();
+}
+
+SstvAvtVariant SstvAvtRxSession::variant() const noexcept
+{
+    return config_.variant;
 }
 
 SstvAvtRxSessionState SstvAvtRxSession::state() const noexcept

@@ -715,6 +715,74 @@ SstvPage {
                 }
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: qsTr("Radiofax TX (experimental)")
+                    color: root.primaryTextColor
+                }
+                Label { text: qsTr("IOC"); color: root.secondaryTextColor }
+                ComboBox {
+                    id: faxTxIoc
+                    objectName: "sstvRadiofaxTxIoc"
+                    model: ["576", "288"]
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                }
+                Label { text: qsTr("Lines/min"); color: root.secondaryTextColor }
+                ComboBox {
+                    id: faxTxRate
+                    objectName: "sstvRadiofaxTxRate"
+                    model: ["120", "60", "90", "240"]
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                }
+                CheckBox {
+                    id: faxTxFldigi
+                    objectName: "sstvRadiofaxTxCenteredPhasing"
+                    text: qsTr("Centered phasing (experimental)")
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                }
+                Button {
+                    objectName: "sstvRadiofaxTransmitButton"
+                    text: qsTr("Transmit Radiofax")
+                    enabled: !!(root.engine && root.engine.sstvTxCanStart
+                                 && !root.engine.sstvTxActive && !fskIdEnabled.checked)
+                    onClicked: root.engine.startSstvRadiofaxTxAligned(
+                                   Number(faxTxIoc.currentText), Number(faxTxRate.currentText),
+                                   faxTxFldigi.checked)
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Uses the prepared image in grayscale; no FSK ID.")
+                    color: root.secondaryTextColor
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Label { text: qsTr("FAX480 TX (experimental)"); color: root.primaryTextColor }
+                ComboBox {
+                    id: fax480Profile
+                    objectName: "sstvFax480TxProfile"
+                    model: ["Dayton 512×480", "QSSTV-style 512×500", "VIS 85 512×480"]
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                }
+                Button {
+                    objectName: "sstvFax480TransmitButton"
+                    text: qsTr("Transmit FAX480")
+                    enabled: !!(root.engine && root.engine.sstvTxCanStart
+                                 && !root.engine.sstvTxActive && !fskIdEnabled.checked)
+                    onClicked: root.engine.startSstvFax480Tx(
+                                   fax480Profile.currentIndex === 0 ? "dayton-480" : (fax480Profile.currentIndex === 1 ? "qsstv-500" : "libsstv-vis-480"))
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Resizes the prepared image and sends it in grayscale; no FSK ID.")
+                    color: root.secondaryTextColor
+                    wrapMode: Text.Wrap
+                }
+            }
+
             Label {
                 objectName: "sstvTxUnavailableReason"
                 Layout.fillWidth: true

@@ -10,6 +10,8 @@
 #include "../analog/SstvScottie.h"
 #include "../analog/SstvSequentialRgb.h"
 #include "../tx/SstvFskIdTxStream.h"
+#include "../fax/SstvRadiofax.h"
+#include "../fax/SstvFax480.h"
 #include "SstvTxAudioDevice.h"
 
 #include <memory>
@@ -54,6 +56,12 @@ std::unique_ptr<SstvPcm16Source> makeCalibrationTonePcm16Source(
 // Type-erased adapters used by the Qt audio device.  They keep the native
 // pull encoders independent from QIODevice and preserve the one-frame plus
 // bounded-scratch memory model through the Decodium SoundOutput boundary.
+std::unique_ptr<SstvPcm16Source> makeFax480Pcm16Source(
+    const std::vector<std::uint8_t>& pixels, SstvFax480Profile profile,
+    std::uint32_t sampleRate = 48'000U);
+std::unique_ptr<SstvPcm16Source> makeRadiofaxPcm16Source(
+    const std::vector<std::uint8_t>& pixels, SstvFaxConfig config);
+
 std::unique_ptr<SstvPcm16Source> makeAvtPcm16Source(
     const std::vector<SstvRgbPixel>& pixels,
     SstvAvtEncoderConfig config = {});

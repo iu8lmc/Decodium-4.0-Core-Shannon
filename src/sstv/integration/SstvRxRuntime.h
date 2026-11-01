@@ -5,6 +5,8 @@
 #include "SstvAudioIngress.h"
 
 #include "../analog/SstvAvt.h"
+#include "../fax/SstvRadiofax.h"
+#include "../fax/SstvFax480.h"
 #include "../analog/SstvMmsstvExtended.h"
 #include "../rx/SstvRxControlPolicy.h"
 #include "../rx/SstvRxCorrectionController.h"
@@ -25,6 +27,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 namespace decodium::sstv {
@@ -58,6 +61,20 @@ constexpr bool operator!=(const SstvRxRouteToken& left,
     return !(left == right);
 }
 
+// Maps a monotonic capture-device sample clock to the local steady-clock
+// domain. Callback arrival jitter does not change the device's sample time.
+class SstvSourceClockMapper final
+{
+public:
+    std::optional<qint64> map(qint64 sourceNs, qint64 localNowNs) noexcept;
+    void reset() noexcept;
+private:
+    qint64 m_sourceOriginNs {0};
+    qint64 m_localOriginNs {0};
+    qint64 m_previousSourceNs {0};
+    bool m_active {false};
+};
+
 // Produces block-start timestamps in one local steady-clock domain.  Callback
 // bursts are placed immediately after the preceding block instead of
 // overlapping it.  A delay beyond the configured scheduler-jitter tolerance is
@@ -86,7 +103,8 @@ public:
 
     Candidate propose(qint64 observedLocalMonotonicNs,
                       std::size_t sampleCount,
-                      std::uint32_t sampleRate) const noexcept;
+                      std::uint32_t sampleRate,
+                      bool deviceClock = false) const noexcept;
     bool commit(const Candidate& candidate) noexcept;
     void reset() noexcept;
 
@@ -118,6 +136,9 @@ public:
         std::uint32_t snapshotNotificationIntervalMs {100U};
         std::size_t maximumErrorCharacters {256U};
         std::size_t maximumDiagnosticScopePoints {256U};
+        // Opt-in experimental manual radiofax acquisition. Geometry and IOC
+        // must be supplied by the operator; the worker DSP runs at 12 kHz.
+        std::optional<SstvFaxConfig> radiofax;
     };
 
     enum class State : std::uint8_t
@@ -266,6 +287,7 @@ public:
         bool complete {false};
         bool partial {false};
         bool cancelled {false};
+        bool radiofaxStopDetected {false};
         // Stable receiver-session key.  Unlike the route generation and
         // progressive image revision, this changes for back-to-back frames
         // received without restarting the audio route.
@@ -343,6 +365,11 @@ public:
     SstvRxRuntime& operator=(SstvRxRuntime&&) = delete;
 
     Config configuration() const noexcept;
+    // Configuration changes are accepted only with the worker stopped.
+    bool setRadiofaxConfig(std::optional<SstvFaxConfig> config);
+    std::optional<SstvFaxConfig> radiofaxConfig() const;
+    bool setFax480Config(std::optional<SstvFax480Profile> profile);
+    std::optional<SstvFax480Profile> fax480Config() const;
     State state() const noexcept;
     bool isRunning() const noexcept;
     SstvRxRouteToken routeToken() const noexcept;
@@ -382,7 +409,9 @@ public:
     bool enqueuePcm16At(QVector<short> samples,
                         int sampleRate,
                         SstvRxRouteToken token,
-                        qint64 observedLocalMonotonicNs) noexcept;
+                        qint64 observedLocalMonotonicNs,
+                        bool deviceClock = false,
+                        bool sourceDiscontinuity = false) noexcept;
 
     static qint64 localMonotonicNowNs() noexcept;
 
@@ -551,6 +580,13 @@ private:
     void terminatePdForDiscontinuity(WorkerPipeline& pipeline,
                                      std::uint64_t eventMs);
     void publishPdImage(WorkerPipeline& pipeline, bool force);
+    void consumeFax480Observations(WorkerPipeline& pipeline,
+                                   const std::vector<SstvFrequencyObservation>& observations);
+    void publishFax480Image(WorkerPipeline& pipeline, bool partial);
+    void consumeRadiofaxObservations(WorkerPipeline& pipeline,
+        const std::vector<SstvFrequencyObservation>& observations);
+    void publishRadiofaxImage(WorkerPipeline& pipeline, bool force);
+    void terminateRadiofaxForDiscontinuity(WorkerPipeline& pipeline);
     void consumeAvtObservations(
         WorkerPipeline& pipeline,
         const std::vector<SstvFrequencyObservation>& observations,
@@ -569,6 +605,10 @@ private:
     void scheduleSnapshotNotification(bool force = false) noexcept;
 
     const Config m_config;
+    std::optional<SstvFaxConfig> m_radiofaxConfig;
+    std::optional<SstvFax480Profile> m_fax480Config;
+    // Worker-owned ID space, distinct from ordinary low-numbered RX sessions.
+    std::uint64_t m_nextRadiofaxAcquisitionId {1ULL << 48U};
     // QObject child rather than a by-value QObject member: Qt then moves the
     // ingress together with this runtime if the controller is moved before it
     // starts, and QObject base destruction owns the final teardown.

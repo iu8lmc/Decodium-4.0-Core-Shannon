@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "HamDrmPartialStore.h"
+#include "HamDrmCrc.h"
+#include "channel/HamDrmChannelCrc.h"
 
 #include <QByteArray>
 #include <QCryptographicHash>
@@ -241,8 +243,26 @@ HamDrmValueResult<HamDrmObjectAssembler> HamDrmPartialStore::load(
                     HamDrmStatus::failure(HamDrmErrorCode::Malformed,
                                           "partial group length is invalid")};
         }
-        const auto ingested = assembler.ingest(
+        auto ingested = assembler.ingest(
             reinterpret_cast<const std::uint8_t*>(data + offset), groupBytes);
+        // Historical local snapshots were written with a reflected CRC. Only
+        // after the whole file's SHA-256 has passed, translate a matching old
+        // group in memory; live/network groups still require the correct CRC.
+        // The original snapshot is never rewritten or removed by load().
+        if (!ingested.ok() && ingested.status.code == HamDrmErrorCode::CrcMismatch
+            && groupBytes >= 2U) {
+            const auto* raw = reinterpret_cast<const std::uint8_t*>(data + offset);
+            const auto stored = static_cast<std::uint16_t>(
+                (static_cast<std::uint16_t>(raw[groupBytes - 2U]) << 8U)
+                | raw[groupBytes - 1U]);
+            if (stored == hamDrmCrc16X25(raw, groupBytes - 2U)) {
+                std::vector<std::uint8_t> translated(raw, raw + groupBytes);
+                const auto crc = channel::hamDrmChannelCrc16(raw, groupBytes - 2U);
+                translated[groupBytes - 2U] = static_cast<std::uint8_t>(crc >> 8U);
+                translated[groupBytes - 1U] = static_cast<std::uint8_t>(crc);
+                ingested = assembler.ingest(translated.data(), translated.size());
+            }
+        }
         if (!ingested.ok()) {
             return {std::nullopt, ingested.status};
         }

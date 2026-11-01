@@ -475,13 +475,28 @@ SstvPage {
                                            parseInt(resumeId.text, 16))
                         }
                         Item { Layout.fillWidth: true }
+                        ComboBox {
+                            id: bsrDialect
+                            objectName: "hamdrmBsrDialect"
+                            model: [qsTr("QSSTV extended"), qsTr("EasyPal compact")]
+                            enabled: root.controller && root.controller.canBuildBsr
+                        }
                         Button {
                             objectName: "hamdrmBuildBsr"
                             text: qsTr("Build BSR")
                             enabled: root.controller && root.controller.canBuildBsr
                             onClicked: root.controller.buildBsr(
                                            root.controller.selectedTransportId,
-                                           true)
+                                           bsrDialect.currentIndex === 0)
+                        }
+                        Button {
+                            objectName: "hamdrmSendBsr"
+                            text: qsTr("Send BSR")
+                            enabled: root.controller && root.controller.canBuildBsr
+                                     && !root.controller.busy
+                                     && root.capability.waveformTx
+                            onClicked: root.controller.startBsrTx(
+                                           root.controller.selectedTransportId, bsrDialect.currentIndex === 0)
                         }
                         Button {
                             objectName: "hamdrmDiscardObject"
@@ -512,6 +527,35 @@ SstvPage {
                         wrapMode: TextEdit.NoWrap
                         placeholderText: qsTr("Generated BSR request appears here")
                         text: root.controller ? root.controller.bsrText : ""
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Received BSR (unverified; retransmission is not automatic)")
+                        color: root.secondaryTextColor
+                    }
+                    TextArea {
+                        objectName: "hamdrmReceivedBsrText"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 100
+                        readOnly: true
+                        wrapMode: TextEdit.NoWrap
+                        text: root.controller ? root.controller.receivedBsrText : ""
+                    }
+                    Button {
+                        objectName: "hamdrmRepairBsr"
+                        text: qsTr("Retransmit requested segments")
+                        enabled: root.controller && root.controller.canRepairReceivedBsr
+                                 && !root.controller.busy && root.capability.waveformTx
+                        onClicked: root.controller.startBsrRepair()
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("The request is unauthenticated. Check that it refers to your last image before transmitting.")
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: root.controller && root.controller.canRepairReceivedBsr
+                        text: qsTr("Requests are not authenticated and image identifiers can collide. Verify the requested image before retransmitting.")
+                        color: root.secondaryTextColor
+                        wrapMode: Text.WordWrap
                     }
                 }
             }

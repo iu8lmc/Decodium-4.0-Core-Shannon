@@ -81,6 +81,15 @@ enum class SstvTxCoordinatorMode : std::uint8_t
     Mc110Narrow,
     Mc140Narrow,
     Mc180Narrow,
+    Avt24Narrow,
+    Avt24Qrm,
+    Avt24NarrowQrm,
+    Avt90Narrow,
+    Avt90Qrm,
+    Avt90NarrowQrm,
+    Avt94Narrow,
+    Avt94Qrm,
+    Avt94NarrowQrm,
 };
 
 enum class SstvTxAudioDetachReason : std::uint8_t

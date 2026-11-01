@@ -110,6 +110,11 @@ struct SstvShareQueueConfig final
     // metered. Uploads whose manifest does not explicitly allow metered use
     // remain queued in both the metered and unknown cases.
     std::function<std::optional<bool>()> meteredNetworkProbe;
+    // Worker-thread hook: authenticate and decrypt the exact bounded payload.
+    // Returning nullopt rejects it; absence never falls back to plaintext.
+    std::function<std::optional<QByteArray>(const SstvShareManifestV1&,
+                                            const QByteArray&)> openEncryptedPayload;
+
 };
 
 enum class SstvShareFaultPoint
@@ -295,7 +300,8 @@ public:
     QString queueDownload(const QString& providerId,
                           const QString& incomingId,
                           const QString& destinationRelativePath,
-                          QString* error = nullptr);
+                          QString* error = nullptr,
+                          bool requireEndToEnd = false);
 
     bool acceptDownload(const QString& transferId,
                         QString* error = nullptr);

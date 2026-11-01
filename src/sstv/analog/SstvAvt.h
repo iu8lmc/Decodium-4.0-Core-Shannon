@@ -17,10 +17,8 @@
 
 namespace decodium::sstv {
 
-// Only the normal AVT variants are executable.  Narrow, QRM and Narrow-QRM
-// identities remain catalogue-only until their complete picture semantics
-// have independent evidence; SstvAvtSyncCodec represents their header bits
-// without promoting them to RX/TX support.
+// Normal modes are integrated. Variant-aware core encoding and decoding are
+// experimental; the runtime, acquisition and UI do not yet expose variants.
 struct SstvAvtModeSpec final
 {
     SstvAvtMode mode {SstvAvtMode::Avt24};
@@ -65,8 +63,9 @@ public:
     // Normal AVT payloads only. Variant payloads intentionally return null.
     static std::optional<SstvAvtMode> normalModeForVis(
         std::uint8_t payload) noexcept;
-    static double frequencyForValue(std::uint8_t value) noexcept;
-    static std::uint8_t valueForFrequency(double frequencyHz) noexcept;
+    static double frequencyForValue(std::uint8_t value, SstvAvtVariant variant = SstvAvtVariant::Normal) noexcept;
+    static std::uint8_t valueForFrequency(double frequencyHz, SstvAvtVariant variant = SstvAvtVariant::Normal) noexcept;
+    static std::vector<SstvAvtToneSegment> header(SstvAvtMode mode, SstvAvtVariant variant);
     static std::vector<SstvAvtToneSegment> normalHeader(SstvAvtMode mode);
 };
 
@@ -82,6 +81,7 @@ struct SstvAvtMapperConfig final
     SstvAvtMode mode {SstvAvtMode::Avt24};
     std::uint32_t sampleRate {12'000U};
     std::int32_t clockErrorPpm {0};
+    SstvAvtVariant variant {SstvAvtVariant::Normal};
 };
 
 struct SstvAvtPosition final
@@ -143,6 +143,7 @@ struct SstvAvtEncoderConfig final
     std::int32_t clockErrorPpm {0};
     double level {1.0};
     double headroom {kDefaultSstvTxHeadroom};
+    SstvAvtVariant variant {SstvAvtVariant::Normal};
 };
 
 enum class SstvAvtEncoderStage : std::uint8_t
@@ -247,6 +248,7 @@ struct SstvAvtDecoderConfig final
     std::uint32_t maximumInterpolationGapPixels {4U};
     std::size_t maximumPendingDirtyEvents {
         SstvImageFrame::kDefaultMaximumDirtyEvents};
+    SstvAvtVariant variant {SstvAvtVariant::Normal};
 };
 
 enum class SstvAvtDecodeState : std::uint8_t
@@ -349,6 +351,7 @@ struct SstvAvtCountdownDetectorConfig final
     double frequencyOffsetHz {0.0};
     double minimumObservationConfidence {0.20};
     double toneToleranceHz {120.0};
+    SstvAvtVariant variant {SstvAvtVariant::Normal};
 };
 
 enum class SstvAvtCountdownDetectorState : std::uint8_t
@@ -363,6 +366,7 @@ struct SstvAvtCountdownDetection final
 {
     bool acquired {false};
     SstvAvtMode mode {SstvAvtMode::Avt24};
+    SstvAvtVariant variant {SstvAvtVariant::Normal};
     std::uint8_t counter {0U};
     std::uint64_t frameStartSample {0U};
     std::uint64_t frameEndSample {0U};
@@ -385,7 +389,7 @@ struct SstvAvtCountdownDetectorMetrics final
 };
 
 // Streaming detector for the mandatory 32x17 AVT countdown. It is armed only
-// after the runtime has observed the repeated normal VIS identity. One exact
+// after the runtime has observed the repeated VIS identity. One exact
 // inverse-protected frame is sufficient, as specified by the AVT protocol.
 class SstvAvtCountdownDetector final
 {

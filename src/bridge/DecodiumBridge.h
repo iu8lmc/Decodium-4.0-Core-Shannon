@@ -864,6 +864,10 @@ public:
     Q_INVOKABLE bool resetSstvRx();
     Q_INVOKABLE bool abortSstvRxFrame();
     Q_INVOKABLE bool updateSstvRxControls(const QVariantMap& controls);
+    Q_INVOKABLE bool configureSstvFax480Rx(bool enabled, const QString& profile);
+    Q_INVOKABLE bool configureSstvRadiofaxRx(bool enabled, int ioc, int width, int height);
+    Q_INVOKABLE bool configureSstvRadiofaxRxAligned(bool enabled, int ioc, int width, int height,
+                                                    bool centeredPhasingWithWhiteEndLine);
     Q_INVOKABLE void resetSstvRxAfc();
     Q_INVOKABLE void resetSstvRxSlant();
     Q_INVOKABLE bool redecodeRecentSstv(
@@ -886,6 +890,9 @@ public:
     Q_INVOKABLE bool startSstvWavReplay(const QUrl& localFile);
     Q_INVOKABLE void cancelSstvWavReplay();
     Q_INVOKABLE bool startSstvTx(const QString& fskId = QString());
+    Q_INVOKABLE bool startSstvRadiofaxTx(int ioc, int linesPerMinute);
+    Q_INVOKABLE bool startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, bool centeredPhasing);
+    Q_INVOKABLE bool startSstvFax480Tx(const QString& profile);
     Q_INVOKABLE bool startSstvCalibrationTone(const QString& toneId);
     Q_INVOKABLE void cancelSstvTx();
 
@@ -2959,6 +2966,7 @@ private:
         m_hamDrmTxBackend;
     bool m_hamDrmRxRequested {false};
     bool m_hamDrmOwnsMonitoring {false};
+    bool m_hamDrmOwnsSstvRx {false};
     std::uint8_t m_hamDrmRxSourceKind {0U};
     quint32 m_hamDrmRxStreamId {0U};
 #endif

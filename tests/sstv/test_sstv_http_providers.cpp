@@ -2,10 +2,16 @@
 
 #include "src/sstv/sharing/SstvHttpShareProviders.h"
 #include "src/sstv/sharing/SstvShareTransfer.h"
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+#include "src/sstv/sharing/SstvShareKeyAgreement.h"
+#include "src/sstv/sharing/SstvShareRecipientEncryption.h"
+#endif
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QEventLoop>
+#include <QProcess>
+#include <QFile>
 #include <QElapsedTimer>
 #include <QHostAddress>
 #include <QJsonArray>
@@ -13,6 +19,10 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QSslCertificate>
+#include <QSslConfiguration>
+#include <QSslKey>
+#include <QSslServer>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
@@ -87,12 +97,33 @@ class ScopedHttpServer final
 public:
     using Handler = std::function<HttpResponse(const HttpRequest&)>;
 
-    explicit ScopedHttpServer(Handler handler)
+    explicit ScopedHttpServer(Handler handler, bool tls = false)
         : m_handler(std::move(handler))
+        , m_tls(tls)
     {
-        QObject::connect(&m_server, &QTcpServer::newConnection, &m_server,
+        if (tls) {
+            auto server = std::make_unique<QSslServer>();
+            QFile certFile(QStringLiteral(DECODIUM_SSTV_TEST_TLS_CERT));
+            QFile keyFile(QStringLiteral(DECODIUM_SSTV_TEST_TLS_KEY));
+            if (!certFile.open(QIODevice::ReadOnly) || !keyFile.open(QIODevice::ReadOnly)) return;
+            QSslConfiguration config = QSslConfiguration::defaultConfiguration();
+            config.setLocalCertificate(QSslCertificate(certFile.readAll()));
+            config.setPrivateKey(QSslKey(keyFile.readAll(), QSsl::Rsa));
+            config.setPeerVerifyMode(QSslSocket::VerifyNone);
+            server->setSslConfiguration(config);
+            QObject::connect(server.get(), &QSslServer::sslErrors, server.get(), [](QSslSocket*, const QList<QSslError>& errors) {
+                for (const auto& error : errors) std::cerr << "TLS test server: " << error.errorString().toStdString() << '\n';
+            });
+            QObject::connect(server.get(), &QSslServer::errorOccurred, server.get(), [](QSslSocket*, QAbstractSocket::SocketError error) {
+                std::cerr << "TLS test server socket error " << int(error) << '\n';
+            });
+            m_server = std::move(server);
+        } else {
+            m_server = std::make_unique<QTcpServer>();
+        }
+        QObject::connect(m_server.get(), &QTcpServer::pendingConnectionAvailable, m_server.get(),
                          [this] { acceptConnections(); });
-        m_listening = m_server.listen(QHostAddress::LocalHost, 0);
+        m_listening = m_server->listen(QHostAddress::LocalHost, 0);
     }
 
     bool isListening() const noexcept { return m_listening; }
@@ -100,9 +131,9 @@ public:
     QUrl url(const QString& path = QStringLiteral("/")) const
     {
         QUrl value;
-        value.setScheme(QStringLiteral("http"));
+        value.setScheme(m_tls ? QStringLiteral("https") : QStringLiteral("http"));
         value.setHost(QStringLiteral("127.0.0.1"));
-        value.setPort(static_cast<int>(m_server.serverPort()));
+        value.setPort(static_cast<int>(m_server->serverPort()));
         value.setPath(path);
         return value;
     }
@@ -132,12 +163,13 @@ private:
 
     void acceptConnections()
     {
-        while (QTcpSocket* socket = m_server.nextPendingConnection()) {
+        while (QTcpSocket* socket = m_server->nextPendingConnection()) {
             m_buffers.insert(socket, {});
             QObject::connect(socket, &QTcpSocket::readyRead, socket,
                              [this, socket] { readRequest(socket); });
             QObject::connect(socket, &QTcpSocket::disconnected, socket,
                              &QObject::deleteLater);
+            if (socket->bytesAvailable() > 0) readRequest(socket);
         }
     }
 
@@ -228,11 +260,12 @@ private:
         });
     }
 
-    QTcpServer m_server;
+    std::unique_ptr<QTcpServer> m_server;
     Handler m_handler;
     QHash<QTcpSocket*, QByteArray> m_buffers;
     QVector<HttpRequest> m_requests;
     bool m_listening {false};
+    bool m_tls {false};
 };
 
 class PlaintextTlsTrap final
@@ -684,6 +717,222 @@ QByteArray inboxJson(const QString& incomingId,
         {QStringLiteral("items"), QJsonArray {item}},
     });
 }
+
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+int encryptedActor(const QString& role)
+{
+    QFile input;
+    if (!input.open(stdin, QIODevice::ReadOnly)) return 1;
+    const auto params = QJsonDocument::fromJson(input.readAll()).object();
+    if (params.contains("ca")) {
+        const QSslCertificate ca(params.value("ca").toString().toUtf8());
+        if (ca.isNull()) return 14;
+        auto ssl = QSslConfiguration::defaultConfiguration();
+        ssl.addCaCertificate(ca);
+        QSslConfiguration::setDefaultConfiguration(ssl);
+    }
+    SstvGenericRestProviderConfig config;
+    config.providerId = QStringLiteral("rest-encrypted");
+    config.baseUrl = QUrl(params.value("url").toString());
+    config.createUploadPath = QStringLiteral("/api/uploads");
+    config.uploadChunkPathTemplate = QStringLiteral("/api/uploads/{uploadId}/content");
+    config.queryStatusPathTemplate = QStringLiteral("/api/uploads/{uploadId}/status");
+    config.completeUploadPathTemplate = QStringLiteral("/api/uploads/{uploadId}/complete");
+    config.cancelUploadPathTemplate = QStringLiteral("/api/uploads/{uploadId}");
+    config.credentialsRequired = false;
+    config.maximumChunkBytes = kMaximumSharedImageBytes;
+    config.transport.timeoutMs = 2000;
+    config.transport.maximumResponseBytes = 4096;
+    config.transport.allowInsecureLocalhostForTests = config.baseUrl.scheme() == QStringLiteral("http");
+    SstvGenericRestShareProvider provider(config, {});
+    if (!provider.isConfigurationValid() || !awaitResult([&](SstvShareProviderCompletion done) {
+        return provider.refreshCapabilitiesAsync(std::move(done));
+    }).result.ok()) return 2;
+    const auto key = QByteArray::fromHex(params.value("key").toString().toLatin1());
+    if (role == "send") {
+        const auto data = QByteArray::fromHex(params.value("data").toString().toLatin1());
+        auto manifest = manifestFor(config.providerId, data);
+        const auto envelope = sstvShareEncryptForRecipient(manifest, key, sstvShareX25519Fingerprint(key), data);
+        if (!envelope) return 3;
+        const QString idempotency = SstvShareTransfer::deriveIdempotencyKey(envelope->manifest);
+        const auto created = awaitResult([&](SstvShareProviderCompletion done) {
+            return provider.createUploadAsync(envelope->manifest, idempotency, std::move(done));
+        });
+        if (!created.result.ok()) return 4;
+        const auto uploaded = awaitResult([&](SstvShareProviderCompletion done) {
+            return provider.uploadChunkAsync(created.result.handle(), 0, envelope->bytes, envelope->manifest.sha256, {}, std::move(done));
+        });
+        if (!uploaded.result.ok()) return 5;
+        return awaitResult([&](SstvShareProviderCompletion done) {
+            return provider.completeUploadAsync(uploaded.result.handle(), idempotency, std::move(done));
+        }).result.ok() ? 0 : 6;
+    }
+    if (role != "receive") return 7;
+    const auto inbox = awaitIncoming([&](SstvShareIncomingCompletion done) { return provider.listIncomingAsync(10, std::move(done)); });
+    if (!inbox.result.ok() || inbox.items.size() != 1) return 8;
+    const auto manifest = parseSstvShareManifestV1(inbox.items[0].canonicalManifestJson);
+    if (!manifest.ok()) return 9;
+    const auto downloaded = awaitResult([&](SstvShareProviderCompletion done) {
+        return provider.downloadAsync(inbox.items[0].opaqueId, 0, inbox.items[0].byteSize, {}, std::move(done));
+    });
+    if (!downloaded.result.ok()) return 10;
+    const auto plaintext = sstvShareDecryptForRecipient(*manifest.manifest, key, downloaded.result.boundedPayload());
+    if (!plaintext) return 11;
+    QFile output;
+    if (!output.open(stdout, QIODevice::WriteOnly)) return 12;
+    return output.write(plaintext->toHex()) == plaintext->size() * 2 ? 0 : 13;
+}
+
+bool runEncryptedActor(const QString& role, const QJsonObject& params, QByteArray* output = nullptr)
+{
+    QProcess child;
+    child.start(QCoreApplication::applicationFilePath(), {QStringLiteral("--encrypted-actor"), role});
+    if (!child.waitForStarted(2000)) return false;
+    child.write(QJsonDocument(params).toJson(QJsonDocument::Compact));
+    child.closeWriteChannel();
+    QEventLoop loop;
+    QTimer timeout; timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(&child, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), &loop, &QEventLoop::quit);
+    if (child.state() != QProcess::NotRunning) { timeout.start(8000); loop.exec(); }
+    if (child.state() != QProcess::NotRunning) { child.kill(); child.waitForFinished(1000); return false; }
+    if (output) *output = child.readAllStandardOutput();
+    return child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0;
+}
+
+bool runEncryptedEnvelopeCrossesIndependentClients(bool useTls)
+{
+    const QSslConfiguration savedSsl = QSslConfiguration::defaultConfiguration();
+    struct RestoreSsl { QSslConfiguration saved; ~RestoreSsl() { QSslConfiguration::setDefaultConfiguration(saved); } } restore {savedSsl};
+    QFile certFile(QStringLiteral(DECODIUM_SSTV_TEST_TLS_CERT));
+    CHECK(!useTls || certFile.open(QIODevice::ReadOnly));
+    const QByteArray certPem = useTls ? certFile.readAll() : QByteArray {};
+    const QSslCertificate testCa(certPem);
+    CHECK(!useTls || !testCa.isNull());
+    const auto recipient = sstvShareGenerateX25519KeyPair();
+    CHECK(recipient.has_value());
+    for (int variant = 0; variant < 2; ++variant) {
+        QByteArray ciphertext;
+        SstvShareManifestV1 storedManifest;
+        ScopedHttpServer server([&](const HttpRequest& request) {
+            if (request.method == "GET" && request.target == "/api/v1/capabilities") {
+                auto object = QJsonDocument::fromJson(fullCapabilitiesJson()).object();
+                object.insert(QStringLiteral("endToEndEncryptionEnvelope"), true);
+                return HttpResponse {200, {}, {{"Content-Type", "application/json"}}, compactJson(object)};
+            }
+            if (request.method == "POST" && request.target == "/api/uploads") {
+                const auto parsed = parseSstvShareManifestV1(request.body);
+                if (!parsed.ok()) return HttpResponse {400};
+                storedManifest = *parsed.manifest;
+                return HttpResponse {201, {}, {{"Content-Type", "application/json"}},
+                                     "{\"uploadId\":\"session-1\",\"committedBytes\":0}"};
+            }
+            if (request.method == "PUT" && request.target == "/api/uploads/session-1/content") {
+                ciphertext = request.body;
+                return HttpResponse {200, {}, {{"Content-Type", "application/json"}},
+                    QByteArray("{\"committedBytes\":") + QByteArray::number(ciphertext.size()) + '}'};
+            }
+            if (request.method == "POST" && request.target == "/api/uploads/session-1/complete") {
+                return HttpResponse {200, {}, {{"Content-Type", "application/json"}},
+                    QByteArray("{\"byteSize\":") + QByteArray::number(ciphertext.size())
+                    + ",\"remoteObjectId\":\"object-1\",\"sha256\":\""
+                    + sha256Hex(ciphertext).toLatin1() + "\"}"};
+            }
+            if (request.method == "GET" && request.target == "/api/v1/inbox?limit=10")
+                return HttpResponse {200, {}, {{"Content-Type", "application/json"}},
+                    inboxJson(QStringLiteral("incoming:one"), storedManifest, storedManifest.createdUtc.addSecs(1))};
+            if (request.method == "GET" && request.target == "/api/v1/inbox/incoming:one/content") {
+                const QByteArray range = QByteArray("bytes 0-") + QByteArray::number(ciphertext.size() - 1)
+                    + '/' + QByteArray::number(ciphertext.size());
+                return HttpResponse {206, {}, {{"Content-Type", "application/octet-stream"},
+                    {"Content-Range", range}, {"Digest", QByteArray("sha-256=") + sha256Base64(ciphertext)}}, ciphertext};
+            }
+            return HttpResponse {404};
+        }, useTls);
+        CHECK(server.isListening());
+        if (useTls && variant == 0) {
+            auto untrustedConfig = restConfig(server, QStringLiteral("rest-encrypted"));
+            untrustedConfig.transport.allowInsecureLocalhostForTests = false;
+            SstvGenericRestShareProvider untrusted(untrustedConfig, {});
+            CHECK(untrusted.isConfigurationValid());
+            const auto untrustedResult = awaitResult([&](SstvShareProviderCompletion done) { return untrusted.refreshCapabilitiesAsync(std::move(done)); });
+            CHECK(untrustedResult.result.category() == SstvShareProviderFailure::TlsValidation);
+            CHECK(server.requests().isEmpty());
+            auto trusted = savedSsl;
+            trusted.addCaCertificate(testCa);
+            QSslConfiguration::setDefaultConfiguration(trusted);
+            auto mismatchConfig = untrustedConfig;
+            mismatchConfig.baseUrl.setHost(QStringLiteral("localhost"));
+            SstvGenericRestShareProvider wrongHost(mismatchConfig, {});
+            CHECK(wrongHost.isConfigurationValid());
+            const auto mismatch = awaitResult([&](SstvShareProviderCompletion done) { return wrongHost.refreshCapabilitiesAsync(std::move(done)); });
+            CHECK(mismatch.result.category() == SstvShareProviderFailure::TlsValidation);
+            CHECK(server.requests().isEmpty());
+        }
+        const QByteArray plaintext = variant == 0 ? QByteArray("image-a-payload") : QByteArray("different-image-b-payload");
+        auto manifest = manifestFor(QStringLiteral("rest-encrypted"), plaintext);
+        const auto envelope = sstvShareEncryptForRecipient(manifest, recipient->publicKey,
+            sstvShareX25519Fingerprint(recipient->publicKey), plaintext);
+        CHECK(envelope.has_value());
+        auto config = restConfig(server, manifest.providerId);
+        if (useTls) { config.transport.allowInsecureLocalhostForTests = false; config.transport.timeoutMs = 5'000; }
+        SstvGenericRestShareProvider sender(config, {}), receiver(config, {});
+        CHECK(sender.isConfigurationValid() && receiver.isConfigurationValid());
+        const auto senderCapabilities = awaitResult([&](SstvShareProviderCompletion done) { return sender.refreshCapabilitiesAsync(std::move(done)); });
+        if (!senderCapabilities.result.ok()) std::cerr << "TLS sender: " << senderCapabilities.result.redactedDiagnostic().toStdString() << '\n';
+        CHECK(senderCapabilities.result.ok());
+        CHECK(awaitResult([&](SstvShareProviderCompletion done) { return receiver.refreshCapabilitiesAsync(std::move(done)); }).result.ok());
+        CHECK(sender.capabilities().endToEndEncryptionEnvelope && receiver.capabilities().endToEndEncryptionEnvelope);
+        const QString key = SstvShareTransfer::deriveIdempotencyKey(envelope->manifest);
+        const auto created = awaitResult([&](SstvShareProviderCompletion done) {
+            return sender.createUploadAsync(envelope->manifest, key, std::move(done));
+        });
+        CHECK(created.result.ok());
+        const auto uploaded = awaitResult([&](SstvShareProviderCompletion done) {
+            return sender.uploadChunkAsync(created.result.handle(), 0, envelope->bytes, envelope->manifest.sha256, {}, std::move(done));
+        });
+        CHECK(uploaded.result.ok() && ciphertext == envelope->bytes && ciphertext != plaintext);
+        CHECK(awaitResult([&](SstvShareProviderCompletion done) {
+            return sender.completeUploadAsync(uploaded.result.handle(), key, std::move(done));
+        }).result.ok());
+        const auto inbox = awaitIncoming([&](SstvShareIncomingCompletion done) { return receiver.listIncomingAsync(10, std::move(done)); });
+        CHECK(inbox.result.ok() && inbox.items.size() == 1);
+        const auto receivedManifest = parseSstvShareManifestV1(inbox.items[0].canonicalManifestJson);
+        CHECK(receivedManifest.ok());
+        const auto downloaded = awaitResult([&](SstvShareProviderCompletion done) {
+            return receiver.downloadAsync(inbox.items[0].opaqueId, 0, static_cast<quint64>(ciphertext.size()), {}, std::move(done));
+        });
+        CHECK(downloaded.result.ok());
+        CHECK(sstvShareDecryptForRecipient(*receivedManifest.manifest, recipient->privateKey, downloaded.result.boundedPayload()) == plaintext);
+        auto damaged = downloaded.result.boundedPayload(); damaged[0] = static_cast<char>(damaged[0] ^ 1);
+        auto alteredManifest = *receivedManifest.manifest; alteredManifest.sha256 = sha256Hex(damaged);
+        CHECK(!sstvShareDecryptForRecipient(alteredManifest, recipient->privateKey, damaged));
+        QJsonObject sendParams {{"url", server.url().toString()},
+                                      {"key", QString::fromLatin1(recipient->publicKey.toHex())},
+                                      {"data", QString::fromLatin1(plaintext.toHex())}};
+        if (useTls) sendParams.insert("ca", QString::fromUtf8(certPem));
+        CHECK(runEncryptedActor(QStringLiteral("send"), sendParams));
+        CHECK(ciphertext != plaintext);
+        QJsonObject receiveParams {{"url", server.url().toString()},
+                                         {"key", QString::fromLatin1(recipient->privateKey.toHex())}};
+        if (useTls) receiveParams.insert("ca", QString::fromUtf8(certPem));
+        QByteArray output;
+        CHECK(runEncryptedActor(QStringLiteral("receive"), receiveParams, &output));
+        CHECK(QByteArray::fromHex(output) == plaintext);
+    }
+    return true;
+}
+
+bool restEncryptedEnvelopeCrossesIndependentClients()
+{
+    return runEncryptedEnvelopeCrossesIndependentClients(false);
+}
+
+bool restEncryptedEnvelopeOverVerifiedHttps()
+{
+    return runEncryptedEnvelopeCrossesIndependentClients(true);
+}
+#endif
 
 bool restHappyPathIsAsyncBoundedAndIdempotent()
 {
@@ -2240,7 +2489,15 @@ int main(int argc, char** argv)
 {
     QCoreApplication application(argc, argv);
     Q_UNUSED(application)
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+    if (application.arguments().size() == 3 && application.arguments().at(1) == QStringLiteral("--encrypted-actor"))
+        return encryptedActor(application.arguments().at(2));
+#endif
     const std::vector<std::pair<const char*, bool (*)()>> tests {
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+        {"restEncryptedEnvelopeCrossesIndependentClients", restEncryptedEnvelopeCrossesIndependentClients},
+        {"restEncryptedEnvelopeOverVerifiedHttps", restEncryptedEnvelopeOverVerifiedHttps},
+#endif
         {"restHappyPathIsAsyncBoundedAndIdempotent",
          restHappyPathIsAsyncBoundedAndIdempotent},
         {"credentialLeaseIsOpaqueAndDiagnosticsAreRedacted",

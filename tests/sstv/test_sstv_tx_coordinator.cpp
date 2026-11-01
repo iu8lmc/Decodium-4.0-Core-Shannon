@@ -225,12 +225,21 @@ SstvTxCoordinatorRequest requestFor(SstvTxCoordinatorMode mode)
         pixelCount = SstvPdEncoder::pixelCount(SstvPdMode::Pd290);
         break;
     case SstvTxCoordinatorMode::Avt24:
+    case SstvTxCoordinatorMode::Avt24Narrow:
+    case SstvTxCoordinatorMode::Avt24Qrm:
+    case SstvTxCoordinatorMode::Avt24NarrowQrm:
         pixelCount = SstvAvtEncoder::pixelCount(SstvAvtMode::Avt24);
         break;
     case SstvTxCoordinatorMode::Avt90:
+    case SstvTxCoordinatorMode::Avt90Narrow:
+    case SstvTxCoordinatorMode::Avt90Qrm:
+    case SstvTxCoordinatorMode::Avt90NarrowQrm:
         pixelCount = SstvAvtEncoder::pixelCount(SstvAvtMode::Avt90);
         break;
     case SstvTxCoordinatorMode::Avt94:
+    case SstvTxCoordinatorMode::Avt94Narrow:
+    case SstvTxCoordinatorMode::Avt94Qrm:
+    case SstvTxCoordinatorMode::Avt94NarrowQrm:
         pixelCount = SstvAvtEncoder::pixelCount(SstvAvtMode::Avt94);
         break;
     case SstvTxCoordinatorMode::Mp73:
@@ -338,12 +347,15 @@ private slots:
     void sequentialRgbFamilySourceBuilderUsesSelectedSpecs();
     void pdFamilySourceBuilderUsesSelectedSpecs();
     void avtFamilySourceBuilderUsesProtectedHeaderAndSelectedSpecs();
+    void avtVariantBuildersMatchDirectEncoders();
     void mmsstvExtendedFamilySourceBuilderUsesSelectedSpecs();
     void preflightRejectsInvalidBusyAndUnavailableJobs();
     void allNativeModeFactoriesRemainLazyAndBounded();
     void confirmedPttLeadAudioFskTailAndReleaseAreOrdered();
     void cancellationDuringHeaderImageAndFskReleasesExactlyOnce();
     void calibrationPreparedPathSharesPttLifecycleAndMetrics();
+    void radiofaxPreparedSourceAndLongHeader();
+    void fax480ProfilesUsePreparedAudioAndRelease();
     void voxCompletionUsesNoPttOffHook();
     void audioOnlyDoesNotAddVoxEnvelope();
     void cancelShutdownRetainDeviceUntilDetachAndReleaseOnce();
@@ -354,6 +366,160 @@ private slots:
     void sessionScopedSinkUnderrunFailsClosed();
     void staleAndMaliciousPlaybackCallbacksFailClosed();
 };
+
+void TestSstvTxCoordinator::radiofaxPreparedSourceAndLongHeader()
+{
+    SstvFaxConfig config;
+    config.sampleRate = 48'000U;
+    config.width = 16U;
+    config.height = 2U;
+    config.linesPerMinute = 240U;
+    std::vector<std::uint8_t> pixels(32U);
+    for (std::size_t i = 0; i < pixels.size(); ++i) pixels[i] = std::uint8_t(i * 8U);
+    SstvRadiofaxEncoder reference(config, pixels);
+    auto source = makeRadiofaxPcm16Source(pixels, config);
+    QCOMPARE(source->totalSamples(), reference.mapper().totalSamples());
+    std::array<std::int16_t, 4096U> a {}, b {};
+    while (!source->complete()) {
+        const auto actual = source->pullPcm16(a.data(), a.size());
+        const auto expected = reference.pullPcm16(b.data(), b.size());
+        QCOMPARE(actual, expected);
+        QVERIFY(actual != 0U);
+        QVERIFY(std::equal(a.begin(), a.begin() + actual, b.begin()));
+    }
+    source->reset();
+    QCOMPARE(source->producedSamples(), std::uint64_t {0U});
+    QCOMPARE(source->pullPcm16(a.data(), a.size()), a.size());
+    source->cancel();
+    QVERIFY(source->cancelled());
+    QCOMPARE(source->pullPcm16(a.data(), a.size()), std::size_t {0U});
+    source->reset();
+    QVERIFY(!source->cancelled());
+
+    FakeHooks fake;
+    auto coordinator = enabledCoordinator(fake);
+    SstvTxPreparedAudioRequest request;
+    request.source = std::move(source);
+    request.mode = "hffax-experimental";
+    request.width = config.width;
+    request.height = config.height;
+    request.headerEndFrame = reference.mapper().imageStartSample();
+    request.imageEndFrame = reference.mapper().totalSamples();
+    const auto started = coordinator->startPrepared(1U, std::move(request));
+    QVERIFY2(started.accepted, started.detail.c_str());
+    QVERIFY(coordinator->notifyPttConfirmed(2U, started.sessionId));
+    QVERIFY(coordinator->tick(12U));
+    QVERIFY(coordinator->tick(5'013U));
+    QCOMPARE(coordinator->snapshot().stateMachine.state, SstvTxState::TransmittingHeader);
+    const auto device = fake.audioDevice.lock();
+    QVERIFY(device);
+    const auto pcm = device->read(8192);
+    QCOMPARE(pcm.size(), qsizetype {8192});
+    SstvRadiofaxEncoder first(config, pixels);
+    QCOMPARE(first.pullPcm16(a.data(), a.size()), a.size());
+    QCOMPARE(pcm, QByteArray(reinterpret_cast<const char*>(a.data()), 8192));
+    QVERIFY(coordinator->cancel(5'014U));
+    QVERIFY(coordinator->notifyPttReleased(5'015U, started.sessionId));
+
+    FakeHooks stalledFake;
+    auto stalled = enabledCoordinator(stalledFake);
+    SstvTxPreparedAudioRequest stalledRequest;
+    stalledRequest.source = makeRadiofaxPcm16Source(pixels, config);
+    stalledRequest.mode = "hffax-experimental";
+    stalledRequest.width = config.width;
+    stalledRequest.height = config.height;
+    stalledRequest.headerEndFrame = reference.mapper().imageStartSample();
+    stalledRequest.imageEndFrame = reference.mapper().totalSamples();
+    const auto job = stalled->startPrepared(1U, std::move(stalledRequest));
+    QVERIFY(job.accepted);
+    QVERIFY(stalled->notifyPttConfirmed(2U, job.sessionId));
+    QVERIFY(stalled->tick(12U));
+    QVERIFY(stalled->tick(35'013U));
+    QVERIFY(stalled->tick(36'013U));
+    QCOMPARE(stalled->snapshot().stateMachine.state, SstvTxState::ReleasingPtt);
+    QCOMPARE(stalledFake.pttOffCalls, std::uint64_t {1U});
+    QVERIFY(stalled->notifyPttReleased(36'014U, job.sessionId));
+
+    FakeHooks fullFake;
+    auto full = enabledCoordinator(fullFake);
+    SstvTxPreparedAudioRequest fullRequest;
+    fullRequest.source = makeRadiofaxPcm16Source(pixels, config);
+    fullRequest.mode = "hffax-experimental";
+    fullRequest.width = config.width;
+    fullRequest.height = config.height;
+    fullRequest.headerEndFrame = reference.mapper().imageStartSample();
+    fullRequest.imageEndFrame = reference.mapper().totalSamples();
+    const auto fullJob = full->startPrepared(1U, std::move(fullRequest));
+    QVERIFY(fullJob.accepted);
+    QVERIFY(full->notifyPttConfirmed(2U, fullJob.sessionId));
+    QVERIFY(full->tick(12U));
+    QVERIFY(full->notifyPlayback(35'012U, fullJob.sessionId,
+        {reference.mapper().imageStartSample(), false, false, {}}));
+    QVERIFY(full->notifyPlayback(38'000U, fullJob.sessionId,
+        {reference.mapper().imageEndSample() + 2U * config.sampleRate, false, false, {}}));
+    QVERIFY(full->tick(40'000U));
+    QCOMPARE(full->snapshot().stateMachine.state, SstvTxState::TransmittingImage);
+    QCOMPARE(fullFake.pttOffCalls, std::uint64_t {0U});
+    QVERIFY(full->notifyPlayback(50'512U, fullJob.sessionId,
+        {reference.mapper().totalSamples(), true, false, {}}));
+    QVERIFY(full->tick(50'532U));
+    QCOMPARE(fullFake.pttOffCalls, std::uint64_t {1U});
+    QVERIFY(full->notifyPttReleased(50'533U, fullJob.sessionId));
+}
+
+void TestSstvTxCoordinator::fax480ProfilesUsePreparedAudioAndRelease()
+{
+    for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::Qsstv500, SstvFax480Profile::LibsstvVis480}) {
+        SstvFax480Mapper mapper(profile, 48'000U);
+        const std::vector<std::uint8_t> pixels(std::size_t(mapper.height())*512U, 128U);
+        auto source=makeFax480Pcm16Source(pixels,profile);
+        SstvFax480Encoder reference(profile,48'000U,pixels);
+        std::array<std::int16_t,4096> a {}, b {};
+        QCOMPARE(source->pullPcm16(a.data(),a.size()),a.size());
+        QCOMPARE(reference.pull(b.data(),b.size()),b.size());
+        QVERIFY(a==b);
+        source->reset();
+        FakeHooks fake;
+        auto coordinator=enabledCoordinator(fake);
+        SstvTxPreparedAudioRequest request;
+        request.source=std::move(source);
+        request.mode="fax480-experimental";
+        request.width=512U; request.height=mapper.height();
+        request.headerEndFrame=mapper.imageStart();
+        request.imageEndFrame=mapper.totalSamples();
+        const auto started=coordinator->startPrepared(1U,std::move(request));
+        QVERIFY2(started.accepted,started.detail.c_str());
+        QVERIFY(coordinator->notifyPttConfirmed(2U,started.sessionId));
+        QVERIFY(coordinator->tick(12U));
+        const auto device=fake.audioDevice.lock();
+        QVERIFY(device);
+        QCOMPARE(device->read(8192),QByteArray(reinterpret_cast<const char*>(a.data()),8192));
+        QVERIFY(coordinator->cancel(100U));
+        QCOMPARE(fake.pttOffCalls,std::uint64_t(1));
+        QVERIFY(coordinator->notifyPttReleased(101U,started.sessionId));
+
+        FakeHooks finishFake;
+        auto finish=enabledCoordinator(finishFake);
+        SstvTxPreparedAudioRequest full;
+        full.source=makeFax480Pcm16Source(pixels,profile);
+        full.mode="fax480-experimental"; full.width=512U; full.height=mapper.height();
+        full.headerEndFrame=mapper.imageStart(); full.imageEndFrame=mapper.totalSamples();
+        const auto job=finish->startPrepared(1U,std::move(full));
+        QVERIFY(job.accepted);
+        QVERIFY(finish->notifyPttConfirmed(2U,job.sessionId));
+        QVERIFY(finish->tick(12U));
+        const auto headerMs=12U+mapper.imageStart()*1000U/48'000U;
+        const auto endMs=12U+mapper.totalSamples()*1000U/48'000U;
+        QVERIFY(finish->notifyPlayback(headerMs,job.sessionId,{mapper.imageStart(),false,false,{}}));
+        QCOMPARE(finish->snapshot().stateMachine.state,SstvTxState::TransmittingImage);
+        QCOMPARE(finishFake.pttOffCalls,std::uint64_t(0));
+        QVERIFY(finish->notifyPlayback(endMs,job.sessionId,{mapper.totalSamples(),true,false,{}}));
+        QVERIFY(finish->tick(endMs+20U));
+        QCOMPARE(finishFake.pttOffCalls,std::uint64_t(1));
+        QVERIFY(finish->notifyPttReleased(endMs+21U,job.sessionId));
+        QCOMPARE(finish->snapshot().stateMachine.state,SstvTxState::Completed);
+    }
+}
 
 void TestSstvTxCoordinator::configurationRequiresExplicitExistingPathHooks()
 {
@@ -848,6 +1014,58 @@ avtFamilySourceBuilderUsesProtectedHeaderAndSelectedSpecs()
     const auto pixels = SstvTxSourceBuilder::pixelsFromImage(
         avt90, SstvTxCoordinatorMode::Avt90);
     QCOMPARE(pixels.size(), std::size_t {320U * 240U});
+}
+
+void TestSstvTxCoordinator::avtVariantBuildersMatchDirectEncoders()
+{
+    const struct {
+        const char* id;
+        SstvAvtMode mode;
+        SstvAvtVariant variant;
+    } cases[] {
+        {"avt-24-narrow", SstvAvtMode::Avt24, SstvAvtVariant::Narrow},
+        {"avt-24-qrm", SstvAvtMode::Avt24, SstvAvtVariant::Qrm},
+        {"avt-24-narrow-qrm", SstvAvtMode::Avt24, SstvAvtVariant::NarrowQrm},
+        {"avt-90-narrow", SstvAvtMode::Avt90, SstvAvtVariant::Narrow},
+        {"avt-90-qrm", SstvAvtMode::Avt90, SstvAvtVariant::Qrm},
+        {"avt-90-narrow-qrm", SstvAvtMode::Avt90, SstvAvtVariant::NarrowQrm},
+        {"avt-94-narrow", SstvAvtMode::Avt94, SstvAvtVariant::Narrow},
+        {"avt-94-qrm", SstvAvtMode::Avt94, SstvAvtVariant::Qrm},
+        {"avt-94-narrow-qrm", SstvAvtMode::Avt94, SstvAvtVariant::NarrowQrm},
+    };
+    for (const auto& item : cases) {
+        const auto coordinatorMode = SstvTxSourceBuilder::modeFromId(item.id);
+        QVERIFY(coordinatorMode.has_value());
+        const auto spec = SstvAvtProtocol::spec(item.mode);
+        QImage image(static_cast<int>(spec.width), static_cast<int>(spec.height),
+                     QImage::Format_RGB888);
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                image.setPixelColor(x, y, QColor(x % 256, y % 256, (x + y) % 256));
+            }
+        }
+        SstvTxSourceBuilderConfig config;
+        config.mode = *coordinatorMode;
+        config.sampleRate = 12'000U;
+        auto built = SstvTxSourceBuilder::build(image, config);
+        QCOMPARE(built.mode, std::string(item.id));
+        SstvAvtEncoderConfig directConfig;
+        directConfig.mode = item.mode;
+        directConfig.variant = item.variant;
+        directConfig.sampleRate = config.sampleRate;
+        directConfig.level = config.level;
+        directConfig.headroom = config.headroom;
+        SstvAvtEncoder direct(SstvTxSourceBuilder::pixelsFromImage(image, *coordinatorMode),
+                              directConfig);
+        std::array<std::int16_t, 4096U> actual {};
+        std::array<std::int16_t, 4096U> expected {};
+        while (!direct.complete()) {
+            const auto count = direct.pullPcm16(expected.data(), expected.size());
+            QCOMPARE(built.source->pullPcm16(actual.data(), count), count);
+            QVERIFY(std::equal(actual.begin(), actual.begin() + count, expected.begin()));
+        }
+        QCOMPARE(built.source->producedSamples(), built.totalFrames);
+    }
 }
 
 void TestSstvTxCoordinator::mmsstvExtendedFamilySourceBuilderUsesSelectedSpecs()

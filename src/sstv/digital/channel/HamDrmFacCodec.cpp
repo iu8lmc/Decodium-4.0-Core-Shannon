@@ -170,12 +170,8 @@ HamDrmValueResult<HamDrmFacDecodeResult> hamDrmDecodeFacPayloadBits(
                 invalid(HamDrmErrorCode::CrcMismatch,
                         "HAMDRM FAC CRC-8 mismatch")};
     }
-    if (std::any_of(payloadBits.begin() + 31, payloadBits.begin() + 40,
-                    [](std::uint8_t bit) { return bit != 0U; })) {
-        return {std::nullopt,
-                invalid(HamDrmErrorCode::Malformed,
-                        "HAMDRM FAC reserved bits are non-zero")};
-    }
+    // QSSTV senders do not necessarily clear the nine unused FAC bits.
+    // They are covered by CRC above but have no meaning in this profile.
 
     HamDrmFacDecodeResult result;
     result.correctedBitMetric = correctedBitMetric;

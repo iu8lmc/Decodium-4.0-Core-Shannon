@@ -141,13 +141,20 @@ private slots:
             "hamdrmResumeTransportId",
             "hamdrmResumePartial",
             "hamdrmBuildBsr",
+            "hamdrmBsrDialect",
+            "hamdrmSendBsr",
             "hamdrmDiscardObject",
             "hamdrmBsrText",
+            "hamdrmReceivedBsrText",
+            "hamdrmRepairBsr",
             "hamdrmError",
         };
         for (const char* name : expectedObjects) {
             QVERIFY2(requiredObject(page, name) != nullptr, name);
         }
+        QCOMPARE(requiredObject(page, "hamdrmBsrDialect")->property("count").toInt(), 2);
+        QVERIFY(!requiredObject(page, "hamdrmSendBsr")->property("enabled").toBool());
+        QVERIFY(!requiredObject(page, "hamdrmRepairBsr")->property("enabled").toBool());
 
         QObject* selector = requiredObject(page, "hamdrmProfileSelector");
         QVERIFY(selector);

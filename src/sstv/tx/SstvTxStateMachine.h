@@ -118,6 +118,7 @@ struct SstvTxEncodingComplete final
     std::uint64_t totalSamples {0U};
     std::uint32_t sampleRate {0U};
     bool fskIdEnabled {false};
+    std::uint64_t headerSamples {0U};
 };
 
 struct SstvTxRequest final {};
@@ -177,6 +178,7 @@ struct SstvTxMetrics final
     std::uint64_t lastEventAtMs {0U};
     std::uint64_t encodedSamples {0U};
     std::uint64_t encodedDurationMs {0U};
+    std::uint64_t headerDurationMs {0U};
     std::uint32_t sampleRate {0U};
     std::uint32_t imageWidth {0U};
     std::uint32_t imageHeight {0U};

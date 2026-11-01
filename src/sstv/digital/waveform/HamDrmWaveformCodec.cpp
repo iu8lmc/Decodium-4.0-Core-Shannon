@@ -851,6 +851,19 @@ public:
                 }
                 const auto acquisition = acquire();
                 if (!acquisition.ok()) {
+                    if (acquisition.status.code == HamDrmErrorCode::Incomplete
+                            && !end) {
+                        // Every candidate for which a full frame is available
+                        // was examined. Keep the incomplete suffix so a live
+                        // receiver can find a transmission after silence.
+                        const std::size_t searched = std::min(
+                            limits.maximumSyncSearchSamples,
+                            pcm.size() - profile.capacity.samplesPerFrame) + 1U;
+                        pcm.erase(pcm.begin(), pcm.begin()
+                            + static_cast<std::ptrdiff_t>(searched));
+                        progress = true;
+                        continue;
+                    }
                     if (acquisition.status.code
                             != HamDrmErrorCode::Incomplete) {
                         ++statistics.synchronizationFailures;
@@ -874,10 +887,16 @@ public:
                                 "HAMDRM receive frame limit exceeded"));
                     break;
                 }
+                const std::size_t previousPilotFailures = statistics.pilotFailures;
                 const HamDrmStatus frameStatus = processFrame(
                     frameStart, batch.dataGroups);
-                const std::size_t consumed = frameStart
-                    + profile.capacity.samplesPerFrame;
+                // A false timing lock can cover the beginning of the next
+                // real frame. If its pilots fail, discard only the examined
+                // timing candidate and search the remaining samples again.
+                const bool rejectedCandidate = !frameStatus.ok()
+                    && statistics.pilotFailures != previousPilotFailures;
+                const std::size_t consumed = frameStart + (rejectedCandidate
+                    ? 1U : profile.capacity.samplesPerFrame);
                 pcm.erase(pcm.begin(),
                           pcm.begin() + static_cast<std::ptrdiff_t>(consumed));
                 frameStart = 0U;

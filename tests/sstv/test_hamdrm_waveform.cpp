@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../../src/sstv/digital/HamDrmMotCodec.h"
+#include "../../src/sstv/digital/HamDrmObjectAssembler.h"
+#include "../../src/sstv/digital/HamDrmImageValidator.h"
+#include <QImage>
 #include "../../src/sstv/digital/channel/HamDrmChannelCrc.h"
 #include "../../src/sstv/digital/waveform/HamDrmPacketCodec.h"
 #include "../../src/sstv/digital/waveform/HamDrmWaveformCodec.h"
@@ -12,6 +15,8 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -137,6 +142,32 @@ HamDrmWaveformReceiveBatch receive(
 
 void testPacketFraming()
 {
+    // Executed independently from QSSTV's CDataEncoder at 8c27d6d, with
+    // packet ID 1, 16-byte body, 35-byte data unit and initial index zero.
+    const std::array<std::string, 3U> qsstvHex {{
+        "90000102030405060708090a0b0c0d0e0f8727",
+        "11101112131415161718191a1b1c1d1e1f229c",
+        "5a03202122000000000000000000000000cc9b"}};
+    std::vector<std::uint8_t> qsstvData(35U);
+    for (std::size_t i = 0; i < qsstvData.size(); ++i)
+        qsstvData[i] = static_cast<std::uint8_t>(i);
+    const HamDrmPacketParameters qsstvParameters {16U, 1U, 4096U};
+    const auto qsstvLocal = hamDrmPacketizeDataUnit(qsstvData, qsstvParameters, 0U);
+    require(qsstvLocal.ok() && qsstvLocal.value->packets.size() == qsstvHex.size(),
+            "QSSTV packet fixture setup failed");
+    HamDrmPacketReassembler qsstvRx(qsstvParameters);
+    for (std::size_t i = 0; i < qsstvHex.size(); ++i) {
+        std::vector<std::uint8_t> packet;
+        for (std::size_t j = 0; j < qsstvHex[i].size(); j += 2U)
+            packet.push_back(static_cast<std::uint8_t>(std::stoul(qsstvHex[i].substr(j, 2U), nullptr, 16)));
+        require(packet == qsstvLocal.value->packets[i], "QSSTV packet bytes differ");
+        const auto result = qsstvRx.push(packet);
+        require(result.ok(), "QSSTV packet rejected");
+        if (i + 1U == qsstvHex.size())
+            require(result.value->dataUnit && *result.value->dataUnit == qsstvData,
+                    "QSSTV packet data unit differs");
+    }
+
     const auto group = makeMotGroup(173U);
     const HamDrmPacketParameters parameters {87U, 2U, 4'096U};
     const auto packetized = hamDrmPacketizeDataUnit(group, parameters, 6U);
@@ -219,6 +250,233 @@ void testCapacityAndExactScheduling()
     }
 }
 
+void testIndependentQsstvSuperframesFailClosed()
+{
+    HamDrmWaveformConfig config;
+    config.pcmSampleRateHz = 48000;
+    const std::array<const char*, 2> files {{DECODIUM_QSSTV_SUPERFRAME_A, DECODIUM_QSSTV_SUPERFRAME_B}};
+    for (const auto* path : files) {
+        std::ifstream input(path, std::ios::binary);
+        require(input.good(), "QSSTV superframe fixture missing");
+        const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)), {});
+        require(bytes.size() == 3U * kHamDrmNativePcmSamplesPerFrame * 2U, "QSSTV fixture length incorrect");
+        std::vector<double> pcm;
+        for (std::size_t i=0;i<bytes.size();i+=2) {
+            const auto raw = static_cast<std::uint16_t>(bytes[i] | (std::uint16_t(bytes[i+1]) << 8U));
+            const int sample = raw < 32768U ? int(raw) : int(raw) - 65536;
+            pcm.push_back(double(sample)/32768.0);
+        }
+        std::vector<std::vector<std::uint8_t>> a, b;
+        const auto batchA = receive(config, pcm, 977U, a);
+        const auto batchB = receive(config, pcm, 8192U, b);
+        require(a.empty() && b.empty(), "synthetic FAC emitted a false MOT group");
+        require(batchA.statistics.facFailures > 0 && batchB.statistics.facFailures > 0,
+                "QSSTV superframe did not reach FAC validation: pilots="
+                  + std::to_string(batchA.statistics.pilotFailures) + " sync="
+                  + std::to_string(batchA.statistics.synchronizationFailures));
+        require(batchA.statistics.pilotFailures == 0 && batchB.statistics.pilotFailures == 0,
+                "QSSTV superframe pilots rejected");
+        require(batchA.statistics.facFailures == batchB.statistics.facFailures,
+                "QSSTV superframe outcome changed with PCM chunking");
+    }
+}
+
+void testIndependentQsstvValidFac()
+{
+    HamDrmWaveformConfig config;
+    config.pcmSampleRateHz = 48000;
+    config.interleaver = HamDrmInterleaver::Short;
+    const std::array<const char*, 2> files {{DECODIUM_QSSTV_VALID_FAC_A, DECODIUM_QSSTV_VALID_FAC_B}};
+    for (const auto* path : files) {
+        std::ifstream input(path, std::ios::binary);
+        require(input.good(), "QSSTV valid FAC fixture missing");
+        const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)), {});
+        require(bytes.size() == 3U * kHamDrmNativePcmSamplesPerFrame * 2U, "QSSTV valid FAC fixture length incorrect");
+        std::vector<double> pcm;
+        for (std::size_t i=0;i<bytes.size();i+=2) {
+            const auto raw = static_cast<std::uint16_t>(bytes[i] | (std::uint16_t(bytes[i+1]) << 8U));
+            pcm.push_back(double(raw < 32768U ? int(raw) : int(raw) - 65536)/32768.0);
+        }
+        std::vector<std::vector<std::uint8_t>> a, b;
+        const auto batchA = receive(config, pcm, 977U, a);
+        const auto batchB = receive(config, pcm, 8192U, b);
+        require(a.empty() && b.empty(), "random MSC emitted MOT data");
+        require(batchA.statistics.receivedFrames > 0 && batchB.statistics.receivedFrames > 0,
+                "QSSTV valid FAC did not decode: fac=" + std::to_string(batchA.statistics.facFailures)
+                + " pilots=" + std::to_string(batchA.statistics.pilotFailures));
+        require(batchA.statistics.receivedFrames == batchB.statistics.receivedFrames,
+                "QSSTV FAC results differ between chunk sizes");
+        require(batchA.statistics.packetCrcFailures + batchA.statistics.mscFailures > 0
+                && batchB.statistics.packetCrcFailures + batchB.statistics.mscFailures > 0,
+                "QSSTV random MSC did not reach a data integrity check");
+    }
+}
+
+void testIndependentQsstvMotGroups()
+{
+    HamDrmWaveformConfig config;
+    config.pcmSampleRateHz = 48000;
+    config.interleaver = HamDrmInterleaver::Short;
+    const std::array<const char*, 2> files {{DECODIUM_QSSTV_MOT_A, DECODIUM_QSSTV_MOT_B}};
+    const std::array<std::string, 2> expectedHex {{
+        "7300800012ee55001b000000400d840185000000004600cc0b0073616d706c652e6a706775b5",
+        "7400800012ee55000412345678ef53"}};
+    for (std::size_t variant=0;variant<files.size();++variant) {
+        std::ifstream input(files[variant], std::ios::binary);
+        require(input.good(), "QSSTV MOT PCM fixture missing");
+        const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)), {});
+        require(bytes.size() == 3U * kHamDrmNativePcmSamplesPerFrame * 2U, "QSSTV MOT PCM length incorrect");
+        std::vector<double> pcm;
+        for (std::size_t i=0;i<bytes.size();i+=2) {
+            const auto raw=static_cast<std::uint16_t>(bytes[i] | (std::uint16_t(bytes[i+1])<<8U));
+            pcm.push_back(double(raw<32768U ? int(raw) : int(raw)-65536)/32768.0);
+        }
+        std::vector<std::uint8_t> expected;
+        for (std::size_t i=0;i<expectedHex[variant].size();i+=2)
+            expected.push_back(static_cast<std::uint8_t>(std::stoul(expectedHex[variant].substr(i,2), nullptr, 16)));
+        const auto nativePcm = transmit(config, {expected}, 977U);
+        require(nativePcm.size() == kHamDrmNativePcmSamplesPerFrame,
+                "native transmit frame has unexpected size");
+        double maximumError = 0.0;
+        for (std::size_t i=0; i<nativePcm.size(); ++i)
+            maximumError = std::max(maximumError, std::abs(nativePcm[i] - pcm[i]));
+        require(maximumError < 1.1/32768.0,
+                "native/QSSTV PCM differ: max=" + std::to_string(maximumError));
+        std::vector<std::vector<std::uint8_t>> a,b;
+        const auto batchA=receive(config,pcm,977U,a);
+        const auto batchB=receive(config,pcm,8192U,b);
+        require(!a.empty() && a==b && std::all_of(a.begin(),a.end(),[&](const auto& item) { return item==expected; }),
+            "QSSTV MOT waveform failed: groups=" + std::to_string(a.size())
+            + " received=" + std::to_string(batchA.statistics.receivedFrames)
+            + " FAC=" + std::to_string(batchA.statistics.facFailures)
+            + " packet=" + std::to_string(batchA.statistics.packetCrcFailures)
+            + " MOT=" + std::to_string(batchA.statistics.motCrcFailures)
+            + " detail=" + batchA.status.detail);
+        require(batchA.statistics.validatedDataGroups == batchB.statistics.validatedDataGroups,
+                "QSSTV MOT group count changed with PCM chunking");
+    }
+}
+
+void testIndependentQsstvObjectAssembly()
+{
+    HamDrmWaveformConfig config;
+    config.pcmSampleRateHz=48000; config.interleaver=HamDrmInterleaver::Short;
+    for (const auto* path : {DECODIUM_QSSTV_OBJECT_A, DECODIUM_QSSTV_OBJECT_B}) {
+        std::ifstream input(path,std::ios::binary);
+        require(input.good(),"QSSTV object PCM missing");
+        const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)),{});
+        require(bytes.size()==3U*kHamDrmNativePcmSamplesPerFrame*2U,"QSSTV object PCM length incorrect");
+        std::vector<double> pcm;
+        for(std::size_t i=0;i<bytes.size();i+=2) {
+            const auto raw=static_cast<std::uint16_t>(bytes[i] | (std::uint16_t(bytes[i+1])<<8U));
+            pcm.push_back(double(raw<32768U ? int(raw) : int(raw)-65536)/32768.0);
+        }
+        std::vector<std::vector<std::uint8_t>> a,b;
+        receive(config,pcm,977U,a); receive(config,pcm,8192U,b);
+        require(a==b && a.size()>=2,"QSSTV object groups did not decode");
+        HamDrmObjectAssembler assembler(0xee55U);
+        for(const auto& group:a) require(assembler.ingest(group.data(),group.size()).ok(),"QSSTV object group rejected");
+        const auto object=assembler.assembledObject();
+        require(object.ok() && object.value->originalBytes == std::vector<std::uint8_t>({0x12,0x34,0x56,0x78}),
+                "QSSTV MOT object did not assemble");
+    }
+}
+
+void testSelectiveRepairWaveform()
+{
+    const std::array<const char*, 2> images {{DECODIUM_QSSTV_IMAGE_A, DECODIUM_QSSTV_IMAGE_B}};
+    for (std::size_t variant = 0; variant < images.size(); ++variant) {
+        std::ifstream input(images[variant], std::ios::binary);
+        require(input.good(), "repair JPEG fixture missing");
+        const std::vector<std::uint8_t> expected((std::istreambuf_iterator<char>(input)), {});
+        HamDrmMotObjectMetadata metadata;
+        metadata.filename = variant == 0 ? "repair-a.jpg" : "repair-b.jpg";
+        metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+        const auto encoded = encodeHamDrmObject(metadata, expected, 50);
+        require(encoded.ok() && encoded.value->bodyGroups.size() > 4,
+                "repair fixture needs at least five segments");
+        const std::size_t firstMissing = variant == 0 ? 1 : 2;
+        const std::size_t secondMissing = variant == 0 ? 3 : encoded.value->bodyGroups.size() - 1;
+
+        HamDrmObjectAssembler assembler(metadata.transportId);
+        for (const auto& group : encoded.value->headerGroups)
+            require(assembler.ingest(group.data(), group.size()).ok(), "partial header rejected");
+        for (std::size_t index = 0; index < encoded.value->bodyGroups.size(); ++index) {
+            if (index == firstMissing || index == secondMissing) continue;
+            const auto& group = encoded.value->bodyGroups[index];
+            require(assembler.ingest(group.data(), group.size()).ok(), "partial body rejected");
+        }
+        require(!assembler.assembledObject().ok(), "partial image unexpectedly complete");
+
+        auto repair = encoded.value->headerGroups;
+        repair.push_back(encoded.value->bodyGroups[firstMissing]);
+        repair.push_back(encoded.value->bodyGroups[secondMissing]);
+        HamDrmWaveformConfig config;
+        config.interleaver = HamDrmInterleaver::Short;
+        const auto pcm = transmit(config, repair, variant == 0 ? 733 : 997);
+        std::vector<std::vector<std::uint8_t>> decoded;
+        const auto batch = receive(config, pcm, variant == 0 ? 977 : 8192, decoded);
+        require(batch.status.ok() && decoded == repair, "repair waveform groups differ");
+        for (const auto& group : decoded)
+            require(assembler.ingest(group.data(), group.size()).ok(), "repair group rejected");
+        const auto result = assembler.assembledObject();
+        require(result.ok() && result.value->originalBytes == expected,
+                "waveform repair did not restore the exact JPEG");
+    }
+}
+
+void testIndependentQsstvImageAssembly()
+{
+    HamDrmWaveformConfig config;
+    config.pcmSampleRateHz=48000; config.interleaver=HamDrmInterleaver::Short;
+    const std::array<const char*,2> files {{DECODIUM_QSSTV_IMAGE_PCM_A, DECODIUM_QSSTV_IMAGE_PCM_B}};
+    const std::array<const char*,2> images {{DECODIUM_QSSTV_IMAGE_A, DECODIUM_QSSTV_IMAGE_B}};
+    for (std::size_t variant=0;variant<files.size();++variant) {
+        std::ifstream input(files[variant],std::ios::binary), imageInput(images[variant],std::ios::binary);
+        require(input.good() && imageInput.good(), "QSSTV image fixture missing");
+        const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)),{});
+        const std::vector<std::uint8_t> expected((std::istreambuf_iterator<char>(imageInput)),{});
+        require(bytes.size()==9U*kHamDrmNativePcmSamplesPerFrame*2U,"QSSTV image PCM length incorrect");
+        std::vector<double> pcm;
+        for(std::size_t i=0;i<bytes.size();i+=2) {
+            const auto raw=static_cast<std::uint16_t>(bytes[i] | (std::uint16_t(bytes[i+1])<<8U));
+            pcm.push_back(double(raw<32768U ? int(raw) : int(raw)-65536)/32768.0);
+        }
+        std::vector<std::vector<std::uint8_t>> a,b;
+        const auto batchA=receive(config,pcm,977U,a); const auto batchB=receive(config,pcm,8192U,b);
+        require(a==b && a.size()>=5,"QSSTV image groups failed: groups=" + std::to_string(a.size())
+            + " FAC=" + std::to_string(batchA.statistics.facFailures)
+            + " packet=" + std::to_string(batchA.statistics.packetCrcFailures)
+            + " chunkB=" + std::to_string(batchB.statistics.validatedDataGroups));
+        const auto first=parseHamDrmMotDataGroup(a.front().data(),a.front().size());
+        require(first.ok(), "QSSTV image first group malformed");
+        HamDrmObjectAssembler assembler(first.value->transportId);
+        for(const auto& group:a) {
+            const auto result=assembler.ingest(group.data(),group.size());
+            const auto parsed=parseHamDrmMotDataGroup(group.data(),group.size());
+            require(result.ok(),"QSSTV image group rejected: " + result.status.detail
+                + " firstId=" + std::to_string(first.value->transportId)
+                + " id=" + std::to_string(parsed.ok() ? parsed.value->transportId : 0));
+        }
+        const auto object=assembler.assembledObject();
+        require(object.ok() && object.value->originalBytes==expected,"QSSTV image bytes did not assemble exactly");
+        require(a.size()==9U, "QSSTV image did not provide all nine frames: " + std::to_string(a.size()));
+        const auto nativePcm = transmit(config, a, 977U);
+        require(nativePcm.size()==pcm.size(), "native image waveform has wrong duration");
+        double maximumError=0.0;
+        for(std::size_t i=0;i<pcm.size();++i)
+            maximumError=std::max(maximumError,std::abs(nativePcm[i]-pcm[i]));
+        require(maximumError < 1.1/32768.0, "native/QSSTV image waveform differs: max=" + std::to_string(maximumError));
+        const auto info=validateHamDrmImage(object.value->metadata, object.value->originalBytes.data(), object.value->originalBytes.size());
+        require(info.ok() && info.value->width==16 && info.value->height==16, "QSSTV image validation failed");
+        const QImage decoded=QImage::fromData(object.value->originalBytes.data(), int(object.value->originalBytes.size()));
+        require(!decoded.isNull() && decoded.width()==16 && decoded.height()==16,"QSSTV JPEG could not decode");
+        const QColor pixel=decoded.pixelColor(8,8);
+        require(variant==0 ? pixel.red()>200 && pixel.blue()<40 : pixel.blue()>200 && pixel.red()<40,
+                "QSSTV JPEG pixels changed");
+    }
+}
+
 void testCleanLongInterleaverLoopback()
 {
     HamDrmWaveformConfig config;
@@ -239,6 +497,58 @@ void testCleanLongInterleaverLoopback()
     require(batch.statistics.receivedFrames == 5U
                 && batch.statistics.validatedDataGroups == 1U,
             "clean loopback statistics mismatch");
+}
+
+void testLiveAcquisitionAfterSilence()
+{
+    HamDrmWaveformConfig config;
+    for (const std::size_t prefix : {12'000U, 19'137U}) {
+        const auto group = makeMotGroup(prefix == 12'000U ? 41U : 42U);
+        auto signal = transmit(config, {group});
+        signal.insert(signal.begin(), prefix, 0.0);
+        std::vector<std::vector<std::uint8_t>> recovered;
+        receive(config, signal, 240U, recovered);
+        require(recovered.size() == 1U && recovered.front() == group,
+                "live acquisition failed after silence");
+    }
+}
+
+void testReacquireAfterPartialFrame()
+{
+    HamDrmWaveformConfig config;
+    for (const std::size_t fragmentLength : {1'000U, 2'000U}) {
+        const auto group = makeMotGroup(fragmentLength == 1'000U ? 41U : 42U);
+        const auto signal = transmit(config, {group});
+        std::vector<double> interrupted(signal.begin(), signal.begin() + fragmentLength);
+        interrupted.insert(interrupted.end(), 100U, 0.0);
+        interrupted.insert(interrupted.end(), signal.begin(), signal.end());
+        std::vector<std::vector<std::uint8_t>> recovered;
+        const auto batch = receive(config, interrupted, 240U, recovered);
+        require(batch.statistics.pilotFailures > 0U,
+                "partial frame did not exercise a rejected pilot candidate");
+        require(recovered.size() == 1U && recovered.front() == group,
+                "receiver did not reacquire after a partial frame");
+    }
+}
+
+void testLiveAcquisitionAfterNoise()
+{
+    HamDrmWaveformConfig config;
+    for (const std::size_t prefix : {4'800U, 7'200U}) {
+        const auto group = makeMotGroup(prefix == 4'800U ? 41U : 42U);
+        const auto signal = transmit(config, {group});
+        std::vector<double> pcm(prefix);
+        std::uint32_t state = 0x12345678U;
+        for (auto& sample : pcm) {
+            state = state * 1'664'525U + 1'013'904'223U;
+            sample = (double(state >> 8U) / double(1U << 24U) - 0.5) * 0.02;
+        }
+        pcm.insert(pcm.end(), signal.begin(), signal.end());
+        std::vector<std::vector<std::uint8_t>> recovered;
+        receive(config, pcm, 240U, recovered);
+        require(recovered.size() == 1U && recovered.front() == group,
+                "receiver failed after initial broadband noise");
+    }
 }
 
 void testNative48kTransmitPath()
@@ -494,10 +804,19 @@ void testCancelResetAndBounds()
 
 int main()
 {
-    const std::array<std::pair<const char*, void (*)()>, 10U> tests {{
+    const std::array<std::pair<const char*, void (*)()>, 19U> tests {{
         {"packet framing", testPacketFraming},
         {"capacity and scheduling", testCapacityAndExactScheduling},
+        {"QSSTV independent JPEG images", testIndependentQsstvImageAssembly},
+        {"selective repair waveform A/B", testSelectiveRepairWaveform},
+        {"QSSTV independent MOT object", testIndependentQsstvObjectAssembly},
+        {"QSSTV independent MOT groups", testIndependentQsstvMotGroups},
+        {"QSSTV valid FAC superframes", testIndependentQsstvValidFac},
+        {"QSSTV synthetic superframes", testIndependentQsstvSuperframesFailClosed},
         {"clean long loopback", testCleanLongInterleaverLoopback},
+        {"live acquisition after silence A/B", testLiveAcquisitionAfterSilence},
+        {"partial frame reacquisition A/B", testReacquireAfterPartialFrame},
+        {"live acquisition after noise A/B", testLiveAcquisitionAfterNoise},
         {"native 48 kHz TX", testNative48kTransmitPath},
         {"native profile matrix", testNativeProfileMatrixLoopback},
         {"multi-frame MOT object", testMultiFrameMotObjectGroups},

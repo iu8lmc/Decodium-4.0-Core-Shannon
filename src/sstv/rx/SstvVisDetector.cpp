@@ -511,19 +511,6 @@ SstvVisDetector::normalize (SstvVisToneEvent const& event,
       if (normalized.end <= normalized.start)
         return std::nullopt;
     }
-  if (frameActive () && hasTimeline_
-      && normalized.start > lastTimelineEndUs_
-      && normalized.start - lastTimelineEndUs_ > config_.maximumGapUs)
-    {
-      invalidResult = makeResult (
-          SstvVisDetectionStatus::InvalidInput,
-          SstvVisDetectionCause::GapExceeded,
-          normalized.start,
-          "VIS event gap exceeds the configured bound",
-          false);
-      return std::nullopt;
-    }
-
   if (!frequencyOffsetHz_)
     {
       double const candidateOffset = event.frequencyHz - kLeaderHz;
@@ -547,6 +534,21 @@ SstvVisDetector::normalize (SstvVisToneEvent const& event,
                               ? 0.0
                               : event.frequencyHz
                                     - nominalFrequency (normalized.tone);
+    }
+  const bool matchingLeader = run_.active && run_.tone == SstvVisToneKind::Leader
+      && normalized.tone == SstvVisToneKind::Leader
+      && (state_ == SstvVisDetectorState::FirstLeader
+          || state_ == SstvVisDetectorState::SecondLeader);
+  const auto allowedGap = matchingLeader
+      ? std::max (config_.maximumGapUs, config_.maximumLeaderGapUs)
+      : config_.maximumGapUs;
+  if (frameActive () && hasTimeline_ && normalized.start > lastTimelineEndUs_
+      && normalized.start - lastTimelineEndUs_ > allowedGap)
+    {
+      invalidResult = makeResult (SstvVisDetectionStatus::InvalidInput,
+          SstvVisDetectionCause::GapExceeded, normalized.start,
+          "VIS event gap exceeds the configured bound", false);
+      return std::nullopt;
     }
   return normalized;
 }
@@ -613,9 +615,16 @@ SstvVisDetector::normalize (SstvVisClassifiedEvent const& event,
       if (normalized.end <= normalized.start)
         return std::nullopt;
     }
+  const bool matchingLeader = run_.active && run_.tone == SstvVisToneKind::Leader
+      && normalized.tone == SstvVisToneKind::Leader
+      && (state_ == SstvVisDetectorState::FirstLeader
+          || state_ == SstvVisDetectorState::SecondLeader);
+  const auto allowedGap = matchingLeader
+      ? std::max (config_.maximumGapUs, config_.maximumLeaderGapUs)
+      : config_.maximumGapUs;
   if (frameActive () && hasTimeline_
       && normalized.start > lastTimelineEndUs_
-      && normalized.start - lastTimelineEndUs_ > config_.maximumGapUs)
+      && normalized.start - lastTimelineEndUs_ > allowedGap)
     {
       invalidResult = makeResult (
           SstvVisDetectionStatus::InvalidInput,
@@ -718,8 +727,14 @@ void SstvVisDetector::processHeaderEvent (
     NormalizedEvent const& event,
     std::vector<SstvVisDetection>& results)
 {
+  const auto allowedGap = run_.tone == SstvVisToneKind::Leader
+      && event.tone == SstvVisToneKind::Leader
+      && (state_ == SstvVisDetectorState::FirstLeader
+          || state_ == SstvVisDetectorState::SecondLeader)
+      ? std::max (config_.maximumGapUs, config_.maximumLeaderGapUs)
+      : config_.maximumGapUs;
   if (run_.active && event.tone == run_.tone
-      && event.start <= run_.end + config_.maximumGapUs)
+      && event.start <= run_.end + allowedGap)
     {
       if (!appendRawEvent (event, results))
         return;
@@ -1456,6 +1471,7 @@ void SstvVisDetector::validateConfig (SstvVisDetectorConfig const& config)
       || config.minimumBitDominance > 1.0)
     throw std::invalid_argument ("invalid VIS confidence policy");
   if (config.maximumGapUs > config.symbolDurationUs
+      || config.maximumLeaderGapUs > config.symbolDurationUs
       || config.maximumOverlapUs > config.symbolDurationUs
       || config.maximumEventDurationUs == 0
       || config.maximumEventDurationUs > 10'000'000

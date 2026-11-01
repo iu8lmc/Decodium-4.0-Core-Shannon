@@ -70,6 +70,20 @@ SstvIncomingMediaValidationResult validateAndStageIncomingMedia(
     const QDateTime& expiresUtc,
     const SstvIncomingMediaLimits& limits = {});
 
+// The caller must first verify the exact encrypted payload against the manifest
+// and authenticate/decrypt it. This function validates decoded image content;
+// it does not perform cryptographic authentication. The handoff source fields
+// continue to describe the ciphertext bound by the original manifest.
+SstvIncomingMediaValidationResult validateAndStageAuthenticatedIncomingMedia(
+    const QByteArray& authenticatedPlaintext,
+    const QString& privateStagingRoot,
+    const QString& localTransferId,
+    const QString& incomingId,
+    const SstvShareManifestV1& manifest,
+    const QDateTime& receivedUtc,
+    const QDateTime& expiresUtc,
+    const SstvIncomingMediaLimits& limits = {});
+
 // Revalidates an already normalized file and reconstructs the precise
 // handoff. This is used after restart and immediately before accept/import.
 SstvIncomingMediaValidationResult inspectStagedIncomingMedia(

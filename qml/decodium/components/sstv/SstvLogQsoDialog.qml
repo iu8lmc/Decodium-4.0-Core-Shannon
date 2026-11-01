@@ -12,9 +12,9 @@ Dialog {
     property color accentColor: "#24c9ee"
     property color borderColor: "#273946"
     property color panelColor: "#0b131a"
-    readonly property bool glassSurfaceEnabled: root.engine && root.engine.themeManager
-                                                && root.engine.themeManager.isGlassTheme
-                                                && root.engine.themeManager.glassTransparencySupported
+    readonly property bool glassSurfaceEnabled: !!(root.engine && root.engine.themeManager
+                                                  && root.engine.themeManager.isGlassTheme
+                                                  && root.engine.themeManager.glassTransparencySupported)
     readonly property color dialogSurface: root.glassSurfaceEnabled
                                            ? Qt.rgba(root.engine.themeManager.panelColor.r,
                                                      root.engine.themeManager.panelColor.g,

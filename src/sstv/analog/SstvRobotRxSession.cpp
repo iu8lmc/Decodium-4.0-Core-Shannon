@@ -481,8 +481,11 @@ void SstvRobotRxSession::refineBw8ImageEndFromObservedSync()
     const double lineCount = static_cast<double>(spec_.height);
     const double canonicalLineSamples = static_cast<double>(
         canonicalImageEndSample_ - config_.imageStartSample) / lineCount;
-    const double compatibilityLineSamples = static_cast<double>(
-        imageEndSample_ - config_.imageStartSample) / lineCount;
+    // The terminal guard protects the end of the image, but it is not part
+    // of the alternate line period. Including it biases the profile decision
+    // toward canonical timing and can truncate a genuine 67 ms waveform.
+    const double compatibilityLineSamples = static_cast<double>(samplesFor(
+        config_.sampleRate, Picoseconds {67'000'000'000LL}));
     const double observedLineSamples =
         sync.slant.estimatedLinePeriodSamples;
     const double canonicalDistance = std::abs(

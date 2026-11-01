@@ -29,6 +29,15 @@ public:
 
   bool isSequential () const override {return true;}
 
+  // Optional source-clock position for the first input frame, in nanoseconds
+  // relative to the capture stream. Backends without a clock use write().
+  virtual qint64 writeWithSourceTime (char const *data, qint64 size,
+                                    qint64 sourceTimeNs)
+  {
+    Q_UNUSED (sourceTimeNs)
+    return write (data, size);
+  }
+
   size_t bytesPerFrame () const {return sizeof (qint16) * m_sourceChannelCount;}
 
   Channel channel () const {return m_channel;}

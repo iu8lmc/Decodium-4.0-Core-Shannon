@@ -95,6 +95,8 @@ class SstvShareController final : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
     Q_PROPERTY(bool secureStorageAvailable READ secureStorageAvailable
                NOTIFY stateChanged)
+    Q_PROPERTY(bool encryptedSharingAvailable READ encryptedSharingAvailable NOTIFY stateChanged)
+    Q_PROPERTY(bool requireIncomingEncryption READ requireIncomingEncryption NOTIFY stateChanged)
     Q_PROPERTY(bool providerSupportsInbox READ providerSupportsInbox
                NOTIFY stateChanged)
     Q_PROPERTY(bool providerSupportsIncomingDelete
@@ -142,6 +144,8 @@ public:
     {
         return m_secureStorageAvailable;
     }
+    bool encryptedSharingAvailable() const noexcept { return m_encryptedSharingAvailable; }
+    bool requireIncomingEncryption() const noexcept { return m_requireIncomingEncryption; }
     bool providerSupportsInbox() const noexcept
     {
         return m_providerSupportsInbox;
@@ -178,6 +182,7 @@ public:
                         const QString& stationProfile);
 
     Q_INVOKABLE bool setEnabled(bool enabled);
+    Q_INVOKABLE bool setRequireIncomingEncryption(bool enabled);
     Q_INVOKABLE bool configureProvider(const QVariantMap& configuration);
     Q_INVOKABLE bool clearCredentials();
     Q_INVOKABLE bool upload(const QUrl& source,
@@ -191,9 +196,25 @@ public:
                                        const QString& message,
                                        bool recipientConfirmed,
                                        const QVariantMap& options);
+    // Requires a separately verified and already pinned recipient key.
+    Q_INVOKABLE bool uploadEncryptedWithOptions(const QUrl& source,
+                                                const QString& recipientId,
+                                                const QString& mode,
+                                                const QString& message,
+                                                bool recipientConfirmed,
+                                                const QVariantMap& options);
+    // Public keys are exchanged out of band; the caller confirms a fingerprint
+    // independently before pinning. Existing pins are never replaced silently.
+    Q_INVOKABLE bool createSharingIdentity();
+    Q_INVOKABLE bool pinSharingRecipient(const QString& recipientId,
+                                          const QString& publicKeyHex,
+                                          const QString& verifiedFingerprint,
+                                          bool independentlyConfirmed);
     Q_INVOKABLE bool refreshInbox();
     Q_INVOKABLE bool download(const QString& incomingId,
                               const QString& destinationFileName);
+    Q_INVOKABLE bool downloadEncrypted(const QString& incomingId,
+                                       const QString& destinationFileName);
     Q_INVOKABLE bool accept(const QString& transferId);
     Q_INVOKABLE bool acknowledge(const QString& transferId);
     Q_INVOKABLE bool reject(const QString& incomingId);
@@ -220,6 +241,7 @@ signals:
     void stateChanged();
     void configurationChanged();
     void operationFinished(QString operation, bool ok, QString message);
+    void sharingIdentityReady(QString publicKeyHex, QString fingerprint);
     // Emitted after explicit user acceptance and native byte/image validation,
     // and once on restart for a durable accepted handoff that still needs
     // import. The owner-thread Gallery storage slot consumes this map;
@@ -253,6 +275,8 @@ private:
     bool m_configured {false};
     bool m_busy {false};
     bool m_secureStorageAvailable {false};
+    bool m_encryptedSharingAvailable {false};
+    bool m_requireIncomingEncryption {false};
     bool m_providerSupportsInbox {false};
     bool m_providerSupportsIncomingDelete {false};
     bool m_providerSupportsSenderBlocking {false};

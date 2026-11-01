@@ -10,6 +10,8 @@ SstvPage {
     required property var engine
     readonly property var sharing: root.engine ? root.engine.sstvShare : null
     property bool configurationExpanded: false
+    property string sharingPublicKey: ""
+    property string sharingFingerprint: ""
     property string noticeText: ""
     property bool noticeError: false
     property url selectedUpload: ""
@@ -128,8 +130,15 @@ SstvPage {
     Connections {
         target: root.sharing
         enabled: root.sharing !== null
+        ignoreUnknownSignals: true
+
+        function onSharingIdentityReady(publicKeyHex, fingerprint) {
+            root.sharingPublicKey = publicKeyHex
+            root.sharingFingerprint = fingerprint
+        }
 
         function onConfigurationChanged() {
+            fingerprintConfirmed.checked = false
             root.loadConfiguration()
         }
 
@@ -466,7 +475,7 @@ SstvPage {
                 text: {
                     const privacy = transferRow.privacySummary || ({})
                     const protection = privacy.endToEndEncrypted
-                                       ? qsTr("end-to-end encrypted")
+                                       ? qsTr("end-to-end encrypted; sender identity is not authenticated")
                                        : (privacy.providerCanReadContent
                                           ? qsTr("TLS transport; provider can read content")
                                           : qsTr("TLS transport"))
@@ -563,6 +572,13 @@ SstvPage {
                     visible: transferRow.canDownload
                     text: qsTr("Download")
                     onClicked: transferRow.controller.download(
+                                   transferRow.incomingId,
+                                   transferRow.fileName)
+                }
+                Button {
+                    visible: transferRow.canDownload
+                    text: qsTr("Download only if encrypted")
+                    onClicked: transferRow.controller.downloadEncrypted(
                                    transferRow.incomingId,
                                    transferRow.fileName)
                 }
@@ -1000,6 +1016,7 @@ SstvPage {
 
                 ColumnLayout {
                     id: uploadLayout
+                    objectName: "sstvShareUploadLayout"
                     anchors.fill: parent
                     anchors.margins: 10
                     spacing: 7
@@ -1024,6 +1041,10 @@ SstvPage {
                         TextField {
                             id: recipient
                             objectName: "sstvShareRecipient"
+                            onTextChanged: {
+                                fingerprintConfirmed.checked = false
+                                recipientConfirmed.checked = false
+                            }
                             Layout.preferredWidth: 180
                             placeholderText: qsTr("Recipient ID")
                             maximumLength: 128
@@ -1034,6 +1055,80 @@ SstvPage {
                             text: qsTr("Martin M1")
                             placeholderText: qsTr("SSTV mode")
                             maximumLength: 64
+                        }
+                    }
+                    CheckBox {
+                        id: encryptUpload
+                        objectName: "sstvShareEncryptUpload"
+                        text: qsTr("Encrypt image for verified recipient (experimental)")
+                        enabled: root.sharing && root.sharing.encryptedSharingAvailable
+                        palette.text: root.primaryTextColor
+                        palette.buttonText: root.primaryTextColor
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: !encryptUpload.enabled
+                        text: qsTr("Encrypted sharing requires a supported provider and secure key storage.")
+                        color: root.secondaryTextColor
+                        wrapMode: Text.WordWrap
+                    }
+                    ColumnLayout {
+                        visible: encryptUpload.checked
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: root.secondaryTextColor
+                            text: qsTr("Exchange public keys and compare fingerprints through an independent trusted channel. The provider can see message metadata. Sender identity is not authenticated.")
+                        }
+                        Button {
+                            objectName: "sstvShareCreateIdentity"
+                            text: qsTr("Create or show my public key")
+                            onClicked: root.sharing.createSharingIdentity()
+                        }
+                        TextField {
+                            Layout.fillWidth: true
+                            readOnly: true
+                            selectByMouse: true
+                            text: root.sharingPublicKey
+                            placeholderText: qsTr("Your public key")
+                        }
+                        TextField {
+                            Layout.fillWidth: true
+                            readOnly: true
+                            selectByMouse: true
+                            text: root.sharingFingerprint
+                            placeholderText: qsTr("Your fingerprint")
+                        }
+                        TextField {
+                            id: peerPublicKey
+                            objectName: "sstvSharePeerPublicKey"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Recipient public key (64 lowercase hex characters)")
+                            maximumLength: 64
+                            onTextChanged: fingerprintConfirmed.checked = false
+                        }
+                        TextField {
+                            id: peerFingerprint
+                            objectName: "sstvSharePeerFingerprint"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Fingerprint verified independently (64 lowercase hex characters)")
+                            maximumLength: 64
+                            onTextChanged: fingerprintConfirmed.checked = false
+                        }
+                        CheckBox {
+                            id: fingerprintConfirmed
+                            objectName: "sstvShareFingerprintConfirmed"
+                            text: qsTr("I compared this fingerprint through a trusted channel")
+                            palette.text: root.primaryTextColor
+                            palette.buttonText: root.primaryTextColor
+                        }
+                        Button {
+                            objectName: "sstvSharePinRecipient"
+                            text: qsTr("Save verified recipient key")
+                            enabled: fingerprintConfirmed.checked && recipient.text.trim().length > 0
+                            onClicked: root.sharing.pinSharingRecipient(recipient.text, peerPublicKey.text,
+                                                                      peerFingerprint.text, fingerprintConfirmed.checked)
                         }
                     }
                     GridLayout {
@@ -1103,8 +1198,13 @@ SstvPage {
                         }
                     }
                     Label {
+                        objectName: "sstvShareUploadPrivacy"
                         Layout.fillWidth: true
-                        text: qsTr("Private recipient-only transfer. Public and automatic sharing stay off. EXIF is removed. Protection is TLS transport; this provider can read content because optional E2EE is not enabled.")
+                        text: encryptUpload.checked
+                              ? (encryptUpload.enabled
+                                 ? qsTr("The image is encrypted for the verified recipient. The provider can see transfer metadata. Sender identity is not authenticated. EXIF is removed.")
+                                 : qsTr("Encrypted sharing is unavailable. Upload is blocked until encryption is available or you explicitly turn it off."))
+                              : qsTr("Private recipient-only transfer. Public and automatic sharing stay off. EXIF is removed. Protection is TLS transport; this provider can read content because optional E2EE is not enabled.")
                         color: "#f2c14e"
                         wrapMode: Text.WordWrap
                     }
@@ -1144,22 +1244,25 @@ SstvPage {
                             enabled: root.sharing && root.sharing.enabled
                                      && root.selectedUpload.toString().length > 0
                                      && recipientConfirmed.checked
+                                     && (!encryptUpload.checked || encryptUpload.enabled)
                                      && (!includeCallsign.checked
                                          || uploadCallsign.text.trim().length > 0)
                                      && (!includeGrid.checked
                                          || uploadGrid.text.trim().length > 0)
                             onClicked: {
-                                const queued = root.sharing.uploadWithOptions(
-                                    root.selectedUpload, recipient.text,
-                                    uploadMode.text, uploadMessage.text,
-                                    recipientConfirmed.checked, {
-                                        "expiryHours": uploadExpiry.currentValue,
-                                        "includeCallsign": includeCallsign.checked,
-                                        "callsign": uploadCallsign.text,
-                                        "includeGrid": includeGrid.checked,
-                                        "grid": uploadGrid.text,
-                                        "meteredNetworkAllowed": meteredUpload.checked
-                                    })
+                                const options = {
+                                    "expiryHours": uploadExpiry.currentValue,
+                                    "includeCallsign": includeCallsign.checked,
+                                    "callsign": uploadCallsign.text,
+                                    "includeGrid": includeGrid.checked,
+                                    "grid": uploadGrid.text,
+                                    "meteredNetworkAllowed": meteredUpload.checked
+                                }
+                                const queued = encryptUpload.checked
+                                    ? root.sharing.uploadEncryptedWithOptions(root.selectedUpload, recipient.text,
+                                        uploadMode.text, uploadMessage.text, recipientConfirmed.checked, options)
+                                    : root.sharing.uploadWithOptions(root.selectedUpload, recipient.text,
+                                        uploadMode.text, uploadMessage.text, recipientConfirmed.checked, options)
                                 if (!queued)
                                     root.showNotice(qsTr("Upload could not be queued."), true)
                             }
@@ -1267,6 +1370,18 @@ SstvPage {
                 text: qsTr("Inbox operations stay fail-closed until the configured REST endpoint returns a valid authenticated capability document. WebDAV supports bounded direct GET only; it does not invent an inbox listing contract.")
                 color: root.secondaryTextColor
                 wrapMode: Text.WordWrap
+            }
+
+            CheckBox {
+                objectName: "sstvShareRequireIncomingEncryption"
+                visible: queueTabs.currentIndex === 1
+                text: qsTr("Require end-to-end encryption for new downloads")
+                checked: root.sharing ? root.sharing.requireIncomingEncryption : false
+                enabled: root.sharing && root.sharing.ready
+                palette.text: root.primaryTextColor
+                onClicked: root.sharing.setRequireIncomingEncryption(checked)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Applies to newly queued downloads. Sender identity is not authenticated.")
             }
 
             StackLayout {

@@ -3,6 +3,8 @@
 #include "SstvRxRuntime.h"
 
 #include "../analog/SstvAvtRxSession.h"
+#include "../fax/SstvRadiofaxAutoRx.h"
+#include "../fax/SstvFax480AutoRx.h"
 #include "../analog/SstvMartinM1RxSession.h"
 #include "../analog/SstvMmsstvExtendedRxSession.h"
 #include "../analog/SstvPdRxSession.h"
@@ -635,6 +637,29 @@ private:
 
 } // namespace
 
+std::optional<qint64> SstvSourceClockMapper::map(qint64 sourceNs, qint64 localNowNs) noexcept
+{
+    if (sourceNs < 0 || localNowNs < 0) return std::nullopt;
+    if (!m_active) {
+        m_active = true;
+        m_sourceOriginNs = m_previousSourceNs = sourceNs;
+        m_localOriginNs = localNowNs;
+        return localNowNs;
+    }
+    if (sourceNs <= m_previousSourceNs) return std::nullopt;
+    const qint64 delta = sourceNs - m_sourceOriginNs;
+    if (delta > std::numeric_limits<qint64>::max() - m_localOriginNs)
+        return std::nullopt;
+    m_previousSourceNs = sourceNs;
+    return m_localOriginNs + delta;
+}
+
+void SstvSourceClockMapper::reset() noexcept
+{
+    m_active = false;
+    m_sourceOriginNs = m_localOriginNs = m_previousSourceNs = 0;
+}
+
 SstvMonotonicTimeline::SstvMonotonicTimeline(qint64 jitterToleranceNs)
     : m_jitterToleranceNs(jitterToleranceNs)
 {
@@ -647,7 +672,8 @@ SstvMonotonicTimeline::SstvMonotonicTimeline(qint64 jitterToleranceNs)
 SstvMonotonicTimeline::Candidate SstvMonotonicTimeline::propose(
     qint64 observedLocalMonotonicNs,
     std::size_t sampleCount,
-    std::uint32_t sampleRate) const noexcept
+    std::uint32_t sampleRate,
+    bool deviceClock) const noexcept
 {
     Candidate result;
     if (observedLocalMonotonicNs < 0 || sampleCount == 0U
@@ -659,8 +685,11 @@ SstvMonotonicTimeline::Candidate SstvMonotonicTimeline::propose(
     result.previousEndNs = m_nextTimestampNs;
     result.startNs = observedLocalMonotonicNs;
     if (m_hasTimestamp) {
-        const qint64 jitterCeiling =
-            cappedAdd(m_nextTimestampNs, m_jitterToleranceNs);
+        // A device sample clock has much less uncertainty than callback
+        // arrival time. Allow one 12 kHz sample plus integer rounding, not
+        // the milliseconds of scheduling tolerance used for wall callbacks.
+        const qint64 tolerance = deviceClock ? 100'000 : m_jitterToleranceNs;
+        const qint64 jitterCeiling = cappedAdd(m_nextTimestampNs, tolerance);
         if (observedLocalMonotonicNs <= jitterCeiling) {
             result.startNs = m_nextTimestampNs;
         } else {
@@ -736,6 +765,12 @@ struct SstvRxRuntime::WorkerPipeline final
     std::unique_ptr<SstvPdRxSession> pdSession;
     std::unique_ptr<SstvAvtCountdownDetector> avtCountdownDetector;
     std::unique_ptr<SstvAvtRxSession> avtSession;
+    std::unique_ptr<SstvRadiofaxAutoRx> radiofax;
+    std::unique_ptr<SstvFax480AutoRx> fax480;
+    std::uint64_t fax480LastPublish {0U};
+    std::uint64_t fax480Revision {0U};
+    std::unique_ptr<SstvRadiofaxAudioStopDetector> radiofaxAudioStop;
+    std::uint64_t radiofaxAcquisitionId {0U};
     std::unique_ptr<SstvMmsstvRxSession> mmsstvSession;
     std::optional<SstvVisClassifiedEvent> pendingVisRun;
     std::optional<SstvNarrowVisToneEvent> pendingNarrowVisRun;
@@ -812,6 +847,7 @@ struct SstvRxRuntime::WorkerPipeline final
         resampler = std::make_unique<SstvResampler>(rate);
         preprocessor->reset();
         frequencyDemodulator->reset(false);
+        if (radiofaxAudioStop) radiofaxAudioStop->reset();
         toneDetector->reset(false);
         toneEpochUs = epochUs;
         hasInputTimeline = false;
@@ -842,6 +878,7 @@ SstvRxRuntime::SstvRxRuntime(QObject* parent)
 SstvRxRuntime::SstvRxRuntime(Config config, QObject* parent)
     : QObject(parent)
     , m_config(validateConfig(config))
+    , m_radiofaxConfig(m_config.radiofax)
     , m_ingress(new SstvAudioIngress(m_config.ingress, this))
     , m_timeline(m_config.timestampJitterToleranceNs)
 {
@@ -876,6 +913,47 @@ SstvRxRuntime::Config SstvRxRuntime::configuration() const noexcept
 {
     return m_config;
 }
+
+bool SstvRxRuntime::setRadiofaxConfig(std::optional<SstvFaxConfig> config)
+{
+    if (!isOnOwnerThread() || state() != State::Inactive || m_worker.joinable())
+        return false;
+    try {
+        if (config) {
+            if (m_fax480Config) return false;
+            if (config->sampleRate != SstvResampler::kOutputSampleRate) return false;
+            static_cast<void>(SstvRadiofaxAutoRx(*config));
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+    m_radiofaxConfig = std::move(config);
+    scheduleSnapshotNotification(true);
+    return true;
+}
+
+std::optional<SstvFaxConfig> SstvRxRuntime::radiofaxConfig() const
+{
+    // Access is owner-thread-only, as is configuration mutation.
+    if (!isOnOwnerThread()) return std::nullopt;
+    return m_radiofaxConfig;
+}
+
+bool SstvRxRuntime::setFax480Config(std::optional<SstvFax480Profile> profile)
+{
+    if (!isOnOwnerThread() || state()!=State::Inactive || m_worker.joinable()) return false;
+    try {
+        if (profile) {
+            if (m_radiofaxConfig) return false;
+            static_cast<void>(SstvFax480AutoRx(*profile,SstvResampler::kOutputSampleRate));
+        }
+    } catch (const std::exception&) { return false; }
+    m_fax480Config=profile;
+    scheduleSnapshotNotification(true);
+    return true;
+}
+std::optional<SstvFax480Profile> SstvRxRuntime::fax480Config() const
+{ return isOnOwnerThread() ? m_fax480Config : std::nullopt; }
 
 SstvRxRuntime::State SstvRxRuntime::state() const noexcept
 {
@@ -1162,7 +1240,9 @@ bool SstvRxRuntime::enqueuePcm16(QVector<short> samples,
 bool SstvRxRuntime::enqueuePcm16At(QVector<short> samples,
                                    int sampleRate,
                                    SstvRxRouteToken token,
-                                   qint64 observedLocalMonotonicNs) noexcept
+                                   qint64 observedLocalMonotonicNs,
+                                   bool deviceClock,
+                                   bool sourceDiscontinuity) noexcept
 {
     if (state() != State::Running || !token.valid()
         || sampleRate <= 0
@@ -1188,7 +1268,7 @@ bool SstvRxRuntime::enqueuePcm16At(QVector<short> samples,
     const auto candidate = m_timeline.propose(
         observedLocalMonotonicNs,
         count,
-        static_cast<std::uint32_t>(sampleRate));
+        static_cast<std::uint32_t>(sampleRate), deviceClock);
     if (!candidate.valid) {
         saturatingAdd(m_producerRejectedCalls);
         return false;
@@ -1199,6 +1279,7 @@ bool SstvRxRuntime::enqueuePcm16At(QVector<short> samples,
     metadata.source = token.source;
     metadata.monotonicTimestampNs = candidate.startNs;
     metadata.generation = token.generation;
+    metadata.sourceDiscontinuity = sourceDiscontinuity;
     if (!m_ingress->enqueuePcm16(std::move(samples), metadata)) {
         saturatingAdd(m_producerRejectedCalls);
         return false;
@@ -1499,6 +1580,11 @@ SstvRxRuntime::Config SstvRxRuntime::validateConfig(Config config)
         || config.maximumDiagnosticScopePoints > 2'048U) {
         throw std::invalid_argument("invalid SSTV RX runtime configuration");
     }
+    if (config.radiofax) {
+        if (config.radiofax->sampleRate != SstvResampler::kOutputSampleRate)
+            throw std::invalid_argument("radiofax RX must use 12000 Hz DSP rate");
+        static_cast<void>(SstvRadiofaxAutoRx(*config.radiofax));
+    }
     return config;
 }
 
@@ -1766,6 +1852,8 @@ void SstvRxRuntime::workerMain() noexcept
             terminatePdForDiscontinuity(pipeline, eventMs);
             terminateAvtForDiscontinuity(pipeline, eventMs);
             terminateMmsstvForDiscontinuity(pipeline, eventMs);
+            terminateRadiofaxForDiscontinuity(pipeline);
+            publishFax480Image(pipeline, true);
         }
     } catch (const std::exception& error) {
         recordWorkerFailure(QString::fromUtf8(error.what()));
@@ -1807,7 +1895,7 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
         return false;
     }
 
-    bool discontinuity = false;
+    bool discontinuity = chunk.sourceDiscontinuity;
     std::uint64_t gapNs = 0U;
     if (pipeline.hasInputTimeline) {
         if (chunk.startTime.count() < pipeline.expectedInputEndNs) {
@@ -1862,6 +1950,19 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
             pipeline, chunkStartUs / 1'000U);
         terminateMmsstvForDiscontinuity(
             pipeline, chunkStartUs / 1'000U);
+        terminateRadiofaxForDiscontinuity(pipeline);
+        publishFax480Image(pipeline, true);
+        if (m_fax480Config) {
+            pipeline.fax480=std::make_unique<SstvFax480AutoRx>(*m_fax480Config,SstvResampler::kOutputSampleRate);
+            pipeline.fax480LastPublish=0U; pipeline.fax480Revision=0U;
+            pipeline.radiofaxAcquisitionId=m_nextRadiofaxAcquisitionId++;
+        }
+        // Demodulator sample coordinates restart after a gap. Rearm with a
+        // fresh detector only after publishing any interrupted partial image.
+        if (m_radiofaxConfig) {
+            pipeline.radiofax = std::make_unique<SstvRadiofaxAutoRx>(*m_radiofaxConfig);
+            pipeline.radiofaxAcquisitionId = m_nextRadiofaxAcquisitionId++;
+        }
         pipeline.resetSignalPath(chunk.sampleRate, chunkStartUs);
         const std::lock_guard<std::mutex> lock(m_snapshotMutex);
         saturatingAdd(m_snapshot.discontinuities);
@@ -1898,6 +1999,18 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
     pipeline.currentChunkEndNs = static_cast<std::uint64_t>(chunkEndNs);
     pipeline.stateMachine->dispatch(nowMs, SstvRxTick {});
 
+    if (pipeline.fax480) {
+        consumeFax480Observations(pipeline, frequencies);
+    } else if (pipeline.radiofax) {
+        consumeRadiofaxObservations(pipeline, frequencies);
+        if (pipeline.radiofaxAudioStop) {
+            const auto stop = pipeline.radiofaxAudioStop->consume(
+                resampled.data(), resampled.size(),
+                pipeline.radiofax->state() == SstvRadiofaxAutoRxState::Receiving);
+            if (stop && pipeline.radiofax->stopAtAudioSample(*stop))
+                publishRadiofaxImage(pipeline, true);
+        }
+    } else {
     // Close an image that reaches its exact end in this chunk before looking
     // for another VIS header.  Otherwise a leader immediately following the
     // final image sample is discarded merely because the old session was
@@ -1972,6 +2085,10 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
         const std::uint64_t available = preprocessed.size();
         const std::uint64_t toneEnd = saturatingUnsignedAdd(
             toneStart, available);
+        if (qEnvironmentVariableIsSet("DECODIUM_SSTV_TRACE_FRAME")) {
+            qInfo().noquote() << "[SSTV][FRAME] resume boundary=" << *resumeToneAtSample
+                              << "tone_start=" << toneStart << "tone_end=" << toneEnd;
+        }
         if (*resumeToneAtSample > toneStart
             && *resumeToneAtSample < toneEnd) {
             const std::size_t prefix = static_cast<std::size_t>(
@@ -2235,7 +2352,7 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
             // that shortened separator to SstvVisDetector makes it infer an
             // invalid VIS clock (notably for odd Robot B/W aliases and VIS
             // 59).  Bound the correction to this one protocol transition:
-            // accept at most one hop of early BitZero/BitOne classification,
+            // accept at most two hops of early BitZero/BitOne classification,
             // close the separator at its canonical 30 ms boundary, and let
             // the next observation begin the data-bit run.
             if (pending.tone == SstvVisToneKind::Separator
@@ -2245,7 +2362,7 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
                 const std::uint64_t expectedEnd = saturatingUnsignedAdd(
                     pending.startTimeUs, kVisSymbolDurationUs);
                 if (event.startTimeUs < expectedEnd
-                    && expectedEnd - event.startTimeUs <= hopDurationUs) {
+                    && expectedEnd - event.startTimeUs <= 2U * hopDurationUs) {
                     pending.durationUs = kVisSymbolDurationUs;
                     flushPendingRun();
                     continue;
@@ -2304,6 +2421,7 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
         consumePdObservations(pipeline, frequencies, chunkEndMs);
         consumeAvtObservations(pipeline, frequencies, chunkEndMs);
         consumeMmsstvObservations(pipeline, frequencies, chunkEndMs);
+    }
     }
     if (!frequencies.empty()) {
         pipeline.lastFrequencySample = frequencies.back().centreSample;
@@ -2500,6 +2618,7 @@ void SstvRxRuntime::resetWorkerPipeline(WorkerPipeline& pipeline,
         terminatePdForDiscontinuity(pipeline, eventMs);
         terminateAvtForDiscontinuity(pipeline, eventMs);
         terminateMmsstvForDiscontinuity(pipeline, eventMs);
+        terminateRadiofaxForDiscontinuity(pipeline);
     }
     pipeline.generation = generation;
     pipeline.inputSampleRate = 0U;
@@ -2532,14 +2651,21 @@ void SstvRxRuntime::resetWorkerPipeline(WorkerPipeline& pipeline,
     // the two 300 ms leaders, start symbol, payload/parity and stop checks
     // continue to provide the acquisition gate.
     visConfig.headerDurationTolerance = 0.50;
+    // A short capture dropout within a continuous 300 ms leader need not
+    // invalidate the otherwise complete header. Bit and transition gaps stay
+    // under their existing stricter bound, with parity and coverage checked.
+    visConfig.maximumLeaderGapUs = 15'000;
     pipeline.visDetector =
         std::make_unique<SstvVisDetector>(visConfig);
     pipeline.narrowVisDetector =
         std::make_unique<SstvNarrowVisDetector>();
     pipeline.controls = m_rxControlPolicy.snapshot();
     SstvRxPolicy statePolicy;
-    if (pipeline.controls.settings.modeLockEnabled) {
-        statePolicy.lockedMode = pipeline.controls.settings.lockedMode;
+    const bool manualAvt = pipeline.controls.settings.modeControl == SstvRxModeControl::Manual
+        && pipeline.controls.settings.manualMode.rfind("avt-", 0U) == 0U;
+    if (manualAvt || pipeline.controls.settings.modeLockEnabled) {
+        statePolicy.lockedMode = manualAvt ? pipeline.controls.settings.manualMode
+                                          : pipeline.controls.settings.lockedMode;
         // A lock constrains selection but never bypasses timing evidence.
         // VIS-less acquisition is started below only after a unique canonical
         // fallback match; conflicts therefore remain fail-closed.
@@ -2579,6 +2705,14 @@ void SstvRxRuntime::resetWorkerPipeline(WorkerPipeline& pipeline,
     pipeline.avtCountdownDetector.reset();
     pipeline.avtSession.reset();
     pipeline.mmsstvSession.reset();
+    pipeline.fax480 = m_fax480Config
+        ? std::make_unique<SstvFax480AutoRx>(*m_fax480Config,SstvResampler::kOutputSampleRate) : nullptr;
+    pipeline.fax480LastPublish=0U; pipeline.fax480Revision=0U;
+    pipeline.radiofax = m_radiofaxConfig
+        ? std::make_unique<SstvRadiofaxAutoRx>(*m_radiofaxConfig) : nullptr;
+    pipeline.radiofaxAudioStop = m_radiofaxConfig
+        ? std::make_unique<SstvRadiofaxAudioStopDetector>(m_radiofaxConfig->sampleRate) : nullptr;
+    pipeline.radiofaxAcquisitionId = (pipeline.radiofax || pipeline.fax480) ? m_nextRadiofaxAcquisitionId++ : 0U;
     pipeline.pendingVisRun.reset();
     pipeline.pendingNarrowVisRun.reset();
     pipeline.pendingSyncPulse.reset();
@@ -2708,10 +2842,13 @@ void SstvRxRuntime::applyControlSnapshot(WorkerPipeline& pipeline)
     if (revisionChanged) {
         if (pipeline.stateMachine
             && !pipeline.stateMachine->hasActiveSession()) {
+            const bool manualAvt = next.settings.modeControl == SstvRxModeControl::Manual
+                && next.settings.manualMode.rfind("avt-", 0U) == 0U;
             static_cast<void>(pipeline.stateMachine->setModeLock(
-                next.settings.modeLockEnabled
+                manualAvt ? std::optional<std::string> {next.settings.manualMode}
+                : (next.settings.modeLockEnabled
                     ? std::optional<std::string> {next.settings.lockedMode}
-                    : std::nullopt));
+                    : std::nullopt)));
             static_cast<void>(pipeline.stateMachine->setNoVisFallbackMode(
                 std::nullopt));
 
@@ -2728,6 +2865,9 @@ void SstvRxRuntime::applyControlSnapshot(WorkerPipeline& pipeline)
     if (pipeline.stateMachine
         && !pipeline.stateMachine->hasActiveSession()
         && next.settings.modeControl == SstvRxModeControl::Manual
+        // AVT is sync-free: its manual selection constrains the VIS, then
+        // still requires the protected countdown to anchor the image.
+        && next.settings.manualMode.rfind("avt-", 0U) != 0U
         && pipeline.stateMachine->state() == SstvRxState::SearchingLeader
         && SstvRxControlPolicy::modeNameIsValid(next.settings.manualMode)) {
         const std::uint64_t eventMs = std::max(
@@ -3079,6 +3219,16 @@ void SstvRxRuntime::recordVisResults(
     std::uint64_t generation)
 {
     for (const SstvVisDetection& detection : results) {
+        if (qEnvironmentVariableIsSet("DECODIUM_SSTV_TRACE_VIS")) {
+            qInfo().noquote() << "[SSTV][VIS]" << SstvVisDetector::causeName(detection.cause)
+                << QString::fromStdString(detection.detail) << "valid=" << detection.valid()
+                << "start=" << detection.frameStartedAtUs << "end=" << detection.frameEndedAtUs;
+            for (const auto& event : detection.rawEvents) {
+                qInfo().noquote() << "[SSTV][VIS] tone=" << static_cast<int>(event.tone)
+                    << "start=" << event.startTimeUs << "duration=" << event.durationUs
+                    << "confidence=" << event.confidence;
+            }
+        }
         bool preserveValidatedSummary = false;
         {
             const std::lock_guard<std::mutex> lock(m_snapshotMutex);
@@ -3089,10 +3239,10 @@ void SstvRxRuntime::recordVisResults(
         const auto mapped = detection.valid()
             ? mapVisToSupportedMode(detection.codecResult)
             : std::nullopt;
-        const bool mappedNormalAvt = mapped.has_value()
+        const bool mappedAvt = mapped.has_value()
             && detection.codecResult.format == SstvVisFormat::Standard
             && detection.codecResult.primary.payloadKnown
-            && SstvAvtProtocol::normalModeForVis(
+            && SstvAvtSyncCodec::modeForVis(
                    detection.codecResult.primary.payload).has_value();
         // Until the protected countdown has established (or completed) the
         // AVT absolute-time session, its 1600/1900/2200 Hz data can resemble
@@ -3102,7 +3252,7 @@ void SstvRxRuntime::recordVisResults(
         // an armed/active AVT acquisition and vanishes on completion, reset,
         // exhaustion or discontinuity, so a later real VIS remains visible.
         if ((pipeline.avtCountdownDetector || pipeline.avtSession)
-            && !mappedNormalAvt) {
+            && !mappedAvt) {
             continue;
         }
         VisSummary summary;
@@ -3172,7 +3322,7 @@ void SstvRxRuntime::recordVisResults(
                                 detection.estimatedFrequencyOffsetHz);
                         } else if (
                             detection.codecResult.primary.payloadKnown
-                            && SstvAvtProtocol::normalModeForVis(
+                            && SstvAvtSyncCodec::modeForVis(
                                    detection.codecResult.primary.payload)
                                    .has_value()) {
                             nativeStartFailed = !armAvtCountdown(
@@ -3516,7 +3666,7 @@ bool SstvRxRuntime::beginNativeSessionByModeId(
             pipeline.frequencyDemodulator->config().hopSamples);
         config.clockErrorPpm = clock;
         config.frequencyOffsetHz = 0.0;
-        config.preserveTerminalGuard = true;
+        config.preserveTerminalGuard = false;
         config.allowTerminalRowRecovery = true;
         pipeline.robotSession =
             std::make_unique<SstvRobotRxSession>(config);
@@ -3833,7 +3983,7 @@ bool SstvRxRuntime::beginRobotSession(
         pipeline.frequencyDemodulator->config().hopSamples);
     config.clockErrorPpm = roundedClockErrorPpm(clockError);
     config.frequencyOffsetHz = 0.0;
-    config.preserveTerminalGuard = true;
+    config.preserveTerminalGuard = false;
     config.allowTerminalRowRecovery = true;
     pipeline.robotSession = std::make_unique<SstvRobotRxSession>(config);
     pipeline.robotLinesReported = 0U;
@@ -3967,7 +4117,7 @@ bool SstvRxRuntime::armAvtCountdown(
         return false;
     }
     const std::optional<SstvAvtMode> mode =
-        SstvAvtProtocol::normalModeForVis(visPayload);
+        SstvAvtSyncCodec::modeForVis(visPayload);
     const auto searchStart = sampleIndexAtUs(
         pipeline.toneEpochUs, detection.frameEndedAtUs);
     if (!mode.has_value() || !searchStart.has_value()) {
@@ -3982,6 +4132,7 @@ bool SstvRxRuntime::armAvtCountdown(
             *searchStart);
     SstvAvtCountdownDetectorConfig config;
     config.expectedMode = *mode;
+    config.variant = SstvAvtSyncCodec::variantForVis(visPayload);
     config.sampleRate = SstvResampler::kOutputSampleRate;
     config.searchStartSample = *searchStart;
     // The countdown detector recovers symbol edges from the demodulator's
@@ -4052,6 +4203,7 @@ bool SstvRxRuntime::beginAvtSession(
 
     SstvAvtRxSessionConfig config;
     config.mode = detection.mode;
+    config.variant = detection.variant;
     config.sampleRate = SstvResampler::kOutputSampleRate;
     config.imageStartSample = detection.imageStartSample;
     config.observationSpanSamples = static_cast<std::uint32_t>(
@@ -4488,13 +4640,16 @@ void SstvRxRuntime::consumeRobotObservations(
     const SstvRobotRxSessionState sessionState =
         pipeline.robotSession->state();
     if (sessionState == SstvRobotRxSessionState::Receiving
-        && inputEndSample >= pipeline.robotSession->imageEndSample()) {
-        // The demodulator intentionally emits no frequency observations for
-        // the silent/tail portion after the final scanline.  Without an
-        // explicit stream-end check the Robot session remains Receiving
-        // forever and the decoder never flushes its final sync predictions.
-        // Close only after the whole input chunk has been consumed, so the
-        // last valid observations still reach the image accumulator.
+        && observations.back().centreSample >= pipeline.robotSession->imageEndSample()) {
+        if (qEnvironmentVariableIsSet("DECODIUM_SSTV_TRACE_FRAME")) {
+            qInfo().noquote() << "[SSTV][FRAME] robot input end=" << inputEndSample
+                << "last observation=" << observations.back().centreSample
+                << "image end=" << pipeline.robotSession->imageEndSample();
+        }
+        // Input audio can run ahead of frequency observations by the
+        // demodulator and resampler delays. Close only once the observation
+        // timeline has crossed the end; otherwise a chunk ending at the
+        // protocol boundary discards valid samples from the final scanline.
         finishRobotAtImageEnd(pipeline, eventMs);
         return;
     }
@@ -4580,6 +4735,21 @@ void SstvRxRuntime::finishRobotAtImageEnd(
     if (qEnvironmentVariableIsSet("DECODIUM_SSTV_TRACE_FRAME")) {
         const SstvRobotDecoderMetrics metrics =
             pipeline.robotSession->decoderMetrics();
+        const auto image = pipeline.robotSession->snapshot();
+        std::uint32_t reportedRows = 0U;
+        for (std::uint32_t y = 0U; y < image.height && reportedRows < 5U; ++y) {
+            if (image.isScanlineComplete(y)) continue;
+            std::uint32_t first = image.width, last = 0U, missing = 0U;
+            for (std::uint32_t x = 0U; x < image.width; ++x) {
+                if (image.coverageMask(x, y) == 0x07U) continue;
+                first = std::min(first, x);
+                last = x;
+                ++missing;
+            }
+            qInfo().noquote() << "[SSTV][FRAME] robot incomplete row=" << y
+                << "missing=" << missing << "first=" << first << "last=" << last;
+            ++reportedRows;
+        }
         qInfo().noquote()
             << "[SSTV][FRAME] robot terminal state="
             << static_cast<int>(sessionState)
@@ -4998,6 +5168,118 @@ void SstvRxRuntime::publishPdImage(WorkerPipeline& pipeline, bool force)
     scheduleSnapshotNotification(force);
 }
 
+void SstvRxRuntime::consumeFax480Observations(
+    WorkerPipeline& pipeline, const std::vector<SstvFrequencyObservation>& observations)
+{
+    if (!pipeline.fax480 || observations.empty()) return;
+    for (std::size_t offset=0;offset<observations.size();) {
+        const auto count=std::min(observations.size()-offset,SstvFax480Receiver::MaximumObservationsPerConsume);
+        pipeline.fax480->consume(observations.data()+offset,count);
+        offset+=count;
+    }
+    const auto end=observations.back().centreSample;
+    if (pipeline.fax480->acquired() && (pipeline.fax480->complete()
+        || end-pipeline.fax480LastPublish>=SstvResampler::kOutputSampleRate)) {
+        const bool done=pipeline.fax480->complete();
+        publishFax480Image(pipeline,false);
+        pipeline.fax480LastPublish=end;
+        if (done) pipeline.fax480.reset();
+    }
+}
+
+void SstvRxRuntime::publishFax480Image(WorkerPipeline& pipeline, bool partial)
+{
+    if (!pipeline.fax480 || !pipeline.fax480->acquired()) return;
+    const auto gray=pipeline.fax480->image();
+    const auto coverage=pipeline.fax480->coverage();
+    auto image=std::make_shared<SstvImageSnapshot>();
+    image->width=512U; image->height=pipeline.fax480->height();
+    image->revision=++pipeline.fax480Revision;
+    image->pixels.resize(gray.size()); image->channelCoverage.resize(gray.size());
+    image->completedPixelsPerScanline.assign(image->height,0U);
+    for (std::size_t i=0;i<gray.size();++i) {
+        image->pixels[i]={gray[i],gray[i],gray[i]};
+        if (coverage[i]) {
+            image->channelCoverage[i]=7U; ++image->completedPixels;
+            ++image->completedPixelsPerScanline[i/512U];
+        }
+    }
+    image->coveredComponents=image->completedPixels*3U;
+    ImageSummary summary;
+    summary.available=true; summary.complete=pipeline.fax480->complete() && !partial;
+    summary.partial=partial || (summary.complete && !image->isComplete());
+    summary.acquisitionId=pipeline.radiofaxAcquisitionId; summary.generation=pipeline.generation;
+    summary.revision=image->revision; summary.width=image->width; summary.height=image->height;
+    summary.coveredComponents=image->coveredComponents; summary.completedPixels=image->completedPixels;
+    summary.coverage=image->coverage();
+    summary.linesPublished=std::count_if(image->completedPixelsPerScanline.begin(),image->completedPixelsPerScanline.end(),
+                                         [](std::size_t n){return n==512U;});
+    summary.mode=QStringLiteral("fax480-experimental");
+    recordProgressiveUpdate(pipeline);
+    {
+        const std::lock_guard<std::mutex> lock(m_snapshotMutex);
+        m_snapshot.image=std::move(summary); m_latestImageSnapshot=std::move(image);
+    }
+    scheduleSnapshotNotification(partial || pipeline.fax480->complete());
+}
+
+void SstvRxRuntime::consumeRadiofaxObservations(
+    WorkerPipeline& pipeline, const std::vector<SstvFrequencyObservation>& observations)
+{
+    if (!pipeline.radiofax) return;
+    const auto before = pipeline.radiofax->state();
+    for (std::size_t offset = 0U; offset < observations.size();) {
+        const std::size_t count = std::min(observations.size() - offset,
+            SstvRadiofaxRxSession::MaximumObservationsPerConsume);
+        pipeline.radiofax->consume(observations.data() + offset, count);
+        offset += count;
+    }
+    const bool dirty = !pipeline.radiofax->takeDirtyEvents().empty();
+    if (dirty || pipeline.radiofax->state() != before)
+        publishRadiofaxImage(pipeline, pipeline.radiofax->state() != before);
+}
+
+void SstvRxRuntime::publishRadiofaxImage(WorkerPipeline& pipeline, bool force)
+{
+    if (!pipeline.radiofax) return;
+    auto snapshot = pipeline.radiofax->snapshot();
+    if (!snapshot) return;
+    auto image = std::make_shared<SstvImageSnapshot>(std::move(*snapshot));
+    const auto state = pipeline.radiofax->state();
+    ImageSummary summary;
+    summary.available = true;
+    summary.complete = state == SstvRadiofaxAutoRxState::Complete;
+    summary.partial = state == SstvRadiofaxAutoRxState::Partial || state == SstvRadiofaxAutoRxState::Failed;
+    summary.cancelled = state == SstvRadiofaxAutoRxState::Cancelled;
+    summary.radiofaxStopDetected = pipeline.radiofax->stopSample().has_value();
+    summary.acquisitionId = pipeline.radiofaxAcquisitionId;
+    summary.generation = pipeline.generation;
+    summary.revision = image->revision;
+    summary.width = image->width;
+    summary.height = image->height;
+    summary.coveredComponents = image->coveredComponents;
+    summary.completedPixels = image->completedPixels;
+    summary.coverage = image->coverage();
+    summary.linesPublished = static_cast<std::uint64_t>(std::count_if(
+        image->completedPixelsPerScanline.begin(), image->completedPixelsPerScanline.end(),
+        [width = image->width](std::size_t n) { return n == width; }));
+    summary.mode = QStringLiteral("hffax-experimental");
+    recordProgressiveUpdate(pipeline);
+    {
+        const std::lock_guard<std::mutex> lock(m_snapshotMutex);
+        m_snapshot.image = std::move(summary);
+        m_latestImageSnapshot = std::move(image);
+    }
+    scheduleSnapshotNotification(force);
+}
+
+void SstvRxRuntime::terminateRadiofaxForDiscontinuity(WorkerPipeline& pipeline)
+{
+    if (!pipeline.radiofax) return;
+    pipeline.radiofax->notifyDiscontinuity();
+    publishRadiofaxImage(pipeline, true);
+}
+
 void SstvRxRuntime::consumeAvtObservations(
     WorkerPipeline& pipeline,
     const std::vector<SstvFrequencyObservation>& observations,
@@ -5133,7 +5415,14 @@ void SstvRxRuntime::publishAvtImage(WorkerPipeline& pipeline, bool force)
     summary.coveredComponents = image->coveredComponents;
     summary.completedPixels = image->completedPixels;
     summary.coverage = image->coverage();
-    summary.mode = QString::fromLatin1(spec.stableId);
+    std::string avtModeId = spec.stableId;
+    switch (pipeline.avtSession->variant()) {
+    case SstvAvtVariant::Normal: break;
+    case SstvAvtVariant::Narrow: avtModeId += "-narrow"; break;
+    case SstvAvtVariant::Qrm: avtModeId += "-qrm"; break;
+    case SstvAvtVariant::NarrowQrm: avtModeId += "-narrow-qrm"; break;
+    }
+    summary.mode = QString::fromStdString(avtModeId);
     recordProgressiveUpdate(pipeline);
     if (sessionState != SstvAvtRxSessionState::Receiving) {
         const std::uint64_t retainedEnd = summary.complete
@@ -5143,7 +5432,7 @@ void SstvRxRuntime::publishAvtImage(WorkerPipeline& pipeline, bool force)
                   : saturatingUnsignedAdd(
                         pipeline.avtSession->imageStartSample(), 1U));
         closeRetainedAcquisition(
-            pipeline, retainedEnd, summary.complete, spec.stableId);
+            pipeline, retainedEnd, summary.complete, avtModeId);
     }
     {
         const std::lock_guard<std::mutex> lock(m_snapshotMutex);

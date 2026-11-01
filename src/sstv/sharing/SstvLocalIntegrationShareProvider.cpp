@@ -136,7 +136,7 @@ SstvLocalIntegrationShareProvider::capabilities() const
     value.revocation = true;
     value.remoteDelete = true;
     value.incomingList = true;
-    value.endToEndEncryptionEnvelope = false;
+    value.endToEndEncryptionEnvelope = m_config.encryptedEnvelopes;
     // The compatibility contract requires providers to reject manifests that
     // weaken transport security. This adapter has no transport at all.
     value.strictTlsRequired = true;

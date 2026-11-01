@@ -1219,11 +1219,20 @@ SstvStudioController::executableModes()
                                     + spec.imageDuration.count)
                     / kPicosecondsPerSecond};
         };
-        const auto avt = [](SstvAvtMode mode) {
+        const auto avt = [](SstvAvtMode mode,
+                            SstvAvtVariant variant = SstvAvtVariant::Normal) {
             const SstvAvtModeSpec spec = SstvAvtProtocol::spec(mode);
+            QString suffix;
+            QString label;
+            switch (variant) {
+            case SstvAvtVariant::Normal: break;
+            case SstvAvtVariant::Narrow: suffix = QStringLiteral("-narrow"); label = QStringLiteral(" Narrow"); break;
+            case SstvAvtVariant::Qrm: suffix = QStringLiteral("-qrm"); label = QStringLiteral(" QRM"); break;
+            case SstvAvtVariant::NarrowQrm: suffix = QStringLiteral("-narrow-qrm"); label = QStringLiteral(" Narrow QRM"); break;
+            }
             return ModeDescriptor {
-                QString::fromLatin1(spec.stableId),
-                QString::fromLatin1(spec.displayName),
+                QString::fromLatin1(spec.stableId) + suffix,
+                QString::fromLatin1(spec.displayName) + label,
                 QSize(static_cast<int>(spec.width),
                       static_cast<int>(spec.height)),
                 static_cast<double>(SstvAvtProtocol::HeaderDuration.count
@@ -1273,8 +1282,17 @@ SstvStudioController::executableModes()
             pd(SstvPdMode::Pd240),
             pd(SstvPdMode::Pd290),
             avt(SstvAvtMode::Avt24),
+            avt(SstvAvtMode::Avt24, SstvAvtVariant::Narrow),
+            avt(SstvAvtMode::Avt24, SstvAvtVariant::Qrm),
+            avt(SstvAvtMode::Avt24, SstvAvtVariant::NarrowQrm),
             avt(SstvAvtMode::Avt90),
+            avt(SstvAvtMode::Avt90, SstvAvtVariant::Narrow),
+            avt(SstvAvtMode::Avt90, SstvAvtVariant::Qrm),
+            avt(SstvAvtMode::Avt90, SstvAvtVariant::NarrowQrm),
             avt(SstvAvtMode::Avt94),
+            avt(SstvAvtMode::Avt94, SstvAvtVariant::Narrow),
+            avt(SstvAvtMode::Avt94, SstvAvtVariant::Qrm),
+            avt(SstvAvtMode::Avt94, SstvAvtVariant::NarrowQrm),
             mmsstv(SstvMmsstvMode::Mp73),
             mmsstv(SstvMmsstvMode::Mp115),
             mmsstv(SstvMmsstvMode::Mp140),

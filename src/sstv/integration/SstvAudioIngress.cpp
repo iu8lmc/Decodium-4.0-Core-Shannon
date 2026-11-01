@@ -283,6 +283,7 @@ bool SstvAudioIngress::enqueuePcm16(QVector<short> samples,
             std::chrono::nanoseconds {metadata.monotonicTimestampNs};
         chunk.sequence = sequence;
         chunk.generation = metadata.generation;
+        chunk.sourceDiscontinuity = metadata.sourceDiscontinuity;
 
         bool queued = false;
         try {

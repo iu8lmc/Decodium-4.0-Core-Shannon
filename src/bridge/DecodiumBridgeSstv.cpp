@@ -77,6 +77,8 @@ public:
     {
         const std::lock_guard<std::mutex> lock(m_mutex);
         m_runtime = runtime;
+        m_sourceClock.reset();
+        m_reportedSourceClock = false;
 #if DECODIUM_HAS_HAMDRM
         m_hamDrm = std::move(hamDrm);
         m_enabled = runtime != nullptr || m_hamDrm != nullptr;
@@ -98,9 +100,12 @@ public:
 
     bool submit(QVector<short> samples,
                 int sampleRate,
-                decodium::sstv::SstvRxRouteToken token)
+                decodium::sstv::SstvRxRouteToken token,
+                qint64 sourceTimeNs = -1)
     {
         decodium::sstv::SstvRxRuntime* runtime = nullptr;
+        std::optional<qint64> mappedTime;
+        bool invalidSourceClock = false;
 #if DECODIUM_HAS_HAMDRM
         std::shared_ptr<
             decodium::sstv::hamdrm::waveform::HamDrmNativeRxBackend> hamDrm;
@@ -111,6 +116,21 @@ public:
                 return false;
             }
             runtime = m_runtime;
+            if (runtime && sourceTimeNs >= 0) {
+                mappedTime = m_sourceClock.map(sourceTimeNs,
+                    decodium::sstv::SstvRxRuntime::localMonotonicNowNs());
+                if (mappedTime && !m_reportedSourceClock
+                    && qEnvironmentVariableIsSet("DECODIUM_SSTV_TRACE_TIMELINE")) {
+                    qInfo() << "[SSTV][TIMELINE] capture sample clock active";
+                    m_reportedSourceClock = true;
+                }
+                if (!mappedTime) {
+                    invalidSourceClock = true;
+                    m_sourceClock.reset();
+                }
+            } else if (sourceTimeNs < 0) {
+                m_sourceClock.reset();
+            }
 #if DECODIUM_HAS_HAMDRM
             hamDrm = m_hamDrm;
             if (!runtime && !hamDrm) {
@@ -136,8 +156,13 @@ public:
         }
 #endif
         if (runtime && token.valid()) {
-            accepted = runtime->enqueuePcm16(
-                std::move(samples), sampleRate, token) || accepted;
+            if (invalidSourceClock)
+                qWarning() << "[SSTV] capture sample clock regressed; restarting the RX signal path";
+            accepted = (mappedTime
+                ? runtime->enqueuePcm16At(std::move(samples), sampleRate, token, *mappedTime, true)
+                : runtime->enqueuePcm16At(std::move(samples), sampleRate, token,
+                    decodium::sstv::SstvRxRuntime::localMonotonicNowNs(), false,
+                    invalidSourceClock)) || accepted;
         }
 
         {
@@ -152,6 +177,8 @@ public:
 
 private:
     std::mutex m_mutex;
+    decodium::sstv::SstvSourceClockMapper m_sourceClock;
+    bool m_reportedSourceClock {false};
     std::condition_variable m_drained;
     decodium::sstv::SstvRxRuntime* m_runtime {nullptr};
 #if DECODIUM_HAS_HAMDRM
@@ -2159,6 +2186,188 @@ bool DecodiumBridge::startSstvCalibrationTone(const QString& toneId)
 #endif
 }
 
+bool DecodiumBridge::startSstvRadiofaxTx(int ioc, int linesPerMinute)
+{
+    return startSstvRadiofaxTxAligned(ioc, linesPerMinute, false);
+}
+
+bool DecodiumBridge::startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, bool centeredPhasing)
+{
+#if DECODIUM_HAS_SSTV
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (!m_sstvTxCoordinator) initialiseSstvTx();
+    auto reject = [this](const QString& detail) {
+        m_sstvTxError = detail;
+        emit sstvTxStateChanged();
+        emit errorMessage(detail);
+        return false;
+    };
+    if (!m_sstvTxCoordinator || !m_sstvStudioController)
+        return reject(tr("Native SSTV TX is unavailable"));
+    if ((ioc != 288 && ioc != 576)
+        || (linesPerMinute != 60 && linesPerMinute != 90
+            && linesPerMinute != 120 && linesPerMinute != 240))
+        return reject(tr("Invalid Radiofax IOC or line rate"));
+    const auto prepared = m_sstvStudioController->preparedSnapshot();
+    if (!prepared || prepared->isNull())
+        return reject(tr("Prepare an image before transmitting Radiofax"));
+    if (!sstvTxCanStart()) return reject(sstvTxPreflightRejection());
+    if (!checkSwrAllowsTransmission(QStringLiteral("sstv-tx")))
+        return reject(tr("Radiofax TX was blocked by the Decodium SWR safety check"));
+    bool requestedDeviceFound = false;
+    const QAudioDevice output = resolveTxOutputDevice(&requestedDeviceFound);
+    if (!sstvOutputMatchesConfiguredSelection(m_audioOutputDevice, m_audioOutputDeviceId,
+                                              requestedDeviceFound, output))
+        return reject(tr("The configured Decodium TX audio output is unavailable"));
+    const unsigned channels = output.preferredFormat().channelCount() <= 1 ? 1U : 2U;
+    decodium::sstv::SstvFaxConfig config;
+    config.ioc = ioc == 288 ? decodium::sstv::SstvFaxIoc::Ioc288 : decodium::sstv::SstvFaxIoc::Ioc576;
+    config.linesPerMinute = static_cast<std::uint16_t>(linesPerMinute);
+    config.centeredPhasingWithWhiteEndLine = centeredPhasing;
+    config.sampleRate = 48'000U;
+    config.width = static_cast<std::uint32_t>(prepared->width());
+    config.height = static_cast<std::uint32_t>(prepared->height());
+    decodium::sstv::SstvTxPreparedAudioRequest request;
+    try {
+        const QImage gray = prepared->convertToFormat(QImage::Format_Grayscale8);
+        if (gray.isNull()) return reject(tr("Cannot convert the image to grayscale"));
+        std::vector<std::uint8_t> pixels;
+        pixels.reserve(static_cast<std::size_t>(config.width) * config.height);
+        for (int y = 0; y < gray.height(); ++y) {
+            const auto* line = gray.constScanLine(y);
+            pixels.insert(pixels.end(), line, line + gray.width());
+        }
+        const decodium::sstv::SstvRadiofaxMapper mapper(config);
+        request.source = decodium::sstv::makeRadiofaxPcm16Source(pixels, config);
+        request.headerEndFrame = mapper.imageStartSample();
+        // Radiofax stop and final black are part of the transmitted protocol;
+        // keep PTT and the image-phase watchdog active until they finish.
+        request.imageEndFrame = mapper.totalSamples();
+    } catch (const std::exception& exception) {
+        return reject(tr("Cannot prepare Radiofax audio: %1").arg(QString::fromUtf8(exception.what())));
+    }
+    request.mode = "hffax-experimental";
+    request.width = config.width;
+    request.height = config.height;
+    request.channelCount = channels;
+    if (channels == 1U || m_audioOutputChannel == 0 || m_audioOutputChannel == 3)
+        request.channelRoute = decodium::sstv::SstvTxChannelRoute::Both;
+    else if (m_audioOutputChannel == 1)
+        request.channelRoute = decodium::sstv::SstvTxChannelRoute::Left;
+    else request.channelRoute = decodium::sstv::SstvTxChannelRoute::Right;
+    static_cast<void>(m_sstvTxCoordinator->tick(sstvTxNowMs()));
+    m_sstvTxOutputDevice = output;
+    m_sstvTxOutputChannels = channels;
+    m_sstvTxOutputPinned = true;
+    m_sstvTxError.clear();
+    m_sstvTxProgress = 0.0;
+    m_sstvTxStartInProgress = true;
+    const auto result = m_sstvTxCoordinator->startPrepared(sstvTxNowMs(), std::move(request));
+    m_sstvTxStartInProgress = false;
+    if (!result.accepted) {
+        m_sstvTxOutputDevice = QAudioDevice {};
+        m_sstvTxOutputChannels = 0U;
+        m_sstvTxOutputPinned = false;
+        return reject(result.detail.empty() ? tr("Radiofax TX preflight failed")
+                                            : QString::fromStdString(result.detail));
+    }
+    m_sstvTxSessionId = static_cast<quint64>(result.sessionId);
+    emit sstvTxStateChanged();
+    emit statusMessage(tr("Experimental Radiofax TX accepted"));
+    return true;
+#else
+    Q_UNUSED(ioc) Q_UNUSED(linesPerMinute) Q_UNUSED(centeredPhasing)
+    emit errorMessage(tr("This Decodium build has no native SSTV support"));
+    return false;
+#endif
+}
+
+bool DecodiumBridge::startSstvFax480Tx(const QString& profile)
+{
+#if DECODIUM_HAS_SSTV
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (!m_sstvTxCoordinator) initialiseSstvTx();
+    auto reject = [this](const QString& detail) {
+        m_sstvTxError = detail;
+        emit sstvTxStateChanged();
+        emit errorMessage(detail);
+        return false;
+    };
+    if (!m_sstvTxCoordinator || !m_sstvStudioController)
+        return reject(tr("Native SSTV TX is unavailable"));
+    using decodium::sstv::SstvFax480Profile;
+    if (profile != QStringLiteral("dayton-480") && profile != QStringLiteral("qsstv-500")
+        && profile != QStringLiteral("libsstv-vis-480"))
+        return reject(tr("Invalid FAX480 profile"));
+    const auto faxProfile = profile == QStringLiteral("dayton-480") ? SstvFax480Profile::Dayton480
+        : (profile == QStringLiteral("qsstv-500") ? SstvFax480Profile::Qsstv500 : SstvFax480Profile::LibsstvVis480);
+    const auto prepared = m_sstvStudioController->preparedSnapshot();
+    if (!prepared || prepared->isNull())
+        return reject(tr("Prepare an image before transmitting FAX480"));
+    if (!sstvTxCanStart()) return reject(sstvTxPreflightRejection());
+    if (!checkSwrAllowsTransmission(QStringLiteral("sstv-tx")))
+        return reject(tr("FAX480 TX was blocked by the Decodium SWR safety check"));
+    bool requestedDeviceFound = false;
+    const QAudioDevice output = resolveTxOutputDevice(&requestedDeviceFound);
+    if (!sstvOutputMatchesConfiguredSelection(m_audioOutputDevice, m_audioOutputDeviceId,
+                                              requestedDeviceFound, output))
+        return reject(tr("The configured Decodium TX audio output is unavailable"));
+    const unsigned channels = output.preferredFormat().channelCount() <= 1 ? 1U : 2U;
+    constexpr std::uint32_t sampleRate = 48'000U;
+    const decodium::sstv::SstvFax480Mapper mapper(faxProfile, sampleRate);
+    decodium::sstv::SstvTxPreparedAudioRequest request;
+    try {
+        const QImage gray = prepared->scaled(512, int(mapper.height()), Qt::IgnoreAspectRatio,
+                                             Qt::SmoothTransformation).convertToFormat(QImage::Format_Grayscale8);
+        if (gray.isNull()) return reject(tr("Cannot convert the image to grayscale"));
+        std::vector<std::uint8_t> pixels;
+        pixels.reserve(std::size_t(512U) * mapper.height());
+        for (int y = 0; y < gray.height(); ++y) {
+            const auto* line = gray.constScanLine(y);
+            pixels.insert(pixels.end(), line, line + gray.width());
+        }
+        request.source = decodium::sstv::makeFax480Pcm16Source(pixels, faxProfile, sampleRate);
+        request.headerEndFrame = mapper.imageStart();
+        request.imageEndFrame = mapper.totalSamples();
+    } catch (const std::exception& exception) {
+        return reject(tr("Cannot prepare FAX480 audio: %1").arg(QString::fromUtf8(exception.what())));
+    }
+    request.mode = "fax480-experimental";
+    request.width = 512U;
+    request.height = mapper.height();
+    request.channelCount = channels;
+    if (channels == 1U || m_audioOutputChannel == 0 || m_audioOutputChannel == 3)
+        request.channelRoute = decodium::sstv::SstvTxChannelRoute::Both;
+    else if (m_audioOutputChannel == 1)
+        request.channelRoute = decodium::sstv::SstvTxChannelRoute::Left;
+    else request.channelRoute = decodium::sstv::SstvTxChannelRoute::Right;
+    static_cast<void>(m_sstvTxCoordinator->tick(sstvTxNowMs()));
+    m_sstvTxOutputDevice = output;
+    m_sstvTxOutputChannels = channels;
+    m_sstvTxOutputPinned = true;
+    m_sstvTxError.clear();
+    m_sstvTxProgress = 0.0;
+    m_sstvTxStartInProgress = true;
+    const auto result = m_sstvTxCoordinator->startPrepared(sstvTxNowMs(), std::move(request));
+    m_sstvTxStartInProgress = false;
+    if (!result.accepted) {
+        m_sstvTxOutputDevice = QAudioDevice {};
+        m_sstvTxOutputChannels = 0U;
+        m_sstvTxOutputPinned = false;
+        return reject(result.detail.empty() ? tr("FAX480 TX preflight failed")
+                                            : QString::fromStdString(result.detail));
+    }
+    m_sstvTxSessionId = static_cast<quint64>(result.sessionId);
+    emit sstvTxStateChanged();
+    emit statusMessage(tr("Experimental FAX480 TX accepted"));
+    return true;
+#else
+    Q_UNUSED(profile)
+    emit errorMessage(tr("This Decodium build has no native SSTV support"));
+    return false;
+#endif
+}
+
 bool DecodiumBridge::startSstvTx(const QString& fskId)
 {
 #if DECODIUM_HAS_SSTV
@@ -2432,6 +2641,17 @@ QVariantMap DecodiumBridge::sstvRxControls() const
         return result;
     }
     const auto controls = m_sstvRxRuntime->rxControlSnapshot();
+    const auto fax480 = m_sstvRxRuntime->fax480Config();
+    result.insert(QStringLiteral("fax480Enabled"), fax480.has_value());
+    result.insert(QStringLiteral("fax480Profile"), !fax480 || *fax480 == decodium::sstv::SstvFax480Profile::Dayton480
+                  ? QStringLiteral("dayton-480") : (*fax480 == decodium::sstv::SstvFax480Profile::Qsstv500
+                     ? QStringLiteral("qsstv-500") : QStringLiteral("libsstv-vis-480")));
+    const auto fax = m_sstvRxRuntime->radiofaxConfig();
+    result.insert(QStringLiteral("radiofaxEnabled"), fax.has_value());
+    result.insert(QStringLiteral("radiofaxIoc"), fax ? int(fax->ioc) : 576);
+    result.insert(QStringLiteral("radiofaxWidth"), fax ? int(fax->width) : 1809);
+    result.insert(QStringLiteral("radiofaxCenteredPhasing"), fax && fax->centeredPhasingWithWhiteEndLine);
+    result.insert(QStringLiteral("radiofaxHeight"), fax ? int(fax->height) : 1000);
     result.insert(QStringLiteral("modeControl"),
                   sstvRxModeControlName(controls.settings.modeControl));
     result.insert(QStringLiteral("manualMode"),
@@ -2535,7 +2755,29 @@ QVariantMap DecodiumBridge::sstvRxDiagnostics() const
     result.insert(QStringLiteral("state"), sstvRxState());
     result.insert(QStringLiteral("source"), sstvRxSource());
     result.insert(QStringLiteral("sourceDevice"), sstvRxSourceDevice());
+    result.insert(QStringLiteral("audioSuspendedForTx"), m_rxAudioSuspendedForTx);
+    result.insert(QStringLiteral("transmitting"), m_transmitting);
+    result.insert(QStringLiteral("monitoring"), m_monitoring);
+#if DECODIUM_HAS_SSTV
+    result.insert(QStringLiteral("audioDiscarding"), m_audioSink && m_audioSink->discardingSamples());
+    result.insert(QStringLiteral("localAudioTapConnected"), bool(m_sstvLocalAudioTap));
+    result.insert(QStringLiteral("legacyAudioTapConnected"), bool(m_sstvLegacyAudioTap));
+#endif
+    result.insert(QStringLiteral("audioSinkPresent"), bool(m_audioSink));
+    result.insert(QStringLiteral("audioHealthTimestampMs"), m_lastAudioHealthMs);
 
+#if DECODIUM_HAS_SSTV && DECODIUM_HAS_HAMDRM
+    if (m_hamDrmRxBackend) {
+        const auto stats = m_hamDrmRxBackend->statistics();
+        result.insert(QStringLiteral("hamdrmAcceptedChunks"), QVariant::fromValue<qulonglong>(stats.acceptedChunks));
+        result.insert(QStringLiteral("hamdrmAcceptedSamples"), QVariant::fromValue<qulonglong>(stats.acceptedSamples));
+        result.insert(QStringLiteral("hamdrmDeliveredGroups"), QVariant::fromValue<qulonglong>(stats.deliveredGroups));
+        result.insert(QStringLiteral("hamdrmRequested"), m_hamDrmRxRequested);
+        result.insert(QStringLiteral("hamdrmActive"), m_hamDrmRxBackend->active());
+        result.insert(QStringLiteral("hamdrmSourceKind"), m_hamDrmRxSourceKind);
+        result.insert(QStringLiteral("hamdrmStreamId"), m_hamDrmRxStreamId);
+    }
+#endif
 #if DECODIUM_HAS_SSTV
     if (!m_sstvRxRuntime) {
         return result;
@@ -2578,6 +2820,7 @@ QVariantMap DecodiumBridge::sstvRxDiagnostics() const
                   snapshot.vis.modeMapped ? snapshot.vis.mappedMode : QString());
     result.insert(QStringLiteral("imageAvailable"), snapshot.image.available);
     result.insert(QStringLiteral("imageComplete"), snapshot.image.complete);
+    result.insert(QStringLiteral("imageRadiofaxStopDetected"), snapshot.image.radiofaxStopDetected);
     result.insert(QStringLiteral("imagePartial"), snapshot.image.partial);
     result.insert(QStringLiteral("imageCancelled"), snapshot.image.cancelled);
     result.insert(QStringLiteral("imageGeneration"),
@@ -4365,9 +4608,26 @@ DecodiumBridge::activateHamDrmRxTap()
         return HamDrmStatus::success();
     }
 
+    // In legacy FT modes the raw legacy tap can remain silent after TX. Reuse
+    // the native SSTV capture arbitration, including its existing restoration
+    // of legacy monitoring, when no analog SSTV receiver already owns it.
+    const bool needsNativeLegacyCapture = !m_sstvRxRequested
+        && usingLegacyBackendForRx() && !m_decoPortUseRemote
+        && !rtlSdrEnabled() && !usingTciAudioInput();
+    if (needsNativeLegacyCapture) {
+        if (!startSstvRx()) {
+            return HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                         "HAMDRM could not start the shared native SSTV capture");
+        }
+        m_hamDrmOwnsSstvRx = true;
+    }
     const SstvAudioSourceKind kind = currentSstvAudioSourceKind();
     const quint32 streamId = currentSstvAudioStreamId(kind);
     if (kind == SstvAudioSourceKind::Unknown || streamId == 0U) {
+        if (m_hamDrmOwnsSstvRx) {
+            m_hamDrmOwnsSstvRx = false;
+            stopSstvRx();
+        }
         return HamDrmStatus::failure(
             HamDrmErrorCode::IoFailure,
             "no Decodium RX audio source is available for HAMDRM");
@@ -4389,6 +4649,10 @@ DecodiumBridge::activateHamDrmRxTap()
             SstvAudioSourceKind::Unknown);
         m_hamDrmRxStreamId = 0U;
         refreshSstvProducerTaps();
+        if (m_hamDrmOwnsSstvRx) {
+            m_hamDrmOwnsSstvRx = false;
+            stopSstvRx();
+        }
         return HamDrmStatus::failure(
             HamDrmErrorCode::IoFailure,
             "HAMDRM RX requires an active Decodium monitor");
@@ -4411,6 +4675,8 @@ void DecodiumBridge::deactivateHamDrmRxTap()
         && m_sstvRxRequested;
     const bool stopOwnedMonitor = m_hamDrmOwnsMonitoring
         && !m_sstvRxRequested && (m_monitoring || m_monitorRequested);
+    const bool stopOwnedSstvRx = m_hamDrmOwnsSstvRx && m_sstvRxRequested;
+    m_hamDrmOwnsSstvRx = false;
     if (transferMonitoring) {
         m_sstvOwnsMonitoring = true;
     }
@@ -4423,6 +4689,9 @@ void DecodiumBridge::deactivateHamDrmRxTap()
     refreshSstvProducerTaps();
     if (stopOwnedMonitor) {
         setMonitoring(false);
+    }
+    if (stopOwnedSstvRx) {
+        stopSstvRx();
     }
     emit statusMessage(tr("HAMDRM RX detached from the Decodium audio monitor"));
 }
@@ -4493,9 +4762,9 @@ void DecodiumBridge::refreshSstvProducerTaps()
     case SstvAudioSourceKind::WebSdr:
         if (m_audioSink) {
             m_sstvLocalAudioTap = connect(
-                m_audioSink, &DecodiumAudioSink::audioSamplesProduced,
-                this, [relay, token](QVector<short> samples) {
-                    relay->submit(std::move(samples), SAMPLE_RATE, token);
+                m_audioSink, &DecodiumAudioSink::audioSamplesProducedWithSourceTime,
+                this, [relay, token](QVector<short> samples, qint64 sourceTimeNs) {
+                    relay->submit(std::move(samples), SAMPLE_RATE, token, sourceTimeNs);
                 }, Qt::DirectConnection);
         }
         break;
@@ -4993,6 +5262,10 @@ bool DecodiumBridge::startSstvRx()
     }
     if (m_sstvRxRequested
         && m_sstvRxRuntime->state() == SstvRxRuntime::State::Running) {
+#if DECODIUM_HAS_HAMDRM
+        // A caller explicitly starting an already shared receiver adopts it.
+        m_hamDrmOwnsSstvRx = false;
+#endif
         return true;
     }
 
@@ -5148,6 +5421,10 @@ bool DecodiumBridge::startSstvRx()
 
 void DecodiumBridge::stopSstvRx()
 {
+#if DECODIUM_HAS_SSTV
+#if DECODIUM_HAS_HAMDRM
+    m_hamDrmOwnsSstvRx = false;
+#endif
 #if DECODIUM_HAS_SSTV && DECODIUM_HAS_HAMDRM
     const bool digitalContinues = m_hamDrmRxRequested
         && m_hamDrmRxBackend && m_hamDrmRxBackend->active();
@@ -5218,10 +5495,15 @@ void DecodiumBridge::stopSstvRx()
         }
     }
     emit statusMessage(tr("SSTV RX stopped"));
+#endif
 }
 
 void DecodiumBridge::stopSstvRxForMonitorStop()
 {
+#if DECODIUM_HAS_SSTV
+#if DECODIUM_HAS_HAMDRM
+    m_hamDrmOwnsSstvRx = false;
+#endif
 #if DECODIUM_HAS_SSTV && DECODIUM_HAS_HAMDRM
     const bool digitalActive = m_hamDrmRxRequested && m_hamDrmRxBackend
         && m_hamDrmRxBackend->active();
@@ -5257,6 +5539,7 @@ void DecodiumBridge::stopSstvRxForMonitorStop()
 #endif
     emit sstvRxStateChanged();
     emit sstvRxSnapshotChanged();
+#endif
 }
 
 bool DecodiumBridge::resetSstvRx()
@@ -5295,6 +5578,57 @@ bool DecodiumBridge::abortSstvRxFrame()
     }
     return aborted;
 #else
+    return false;
+#endif
+}
+
+bool DecodiumBridge::configureSstvFax480Rx(bool enabled, const QString& profile)
+{
+#if DECODIUM_HAS_SSTV
+    initialiseSstvRuntime();
+    if (!m_sstvRxRuntime || m_sstvRxRequested || m_sstvRedecodeActive) return false;
+    using decodium::sstv::SstvFax480Profile;
+    if (enabled && profile!=QStringLiteral("dayton-480") && profile!=QStringLiteral("qsstv-500")
+        && profile!=QStringLiteral("libsstv-vis-480")) return false;
+    std::optional<SstvFax480Profile> selected;
+    if (enabled) selected=profile==QStringLiteral("dayton-480") ? SstvFax480Profile::Dayton480
+        : (profile==QStringLiteral("qsstv-500") ? SstvFax480Profile::Qsstv500 : SstvFax480Profile::LibsstvVis480);
+    const bool accepted=m_sstvRxRuntime->setFax480Config(selected);
+    if (accepted) emit sstvRxSnapshotChanged();
+    return accepted;
+#else
+    Q_UNUSED(enabled) Q_UNUSED(profile)
+    return false;
+#endif
+}
+
+bool DecodiumBridge::configureSstvRadiofaxRx(bool enabled, int ioc, int width, int height)
+{
+    return configureSstvRadiofaxRxAligned(enabled, ioc, width, height, false);
+}
+
+bool DecodiumBridge::configureSstvRadiofaxRxAligned(bool enabled, int ioc, int width, int height,
+                                                    bool centeredPhasingWithWhiteEndLine)
+{
+#if DECODIUM_HAS_SSTV
+    initialiseSstvRuntime();
+    if (!m_sstvRxRuntime || m_sstvRxRequested || m_sstvRedecodeActive
+        || (enabled && ((ioc != 288 && ioc != 576) || width < 1 || height < 1)))
+        return false;
+    std::optional<decodium::sstv::SstvFaxConfig> config;
+    if (enabled) {
+        config.emplace();
+        config->ioc = ioc == 288 ? decodium::sstv::SstvFaxIoc::Ioc288
+                                 : decodium::sstv::SstvFaxIoc::Ioc576;
+        config->width = static_cast<std::uint32_t>(width);
+        config->height = static_cast<std::uint32_t>(height);
+        config->centeredPhasingWithWhiteEndLine = centeredPhasingWithWhiteEndLine;
+    }
+    const bool accepted = m_sstvRxRuntime->setRadiofaxConfig(config);
+    if (accepted) emit sstvRxSnapshotChanged();
+    return accepted;
+#else
+    Q_UNUSED(enabled) Q_UNUSED(ioc) Q_UNUSED(width) Q_UNUSED(height) Q_UNUSED(centeredPhasingWithWhiteEndLine)
     return false;
 #endif
 }

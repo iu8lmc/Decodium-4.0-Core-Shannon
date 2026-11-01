@@ -3,6 +3,7 @@
 #define SOUNDIN_H__
 
 #include <limits>
+#include <atomic>
 #include <QObject>
 #include <QString>
 #include <QDateTime>
@@ -86,6 +87,7 @@ private:
   QPointer<AudioDevice> m_sink;
 #if defined(Q_OS_MACOS)
   AudioQueueRef m_audioQueue {nullptr};
+  std::atomic<quint64> m_nativeCallbackCount {0};
   QVector<AudioQueueBufferRef> m_audioQueueBuffers;
   QAudioFormat m_nativeInputFormat;
   QPointer<QIODevice> m_pullDevice;

@@ -148,6 +148,7 @@ private Q_SLOTS:
   void handlesFragmentedEventsAndArbitraryConsumeChunks ();
   void trimsBoundedOverlapWithoutChangingFrame ();
   void rejectsGapsBeyondConfiguredBound ();
+  void toleratesOnlyBoundedLeaderDropouts ();
   void reacquiresLeaderThatStartsAfterRejectedGap ();
   void ignoresNoiseAndLowConfidenceWithoutLocking ();
   void rejectsHeaderTimingAndBadParity ();
@@ -344,6 +345,54 @@ void TestSstvVisDetector::rejectsGapsBeyondConfiguredBound ()
   QCOMPARE (classifiedResult.size (), std::size_t {1u});
   QCOMPARE (classifiedResult.front ().cause,
             SstvVisDetectionCause::GapExceeded);
+}
+
+void TestSstvVisDetector::toleratesOnlyBoundedLeaderDropouts ()
+{
+  SstvVisDetectorConfig config;
+  config.maximumLeaderGapUs = 15'000;
+  for (const auto payload : {std::uint8_t {0}, std::uint8_t {0x42}}) {
+    const auto frame = standardFrame (payload);
+    std::vector<SstvVisToneEvent> split = frame;
+    const auto leader = split.at (2);
+    split[2].durationUs = 220'000;
+    split.insert (split.begin () + 3,
+                  {leader.startTimeUs + 232'500, 67'500, 1900.0, 0.9});
+    SstvVisDetector raw (config);
+    const auto decoded = raw.consume (split);
+    QCOMPARE (decoded.size (), std::size_t {1});
+    QVERIFY (decoded.front ().valid ());
+    QCOMPARE (decoded.front ().codecResult.primary.payload, payload);
+
+    std::vector<SstvVisClassifiedEvent> classified;
+    for (const auto& event : split) {
+      const auto tone = event.frequencyHz == 1900.0 ? SstvVisToneKind::Leader
+          : event.frequencyHz == 1200.0 ? SstvVisToneKind::Separator
+          : event.frequencyHz == 1100.0 ? SstvVisToneKind::BitOne
+          : SstvVisToneKind::BitZero;
+      classified.push_back ({event.startTimeUs, event.durationUs, tone, 0.0, event.confidence});
+    }
+    SstvVisDetector classifiedDetector (config);
+    const auto classifiedResult = classifiedDetector.consumeClassified (classified);
+    QCOMPARE (classifiedResult.size (), std::size_t {1});
+    QVERIFY (classifiedResult.front ().valid ());
+    QCOMPARE (classifiedResult.front ().codecResult.primary.payload, payload);
+
+    split[3].startTimeUs += 5'001;
+    split[3].durationUs -= 5'001;
+    SstvVisDetector tooLong (config);
+    const auto rejected = tooLong.consume (split);
+    QVERIFY (!rejected.empty ());
+    QCOMPARE (rejected.front ().cause, SstvVisDetectionCause::GapExceeded);
+
+    auto dataGap = frame;
+    for (std::size_t index = 5; index < dataGap.size (); ++index)
+      dataGap[index].startTimeUs += 5'001;
+    SstvVisDetector strictData (config);
+    const auto dataRejected = strictData.consume (dataGap);
+    QVERIFY (!dataRejected.empty ());
+    QCOMPARE (dataRejected.front ().cause, SstvVisDetectionCause::GapExceeded);
+  }
 }
 
 void TestSstvVisDetector::reacquiresLeaderThatStartsAfterRejectedGap ()

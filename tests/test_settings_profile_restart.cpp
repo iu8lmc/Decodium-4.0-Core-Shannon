@@ -1,6 +1,9 @@
 // Cross-process storage test. Does not instantiate radio/audio services or use
 // the operator's settings. GUI/backend integration is a separate validation.
 #include "../src/radio/DecodiumProfileSettings.h"
+#include "../src/bridge/SettingsAsyncHandoff.h"
+#include <QThreadPool>
+#include <QRunnable>
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
@@ -80,6 +83,28 @@ private slots:
         settings.sync();
 
         QCOMPARE(decodium::profiledSettingsValue({}, "MaxCallerRetries", 10).toInt(), 3);
+    }
+
+    void asyncSettingsHandoffKeepsThreadAffinity()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QThreadPool pool;
+        pool.setMaxThreadCount(1);
+        const auto path = dir.filePath(QStringLiteral("handoff.ini"));
+        for (int i = 0; i < 200; ++i) {
+            auto* settings = new QSettings(path, QSettings::IniFormat);
+            settings->setValue(QStringLiteral("value"), i);
+            decodium::detachSettingsForWorker(settings);
+            pool.start(QRunnable::create([settings] {
+                decodium::flushDetachedSettings(settings);
+            }));
+            QCoreApplication::processEvents();
+        }
+        QVERIFY(pool.waitForDone(15'000));
+        QCoreApplication::processEvents();
+        QSettings verify(path, QSettings::IniFormat);
+        QCOMPARE(verify.value(QStringLiteral("value")).toInt(), 199);
     }
 
     void separateProcessesAndProfiles()

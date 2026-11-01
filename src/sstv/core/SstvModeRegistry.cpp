@@ -1029,31 +1029,28 @@ void populateAvtCatalogueVariant(SstvModeSpec& mode,
                                  SstvAvtMode avtMode,
                                  SstvAvtVariant variant)
 {
-    SstvVisSpec vis;
-    vis.encoding = VisEncoding::StandardSevenBit;
-    vis.bitCount = 7U;
-    vis.standardCode = SstvAvtSyncCodec::visPayload(avtMode, variant);
-    vis.lsbFirst = true;
-    vis.parity = Parity::Even;
-    mode.vis = std::move(vis);
-    mode.catalogueReferences.push_back(
-        "tests/sstv/fixtures/avt-handbook-qsstv-landmarks.json");
-    mode.catalogueReferences.push_back("docs/sstv/AVT_PROTOCOL.md");
-    mode.protocolProvenance = {
-        "The standard VIS identity and its Narrow/QRM flags were audited "
-        "from pinned documentary/source landmarks.",
-        "Complete variant countdown, carrier treatment and picture semantics "
-        "have not been established independently, so no executable RX, TX "
-        "or auto-detect capability is claimed."
-    };
-    mode.evidenceStatus = EvidenceStatus::AuditedSources;
-    mode.interoperabilityStatus = InteroperabilityStatus::NotTested;
-    mode.fixtureStatus = FixtureStatus::Missing;
-    mode.protocolDataComplete = false;
+    populateAvt(mode, SstvAvtProtocol::spec(avtMode));
+    mode.vis->standardCode = SstvAvtSyncCodec::visPayload(avtMode, variant);
+    if (SstvAvtSyncCodec::isNarrow(variant)) {
+        mode.colour.conversionRule =
+            "Full-range RGB8; component value v maps to 1700 + 400*v/255 Hz.";
+        mode.timing.nominalAudioBandwidth = SstvAudioBandwidth {1'100U, 2'100U};
+    }
+    if (SstvAvtSyncCodec::isQrm(variant)) {
+        mode.specialLineOrdering =
+            "Even raster rows are transmitted first, then odd raster rows; "
+            "each row contains continuous red, green and blue components.";
+    }
+    mode.fallbackSignature.discriminator =
+        "The variant VIS identity and protected countdown are required; "
+        "there is no timing-only or line-sync fallback.";
+    mode.protocolProvenance.push_back(
+        "AEA AVT System manual pages 59-60 specify even rows followed by odd "
+        "rows for QRM; SSTV Handbook section 4.2.5 describes narrow tones.");
     mode.statusNote =
-        "Catalogue-only AVT identity: the standard VIS header is known, but "
-        "complete variant semantics and independent evidence are missing. "
-        "RX, TX and auto-detect remain deliberately unimplemented.";
+        "Native variant RX/TX uses a protected countdown and local PCM "
+        "loopback tests. Independent application and on-air verification "
+        "remain pending.";
 }
 
 void addIssue(std::vector<ModeValidationIssue>& issues,

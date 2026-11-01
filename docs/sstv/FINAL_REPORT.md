@@ -147,9 +147,10 @@ create a second manually maintained table.
 | PD | PD50, 90, 120, 160, 180, 240, 290 | 7 | pySSTV/libsstv landmarks; libsstv's defective suffix is rejected |
 | AVT normal | AVT24, AVT90, AVT94 | 3 | Handbook/source landmarks and native loopback only |
 | MMSSTV extended/narrow | MP73/115/140/175; MR73/90/115/140/175; ML180/240/280/320; MP73N/110N/140N; MC110N/140N/180N | 19 | pinned source landmarks, no independent PCM |
-| Related/catalogue-only | FAX480, HFFAX, WEFAX; AVT Narrow/QRM variants | 12 rows beyond the 52 above | blocked or unavailable, and not advertised as implemented SSTV |
+| AVT variants | Narrow, QRM, Narrow-QRM for AVT24/90/94 | 9 | local tests; independent and on-air verification pending |
+| Related/catalogue-only | FAX480, HFFAX, WEFAX | 3 | blocked or unavailable |
 
-All 52 native rows implement RX, TX and automatic protocol detection and have
+All 61 native rows implement RX, TX and automatic protocol detection and have
 deterministic coverage. “Implemented” does not mean independently interoperable.
 
 ## 6. Digital/HAMDRM compatibility matrix
@@ -282,7 +283,7 @@ Historical pre-rebase supplemental evidence includes:
 - untouched baseline: 37/37 CTest tests;
 - focused mode-doc, external-vector, performance, sharing-core and
   schema-v3 queue run;
-- family protocol/RX/TX/WAV/Studio tests for all 52 native analog rows;
+- family protocol/RX/TX/WAV/Studio tests for the original 52 native analog rows; AVT variant coverage is detailed in AVT_PROTOCOL.md;
 - offscreen Receive, Studio, Gallery, Sharing, Settings, QSO, Diagnostics and
   Digital QML tests in focused runs;
 - storage/migration/retention/delete, 5,000-row Gallery, sharing provider/
@@ -441,8 +442,8 @@ included.
 - No production sharing backend, real provider account or complete
   maintained-platform secure-store test exists.
 - E2EE lacks an audited dependency, envelope/key lifecycle, packaging and vectors.
-- FAX480 has unresolved 512x500 versus 512x480 geometry; HFFAX/WEFAX and AVT
-  Narrow/QRM lack complete defensible semantics.
+- FAX480 has unresolved 512x500 versus 512x480 geometry; HFFAX/WEFAX
+  profiles remain unimplemented. AVT variants lack independent waveform proof.
 - Final packages have not been inspected for QSQLITE, Qt image plugins,
   ShaderTools/QML assets and OpenJPEG closure.
 - Coverage-guided libFuzzer runs, longer sanitizer concurrency/shutdown stress,
@@ -506,7 +507,7 @@ Suggested body:
 ## Summary
 
 Adds an in-process Decodium4 SSTV workspace with native analog RX/TX for the
-52 implemented rows in docs/sstv/MODE_MATRIX.md, progressive reception,
+61 implemented rows in docs/sstv/MODE_MATRIX.md, progressive reception,
 Studio/WAV/loopback, existing SoundOutput/CAT/PTT coordination, Gallery/QSO
 storage, opt-in provider-neutral sharing, diagnostics and separately gated
 HAMDRM.

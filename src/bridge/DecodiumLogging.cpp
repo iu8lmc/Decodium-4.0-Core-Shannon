@@ -360,6 +360,9 @@ public:
         quint64 sequence = 0;
         {
             QMutexLocker lock(&m_mutex);
+            if (!m_acceptingCommands) {
+                return;
+            }
             // The writer is a function-local static. It must be stopped while
             // Qt is still alive; otherwise QThread's static destructor aborts
             // the process if the worker is waiting for another command.

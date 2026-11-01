@@ -211,6 +211,7 @@ SstvTxTransition SstvTxStateMachine::dispatch(
         }
         metrics_.encodedSamples = encoded->totalSamples;
         metrics_.sampleRate = encoded->sampleRate;
+        metrics_.headerDurationMs = (encoded->headerSamples * 1'000U + encoded->sampleRate - 1U) / encoded->sampleRate;
         metrics_.fskIdEnabled = encoded->fskIdEnabled;
         metrics_.encodedDurationMs =
             (encoded->totalSamples * 1'000U + encoded->sampleRate - 1U)
@@ -487,6 +488,7 @@ void SstvTxStateMachine::clearSession() noexcept
     metrics_.currentSessionId = 0U;
     metrics_.encodedSamples = 0U;
     metrics_.encodedDurationMs = 0U;
+    metrics_.headerDurationMs = 0U;
     metrics_.sampleRate = 0U;
     metrics_.imageWidth = 0U;
     metrics_.imageHeight = 0U;
@@ -633,6 +635,12 @@ std::uint64_t SstvTxStateMachine::timeoutForState() const noexcept
     case SstvTxState::WaitingForPtt:
         return policy_.timeouts.waitingForPttMs;
     case SstvTxState::TransmittingHeader:
+        if (metrics_.headerDurationMs >= policy_.timeouts.transmittingHeaderMs) {
+            if (metrics_.headerDurationMs > std::numeric_limits<std::uint64_t>::max()
+                    - policy_.timeouts.transmittingHeaderMs)
+                return std::numeric_limits<std::uint64_t>::max();
+            return metrics_.headerDurationMs + policy_.timeouts.transmittingHeaderMs;
+        }
         return policy_.timeouts.transmittingHeaderMs;
     case SstvTxState::TransmittingImage:
         if (metrics_.encodedDurationMs
@@ -667,7 +675,8 @@ bool SstvTxStateMachine::validPrepare(
 bool SstvTxStateMachine::validEncoding(
     const SstvTxEncodingComplete& encoded) const noexcept
 {
-    if (encoded.totalSamples == 0U
+    if (encoded.headerSamples > encoded.totalSamples
+        || encoded.totalSamples == 0U
         || encoded.totalSamples > policy_.maximumEncodedSamples
         || encoded.sampleRate < policy_.minimumSampleRate
         || encoded.sampleRate > policy_.maximumSampleRate) {

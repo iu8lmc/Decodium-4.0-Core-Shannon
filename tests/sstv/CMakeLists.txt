@@ -51,6 +51,17 @@ set_target_properties (generate_sstv_mode_matrix PROPERTIES
   CXX_STANDARD_REQUIRED ON
   )
 add_decodium_sstv_test (test_sstv_timing test_sstv_timing.cpp)
+add_decodium_sstv_test (test_sstv_fax480 test_sstv_fax480.cpp)
+add_executable (decode_libsstv_fax EXCLUDE_FROM_ALL tools/decode_libsstv_fax.cpp)
+target_link_libraries (decode_libsstv_fax PRIVATE Decodium::SstvCore)
+target_compile_features (decode_libsstv_fax PRIVATE cxx_std_17)
+add_executable (decode_fax480_capture EXCLUDE_FROM_ALL tools/decode_fax480_capture.cpp)
+target_link_libraries (decode_fax480_capture PRIVATE Decodium::SstvCore Qt6::Gui)
+target_compile_features (decode_fax480_capture PRIVATE cxx_std_17)
+add_executable (export_fax480_capture EXCLUDE_FROM_ALL tools/export_fax480_capture.cpp)
+target_link_libraries (export_fax480_capture PRIVATE Decodium::SstvCore Qt6::Gui)
+target_compile_features (export_fax480_capture PRIVATE cxx_std_17)
+add_dependencies (test_sstv_fax480 decode_fax480_capture export_fax480_capture)
 add_decodium_sstv_test (test_sstv_vis test_sstv_vis.cpp)
 add_decodium_sstv_test (test_sstv_narrow_vis test_sstv_narrow_vis.cpp)
 target_compile_definitions (test_sstv_narrow_vis PRIVATE
@@ -96,6 +107,7 @@ target_compile_definitions (test_sstv_avt PRIVATE
   )
 add_decodium_sstv_test (test_sstv_avt_rx_session
   test_sstv_avt_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_radiofax test_sstv_radiofax.cpp)
 add_decodium_sstv_test (test_sstv_martin_m1 test_sstv_martin_m1.cpp)
 add_decodium_sstv_test (test_sstv_martin_m1_rx_session
   test_sstv_martin_m1_rx_session.cpp)
@@ -138,6 +150,9 @@ add_decodium_sstv_integration_test (test_sstv_qso_log
   test_sstv_qso_log.cpp)
 add_decodium_sstv_integration_test (test_sstv_rx_runtime
   test_sstv_rx_runtime.cpp)
+add_executable (analyze_sstv_capture EXCLUDE_FROM_ALL tools/analyze_sstv_capture.cpp)
+target_link_libraries (analyze_sstv_capture PRIVATE Decodium::SstvIntegration Qt6::Core)
+target_compile_features (analyze_sstv_capture PRIVATE cxx_std_17)
 add_decodium_sstv_integration_test (test_sstv_tx_audio_device
   test_sstv_tx_audio_device.cpp)
 add_decodium_sstv_integration_test (test_sstv_tx_coordinator
@@ -698,7 +713,9 @@ target_link_libraries (test_sstv_http_providers
   )
 target_compile_definitions (test_sstv_http_providers PRIVATE
   DECODIUM_SSTV_ALLOW_INSECURE_LOCAL_TEST_TRANSPORT=1
-  DECODIUM_SSTV_PROVIDER_TESTING=1)
+  DECODIUM_SSTV_PROVIDER_TESTING=1
+  DECODIUM_SSTV_TEST_TLS_CERT="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+  DECODIUM_SSTV_TEST_TLS_KEY="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key")
 set_target_properties (test_sstv_http_providers PROPERTIES
   AUTOMOC OFF
   CXX_EXTENSIONS OFF
@@ -722,6 +739,9 @@ target_link_libraries (test_sstv_http_provider_production_gate
     Qt6::Core
     Qt6::Network
   )
+target_compile_definitions (test_sstv_http_provider_production_gate PRIVATE
+  DECODIUM_SSTV_TEST_TLS_CERT="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+  DECODIUM_SSTV_TEST_TLS_KEY="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key")
 set_target_properties (test_sstv_http_provider_production_gate PROPERTIES
   AUTOMOC OFF
   CXX_EXTENSIONS OFF
@@ -1022,6 +1042,8 @@ if (DECODIUM_ENABLE_HAMDRM)
 
   add_executable (test_hamdrm_phy test_hamdrm_phy.cpp)
   target_link_libraries (test_hamdrm_phy PRIVATE Decodium::HamDrmCore)
+  target_compile_definitions (test_hamdrm_phy PRIVATE
+    DECODIUM_QSSTV_OFDM_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-ofdm-8c27d6d.txt")
   set_target_properties (test_hamdrm_phy PROPERTIES
     AUTOMOC OFF
     CXX_EXTENSIONS OFF
@@ -1034,8 +1056,26 @@ if (DECODIUM_ENABLE_HAMDRM)
     TIMEOUT 30
     )
 
+  add_executable (export_decodium_packets EXCLUDE_FROM_ALL tools/export_decodium_packets.cpp)
+  target_link_libraries (export_decodium_packets PRIVATE Decodium::HamDrmCore)
+  target_compile_features (export_decodium_packets PRIVATE cxx_std_17)
+  add_executable (export_decodium_msc EXCLUDE_FROM_ALL tools/export_decodium_msc.cpp)
+  target_link_libraries (export_decodium_msc PRIVATE Decodium::HamDrmCore)
+  target_compile_features (export_decodium_msc PRIVATE cxx_std_17)
+
+  add_executable (export_decodium_fac EXCLUDE_FROM_ALL tools/export_decodium_fac.cpp)
+  target_link_libraries (export_decodium_fac PRIVATE Decodium::HamDrmCore)
+  target_compile_features (export_decodium_fac PRIVATE cxx_std_17)
+
   add_executable (test_hamdrm_channel test_hamdrm_channel.cpp)
   target_link_libraries (test_hamdrm_channel PRIVATE Decodium::HamDrmCore)
+  target_compile_definitions (test_hamdrm_channel PRIVATE
+    DECODIUM_QSSTV_FAC_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-fac-8c27d6d.txt"
+    DECODIUM_QSSTV_MSC_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-msc-8c27d6d.txt"
+    DECODIUM_QSSTV_CELLMAP_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-cellmap-8c27d6d.txt"
+    DECODIUM_QSSTV_PILOTS_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-pilots-8c27d6d.txt"
+    DECODIUM_QSSTV_MAPPER_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-mapper-8c27d6d.txt"
+    DECODIUM_QSSTV_RX_MAP_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-msc-rx-map-8c27d6d.txt")
   set_target_properties (test_hamdrm_channel PROPERTIES
     AUTOMOC OFF
     CXX_EXTENSIONS OFF
@@ -1051,7 +1091,20 @@ if (DECODIUM_ENABLE_HAMDRM)
 
   add_executable (test_hamdrm_waveform test_hamdrm_waveform.cpp)
   target_link_libraries (test_hamdrm_waveform
-    PRIVATE Decodium::HamDrmCore)
+    PRIVATE Decodium::HamDrmCore Qt6::Gui)
+  target_compile_definitions (test_hamdrm_waveform PRIVATE
+    DECODIUM_QSSTV_SUPERFRAME_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-superframe-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_SUPERFRAME_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-superframe-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_VALID_FAC_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-valid-fac-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_VALID_FAC_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-valid-fac-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_MOT_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-mot-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_MOT_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-mot-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_OBJECT_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-object-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_OBJECT_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-object-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_IMAGE_PCM_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_IMAGE_PCM_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_IMAGE_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-a.jpg"
+    DECODIUM_QSSTV_IMAGE_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-b.jpg")
   set_target_properties (test_hamdrm_waveform PROPERTIES
     AUTOMOC OFF
     CXX_EXTENSIONS OFF
@@ -1149,3 +1202,122 @@ endforeach ()
 unset (_decodium_sstv_target_type)
 unset (_decodium_sstv_target)
 unset (_decodium_sstv_directory_targets)
+
+if (TARGET decodium_sstv_share_aead)
+  target_link_libraries (test_sstv_share_queue_manager PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_share_queue_manager PRIVATE DECODIUM_TEST_SHARE_CRYPTO=1)
+  add_executable (test_sstv_share_aead test_sstv_share_aead.cpp)
+  target_link_libraries (test_sstv_share_aead PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_share_aead PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_share_aead COMMAND $<TARGET_FILE:test_sstv_share_aead>)
+  set_tests_properties (test_sstv_share_aead PROPERTIES LABELS "sstv;sharing;security" TIMEOUT 30)
+endif ()
+
+if (APPLE AND TARGET decodium_sstv_share_aead)
+  target_link_libraries (test_sstv_http_providers PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_http_providers PRIVATE DECODIUM_TEST_SHARE_CRYPTO=1)
+  target_link_libraries (test_sstv_http_provider_production_gate PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_http_provider_production_gate PRIVATE DECODIUM_TEST_SHARE_CRYPTO=1)
+  add_test (NAME test_sstv_https_encrypted_production
+    COMMAND $<TARGET_FILE:test_sstv_http_provider_production_gate>
+      restEncryptedEnvelopeOverVerifiedHttps)
+  set_tests_properties (test_sstv_https_encrypted_production PROPERTIES
+    LABELS "sstv;sharing;network;security;production-gate" TIMEOUT 30)
+  target_link_libraries (test_sstv_share_qml PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_share_qml PRIVATE DECODIUM_TEST_MAC_E2EE=1)
+  find_program (_decodium_sstv_test_python NAMES python3)
+  if (_decodium_sstv_test_python)
+    add_test (NAME test_sstv_fax480_capture_analyzer
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fax480_capture_analyzer.py"
+        $<TARGET_FILE:export_fax480_capture> $<TARGET_FILE:decode_fax480_capture>)
+    set_tests_properties (test_sstv_fax480_capture_analyzer PROPERTIES
+      LABELS "sstv;fax;audio" TIMEOUT 90)
+    add_test (NAME test_sstv_fax480_lab_cli
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fax480_lab_cli.py"
+        $<TARGET_FILE:decodium_qml>)
+    set_tests_properties (test_sstv_fax480_lab_cli PROPERTIES
+      LABELS "sstv;fax;application" TIMEOUT 20)
+    add_test (NAME test_hamdrm_lab_cli
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_hamdrm_lab_cli.py"
+        $<TARGET_FILE:decodium_qml>)
+    set_tests_properties (test_hamdrm_lab_cli PROPERTIES
+      LABELS "sstv;hamdrm;application" TIMEOUT 20)
+    add_test (NAME test_sstv_share_app_identities
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_identity_lab.py"
+        $<TARGET_FILE:decodium_qml>)
+    set_tests_properties (test_sstv_share_app_identities PROPERTIES
+      LABELS "sstv;sharing;security;keychain;application"
+      TIMEOUT 150 RUN_SERIAL TRUE
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+    add_test (NAME test_sstv_share_https_fixture
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_share_https_fixture.py"
+        $<TARGET_FILE:test_sstv_http_provider_production_gate>
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key")
+    set_tests_properties (test_sstv_share_https_fixture PROPERTIES
+      LABELS "sstv;sharing;network;security;production-gate" TIMEOUT 60)
+    find_program (_decodium_sstv_test_ffmpeg NAMES ffmpeg)
+    find_program (_decodium_sstv_test_ffprobe NAMES ffprobe)
+    if (_decodium_sstv_test_ffmpeg AND _decodium_sstv_test_ffprobe)
+      add_test (NAME test_sstv_share_app_transfer
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      add_test (NAME test_sstv_share_app_tamper
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      add_test (NAME test_sstv_share_app_manifest_tamper_a
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper-manifest a
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      add_test (NAME test_sstv_share_app_manifest_tamper_b
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper-manifest b
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      set_tests_properties (test_sstv_share_app_manifest_tamper_a test_sstv_share_app_manifest_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_tamper PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_transfer PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+    endif ()
+    unset (_decodium_sstv_test_ffmpeg)
+    unset (_decodium_sstv_test_ffprobe)
+  endif ()
+  unset (_decodium_sstv_test_python)
+  target_link_libraries (test_sstv_local_integration_provider PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_local_integration_provider PRIVATE DECODIUM_TEST_MAC_E2EE=1)
+  add_executable (test_sstv_macos_keychain test_sstv_macos_keychain.cpp)
+  target_link_libraries (test_sstv_macos_keychain PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_macos_keychain PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_macos_keychain COMMAND $<TARGET_FILE:test_sstv_macos_keychain>)
+  set_tests_properties (test_sstv_macos_keychain PROPERTIES LABELS "sstv;sharing;security;keychain" TIMEOUT 60)
+endif ()

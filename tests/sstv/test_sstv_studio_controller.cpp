@@ -68,7 +68,7 @@ private slots:
     {
         SstvStudioController controller;
         const QVariantList modes = controller.modes();
-        QCOMPARE(modes.size(), 52);
+        QCOMPARE(modes.size(), 61);
         QCOMPARE(controller.modeId(), QStringLiteral("martin-m1"));
         QCOMPARE(controller.modeName(), QStringLiteral("Martin M1"));
         QCOMPARE(controller.outputSize(), QSize(320, 256));
@@ -116,8 +116,17 @@ private slots:
             {"pd-240", "PD240", 640, 496, 248.91},
             {"pd-290", "PD290", 800, 616, 289.59224},
             {"avt-24", "AVT24", 128, 120, 30.5425},
+            {"avt-24-narrow", "AVT24 Narrow", 128, 120, 30.5425},
+            {"avt-24-qrm", "AVT24 QRM", 128, 120, 30.5425},
+            {"avt-24-narrow-qrm", "AVT24 Narrow QRM", 128, 120, 30.5425},
             {"avt-90", "AVT90", 320, 240, 98.0425},
+            {"avt-90-narrow", "AVT90 Narrow", 320, 240, 98.0425},
+            {"avt-90-qrm", "AVT90 QRM", 320, 240, 98.0425},
+            {"avt-90-narrow-qrm", "AVT90 Narrow QRM", 320, 240, 98.0425},
             {"avt-94", "AVT94", 320, 200, 101.7925},
+            {"avt-94-narrow", "AVT94 Narrow", 320, 200, 101.7925},
+            {"avt-94-qrm", "AVT94 QRM", 320, 200, 101.7925},
+            {"avt-94-narrow-qrm", "AVT94 Narrow QRM", 320, 200, 101.7925},
             {"mp-73", "MP73", 320, 256, 74.11},
             {"mp-115", "MP115", 320, 256, 116.606},
             {"mp-140", "MP140", 320, 256, 140.67},
@@ -763,6 +772,52 @@ private slots:
                      .toByteArray().isEmpty());
         QVERIFY(!migratedSettings.contains(QStringLiteral("templates")));
         migratedSettings.endGroup();
+    }
+
+    void avtVariantStudioLoopbacksComplete()
+    {
+        for (const QString& mode : {QStringLiteral("avt-24"),
+                                    QStringLiteral("avt-24-narrow"),
+                                    QStringLiteral("avt-24-qrm"),
+                                    QStringLiteral("avt-24-narrow-qrm"),
+                                    QStringLiteral("avt-90"),
+                                    QStringLiteral("avt-90-narrow"),
+                                    QStringLiteral("avt-90-qrm"),
+                                    QStringLiteral("avt-90-narrow-qrm"),
+                                    QStringLiteral("avt-94"),
+                                    QStringLiteral("avt-94-narrow"),
+                                    QStringLiteral("avt-94-qrm"),
+                                    QStringLiteral("avt-94-narrow-qrm")}) {
+            SstvStudioController controller;
+            controller.setModeId(mode);
+            QCOMPARE(controller.modeId(), mode);
+            QVERIFY(controller.generateCalibrationPattern());
+            QVERIFY(controller.prepareImage());
+            QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 5'000);
+            QVERIFY2(controller.preparedReady(), qPrintable(controller.error()));
+            QVERIFY(controller.startLoopback());
+            QTRY_VERIFY_WITH_TIMEOUT(!controller.loopbackBusy(), 30'000);
+            QVERIFY2(controller.loopbackReady(), qPrintable(mode + ": " + controller.loopbackError()));
+            const auto image = controller.loopbackSnapshot();
+            QVERIFY(image);
+            QCOMPARE(image->size(), controller.outputSize());
+            const auto expected = controller.preparedSnapshot();
+            QVERIFY(expected);
+            std::uint64_t absoluteError = 0U;
+            for (int y = 0; y < image->height(); ++y) {
+                for (int x = 0; x < image->width(); ++x) {
+                    const QColor actualPixel = image->pixelColor(x, y);
+                    const QColor expectedPixel = expected->pixelColor(x, y);
+                    absoluteError += static_cast<std::uint64_t>(
+                        std::abs(actualPixel.red() - expectedPixel.red())
+                        + std::abs(actualPixel.green() - expectedPixel.green())
+                        + std::abs(actualPixel.blue() - expectedPixel.blue()));
+                }
+            }
+            const double mae = static_cast<double>(absoluteError)
+                / (static_cast<double>(image->width()) * image->height() * 3.0);
+            QVERIFY2(mae < 35.0, qPrintable(mode + ": MAE " + QString::number(mae)));
+        }
     }
 
     void nativeEncoderDecoderLoopbackIsAsynchronousAndCancellable()

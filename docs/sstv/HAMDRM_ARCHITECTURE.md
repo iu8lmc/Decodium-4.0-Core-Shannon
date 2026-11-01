@@ -68,7 +68,7 @@ An outbound object is validated before packetisation. Its filename is reduced
 to a safe basename, its content type is restricted to JPEG, JP2, PNG, GIF, BMP
 or the protocol BSR object, and its object/header/segment counts are checked
 before allocation. MOT data groups carry session, user-access and transport
-information plus CRC-16/X-25. Header and body groups can arrive out of order.
+information plus MSB-first CRC-16 (polynomial 0x1021, initial and final xor 0xffff). Header and body groups can arrive out of order.
 
 The assembler accepts an exact duplicate idempotently and rejects a conflicting
 duplicate. It reports the exact missing segment set and emits a completed
@@ -83,6 +83,91 @@ ranges can intentionally request already received filler around holes; the
 controller records this behavior instead of silently treating it as an exact
 set. Unsupported profile identifiers and malformed or excessive ranges are
 rejected.
+
+The controller can transmit a generated compact or extended request as a
+`bsr.bin` MOT object through the existing waveform/PTT backend. Received BSR
+objects are parsed and shown separately from images; malformed requests are
+rejected before publication. A received request is untrusted and does not
+automatically trigger retransmission. The operator can explicitly retransmit
+requested segments of the last successfully transmitted image kept in memory,
+when its transport identifier, segment size, profile, optional filename and
+segment indices match. Identifiers can collide; the request does not
+authenticate its sender. The cached source is lost when the application exits.
+Controller-level A/B tests cover both dialects, rejected mismatches and exact
+reassembly after repair. `test_hamdrm_waveform` also encodes the headers and
+two selected missing segments as PCM for two JPEG fixtures, including a
+missing final segment, then decodes the resulting
+waveform in different chunk sizes and verifies exact reassembly. This test
+seeds the other segments directly.
+
+The A/B lab `python3 tests/sstv/tools/run_hamdrm_repair_two_app_lab.py a|b`
+also verifies selective repair with two full Decodium processes over BlackHole.
+The sender first transmits a JPEG and retains its source; after that TX the
+receiver is seeded with all but segment 1 and started. The harness injects a
+valid BSR into the sender (extended for A, compact for B), then explicitly
+starts repair. Both transmitters completed, and both received JPEG files
+matched the original 2,725 bytes exactly. Fixtures contain a small JPEG with
+zero padding to cross the 1,024-byte segment boundary. Artifacts:
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-repair-a-u_1i30tz`
+and `.../decodium-hamdrm-repair-b-gyjs240_`. This verifies the application
+repair waveform path; the initial receive loss and BSR arrival are simulated,
+so it is not a complete over-audio BSR/repair exchange or external interoperability.
+
+An additional experimental `a air` variant sends the BSR over BlackHole and
+then changes the same two applications back to repair TX/RX. The BSR was
+received and repair was requested, but the image was not reconstructed in
+the first runs. With digital-only RX after BSR TX, diagnostics showed the
+legacy source selected, with zero accepted HAMDRM chunks; with the analog
+local capture started first, the local tap received 40 chunks and then
+stopped advancing despite RX being active, monitoring enabled, and neither TX
+suspension nor sample discard being set. The cause is not yet established.
+`sstvRxDiagnostics` exposes accepted HAMDRM chunks and groups, source and tap
+selection, monitor state, TX suspension and sample-discard state to support
+further investigation. The tests above are macOS-only; Linux and Windows,
+including their legacy-backend paths, require independent verification.
+The current harness waits for three consecutive advances in the HAMDRM chunk
+counter instead of treating an active state or a single callback as proof of
+readiness. Representative failed artifacts:
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-repair-a-oy4i7rig`
+and `.../decodium-hamdrm-repair-a-ftprwylr`. The legacy-mode activation now
+reuses native SSTV capture arbitration when no analog receiver is already
+active, with ownership intended to restore the preceding monitor on stop.
+In subsequent A/B trials, digital-only RX selected the local tap and accepted
+43 and 41 chunks respectively, then both stalled before readiness; the full
+audio repair test therefore still fails. Artifacts:
+`.../decodium-hamdrm-repair-a-21oybrat` and
+`.../decodium-hamdrm-repair-b-ojwi0_hn`. The BSR-only two-application A/B
+tests passed after this change, but automatic capture ownership/restoration
+and operation on Linux and Windows need further independent tests. These are
+local BlackHole observations; they do not establish a hardware-radio failure.
+
+Completed `bsr.bin` objects can be followed by another request using the same
+transport ID in the same receive session. The last complete request stays
+visible while the following candidate is assembled; a differing header can
+replace a stale BSR candidate left by the previous carousel. A/B tests with
+two Decodium processes sent two different requests in one RX session over
+BlackHole, using extended and compact dialects respectively. The partial MOT
+source was seeded by the test, so these checks do not demonstrate complete
+image retransmission or external application interoperability. Artifacts:
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-two-app-a-is2m3aw9`
+and `.../decodium-hamdrm-two-app-b-ch1n_mcp`. Reproduce with
+`python3 tests/sstv/tools/run_hamdrm_two_app_lab.py a bsr-repeat` and
+`python3 tests/sstv/tools/run_hamdrm_two_app_lab.py b bsr-repeat`.
+
+Two isolated Decodium application pairs exchanged A/B BSR objects over
+BlackHole without radio: A used the extended form for transport `0x2451`, B
+the compact form for `0x5372`; both requested the expected missing segments.
+The lab seeded a synthetic partial MOT object before TX, so this is an
+application waveform test of BSR transfer, not an end-to-end repair of a
+previously transmitted image. Artifacts:
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-two-app-a-x9patv3y`
+and `.../decodium-hamdrm-two-app-b-0ix120us`. Reproduce with
+`python3 tests/sstv/tools/run_hamdrm_two_app_lab.py a bsr` and `b bsr`.
+After the receive-session cleanup change, these A/B audio transfers were
+repeated successfully with artifacts at
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-two-app-a-8_yiuxsk`
+and `.../decodium-hamdrm-two-app-b-uvi30h6j`. The cleanup itself was exercised
+by the A/B controller tests; the application audio tests transfer one BSR each.
 
 ## Image boundary
 

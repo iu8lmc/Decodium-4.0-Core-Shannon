@@ -198,6 +198,21 @@ std::unique_ptr<SstvPcm16Source> makeCalibrationTonePcm16Source(
         kind, sampleRate, durationMilliseconds, level, headroom);
 }
 
+std::unique_ptr<SstvPcm16Source> makeFax480Pcm16Source(
+    const std::vector<std::uint8_t>& pixels, SstvFax480Profile profile,
+    std::uint32_t sampleRate)
+{
+    return std::make_unique<EncoderPcm16Source<SstvFax480Encoder>>(
+        sampleRate, profile, sampleRate, pixels);
+}
+
+std::unique_ptr<SstvPcm16Source> makeRadiofaxPcm16Source(
+    const std::vector<std::uint8_t>& pixels, SstvFaxConfig config)
+{
+    return std::make_unique<EncoderPcm16Source<SstvRadiofaxEncoder>>(
+        config.sampleRate, config, pixels);
+}
+
 std::unique_ptr<SstvPcm16Source> makeAvtPcm16Source(
     const std::vector<SstvRgbPixel>& pixels,
     SstvAvtEncoderConfig config)

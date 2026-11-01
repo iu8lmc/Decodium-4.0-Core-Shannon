@@ -2971,12 +2971,33 @@ struct SstvShareQueueManager::Impl final
             record.providerId, record.incomingId, &error);
         const QString validatedRoot = QDir(store.config().downloadRoot)
             .absoluteFilePath(QStringLiteral("validated"));
-        const auto validation = parsed.ok() && item
-            ? validateAndStageIncomingMedia(
-                  record.stagingPath, validatedRoot, record.transferId,
-                  record.incomingId, *parsed.manifest, item->receivedUtc,
-                  item->expiresUtc)
-            : SstvIncomingMediaValidationResult {};
+        SstvIncomingMediaValidationResult validation;
+        if (parsed.ok() && item) {
+            if (parsed.manifest->encryption.mode == SstvShareEncryptionMode::EndToEnd) {
+                validation.failure = SstvShareProviderFailure::Integrity;
+                validation.redactedDiagnostic = QStringLiteral(
+                    "encrypted payload authentication or decryption failed");
+                QFile encrypted(record.stagingPath);
+                const auto& openPayload = store.config().openEncryptedPayload;
+                if (openPayload && encrypted.open(QIODevice::ReadOnly)) {
+                    const QByteArray bytes = encrypted.read(static_cast<qint64>(record.byteSize) + 1);
+                    if (static_cast<quint64>(bytes.size()) == record.byteSize) {
+                        auto plaintext = openPayload(*parsed.manifest, bytes);
+                        if (plaintext) {
+                            validation = validateAndStageAuthenticatedIncomingMedia(
+                                *plaintext, validatedRoot, record.transferId, record.incomingId,
+                                *parsed.manifest, item->receivedUtc, item->expiresUtc);
+                            std::fill(plaintext->begin(), plaintext->end(), '\0');
+                        }
+                    }
+                }
+            } else {
+                validation = validateAndStageIncomingMedia(
+                    record.stagingPath, validatedRoot, record.transferId,
+                    record.incomingId, *parsed.manifest, item->receivedUtc,
+                    item->expiresUtc);
+            }
+        }
         if (!validation.ok()
             || validation.handoff->stagedCanonicalPath
                 != QFileInfo(record.destinationPath).canonicalFilePath()) {
@@ -4057,7 +4078,8 @@ QString SstvShareQueueManager::queueDownload(
     const QString& providerId,
     const QString& incomingId,
     const QString& destinationRelativePath,
-    QString* error)
+    QString* error,
+    bool requireEndToEnd)
 {
     if (!m_impl->ownerThread(error) || !m_impl->initialized) {
         fail(error, QStringLiteral("share queue manager is not initialized"));
@@ -4077,6 +4099,11 @@ QString SstvShareQueueManager::queueDownload(
                 *parsed.manifest, providerId,
                 shareProvider->capabilities()).ok()) {
         fail(error, QStringLiteral("incoming manifest/provider compatibility failed"));
+        return {};
+    }
+    if (requireEndToEnd
+        && parsed.manifest->encryption.mode != SstvShareEncryptionMode::EndToEnd) {
+        fail(error, QStringLiteral("this download requires end-to-end encryption"));
         return {};
     }
     const auto destination = secureDestinationPath(

@@ -57,6 +57,11 @@ public:
         m_pendingFullRate.clear();
     }
 
+    bool discardingSamples() const noexcept
+    {
+        return m_discardSamples.load(std::memory_order_acquire);
+    }
+
     void resetDecimationPhase()
     {
         if (m_bufferMutex) {
@@ -74,6 +79,18 @@ public:
     qint64 readData(char* /*data*/, qint64 /*maxSize*/) override { return -1; }
 
     qint64 writeData(const char* data, qint64 maxSize) override
+    {
+        return writeInput(data, maxSize, -1);
+    }
+
+    qint64 writeWithSourceTime(const char* data, qint64 maxSize,
+                               qint64 sourceTimeNs) override
+    {
+        return writeInput(data, maxSize, sourceTimeNs);
+    }
+
+private:
+    qint64 writeInput(const char* data, qint64 maxSize, qint64 sourceTimeNs)
     {
         if (!data || maxSize <= 0) return 0;
 
@@ -153,6 +170,7 @@ public:
             emit audioLevelChanged(m_lastRms);
             emit audioHealthChanged(rms, peak, dynamicRange, clippedSamples, newSamples);
             emit audioSamplesProduced(emittedSamples);
+            emit audioSamplesProducedWithSourceTime(emittedSamples, sourceTimeNs);
             emit audioSamplesReady(emittedSamples);
         }
 
@@ -165,6 +183,7 @@ signals:
     // First producer-boundary signal for bounded DirectConnection consumers.
     // UI/network consumers keep using audioSamplesReady below.
     void audioSamplesProduced(QVector<short> samples);
+    void audioSamplesProducedWithSourceTime(QVector<short> samples, qint64 sourceTimeNs);
     void audioSamplesReady(QVector<short> samples);
 
 private:
@@ -254,6 +273,7 @@ public:
         emit audioLevelChanged(m_lastRms);
         emit audioHealthChanged(rms, peak, dynamicRange, clippedSamples, samples.size());
         emit audioSamplesProduced(samples);
+        emit audioSamplesProducedWithSourceTime(samples, -1);
         emit audioSamplesReady(samples);
     }
 

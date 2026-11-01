@@ -21,6 +21,7 @@ struct SstvPcm16Metadata final
     SstvAudioSource source;
     qint64 monotonicTimestampNs {-1};
     std::uint64_t generation {0U};
+    bool sourceDiscontinuity {false};
 };
 
 // Native adapter for Decodium's existing decoded mono PCM fanout.

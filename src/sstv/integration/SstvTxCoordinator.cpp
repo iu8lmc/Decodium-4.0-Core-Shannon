@@ -645,13 +645,42 @@ std::optional<SstvAvtMode> builderAvtMode(
 {
     switch (mode) {
     case SstvTxCoordinatorMode::Avt24:
+    case SstvTxCoordinatorMode::Avt24Narrow:
+    case SstvTxCoordinatorMode::Avt24Qrm:
+    case SstvTxCoordinatorMode::Avt24NarrowQrm:
         return SstvAvtMode::Avt24;
     case SstvTxCoordinatorMode::Avt90:
+    case SstvTxCoordinatorMode::Avt90Narrow:
+    case SstvTxCoordinatorMode::Avt90Qrm:
+    case SstvTxCoordinatorMode::Avt90NarrowQrm:
         return SstvAvtMode::Avt90;
     case SstvTxCoordinatorMode::Avt94:
+    case SstvTxCoordinatorMode::Avt94Narrow:
+    case SstvTxCoordinatorMode::Avt94Qrm:
+    case SstvTxCoordinatorMode::Avt94NarrowQrm:
         return SstvAvtMode::Avt94;
     default:
         return std::nullopt;
+    }
+}
+
+SstvAvtVariant builderAvtVariant(SstvTxCoordinatorMode mode) noexcept
+{
+    switch (mode) {
+    case SstvTxCoordinatorMode::Avt24Narrow:
+    case SstvTxCoordinatorMode::Avt90Narrow:
+    case SstvTxCoordinatorMode::Avt94Narrow:
+        return SstvAvtVariant::Narrow;
+    case SstvTxCoordinatorMode::Avt24Qrm:
+    case SstvTxCoordinatorMode::Avt90Qrm:
+    case SstvTxCoordinatorMode::Avt94Qrm:
+        return SstvAvtVariant::Qrm;
+    case SstvTxCoordinatorMode::Avt24NarrowQrm:
+    case SstvTxCoordinatorMode::Avt90NarrowQrm:
+    case SstvTxCoordinatorMode::Avt94NarrowQrm:
+        return SstvAvtVariant::NarrowQrm;
+    default:
+        return SstvAvtVariant::Normal;
     }
 }
 
@@ -777,10 +806,28 @@ const char* SstvTxSourceBuilder::modeId(
         return "pd-290";
     case SstvTxCoordinatorMode::Avt24:
         return "avt-24";
+    case SstvTxCoordinatorMode::Avt24Narrow:
+        return "avt-24-narrow";
+    case SstvTxCoordinatorMode::Avt24Qrm:
+        return "avt-24-qrm";
+    case SstvTxCoordinatorMode::Avt24NarrowQrm:
+        return "avt-24-narrow-qrm";
     case SstvTxCoordinatorMode::Avt90:
         return "avt-90";
+    case SstvTxCoordinatorMode::Avt90Narrow:
+        return "avt-90-narrow";
+    case SstvTxCoordinatorMode::Avt90Qrm:
+        return "avt-90-qrm";
+    case SstvTxCoordinatorMode::Avt90NarrowQrm:
+        return "avt-90-narrow-qrm";
     case SstvTxCoordinatorMode::Avt94:
         return "avt-94";
+    case SstvTxCoordinatorMode::Avt94Narrow:
+        return "avt-94-narrow";
+    case SstvTxCoordinatorMode::Avt94Qrm:
+        return "avt-94-qrm";
+    case SstvTxCoordinatorMode::Avt94NarrowQrm:
+        return "avt-94-narrow-qrm";
     case SstvTxCoordinatorMode::Mp73:
         return "mp-73";
     case SstvTxCoordinatorMode::Mp115:
@@ -924,6 +971,33 @@ std::optional<SstvTxCoordinatorMode> SstvTxSourceBuilder::modeFromId(
     }
     if (modeId == "avt-94") {
         return SstvTxCoordinatorMode::Avt94;
+    }
+    if (modeId == "avt-24-narrow") {
+        return SstvTxCoordinatorMode::Avt24Narrow;
+    }
+    if (modeId == "avt-24-qrm") {
+        return SstvTxCoordinatorMode::Avt24Qrm;
+    }
+    if (modeId == "avt-24-narrow-qrm") {
+        return SstvTxCoordinatorMode::Avt24NarrowQrm;
+    }
+    if (modeId == "avt-90-narrow") {
+        return SstvTxCoordinatorMode::Avt90Narrow;
+    }
+    if (modeId == "avt-90-qrm") {
+        return SstvTxCoordinatorMode::Avt90Qrm;
+    }
+    if (modeId == "avt-90-narrow-qrm") {
+        return SstvTxCoordinatorMode::Avt90NarrowQrm;
+    }
+    if (modeId == "avt-94-narrow") {
+        return SstvTxCoordinatorMode::Avt94Narrow;
+    }
+    if (modeId == "avt-94-qrm") {
+        return SstvTxCoordinatorMode::Avt94Qrm;
+    }
+    if (modeId == "avt-94-narrow-qrm") {
+        return SstvTxCoordinatorMode::Avt94NarrowQrm;
     }
     if (modeId == "mp-73") {
         return SstvTxCoordinatorMode::Mp73;
@@ -1086,6 +1160,7 @@ SstvTxBuiltSource SstvTxSourceBuilder::build(
                mode.has_value()) {
         SstvAvtEncoderConfig encoder;
         encoder.mode = *mode;
+        encoder.variant = builderAvtVariant(config.mode);
         encoder.sampleRate = config.sampleRate;
         encoder.clockErrorPpm = config.clockErrorPpm;
         encoder.level = config.level;
@@ -1414,7 +1489,8 @@ SstvTxCoordinatorResult SstvTxCoordinator::startValidated(
                      SstvTxEncodingComplete {
                          audioPlan_.totalFrames,
                          audioPlan_.sampleRate,
-                         audioPlan_.fskIdPlanned})
+                         audioPlan_.fskIdPlanned,
+                         audioPlan_.headerFrames})
         || !dispatch(nowMs, SstvTxRequest {})
         || !dispatch(nowMs,
                      SstvTxPttRequestDispatched {

@@ -122,6 +122,47 @@ class TestSstvIncomingMediaValidator final : public QObject
     Q_OBJECT
 
 private slots:
+    void authenticatedBytesAreValidatedAndBoundToEncryptedSource()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QByteArray imageA = imageBytes("PNG", 16, 12, true, Qt::red);
+        const QByteArray imageB = imageBytes("PNG", 16, 12, true, Qt::blue);
+        QVERIFY(!imageA.isEmpty() && !imageB.isEmpty());
+        const QByteArray ciphertext("ciphertext-and-authentication-tag");
+        auto manifest = manifestFor(ciphertext, QStringLiteral("image/png"), 16, 12);
+        manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+        manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+        manifest.encryption.keyId = QStringLiteral("test-key");
+        manifest.encryption.recipientKeyFingerprint = QString(64, QLatin1Char('a'));
+        manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+        manifest.encryption.manifestBoundAsAuthenticatedData = true;
+        manifest.transport.providerCanReadContent = false;
+        QVERIFY(manifest.validate(false).ok());
+        const auto received = manifest.createdUtc.addSecs(10);
+        const auto stage = temporary.filePath(QStringLiteral("validated"));
+        for (const auto& image : {imageA, imageB}) {
+            const auto transfer = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            const auto result = validateAndStageAuthenticatedIncomingMedia(image, stage, transfer,
+                QStringLiteral("incoming"), manifest, received, manifest.expiresUtc);
+            QVERIFY(result.ok());
+            QCOMPARE(result.handoff->sourceSha256, sha256(ciphertext));
+            QCOMPARE(result.handoff->sourceByteSize, quint64(ciphertext.size()));
+            QImageReader decoded(result.handoff->stagedCanonicalPath);
+            QVERIFY(!decoded.read().isNull());
+            QVERIFY(!decoded.textKeys().contains(QStringLiteral("Comment")));
+        }
+        const auto transfer = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QVERIFY(!validateAndStageAuthenticatedIncomingMedia(QByteArray("not an image"), stage,
+            transfer, QStringLiteral("incoming"), manifest, received, manifest.expiresUtc).ok());
+        const auto source = temporary.filePath(QStringLiteral("source.png"));
+        QVERIFY(writeBytes(source, ciphertext));
+        QVERIFY(!validateAndStageIncomingMedia(source, stage, transfer, QStringLiteral("incoming"),
+            manifest, received, manifest.expiresUtc).ok());
+        auto tlsManifest = manifestFor(imageA, QStringLiteral("image/png"), 16, 12);
+        QVERIFY(!validateAndStageAuthenticatedIncomingMedia(imageA, stage, transfer,
+            QStringLiteral("incoming"), tlsManifest, tlsManifest.createdUtc.addSecs(10), tlsManifest.expiresUtc).ok());
+    }
     void validatesNormalizesAndReconstructsRestartHandoff()
     {
         QTemporaryDir temporary;

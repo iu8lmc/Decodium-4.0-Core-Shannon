@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "src/sstv/models/SstvShareController.h"
+#ifdef DECODIUM_TEST_MAC_E2EE
+#include "src/security/MacKeychainBackend.h"
+#include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#include <Security/Security.h>
+#endif
 #include "src/sstv/sharing/SstvLocalIntegrationShareProvider.h"
 #include "src/sstv/sharing/SstvShareQueueManager.h"
 #include "src/sstv/sharing/SstvShareTransfer.h"
@@ -183,6 +188,9 @@ private slots:
     void completionUsesOneClockBoundaryAndKeepsBudgetInvariant();
     void queueManagerRoundTripIsDeterministic();
     void controllerInjectionRoundTripIsExplicitAndFunctional();
+#ifdef DECODIUM_TEST_MAC_E2EE
+    void controllerReceivesAuthenticatedEnvelopesWithTemporaryKeychain();
+#endif
 
 private:
     QTemporaryDir m_settingsRoot;
@@ -680,6 +688,236 @@ controllerInjectionRoundTripIsExplicitAndFunctional()
         QStringLiteral("downloadedBytes")).toULongLong() > 0U, 8'000);
     controller.shutdown();
 }
+
+#ifdef DECODIUM_TEST_MAC_E2EE
+void TestSstvLocalIntegrationProvider::controllerReceivesAuthenticatedEnvelopesWithTemporaryKeychain()
+{
+    QTemporaryDir storage;
+    QVERIFY(storage.isValid());
+    const QByteArray path = storage.filePath(QStringLiteral("test.keychain-db")).toUtf8();
+    const QByteArray password("only-temporary-test-keychain");
+    SecKeychainRef rawKeychain = nullptr;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    SecKeychainSetUserInteractionAllowed(false);
+    const auto status = SecKeychainCreate(path.constData(), UInt32(password.size()), password.constData(),
+                                          false, nullptr, &rawKeychain);
+#pragma clang diagnostic pop
+    QVERIFY2(status == errSecSuccess && rawKeychain, "temporary keychain creation failed");
+    struct Cleanup {
+        SecKeychainRef keychain;
+        ~Cleanup() {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            SecKeychainDelete(keychain);
+#pragma clang diagnostic pop
+            CFRelease(keychain);
+        }
+    } cleanup {rawKeychain};
+    secure_settings::MacKeychainBackend backend(QString::fromUtf8(path));
+    SstvShareKeyStore sender(backend, QStringLiteral("sender-test"));
+    SstvShareKeyStore receiver(backend, QStringLiteral("STATION-LOCAL"));
+    const auto publicKey = receiver.createOrLoadPublicKey();
+    QVERIFY(publicKey.ok());
+    QCOMPARE(sender.pinRecipient("local-integration", "station-local", *publicKey.key,
+                                sstvShareX25519Fingerprint(*publicKey.key)), SstvShareKeyStoreError::None);
+    SstvLocalIntegrationShareProvider::Config config;
+    config.localRecipientId = QStringLiteral("station-local");
+    config.participantIds = {QStringLiteral("station-local"), QStringLiteral("sender")};
+    config.encryptedEnvelopes = true;
+    config.completionDelayMs = 100;
+    config.maximumTotalBytes = 4U * 1024U * 1024U;
+    config.maximumPendingOperations = 64;
+    auto provider = std::make_shared<SstvLocalIntegrationShareProvider>(config);
+    QVERIFY(provider->isConfigurationValid());
+    for (int i = 0; i < 3; ++i) {
+        QImage pixels(32, 24, QImage::Format_RGB32);
+        pixels.fill(QColor(25 + i * 60, 80, 150));
+        QByteArray image; QBuffer output(&image);
+        QVERIFY(output.open(QIODevice::WriteOnly));
+        QVERIFY(pixels.save(&output, "PNG"));
+        auto manifest = manifestFor(image, QDateTime::currentDateTimeUtc(),
+                                    QStringLiteral("sender"), QStringLiteral("station-local"), 64U * 1024U);
+        manifest.privacy.meteredNetworkAllowed = true;
+        auto envelope = sstvShareSealPinnedEnvelope(sender, manifest, image);
+        QVERIFY(envelope.has_value());
+        if (i == 2) {
+            envelope->bytes[0] = static_cast<char>(envelope->bytes[0] ^ 1);
+            envelope->manifest.sha256 = sha256Hex(envelope->bytes);
+        }
+        const QString idempotency = SstvShareTransfer::deriveIdempotencyKey(envelope->manifest);
+        const auto created = awaitResult([&](SstvShareProviderCompletion done) {
+            return provider->createUploadAsync(envelope->manifest, idempotency, std::move(done));
+        });
+        QVERIFY(created.completed && created.result.ok());
+        const auto uploaded = awaitResult([&](SstvShareProviderCompletion done) {
+            return provider->uploadChunkAsync(created.result.handle(), 0, envelope->bytes,
+                sha256Hex(envelope->bytes), {}, std::move(done));
+        });
+        QVERIFY(uploaded.completed && uploaded.result.ok());
+        const auto completed = awaitResult([&](SstvShareProviderCompletion done) {
+            return provider->completeUploadAsync(uploaded.result.handle(), idempotency, std::move(done));
+        });
+        QVERIFY(completed.completed && completed.result.ok());
+    }
+    QSettings settings; settings.clear(); settings.sync();
+    SstvShareController controller(&backend, provider);
+    QSignalSpy operations(&controller, &SstvShareController::operationFinished);
+    QSignalSpy handoffs(&controller, &SstvShareController::incomingHandoffReady);
+    QSignalSpy identities(&controller, &SstvShareController::sharingIdentityReady);
+    controller.setStorageRoot(storage.path(), QStringLiteral("station-local"));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 5000);
+    QVERIFY(controller.setEnabled(true));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.enabled(), 5000);
+    QVERIFY(controller.refreshInbox());
+    QAbstractItemModel* inbox = controller.inbox();
+    QTRY_COMPARE_WITH_TIMEOUT(inbox->rowCount(), 3, 5000);
+    const int incomingRole = roleFor(inbox, "incomingId");
+    const int transferRole = roleFor(inbox, "transferId");
+    const int acceptRole = roleFor(inbox, "canAccept");
+    QVERIFY(incomingRole >= 0 && transferRole >= 0 && acceptRole >= 0);
+    QStringList ids;
+    for (int row = 0; row < 3; ++row) ids << inbox->data(inbox->index(row, 0), incomingRole).toString();
+    for (int i = 0; i < ids.size(); ++i) {
+        QVERIFY(controller.download(ids[i], QStringLiteral("received%1.png").arg(i)));
+    }
+    const bool completedDownloads = spinUntil([&] {
+        int ready = 0;
+        for (int row = 0; row < inbox->rowCount(); ++row)
+            ready += inbox->data(inbox->index(row, 0), acceptRole).toBool() ? 1 : 0;
+        return ready == 2;
+    }, 5000);
+    if (!completedDownloads) {
+        qWarning() << "diagnostics" << controller.diagnostics();
+        for (int row = 0; row < inbox->rowCount(); ++row)
+            qWarning() << "inbox" << inbox->data(inbox->index(row, 0), roleFor(inbox, "transferState"))
+                       << inbox->data(inbox->index(row, 0), transferRole);
+        for (auto* model : {controller.activeTransfers(), controller.transferHistory()})
+            for (int row = 0; row < model->rowCount(); ++row)
+                qWarning() << "transfer" << model->data(model->index(row, 0), roleFor(model, "transferState"))
+                           << model->data(model->index(row, 0), roleFor(model, "error"));
+    }
+    QVERIFY(completedDownloads);
+    QVERIFY(spinUntil([&] {
+        auto* history = controller.transferHistory();
+        const int stateRole = roleFor(history, "transferState");
+        for (int row = 0; row < history->rowCount(); ++row)
+            if (history->data(history->index(row, 0), stateRole).toString() == QStringLiteral("Failed")) return true;
+        return false;
+    }, 5000));
+    int accepted = 0;
+    for (int row = 0; row < inbox->rowCount(); ++row) {
+        if (!inbox->data(inbox->index(row, 0), acceptRole).toBool()) continue;
+        const auto transferId = inbox->data(inbox->index(row, 0), transferRole).toString();
+        QVERIFY(!transferId.isEmpty());
+        QVERIFY(controller.accept(transferId));
+        ++accepted;
+    }
+    QCOMPARE(accepted, 2);
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        int successful = 0;
+        for (const auto& op : operations)
+            if (op.at(0).toString() == QStringLiteral("accept") && op.at(1).toBool()) ++successful;
+        return successful == 2;
+    }(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(handoffs.count(), 2, 5000);
+    QSet<int> redValues;
+    for (const auto& handoff : handoffs) {
+        const auto fields = handoff.at(0).toMap();
+        const QImage image(fields.value(QStringLiteral("stagedCanonicalPath")).toString());
+        QVERIFY(!image.isNull());
+        redValues.insert(image.pixelColor(0, 0).red());
+    }
+    QCOMPARE(redValues, (QSet<int>{25, 85}));
+    QVERIFY(controller.createSharingIdentity());
+    QTRY_COMPARE_WITH_TIMEOUT(identities.count(), 1, 5000);
+    QCOMPARE(identities.first().at(0).toString(), QString::fromLatin1(publicKey.key->toHex()));
+    const QString fingerprint = sstvShareX25519Fingerprint(*publicKey.key);
+    QCOMPARE(identities.first().at(1).toString(), fingerprint);
+    operations.clear();
+    QVERIFY(controller.pinSharingRecipient("station-local", QString::fromLatin1(publicKey.key->toHex()), fingerprint, false));
+    QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+    QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-pin"));
+    QVERIFY(!operations.last().at(1).toBool());
+    operations.clear();
+    QVERIFY(controller.pinSharingRecipient("station-local", QString::fromLatin1(publicKey.key->toHex()), fingerprint, true));
+    QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+    QVERIFY(operations.last().at(1).toBool());
+    const auto different = sender.createOrLoadPublicKey();
+    QVERIFY(different.ok());
+    operations.clear();
+    QVERIFY(controller.pinSharingRecipient("station-local", QString::fromLatin1(different.key->toHex()),
+                                           sstvShareX25519Fingerprint(*different.key), true));
+    QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+    QVERIFY(!operations.last().at(1).toBool());
+    QCOMPARE(receiver.pinnedRecipient("local-integration", "station-local").key, publicKey.key);
+    const QVariantMap options {{"expiryHours", 24}, {"includeCallsign", false}, {"callsign", QString{}},
+                               {"includeGrid", false}, {"grid", QString{}}, {"meteredNetworkAllowed", true}};
+    const QString sourceA = storage.filePath(QStringLiteral("outgoing-a.png"));
+    const QString sourceB = storage.filePath(QStringLiteral("outgoing-b.png"));
+    QImage imageA(32, 24, QImage::Format_RGB32); imageA.fill(Qt::red);
+    QImage imageB(32, 24, QImage::Format_RGB32); imageB.fill(Qt::blue);
+    QVERIFY(imageA.save(sourceA)); QVERIFY(imageB.save(sourceB));
+    operations.clear();
+    QVERIFY(controller.uploadEncryptedWithOptions(QUrl::fromLocalFile(sourceA), "sender", "Martin M1", {}, true, options));
+    QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+    QCOMPARE(operations.last().at(0).toString(), QStringLiteral("upload"));
+    QVERIFY(!operations.last().at(1).toBool());
+    const QDir outgoing(storage.filePath(QStringLiteral("sharing/outgoing")));
+    QVERIFY(!outgoing.exists() || outgoing.entryList(QDir::Files | QDir::Hidden).isEmpty());
+    operations.clear();
+    QVERIFY(controller.uploadEncryptedWithOptions(QUrl::fromLocalFile(sourceA), "station-local", "Martin M1", {}, true, options));
+    QVERIFY(controller.uploadEncryptedWithOptions(QUrl::fromLocalFile(sourceB), "station-local", "Martin M1", {}, true, options));
+    QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 2, 5000);
+    for (const auto& op : operations) {
+        QCOMPARE(op.at(0).toString(), QStringLiteral("upload"));
+        QVERIFY(op.at(1).toBool());
+    }
+    QSet<QString> stagedDigests;
+    const QStringList stagedFiles = outgoing.entryList(QDir::Files | QDir::Hidden);
+    QCOMPARE(stagedFiles.size(), 2);
+    for (const auto& name : stagedFiles) {
+        QFile staged(outgoing.filePath(name));
+        QVERIFY(staged.open(QIODevice::ReadOnly));
+        const QByteArray bytes = staged.readAll();
+        QVERIFY(!bytes.startsWith(QByteArray::fromHex("89504e470d0a1a0a")));
+        stagedDigests.insert(sha256Hex(bytes));
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(controller.diagnostics().value("uploadedBytes").toULongLong() > 0, 8000);
+    QVERIFY(spinUntil([&] {
+        const auto listed = awaitIncoming([&](SstvShareIncomingCompletion done) {
+            return provider->listIncomingAsync(10, std::move(done));
+        });
+        return listed.completed && listed.result.ok() && listed.items.size() == 5;
+    }, 8000));
+    const auto listed = awaitIncoming([&](SstvShareIncomingCompletion done) {
+        return provider->listIncomingAsync(10, std::move(done));
+    });
+    int encryptedUploads = 0;
+    for (const auto& item : listed.items) {
+        const auto parsed = parseSstvShareManifestV1(item.canonicalManifestJson);
+        QVERIFY(parsed.ok());
+        if (parsed.manifest->senderId != QStringLiteral("station-local")) continue;
+        QCOMPARE(parsed.manifest->encryption.mode, SstvShareEncryptionMode::EndToEnd);
+        QVERIFY(!parsed.manifest->transport.providerCanReadContent);
+        const auto downloaded = awaitResult([&](SstvShareProviderCompletion done) {
+            return provider->downloadAsync(item.opaqueId, 0, 64U * 1024U, {}, std::move(done));
+        });
+        QVERIFY(downloaded.completed && downloaded.result.ok());
+        QVERIFY(stagedDigests.contains(sha256Hex(downloaded.result.boundedPayload())));
+        const auto plain = sstvShareOpenStoredEnvelope(receiver, "local-integration", "station-local",
+            *parsed.manifest, downloaded.result.boundedPayload());
+        QVERIFY(plain.has_value());
+        const QImage opened = QImage::fromData(*plain);
+        QVERIFY(!opened.isNull());
+        const QColor pixel = opened.pixelColor(0, 0);
+        QVERIFY(pixel == QColor(Qt::red) || pixel == QColor(Qt::blue));
+        ++encryptedUploads;
+    }
+    QCOMPARE(encryptedUploads, 2);
+    controller.shutdown();
+}
+#endif
 
 QTEST_GUILESS_MAIN(TestSstvLocalIntegrationProvider)
 

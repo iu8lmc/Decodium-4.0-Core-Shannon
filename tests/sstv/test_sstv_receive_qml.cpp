@@ -127,6 +127,31 @@ public:
 
     Q_INVOKABLE bool startSstvRx() { m_rxActive = true; Q_EMIT rxChanged(); return true; }
     Q_INVOKABLE void stopSstvRx() { m_rxActive = false; Q_EMIT rxChanged(); }
+    Q_INVOKABLE bool configureSstvRadiofaxRx(bool enabled, int ioc, int width, int height)
+    {
+        if (m_rxActive || m_replayActive) return false;
+        m_controls.insert(QStringLiteral("radiofaxEnabled"), enabled);
+        m_controls.insert(QStringLiteral("radiofaxIoc"), ioc);
+        m_controls.insert(QStringLiteral("radiofaxWidth"), width);
+        m_controls.insert(QStringLiteral("radiofaxHeight"), height);
+        Q_EMIT rxChanged();
+        return true;
+    }
+    Q_INVOKABLE bool configureSstvRadiofaxRxAligned(bool enabled, int ioc, int width, int height, bool centered)
+    {
+        if (!configureSstvRadiofaxRx(enabled, ioc, width, height)) return false;
+        m_controls.insert(QStringLiteral("radiofaxCenteredPhasing"), centered);
+        Q_EMIT rxChanged();
+        return true;
+    }
+    Q_INVOKABLE bool configureSstvFax480Rx(bool enabled, const QString& profile)
+    {
+        if (m_rxActive || m_replayActive) return false;
+        m_controls.insert(QStringLiteral("fax480Enabled"),enabled);
+        m_controls.insert(QStringLiteral("fax480Profile"),profile);
+        Q_EMIT rxChanged();
+        return true;
+    }
     Q_INVOKABLE bool resetSstvRx() { return !m_replayActive; }
     Q_INVOKABLE bool abortSstvRxFrame() { ++abortCount; return !m_replayActive; }
     Q_INVOKABLE bool updateSstvRxControls(const QVariantMap& values)
@@ -308,6 +333,41 @@ private slots:
         QVERIFY(imagePixel);
         QVERIFY(imageZoom);
         QVERIFY(scope);
+        QObject* faxEnabled = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxEnabled"));
+        QObject* faxWidth = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxWidth"));
+        QObject* faxHeight = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxHeight"));
+        QObject* faxApply = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxApply"));
+        QObject* faxAlignment = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxFldigiAlignment"));
+        QVERIFY(faxEnabled && faxWidth && faxHeight && faxApply && faxAlignment);
+        QCOMPARE(faxApply->property("enabled").toBool(), false);
+        fixture.stopSstvRx();
+        QTRY_VERIFY(faxApply->property("enabled").toBool());
+        QVERIFY(faxEnabled->setProperty("checked", true));
+        QVERIFY(faxWidth->setProperty("value", 512));
+        QVERIFY(faxHeight->setProperty("value", 400));
+        QVERIFY(faxAlignment->setProperty("checked", true));
+        QVERIFY(QMetaObject::invokeMethod(faxApply, "clicked"));
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxEnabled")).toBool(), true);
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxWidth")).toInt(), 512);
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxHeight")).toInt(), 400);
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxCenteredPhasing")).toBool(), true);
+        auto* fax480Enabled=page->findChild<QObject*>(QStringLiteral("sstvFax480RxEnabled"));
+        auto* fax480Profile=page->findChild<QObject*>(QStringLiteral("sstvFax480RxProfile"));
+        auto* fax480Apply=page->findChild<QObject*>(QStringLiteral("sstvFax480RxApply"));
+        QVERIFY(fax480Enabled && fax480Profile && fax480Apply);
+        QVERIFY(fax480Enabled->setProperty("checked",true));
+        QVERIFY(fax480Profile->setProperty("currentIndex",0));
+        QVERIFY(QMetaObject::invokeMethod(fax480Apply,"clicked"));
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("fax480Profile")).toString(),QStringLiteral("dayton-480"));
+        QVERIFY(fax480Profile->setProperty("currentIndex",1));
+        QVERIFY(QMetaObject::invokeMethod(fax480Apply,"clicked"));
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("fax480Profile")).toString(),QStringLiteral("qsstv-500"));
+        QVERIFY(fax480Profile->setProperty("currentIndex",2));
+        QVERIFY(QMetaObject::invokeMethod(fax480Apply,"clicked"));
+        QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("fax480Profile")).toString(),QStringLiteral("libsstv-vis-480"));
+        fixture.startSstvRx();
+        QTRY_COMPARE(faxApply->property("enabled").toBool(), false);
+        QTRY_COMPARE(fax480Apply->property("enabled").toBool(), false);
         QCOMPARE(open->property("enabled").toBool(), true);
         QCOMPARE(cancel->property("visible").toBool(), false);
         QCOMPARE(autoSave->property("enabled").toBool(), true);

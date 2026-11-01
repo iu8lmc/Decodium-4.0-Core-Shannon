@@ -88,6 +88,8 @@ struct SstvVisDetectorConfig
   double minimumSlotCoverage {0.70};
   double minimumBitDominance {0.70};
   std::uint64_t maximumGapUs {5'000};
+  // Only applies between two observations of the same leader tone.
+  std::uint64_t maximumLeaderGapUs {5'000};
   std::uint64_t maximumOverlapUs {5'000};
   std::uint64_t maximumEventDurationUs {2'000'000};
   std::uint64_t maximumFrameDurationUs {2'000'000};

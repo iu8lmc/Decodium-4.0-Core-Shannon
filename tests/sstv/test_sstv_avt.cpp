@@ -116,17 +116,17 @@ std::vector<SstvFrequencyObservation> lineObservations(
     std::uint64_t sample = first;
     while (sample < end) {
         const SstvAvtPosition position = mapper.positionAtSample(sample);
-        if (!position.valid() || position.line != line) {
+        if (!position.valid()) {
             throw std::logic_error("invalid AVT test mapper position");
         }
         const std::uint64_t centre = position.segmentStartSample
             + (position.segmentEndSample - position.segmentStartSample) / 2U;
         const std::uint8_t value = valueFor(
-            position.pixel, line, position.component);
+            position.pixel, position.line, position.component);
         result.push_back(observation(
             sequence++,
             kImageStart + centre,
-            SstvAvtProtocol::frequencyForValue(value)));
+            SstvAvtProtocol::frequencyForValue(value, mapper.config().variant)));
         if (position.segmentEndSample <= sample) {
             throw std::logic_error("AVT test mapper made no progress");
         }
@@ -166,13 +166,14 @@ std::vector<SstvFrequencyObservation> countdownFrameObservations(
     std::uint64_t frameStart,
     std::uint64_t& sequence,
     std::uint64_t hop = 6U,
-    std::uint32_t sampleRate = kSampleRate)
+    std::uint32_t sampleRate = kSampleRate,
+    bool narrow = false)
 {
     if (hop == 0U) {
         throw std::invalid_argument("AVT test observation hop is zero");
     }
     const SstvAvtSyncFrame frame = SstvAvtSyncCodec::encodeFrame(
-        mode, counter, false);
+        mode, counter, narrow);
     SstvTimingAccumulator timing(sampleRate);
     std::array<std::uint64_t, SstvAvtSyncCodec::TonesPerFrame + 1U>
         boundaries {};
@@ -208,6 +209,66 @@ class TestSstvAvt final : public QObject
     Q_OBJECT
 
 private slots:
+    void countdownAcquiresNarrowAndNormalVariants()
+    {
+        constexpr std::uint64_t frameStart = 400'000U;
+        for (const auto variant : {SstvAvtVariant::Normal, SstvAvtVariant::Narrow,
+                                   SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+            std::uint64_t sequence = 1U;
+            const auto observations = countdownFrameObservations(
+                SstvAvtMode::Avt90, 7U, frameStart, sequence, 6U,
+                kSampleRate, SstvAvtSyncCodec::isNarrow(variant));
+            SstvAvtCountdownDetectorConfig config;
+            config.expectedMode = SstvAvtMode::Avt90;
+            config.searchStartSample = frameStart - 20U;
+            config.frequencyOffsetHz = kOffsetHz;
+            config.variant = variant;
+            const auto result = SstvAvtCountdownDetector(config).consume(observations);
+            QVERIFY(result.has_value());
+            QCOMPARE(result->variant, variant);
+            QCOMPARE(result->counter, std::uint8_t {7U});
+            QCOMPARE(result->frameStartSample, frameStart);
+        }
+    }
+
+    void variantLandmarksCompareNormalAndQrm()
+    {
+        for (const auto mode : kModes) {
+            const auto spec = SstvAvtProtocol::spec(mode);
+            for (const auto variant : {SstvAvtVariant::Normal, SstvAvtVariant::Narrow,
+                                       SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+                const bool narrow = SstvAvtSyncCodec::isNarrow(variant);
+                const bool qrm = SstvAvtSyncCodec::isQrm(variant);
+                const SstvAvtMapper mapper({mode, kSampleRate, 0, variant});
+                for (std::uint32_t wireLine = 0; wireLine < spec.height; ++wireLine) {
+                    const auto pos = mapper.positionAtSample(mapper.lineStartSample(wireLine));
+                    const auto expected = qrm
+                        ? (wireLine < spec.height / 2U ? wireLine * 2U
+                           : (wireLine - spec.height / 2U) * 2U + 1U)
+                        : wireLine;
+                    QCOMPARE(pos.line, expected);
+                    const auto byTime = mapper.positionAtElapsedTime(
+                        Picoseconds {spec.lineDuration.count * wireLine});
+                    QCOMPARE(byTime.line, expected);
+                }
+                QCOMPARE(SstvAvtProtocol::frequencyForValue(0, variant), narrow ? 1700.0 : 1500.0);
+                QCOMPARE(SstvAvtProtocol::frequencyForValue(255, variant), narrow ? 2100.0 : 2300.0);
+                for (unsigned value = 0; value < 256; ++value) {
+                    const auto frequency = SstvAvtProtocol::frequencyForValue(
+                        static_cast<std::uint8_t>(value), variant);
+                    QCOMPARE(SstvAvtProtocol::valueForFrequency(frequency, variant),
+                             static_cast<std::uint8_t>(value));
+                }
+                const auto header = SstvAvtProtocol::header(mode, variant);
+                const auto expectedCountdown = SstvAvtSyncCodec::encodeCountdown(mode, narrow);
+                QCOMPARE(header.size(), SstvAvtProtocol::HeaderSegmentCount);
+                for (std::size_t i = 0; i < expectedCountdown.size(); ++i) {
+                    QCOMPARE(header[SstvAvtProtocol::TripleVisSegmentCount + i].frequencyHz,
+                             expectedCountdown[i].frequencyHz);
+                }
+            }
+        }
+    }
     void fixtureAndProtocolTableKeepEffectiveGeometrySeparate()
     {
         const QJsonObject fixture = readFixture();
@@ -440,6 +501,38 @@ private slots:
         }
     }
 
+    void variantDecoderReconstructsDistinctRows()
+    {
+        const auto mode = SstvAvtMode::Avt24;
+        const auto spec = SstvAvtProtocol::spec(mode);
+        for (const auto variant : {SstvAvtVariant::Normal, SstvAvtVariant::Narrow,
+                                   SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+            const SstvAvtMapper mapper({mode, kSampleRate, 0, variant});
+            SstvAvtDecoderConfig config;
+            config.mode = mode;
+            config.variant = variant;
+            config.imageStartSample = kImageStart;
+            config.observationSpanSamples = 1U;
+            config.frequencyOffsetHz = kOffsetHz;
+            config.maximumInterpolationGapPixels = 0U;
+            SstvAvtDecoder decoder(config);
+            std::uint64_t sequence = 1U;
+            for (std::uint32_t line = 0; line < spec.height; ++line) {
+                const auto observations = lineObservations(mapper, line, sequence);
+                QCOMPARE(decoder.consume(observations), observations.size());
+            }
+            QCOMPARE(decoder.finish(), SstvAvtDecodeState::Complete);
+            const auto snapshot = decoder.snapshot();
+            QVERIFY(snapshot.isComplete());
+            for (std::uint32_t y = 0; y < spec.height; ++y) {
+                const auto pixel = snapshot.pixel(0, y);
+                QCOMPARE(pixel.red, valueFor(0, y, ColourComponent::Red));
+                QCOMPARE(pixel.green, valueFor(0, y, ColourComponent::Green));
+                QCOMPARE(pixel.blue, valueFor(0, y, ColourComponent::Blue));
+            }
+        }
+    }
+
     void countdownDetectorAnchorsFromAnyProtectedFrame()
     {
         constexpr std::uint64_t frameStart = 400'000U;
@@ -638,8 +731,19 @@ private slots:
                                 .arg(static_cast<qulonglong>(error))));
     }
 
+    void fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively_data()
+    {
+        QTest::addColumn<int>("variant");
+        QTest::newRow("normal") << static_cast<int>(SstvAvtVariant::Normal);
+        QTest::newRow("narrow") << static_cast<int>(SstvAvtVariant::Narrow);
+        QTest::newRow("qrm") << static_cast<int>(SstvAvtVariant::Qrm);
+        QTest::newRow("narrow-qrm") << static_cast<int>(SstvAvtVariant::NarrowQrm);
+    }
+
     void fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively()
     {
+        QFETCH(int, variant);
+        const auto avtVariant = static_cast<SstvAvtVariant>(variant);
         const std::vector<SstvRgbPixel> expected = pixelsFor(
             SstvAvtMode::Avt24);
         SstvAvtEncoder encoder(expected,
@@ -647,7 +751,8 @@ private slots:
                                 kSampleRate,
                                 0,
                                 0.7,
-                                0.95});
+                                0.95,
+                                avtVariant});
         SstvFrequencyDemodulatorConfig demodConfig =
             SstvFrequencyDemodulatorConfig::sstvDefaults();
         demodConfig.averagingSamples = 3U;
@@ -660,6 +765,7 @@ private slots:
         const std::uint64_t countdownStart = timing.totalSamples();
         SstvAvtCountdownDetectorConfig detectorConfig;
         detectorConfig.expectedMode = SstvAvtMode::Avt24;
+        detectorConfig.variant = avtVariant;
         detectorConfig.sampleRate = kSampleRate;
         detectorConfig.searchStartSample = countdownStart - 64U;
         detectorConfig.observationSpanSamples = static_cast<std::uint32_t>(
@@ -691,6 +797,7 @@ private slots:
                 if (detection.has_value()) {
                     SstvAvtRxSessionConfig sessionConfig;
                     sessionConfig.mode = detection->mode;
+                    sessionConfig.variant = detection->variant;
                     sessionConfig.sampleRate = kSampleRate;
                     sessionConfig.imageStartSample =
                         detection->imageStartSample;

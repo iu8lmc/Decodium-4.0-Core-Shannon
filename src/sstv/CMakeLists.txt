@@ -27,6 +27,14 @@ set (DECODIUM_SSTV_CORE_SOURCES
   dsp/SstvSlantEstimator.cpp
   dsp/SstvSyncTracker.cpp
   dsp/SstvToneDetector.cpp
+  fax/SstvFax480.cpp
+  fax/SstvFax480AutoRx.cpp
+  fax/SstvFax480Receiver.cpp
+  fax/SstvRadiofax.cpp
+  fax/SstvRadiofaxAutoRx.cpp
+  fax/SstvRadiofaxPhasing.cpp
+  fax/SstvRadiofaxRxSession.cpp
+  fax/SstvRadiofaxStop.cpp
   image/SstvColourConverter.cpp
   image/SstvImageFrame.cpp
   rx/SstvAudioRingBuffer.cpp
@@ -76,6 +84,14 @@ set (DECODIUM_SSTV_CORE_HEADERS
   dsp/SstvSlantEstimator.h
   dsp/SstvSyncTracker.h
   dsp/SstvToneDetector.h
+  fax/SstvFax480.h
+  fax/SstvFax480AutoRx.h
+  fax/SstvFax480Receiver.h
+  fax/SstvRadiofax.h
+  fax/SstvRadiofaxAutoRx.h
+  fax/SstvRadiofaxPhasing.h
+  fax/SstvRadiofaxRxSession.h
+  fax/SstvRadiofaxStop.h
   image/SstvColourConverter.h
   image/SstvImageFrame.h
   rx/SstvAudioRingBuffer.h
@@ -318,6 +334,25 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror)
 endif ()
 
+# E2EE is optional; builds without OpenSSL retain TLS-only sharing.
+find_package (OpenSSL QUIET COMPONENTS Crypto)
+if (OpenSSL_Crypto_FOUND)
+  add_library (decodium_sstv_share_aead STATIC
+    sharing/SstvShareAead.cpp sharing/SstvShareAead.h
+    sharing/SstvShareEncryptedPayload.cpp sharing/SstvShareEncryptedPayload.h
+    sharing/SstvShareKeyAgreement.cpp sharing/SstvShareKeyAgreement.h
+    sharing/SstvShareRecipientEncryption.cpp sharing/SstvShareRecipientEncryption.h
+    sharing/SstvShareKeyStore.cpp sharing/SstvShareKeyStore.h
+    sharing/SstvShareSecureEnvelope.cpp sharing/SstvShareSecureEnvelope.h)
+  target_link_libraries (decodium_sstv_share_aead PUBLIC Qt6::Core OpenSSL::Crypto)
+  target_compile_features (decodium_sstv_share_aead PUBLIC cxx_std_17)
+  if (APPLE)
+    target_sources (decodium_sstv_share_aead PRIVATE
+      ../security/MacKeychainBackend.cpp ../security/MacKeychainBackend.h)
+    target_link_libraries (decodium_sstv_share_aead PUBLIC "-framework Security" "-framework CoreFoundation")
+  endif ()
+endif ()
+
 add_library (decodium_sstv_sharing_core STATIC
   sharing/SstvLocalIntegrationShareProvider.cpp
   sharing/SstvLocalIntegrationShareProvider.h
@@ -330,6 +365,9 @@ add_library (decodium_sstv_sharing_core STATIC
   sharing/SstvShareTransfer.h
   )
 add_library (Decodium::SstvSharingCore ALIAS decodium_sstv_sharing_core)
+if (TARGET decodium_sstv_share_aead)
+  target_link_libraries (decodium_sstv_share_aead PUBLIC Decodium::SstvSharingCore)
+endif ()
 target_include_directories (decodium_sstv_sharing_core
   PUBLIC
     ${CMAKE_SOURCE_DIR}
@@ -417,6 +455,10 @@ target_link_libraries (decodium_sstv_sharing_ui
     Qt6::Core
     Qt6::Gui
   )
+if (APPLE AND TARGET decodium_sstv_share_aead)
+  target_link_libraries (decodium_sstv_sharing_ui PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (decodium_sstv_sharing_ui PRIVATE DECODIUM_SSTV_MACOS_E2EE_RECEIVE=1)
+endif ()
 target_compile_features (decodium_sstv_sharing_ui PUBLIC cxx_std_17)
 set_target_properties (decodium_sstv_sharing_ui PROPERTIES
   AUTOMOC ON

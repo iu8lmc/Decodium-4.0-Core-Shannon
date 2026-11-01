@@ -80,8 +80,10 @@ public:
   // Install crash/signal handlers
   static void installCrashHandler ();
 
-private:
+  // Join the writer on command-line exits that do not enter the event loop.
   static void shutdownDiagnosticLog ();
+
+private:
   QtMessageHandler previous_qt_message_handler_ {nullptr};
   static DecodiumLogging* s_instance;
 };

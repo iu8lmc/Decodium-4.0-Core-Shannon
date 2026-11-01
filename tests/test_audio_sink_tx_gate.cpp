@@ -9,6 +9,7 @@ class TestAudioSinkTxGate final : public QObject
 private slots:
     void discardsTxSamplesWithoutClosingInput();
     void silentInputStillReportsPcm();
+    void sourceTimeFollowsPcmWithoutDuplicateDelivery();
 };
 
 void TestAudioSinkTxGate::discardsTxSamplesWithoutClosingInput()
@@ -35,6 +36,7 @@ void TestAudioSinkTxGate::discardsTxSamplesWithoutClosingInput()
     QCOMPARE(healthSignalCount, 1);
 
     sink.setDiscardSamples(true);
+    QVERIFY(sink.discardingSamples());
     QVector<qint16> const duringTx {1000, 2000, 3000, 4000};
     QCOMPARE(sink.write(reinterpret_cast<char const *>(duringTx.constData()),
                         static_cast<qint64>(duringTx.size() * sizeof(qint16))),
@@ -45,6 +47,7 @@ void TestAudioSinkTxGate::discardsTxSamplesWithoutClosingInput()
     QVERIFY(sink.isOpen());
 
     sink.setDiscardSamples(false);
+    QVERIFY(!sink.discardingSamples());
     QVector<qint16> const afterTx {500, -600};
     QCOMPARE(sink.write(reinterpret_cast<char const *>(afterTx.constData()),
                         static_cast<qint64>(afterTx.size() * sizeof(qint16))),
@@ -53,6 +56,29 @@ void TestAudioSinkTxGate::discardsTxSamplesWithoutClosingInput()
              QVector<short>({100, -200, 300, -400, 500, -600}));
     QCOMPARE(callbackCount, beforeTx.size() + afterTx.size());
     QCOMPARE(healthSignalCount, 2);
+}
+
+void TestAudioSinkTxGate::sourceTimeFollowsPcmWithoutDuplicateDelivery()
+{
+    QVector<short> buffer;
+    QMutex mutex;
+    DecodiumAudioSink sink(buffer, 1, nullptr, &mutex);
+    QVERIFY(sink.initialize(QIODevice::WriteOnly, AudioDevice::Mono, 1));
+    QSignalSpy timed(&sink, &DecodiumAudioSink::audioSamplesProducedWithSourceTime);
+    QSignalSpy legacy(&sink, &DecodiumAudioSink::audioSamplesProduced);
+    const QVector<qint16> samples {12, -34, 56, -78};
+    const auto* data = reinterpret_cast<const char*>(samples.constData());
+    const qint64 bytes = samples.size() * sizeof(qint16);
+    QCOMPARE(sink.writeWithSourceTime(data, bytes, 123'000'000), bytes);
+    QCOMPARE(sink.write(data, bytes), bytes);
+    QCOMPARE(timed.size(), 2);
+    QCOMPARE(legacy.size(), 2);
+    QCOMPARE(timed[0][0].value<QVector<short>>(), samples);
+    QCOMPARE(timed[0][1].toLongLong(), qint64 {123'000'000});
+    QCOMPARE(timed[1][1].toLongLong(), qint64 {-1});
+    sink.setDiscardSamples(true);
+    QCOMPARE(sink.writeWithSourceTime(data, bytes, 124'000'000), bytes);
+    QCOMPARE(timed.size(), 2);
 }
 
 void TestAudioSinkTxGate::silentInputStillReportsPcm()

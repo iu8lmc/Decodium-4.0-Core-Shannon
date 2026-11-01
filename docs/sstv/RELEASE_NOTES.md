@@ -4,6 +4,19 @@ Status: release-readiness draft for the native SSTV feature branch.  These
 notes describe only capabilities present in this source tree and must be
 reconciled with the final CI run before publication.
 
+Local verification on 2026-11-01: the macOS development build passed all 98
+tests labeled `sstv`, including two-application E2EE transfer and tampering
+tests, before the subsequent CLI shutdown fix. The CLI test and both E2EE
+application tests passed again after that fix. Separate A/B BSR audio
+transfers between Decodium processes also passed after the final shutdown
+change. These results cover the local working tree, not release packages or
+other platforms. The work remains uncommitted and the development build still
+reports version 1.0.727; neither fact identifies a release revision.
+The development executable's `--help`, `--version`, unknown-option and
+post-parser validation exits are covered by `test_hamdrm_lab_cli`: each must
+terminate promptly without a running diagnostic-writer thread. This does not
+establish command-line behavior in a packaged release.
+
 ## What is included
 
 - One in-process Decodium SSTV workspace for receive, transmit, Gallery,
@@ -23,6 +36,11 @@ reconciled with the final CI run before publication.
   durable queue, secure-setting credential handles and a validated incoming
   inbox.  The local integration provider is test/development-only and is not a
   network service.
+- Optional end-to-end encrypted sharing with recipient key verification and
+  authenticated decryption; local two-application HTTPS transfer and tamper
+  tests are documented in `E2EE_IMPLEMENTATION.md`.
+- Radiofax and experimental FAX480 profiles, with their individual support
+  and verification limits documented in `RADIOFAX_PROTOCOL.md`.
 - A separate native HAMDRM implementation for the precise profiles and
   transport subset recorded in `HAMDRM_COMPATIBILITY_MATRIX.md`, including
   MOT objects, integrity checks, BSR, partial retransmission/resume and native
@@ -40,19 +58,24 @@ reconciled with the final CI run before publication.
   from local loopback or deterministic tests.  Connected native HAMDRM
   adapters establish the in-process path only; those independent trials remain
   required before a broader release claim.
+- Manual BSR repair has controller, waveform and two-application A/B tests;
+  the latter injects the request and seeds the partial object. A complete
+  over-audio request/repair exchange remains unverified. Consecutive BSRs in
+  one receive session have a separate two-application A/B test.
 - Platform support is claimed only for platforms whose final workflow actually
   succeeds.  Workflow definitions and packaging dependencies alone are not
   build evidence; update this note with the final CI run URLs before release.
-- FAX480 and HFFAX/WEFAX are related image modes, not implemented analog-SSTV
-  rows.  Their exact geometry/profile evidence remains unresolved as recorded
-  in the catalogue.
-- AVT Narrow/QRM variants remain catalogue-only because the audited references
-  do not establish enough picture semantics for a defensible implementation.
+- FAX480 and HFFAX/WEFAX profiles have local coverage, but exact geometry,
+  broader variants and independent application interoperability remain
+  bounded by the evidence in `RADIOFAX_PROTOCOL.md`.
+- The six AVT24/90/94 QRM and Narrow-QRM variants have local two-application
+  A/B checks; independent applications, interference and RF remain unverified.
 - Remote sharing is disabled until the operator configures and enables a
   provider.  Decodium does not invent or deploy an Internet relay/backend.
-- End-to-end encryption is not advertised: production providers use validated
-  TLS, but a TLS endpoint can read the transferred object.  A request that
-  requires E2EE fails closed.
+- E2EE is optional and requires recipient identity verification. Local HTTPS
+  tests do not establish sender authentication, public-provider interoperability
+  or an independent cryptographic security audit. TLS-only sharing remains
+  readable by its endpoint; require E2EE when that protection is needed.
 - Incoming and outgoing files, metadata, queues and diagnostics are bounded,
   but operators should still treat files from unknown stations as untrusted.
 

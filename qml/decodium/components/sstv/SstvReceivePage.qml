@@ -339,6 +339,117 @@ SstvPage {
             }
 
             Rectangle {
+                objectName: "sstvRadiofaxRxControls"
+                Layout.fillWidth: true
+                Layout.preferredHeight: faxControls.implicitHeight + 20
+                color: Qt.rgba(0, 0, 0, 0.10)
+                border.color: root.borderColor
+                border.width: 1
+                radius: 7
+                ColumnLayout {
+                    id: faxControls
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 10
+                    RowLayout {
+                        Layout.fillWidth: true
+                        enabled: !!(root.engine && !root.engine.sstvRxActive && !root.replayActive)
+                        CheckBox {
+                            id: faxEnabled
+                            objectName: "sstvRadiofaxEnabled"
+                            text: qsTr("Radiofax RX (experimental)")
+                            checked: !!root.controls.radiofaxEnabled
+                        }
+                        Label { text: qsTr("IOC"); color: root.secondaryTextColor }
+                        ComboBox {
+                            id: faxIoc
+                            objectName: "sstvRadiofaxIoc"
+                            model: ["576", "288"]
+                            currentIndex: Number(root.controls.radiofaxIoc || 576) === 288 ? 1 : 0
+                            enabled: faxEnabled.checked
+                        }
+                        Label { text: qsTr("Width"); color: root.secondaryTextColor }
+                        SpinBox {
+                            id: faxWidth
+                            objectName: "sstvRadiofaxWidth"
+                            from: 1; to: 4096; editable: true
+                            value: Number(root.controls.radiofaxWidth || 1809)
+                            enabled: faxEnabled.checked
+                        }
+                        Label { text: qsTr("Lines"); color: root.secondaryTextColor }
+                        SpinBox {
+                            id: faxHeight
+                            objectName: "sstvRadiofaxHeight"
+                            from: 1; to: 8192; editable: true
+                            value: Number(root.controls.radiofaxHeight || 1000)
+                            enabled: faxEnabled.checked
+                        }
+                        SstvButton {
+                            objectName: "sstvRadiofaxApply"
+                            text: qsTr("Apply")
+                            onClicked: {
+                                const ok = root.engine.configureSstvRadiofaxRxAligned(
+                                    faxEnabled.checked, Number(faxIoc.currentText),
+                                    faxWidth.value, faxHeight.value, faxFldigiAlignment.checked)
+                                root.feedback = ok ? qsTr("Receiver profile applied")
+                                                   : qsTr("Radiofax profile rejected; check settings or disable FAX480")
+                            }
+                        }
+                    }
+                    CheckBox {
+                        id: faxFldigiAlignment
+                        objectName: "sstvRadiofaxFldigiAlignment"
+                        enabled: faxEnabled.checked && root.engine && !root.engine.sstvRxActive && !root.replayActive
+                        checked: !!root.controls.radiofaxCenteredPhasing
+                        text: qsTr("FLdigi phasing: centered stripe and white end line")
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Set IOC and maximum image size before monitoring. Start and stop detection are approximate. Reset to receive another image.")
+                        color: root.secondaryTextColor
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                enabled: !!(root.engine && !root.engine.sstvRxActive && !root.replayActive)
+                CheckBox {
+                    id: fax480Enabled
+                    objectName: "sstvFax480RxEnabled"
+                    text: qsTr("FAX480 RX (experimental)")
+                    checked: !!root.controls.fax480Enabled
+                }
+                ComboBox {
+                    id: fax480Profile
+                    objectName: "sstvFax480RxProfile"
+                    model: ["Dayton 512×480", "QSSTV-style 512×500", "VIS 85 512×480"]
+                    currentIndex: root.controls.fax480Profile === "qsstv-500" ? 1 : (root.controls.fax480Profile === "libsstv-vis-480" ? 2 : 0)
+                    enabled: fax480Enabled.checked
+                }
+                Button {
+                    objectName: "sstvFax480RxApply"
+                    text: qsTr("Apply")
+                    onClicked: {
+                        const ok = root.engine.configureSstvFax480Rx(fax480Enabled.checked,
+                            fax480Profile.currentIndex === 0 ? "dayton-480" : (fax480Profile.currentIndex === 1 ? "qsstv-500" : "libsstv-vis-480"))
+                        root.feedback = ok ? qsTr("FAX480 receiver profile applied")
+                                           : qsTr("FAX480 profile rejected; disable Radiofax first")
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Requires the selected start signal; stop and restart RX for another image.")
+                    color: root.secondaryTextColor
+                    font.pixelSize: 10
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            Rectangle {
                 objectName: "sstvRxCorrectionControls"
                 Layout.fillWidth: true
                 Layout.preferredHeight: rxControlLayout.implicitHeight + 24
@@ -839,6 +950,9 @@ SstvPage {
                         anchors.centerIn: parent
                         text: root.stats && root.stats.imageComplete
                               ? qsTr("Complete · %1").arg(root.textValue("imageMode", qsTr("SSTV")))
+                              : root.stats && root.stats.imageRadiofaxStopDetected
+                                ? qsTr("Radiofax stop · %1 lines")
+                                    .arg(root.textValue("imageLinesPublished", "0"))
                               : qsTr("%1 · %2% · %3/%4 lines")
                                   .arg(root.textValue("imageMode", qsTr("SSTV")))
                                   .arg((root.imageCoverage * 100).toFixed(0))

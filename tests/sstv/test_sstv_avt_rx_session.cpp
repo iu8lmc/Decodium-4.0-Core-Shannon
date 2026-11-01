@@ -31,10 +31,11 @@ std::uint8_t componentValue(std::uint32_t x,
     return static_cast<std::uint8_t>((x * 7U + y * 13U + salt) & 0xffU);
 }
 
-std::vector<SstvFrequencyObservation> allObservations(SstvAvtMode mode)
+std::vector<SstvFrequencyObservation> allObservations(
+    SstvAvtMode mode, SstvAvtVariant variant = SstvAvtVariant::Normal)
 {
     const SstvAvtModeSpec spec = SstvAvtProtocol::spec(mode);
-    const SstvAvtMapper mapper({mode, kSampleRate, 0});
+    const SstvAvtMapper mapper({mode, kSampleRate, 0, variant});
     std::vector<SstvFrequencyObservation> result;
     result.reserve(static_cast<std::size_t>(spec.width) * spec.height * 3U);
     std::uint64_t sequence = 1U;
@@ -52,7 +53,7 @@ std::vector<SstvFrequencyObservation> allObservations(SstvAvtMode mode)
         observation.rawFrequencyHz = SstvAvtProtocol::frequencyForValue(
             componentValue(position.pixel,
                            position.line,
-                           position.component));
+                           position.component), variant);
         observation.correctedFrequencyHz = observation.rawFrequencyHz;
         observation.rms = 0.5;
         observation.snrDb = 36.0;
@@ -99,6 +100,24 @@ class TestSstvAvtRxSession final : public QObject
     Q_OBJECT
 
 private slots:
+    void variantsMatchNormalRasterThroughSession()
+    {
+        const auto mode = SstvAvtMode::Avt24;
+        SstvAvtRxSession normal(configFor(mode));
+        consumeChunks(normal, allObservations(mode), 257U);
+        QCOMPARE(normal.finish(), SstvAvtRxSessionState::Complete);
+        const auto expected = normal.snapshot();
+        for (const auto variant : {SstvAvtVariant::Narrow, SstvAvtVariant::Qrm,
+                                   SstvAvtVariant::NarrowQrm}) {
+            auto config = configFor(mode);
+            config.variant = variant;
+            SstvAvtRxSession session(config);
+            consumeChunks(session, allObservations(mode, variant), 257U);
+            QCOMPARE(session.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(session.snapshot().pixels, expected.pixels);
+        }
+    }
+
     void completeFramesAreChunkInvariantAndBounded()
     {
         for (const SstvAvtMode mode : kModes) {

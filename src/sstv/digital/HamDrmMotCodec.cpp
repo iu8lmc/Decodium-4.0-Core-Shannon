@@ -2,7 +2,7 @@
 
 #include "HamDrmMotCodec.h"
 
-#include "HamDrmCrc.h"
+#include "channel/HamDrmChannelCrc.h"
 
 #include <algorithm>
 #include <cctype>
@@ -185,7 +185,7 @@ HamDrmValueResult<std::vector<std::uint8_t>> encodeHamDrmMotDataGroup(
         (static_cast<std::uint16_t>(group.segmentRepetitionCount) << 13U)
         | static_cast<std::uint16_t>(group.payload.size())));
     output.insert(output.end(), group.payload.begin(), group.payload.end());
-    appendBigEndian16(output, hamDrmCrc16X25(output.data(), output.size()));
+    appendBigEndian16(output, channel::hamDrmChannelCrc16(output.data(), output.size()));
     return {std::move(output), HamDrmStatus::success()};
 }
 
@@ -238,7 +238,7 @@ HamDrmValueResult<HamDrmMotDataGroup> parseHamDrmMotDataGroup(
                                       "MOT segment length is inconsistent")};
     }
     const std::uint16_t receivedCrc = readBigEndian16(data + size - kCrcBytes);
-    const std::uint16_t computedCrc = hamDrmCrc16X25(data, size - kCrcBytes);
+    const std::uint16_t computedCrc = channel::hamDrmChannelCrc16(data, size - kCrcBytes);
     if (receivedCrc != computedCrc) {
         return {std::nullopt,
                 HamDrmStatus::failure(HamDrmErrorCode::CrcMismatch,

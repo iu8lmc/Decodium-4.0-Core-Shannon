@@ -22,7 +22,14 @@
 #if DECODIUM_HAS_SSTV
 #include <QImage>
 #include <QQuickImageProvider>
+#include "src/sstv/models/SstvShareController.h"
+#if defined(Q_OS_MACOS)
+#include "SstvShareLabSession.h"
 #endif
+#endif
+#include <QJsonObject>
+#include <QSslCertificate>
+#include <QSslConfiguration>
 #include <QQuickGraphicsConfiguration>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -73,6 +80,16 @@ static bool hasCommandLineSwitchAny(int argc, char* argv[], const char* name)
     for (int i = 1; i < argc; ++i) {
         if (QString::fromLocal8Bit(argv[i]) == QLatin1String(name))
             return true;
+    }
+    return false;
+}
+
+static bool hasCommandLineOptionAny(int argc, char* argv[], const char* name)
+{
+    const QString option=QString::fromLatin1(name);
+    for (int i=1;i<argc;++i) {
+        const QString arg=QString::fromLocal8Bit(argv[i]);
+        if (arg==option || arg.startsWith(option+QLatin1Char('='))) return true;
     }
     return false;
 }
@@ -183,6 +200,10 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #include "src/sstv/image/SstvImageFrame.h"
 #include "src/sstv/integration/SstvStudioController.h"
 #include "src/sstv/models/SstvThumbnailProvider.h"
+#endif
+#if DECODIUM_HAS_HAMDRM
+#include "src/sstv/digital/HamDrmController.h"
+#include "src/sstv/digital/HamDrmBsrCodec.h"
 #endif
 
 static void L(const char* msg) {
@@ -1648,6 +1669,129 @@ int main(int argc, char* argv[])
     // il database devono gia' vedere il nuovo layout su file.
     DecodiumStorageMigration::configure();
 
+    // Validate the test-only profile switch before startup workers exist.
+    for (int i = 1; i < argc; ++i) {
+        const QString arg = QString::fromLocal8Bit(argv[i]);
+        const QString name = QStringLiteral("--lab-hamdrm-profile");
+        if (arg == name || arg.startsWith(name + QLatin1Char('='))) {
+            const QString value = arg == name
+                ? (i + 1 < argc ? QString::fromLocal8Bit(argv[i + 1]) : QString {})
+                : arg.mid(name.size() + 1);
+            if (!hasCommandLineSwitchAny(argc, argv, "--test-mode")
+                || !hasCommandLineSwitchAny(argc, argv, "--lab-hamdrm")
+                || value.isEmpty() || value.startsWith(QLatin1Char('-'))) {
+                std::fprintf(stderr, "HAMDRM lab profile requires --test-mode, --lab-hamdrm and a profile value\n");
+                return 2;
+            }
+        }
+    }
+
+    for (int i = 1; i < argc; ++i) {
+        const QString arg = QString::fromLocal8Bit(argv[i]);
+        const QString name = QStringLiteral("--lab-sstv-fax480-tx");
+        if (arg == name || arg.startsWith(name + QLatin1Char('='))) {
+            const QString value = arg == name
+                ? (i + 1 < argc ? QString::fromLocal8Bit(argv[i + 1]) : QString {})
+                : arg.mid(name.size() + 1);
+            if (!hasCommandLineSwitchAny(argc, argv, "--test-mode")
+                || hasCommandLineOptionAny(argc, argv, "--lab-sstv-fax-tx")
+                || (value != QStringLiteral("dayton-480") && value != QStringLiteral("qsstv-500") && value != QStringLiteral("libsstv-vis-480"))) {
+                std::fprintf(stderr, "FAX480 lab TX requires --test-mode and a valid exclusive profile\n");
+                return 2;
+            }
+        }
+    }
+
+    for (int i=1;i<argc;++i) {
+        const QString arg=QString::fromLocal8Bit(argv[i]);
+        const QString name=QStringLiteral("--lab-sstv-fax480-rx");
+        if (arg==name || arg.startsWith(name+QLatin1Char('='))) {
+            const QString value=arg==name ? (i+1<argc ? QString::fromLocal8Bit(argv[i+1]) : QString {})
+                                          : arg.mid(name.size()+1);
+            if (!hasCommandLineSwitchAny(argc,argv,"--test-mode")
+                || hasCommandLineOptionAny(argc,argv,"--lab-sstv-fax-rx")
+                || (value!=QStringLiteral("dayton-480") && value!=QStringLiteral("qsstv-500") && value!=QStringLiteral("libsstv-vis-480"))) {
+                std::fprintf(stderr,"FAX480 lab RX requires --test-mode and a valid exclusive profile\n");
+                return 2;
+            }
+        }
+    }
+
+    // Reject malformed sharing-lab invocations before starting any Qt or
+    // decoder workers. An early return after those threads start can strand
+    // their shutdown path even though no sharing operation was authorized.
+    QString earlyLabKeychain;
+    QString earlyLabIdentity;
+    QString earlyLabSession;
+    QJsonObject earlyLabShareConfig;
+    QByteArray earlyLabShareCa;
+    bool earlyLabOption = false;
+    for (int i = 1; i < argc; ++i) {
+        const QString arg = QString::fromLocal8Bit(argv[i]);
+        for (const auto& entry : {std::pair<QString, QString*> {QStringLiteral("--lab-share-keychain"), &earlyLabKeychain},
+                                  {QStringLiteral("--lab-share-identity-file"), &earlyLabIdentity},
+                                  {QStringLiteral("--lab-share-session-file"), &earlyLabSession}}) {
+            if (arg == entry.first || arg.startsWith(entry.first + QLatin1Char('='))) {
+                earlyLabOption = true;
+                *entry.second = arg == entry.first
+                    ? (i + 1 < argc ? QString::fromLocal8Bit(argv[++i]) : QString {})
+                    : arg.mid(entry.first.size() + 1);
+                break;
+            }
+        }
+    }
+    if (earlyLabOption) {
+#if !DECODIUM_HAS_SSTV || !defined(Q_OS_MACOS)
+        std::fprintf(stderr, "Sharing identity lab requires SSTV and macOS\n");
+        return 2;
+#endif
+        const QFileInfo keychain(earlyLabKeychain);
+        if (!hasCommandLineSwitchAny(argc, argv, "--test-mode")
+            || !keychain.isAbsolute() || !keychain.isFile() || keychain.isSymLink()
+            || (earlyLabIdentity.isEmpty() == earlyLabSession.isEmpty())
+            || (!earlyLabIdentity.isEmpty() && !QDir::isAbsolutePath(earlyLabIdentity))
+            || (!earlyLabSession.isEmpty() && (!QFileInfo(earlyLabSession).isAbsolute()
+                                                || !QFileInfo(earlyLabSession).isFile()))) {
+            std::fprintf(stderr, "Sharing lab requires --test-mode, an existing absolute keychain and one absolute identity or session path\n");
+            return 2;
+        }
+        if (!earlyLabSession.isEmpty()) {
+            QFile input(earlyLabSession);
+            if (!input.open(QIODevice::ReadOnly) || input.size() > 64 * 1024) {
+                std::fprintf(stderr, "Invalid sharing lab session file\n"); return 2;
+            }
+            const auto parsed = QJsonDocument::fromJson(input.readAll());
+            if (!parsed.isObject()) { std::fprintf(stderr, "Invalid sharing lab JSON\n"); return 2; }
+            earlyLabShareConfig = parsed.object();
+            const auto field = [&earlyLabShareConfig](const char* name) {
+                return earlyLabShareConfig.value(QLatin1String(name)).toString();
+            };
+            const QUrl endpoint(field("endpoint"));
+            QFile cert(field("certificate"));
+            const QString role = field("role");
+            bool valid = endpoint.isValid() && endpoint.scheme() == QStringLiteral("https")
+                && endpoint.host() == QStringLiteral("127.0.0.1") && endpoint.port() > 0
+                && endpoint.userInfo().isEmpty() && endpoint.query().isEmpty() && endpoint.fragment().isEmpty()
+                && QFileInfo(cert).isAbsolute() && cert.open(QIODevice::ReadOnly) && cert.size() <= 64 * 1024
+                && QDir::isAbsolutePath(field("identity")) && QDir::isAbsolutePath(field("result"))
+                && (role == QStringLiteral("sender") || role == QStringLiteral("receiver"));
+            if (valid && role == QStringLiteral("sender")) {
+                for (const auto* name : {"imageA", "imageB"}) {
+                    const QFileInfo image(field(name));
+                    valid = valid && image.isAbsolute() && image.isFile();
+                }
+                valid = valid && !field("recipient").isEmpty();
+            } else if (valid) {
+                const QFileInfo output(field("outputDir"));
+                valid = output.isAbsolute() && output.isDir();
+            }
+            if (valid) earlyLabShareCa = cert.readAll();
+            if (!valid || QSslCertificate(earlyLabShareCa).isNull()) {
+                std::fprintf(stderr, "Invalid sharing lab session parameters\n"); return 2;
+            }
+        }
+    }
+
 #ifdef Q_OS_WIN
     int graphicsSupervisorExitCode = 0;
     if (runWindowsGraphicsStartupSupervisor(argc, argv, &graphicsSupervisorExitCode))
@@ -1981,6 +2125,11 @@ int main(int argc, char* argv[])
 #endif
 
     DecodiumApplication app(argc, argv);
+    // Some command-line and startup paths return without entering the Qt
+    // event loop, so aboutToQuit alone cannot join the diagnostic writer.
+    struct DiagnosticLogCleanup {
+        ~DiagnosticLogCleanup() { DecodiumLogging::shutdownDiagnosticLog(); }
+    } diagnosticLogCleanup;
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
 #ifdef Q_OS_LINUX
@@ -2203,6 +2352,22 @@ int main(int argc, char* argv[])
         QStringList {} << "lab-monitor-ms",
         QStringLiteral("Delay before starting RX monitor in a runtime lab session."),
         QStringLiteral("ms"));
+    QCommandLineOption const labHamDrmOption(
+        QStringList {} << "lab-hamdrm",
+        QStringLiteral("Test-only: exercise HAMDRM with the existing SSTV lab RX/TX controls."));
+    QCommandLineOption const labHamDrmProfileOption(
+        QStringList {} << "lab-hamdrm-profile",
+        QStringLiteral("Test-only: select a HAMDRM profile for the lab RX or TX."),
+        QStringLiteral("profile"));
+    QCommandLineOption const labShareKeychainOption(
+        QStringList {} << "lab-share-keychain",
+        QStringLiteral("Test-only: use an isolated macOS keychain for SSTV sharing."), QStringLiteral("path"));
+    QCommandLineOption const labShareIdentityOption(
+        QStringList {} << "lab-share-identity-file",
+        QStringLiteral("Test-only: write the public sharing identity as JSON and exit."), QStringLiteral("path"));
+    QCommandLineOption const labShareSessionOption(
+        QStringList {} << "lab-share-session-file",
+        QStringLiteral("Test-only: run a local HTTPS encrypted sharing session."), QStringLiteral("path"));
     QCommandLineOption const labSstvRxMsOption(
         QStringList {} << "lab-sstv-rx-ms",
         QStringLiteral("Delay before starting native SSTV RX in a runtime lab session."),
@@ -2215,6 +2380,26 @@ int main(int argc, char* argv[])
         QStringList {} << "lab-sstv-rx-ready-file",
         QStringLiteral("Write this file when native SSTV RX is running and its capture worker has processed audio."),
         QStringLiteral("path"));
+    QCommandLineOption const labSstvRxImageFileOption(
+        QStringList {} << "lab-sstv-rx-image-file",
+        QStringLiteral("Test-only absolute PNG destination for a completed or stop-terminated SSTV RX image."),
+        QStringLiteral("path"));
+    QCommandLineOption const labSstvTxImageFileOption(
+        QStringList {} << "lab-sstv-tx-image-file",
+        QStringLiteral("Test-only absolute PNG destination for the prepared SSTV TX image."),
+        QStringLiteral("path"));
+    QCommandLineOption const labSstvFaxRxOption(
+        QStringList {} << "lab-sstv-fax-rx",
+        QStringLiteral("Test-only Radiofax RX profile: IOC,width,height[,centered-phasing-0-or-1]."), QStringLiteral("profile"));
+    QCommandLineOption const labSstvFaxTxOption(
+        QStringList {} << "lab-sstv-fax-tx",
+        QStringLiteral("Test-only Radiofax TX profile: IOC,lines-per-minute[,centered-phasing-0-or-1]."), QStringLiteral("profile"));
+    QCommandLineOption const labSstvFax480RxOption(
+        QStringList {} << "lab-sstv-fax480-rx",
+        QStringLiteral("Test-only FAX480 RX profile: dayton-480 or qsstv-500."), QStringLiteral("profile"));
+    QCommandLineOption const labSstvFax480TxOption(
+        QStringList {} << "lab-sstv-fax480-tx",
+        QStringLiteral("Test-only FAX480 TX profile: dayton-480 or qsstv-500."), QStringLiteral("profile"));
     QCommandLineOption const labSstvTxMsOption(
         QStringList {} << "lab-sstv-tx-ms",
         QStringLiteral("Delay before preparing and transmitting a native SSTV calibration image."),
@@ -2572,9 +2757,20 @@ int main(int argc, char* argv[])
     parser.addOption(labNoMonitorOption);
     parser.addOption(labReapplyMsOption);
     parser.addOption(labMonitorMsOption);
+    parser.addOption(labHamDrmOption);
+    parser.addOption(labHamDrmProfileOption);
+    parser.addOption(labShareKeychainOption);
+    parser.addOption(labShareIdentityOption);
+    parser.addOption(labShareSessionOption);
     parser.addOption(labSstvRxMsOption);
     parser.addOption(labSstvRxModeOption);
     parser.addOption(labSstvRxReadyFileOption);
+    parser.addOption(labSstvRxImageFileOption);
+    parser.addOption(labSstvTxImageFileOption);
+    parser.addOption(labSstvFaxRxOption);
+    parser.addOption(labSstvFaxTxOption);
+    parser.addOption(labSstvFax480TxOption);
+    parser.addOption(labSstvFax480RxOption);
     parser.addOption(labSstvTxMsOption);
     parser.addOption(labSstvTxWaitFileOption);
     parser.addOption(labSstvTxWaitTimeoutOption);
@@ -2659,12 +2855,97 @@ int main(int argc, char* argv[])
         return -1;
     }
     if (parser.isSet(helpOption)) {
-        parser.showHelp(0);
+        const QByteArray help = parser.helpText().toLocal8Bit();
+        std::fwrite(help.constData(), 1, static_cast<std::size_t>(help.size()), stdout);
+        std::fflush(stdout);
+        return 0;
     }
     if (parser.isSet(versionOption)) {
-        parser.showVersion();
+        const QByteArray version = (app.applicationName() + QLatin1Char(' ')
+                                    + app.applicationVersion() + QLatin1Char('\n')).toLocal8Bit();
+        std::fwrite(version.constData(), 1, static_cast<std::size_t>(version.size()), stdout);
+        std::fflush(stdout);
+        return 0;
     }
 
+    if (parser.isSet(labHamDrmProfileOption)
+        && (!parser.isSet(testOption) || !parser.isSet(labHamDrmOption))) {
+        qCritical() << "HAMDRM lab profile requires --test-mode and --lab-hamdrm";
+        return -1;
+    }
+    if (parser.isSet(labHamDrmOption) && !parser.isSet(testOption)) {
+        qCritical() << "HAMDRM lab mode requires --test-mode";
+        return -1;
+    }
+    const bool labShareIdentity = parser.isSet(labShareIdentityOption);
+    const bool labShareSession = parser.isSet(labShareSessionOption);
+    QJsonObject labShareConfig;
+    if (labShareIdentity || labShareSession || parser.isSet(labShareKeychainOption)) {
+        const QFileInfo keychain(parser.value(labShareKeychainOption));
+        if (!parser.isSet(testOption) || labShareIdentity == labShareSession
+            || !parser.isSet(labShareKeychainOption)
+            || !keychain.isAbsolute() || !keychain.isFile() || keychain.isSymLink()
+            || (labShareIdentity && !QDir::isAbsolutePath(parser.value(labShareIdentityOption)))
+            || (labShareSession && !QFileInfo(parser.value(labShareSessionOption)).isAbsolute())) {
+            qCritical() << "Invalid sharing lab configuration";
+            return -1;
+        }
+#if !DECODIUM_HAS_SSTV || !defined(Q_OS_MACOS)
+        qCritical() << "Sharing identity lab requires SSTV and macOS";
+        return -1;
+#endif
+        app.setProperty("decodiumLabShareKeychain", keychain.canonicalFilePath());
+        if (labShareSession) {
+            labShareConfig = earlyLabShareConfig;
+            const QSslCertificate testCa(earlyLabShareCa);
+            auto ssl = QSslConfiguration::defaultConfiguration();
+            ssl.addCaCertificate(testCa);
+            QSslConfiguration::setDefaultConfiguration(ssl);
+        }
+    }
+#if !DECODIUM_HAS_HAMDRM
+    if (parser.isSet(labHamDrmOption)) {
+        qCritical() << "HAMDRM lab mode is unavailable in this build";
+        return -1;
+    }
+#endif
+    for (const auto& imageOption : {labSstvRxImageFileOption, labSstvTxImageFileOption}) {
+        if (parser.isSet(imageOption)
+            && (!parser.isSet(testOption) || !QDir::isAbsolutePath(parser.value(imageOption)))) {
+            qCritical() << "Lab image output requires --test-mode and an absolute path";
+            return -1;
+        }
+    }
+    if ((parser.isSet(labSstvFaxRxOption) || parser.isSet(labSstvFaxTxOption)
+         || parser.isSet(labSstvFax480TxOption))
+        && !parser.isSet(testOption)) {
+        qCritical() << "Radiofax lab options require --test-mode";
+        return -1;
+    }
+    const QStringList labFaxRx = parser.isSet(labSstvFaxRxOption)
+        ? parser.value(labSstvFaxRxOption).split(QLatin1Char(',')) : QStringList {};
+    const QStringList labFaxTx = parser.isSet(labSstvFaxTxOption)
+        ? parser.value(labSstvFaxTxOption).split(QLatin1Char(',')) : QStringList {};
+    const QString labFax480Rx = parser.value(labSstvFax480RxOption).trimmed();
+    const QString labFax480Tx = parser.value(labSstvFax480TxOption).trimmed();
+    if (parser.isSet(labSstvFax480TxOption)
+        && (parser.isSet(labSstvFaxTxOption) || (labFax480Tx != QStringLiteral("dayton-480")
+            && labFax480Tx != QStringLiteral("qsstv-500") && labFax480Tx != QStringLiteral("libsstv-vis-480")))) {
+        qCritical() << "Invalid FAX480 lab TX profile";
+        return 2;
+    }
+    const auto numericProfile = [](const QStringList& parts, int expected) {
+        if (parts.size() != expected) return false;
+        for (const auto& part : parts) { bool ok = false; part.toInt(&ok); if (!ok) return false; }
+        return true;
+    };
+    if ((!labFaxRx.isEmpty() && !(numericProfile(labFaxRx, 3)
+          || (numericProfile(labFaxRx, 4) && (labFaxRx[3] == "0" || labFaxRx[3] == "1"))))
+        || (!labFaxTx.isEmpty() && !(numericProfile(labFaxTx, 2)
+          || (numericProfile(labFaxTx, 3) && (labFaxTx[2] == "0" || labFaxTx[2] == "1"))))) {
+        qCritical() << "Invalid Radiofax lab profile";
+        return -1;
+    }
     QStandardPaths::setTestModeEnabled(parser.isSet(testOption));
     // Explicit test-only root keeps bridge settings (including named INI
     // stores) separate from the operator's normal radio configuration.
@@ -2798,9 +3079,13 @@ int main(int argc, char* argv[])
     QString const labSstvMode = parser.value(labSstvModeOption).trimmed();
     QString const labSstvRxMode = parser.value(labSstvRxModeOption).trimmed();
     QString const labSstvRxReadyFile = parser.value(labSstvRxReadyFileOption).trimmed();
+    QString const labSstvRxImageFile = parser.value(labSstvRxImageFileOption).trimmed();
+    QString const labSstvTxImageFile = parser.value(labSstvTxImageFileOption).trimmed();
     QString const labSstvTxWaitFile = parser.value(labSstvTxWaitFileOption).trimmed();
     QString const labSstvImage = parser.value(labSstvImageOption).trimmed();
     bool const labSstvVox = parser.isSet(labSstvVoxOption);
+    bool const labHamDrm = parser.isSet(labHamDrmOption);
+    QString const labHamDrmProfile = parser.value(labHamDrmProfileOption).trimmed();
     int const labBcastMs = parseLabDelayMs(labBcastMsOption, 14000);
     int const labDigiMs = parseLabDelayMs(labDigiMsOption, 14000);
     int const labQuitMs = parseLabDelayMs(labQuitMsOption, 0);
@@ -3031,6 +3316,74 @@ int main(int argc, char* argv[])
 
     L("bridge constructing");
     DecodiumBridge bridge;
+#if DECODIUM_HAS_SSTV && defined(Q_OS_MACOS)
+    if (labShareSession) {
+        auto* sharing = qobject_cast<decodium::sstv::SstvShareController*>(bridge.sstvShare());
+        const QString role = labShareConfig.value(QStringLiteral("role")).toString();
+        bool valid = sharing && (role == QStringLiteral("sender") || role == QStringLiteral("receiver"));
+        for (const auto& name : {"identity", "result"})
+            valid = valid && QDir::isAbsolutePath(labShareConfig.value(QLatin1String(name)).toString());
+        if (role == QStringLiteral("sender")) {
+            for (const auto& name : {"imageA", "imageB"})
+                valid = valid && QFileInfo(labShareConfig.value(QLatin1String(name)).toString()).isAbsolute()
+                    && QFileInfo(labShareConfig.value(QLatin1String(name)).toString()).isFile();
+            valid = valid && !labShareConfig.value(QStringLiteral("recipient")).toString().isEmpty();
+        } else {
+            const QFileInfo dir(labShareConfig.value(QStringLiteral("outputDir")).toString());
+            valid = valid && dir.isAbsolute() && dir.isDir();
+        }
+        if (!valid) {
+            qCritical() << "[LAB][SHARE SESSION] invalid session parameters";
+            QTimer::singleShot(0, &app, [&app]() { app.exit(2); });
+        } else {
+            new SstvShareLabSession(sharing, labShareConfig, &app);
+        }
+    }
+    if (labShareIdentity) {
+        auto* sharing = qobject_cast<decodium::sstv::SstvShareController*>(bridge.sstvShare());
+        if (!sharing) {
+            qCritical() << "[LAB][SHARE] sharing controller unavailable";
+            return -1;
+        }
+        const QString identityPath = parser.value(labShareIdentityOption);
+        QObject::connect(sharing, &decodium::sstv::SstvShareController::sharingIdentityReady,
+                         &app, [&app, identityPath](const QString& publicKey, const QString& fingerprint) {
+            QSaveFile file(identityPath);
+            const QByteArray json = QJsonDocument(QJsonObject {
+                {QStringLiteral("publicKey"), publicKey},
+                {QStringLiteral("fingerprint"), fingerprint}
+            }).toJson(QJsonDocument::Compact);
+            if (!file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit()) {
+                qCritical() << "[LAB][SHARE] could not write public identity";
+                app.exit(2);
+                return;
+            }
+            qInfo() << "[LAB][SHARE] public identity written" << identityPath;
+            app.exit(0);
+        });
+        QObject::connect(sharing, &decodium::sstv::SstvShareController::operationFinished,
+                         &app, [&app](const QString& operation, bool ok, const QString& message) {
+            if (operation == QStringLiteral("sharing-identity") && !ok) {
+                qCritical() << "[LAB][SHARE] identity failed" << message;
+                app.exit(2);
+            }
+        });
+        auto* readiness = new QTimer(&app);
+        readiness->setInterval(100);
+        QObject::connect(readiness, &QTimer::timeout, &app, [sharing, readiness]() {
+            if (sharing->ready()) {
+                readiness->stop();
+                if (!sharing->createSharingIdentity())
+                    QCoreApplication::exit(2);
+            }
+        });
+        readiness->start();
+        QTimer::singleShot(60'000, &app, [&app]() {
+            qCritical() << "[LAB][SHARE] identity timed out";
+            app.exit(2);
+        });
+    }
+#endif
     FT2LinkQmlAdapter ft2Link;
 #if DECODIUM_HAS_RTTY
     // DecoRTTY: RTTY su VITA-49, FlexRadio diretto e FT-991A via gateway.
@@ -3322,8 +3675,25 @@ int main(int argc, char* argv[])
         QTimer::singleShot(labSstvRxMs, &bridge,
                            [&bridge,
                             labSstvRxMode,
+                            labFaxRx,
+                            labFax480Rx,
+                            labHamDrm,
+                            labHamDrmProfile,
+                            labSstvRxImageFile,
                             labSstvRxReadyFile,
                             writeLabSstvReadyFile]() {
+            if (!labFax480Rx.isEmpty()) {
+                const bool configured=bridge.configureSstvFax480Rx(true,labFax480Rx);
+                qInfo() << "[LAB][SSTV] FAX480 RX configured" << configured << labFax480Rx;
+                if (!configured) return;
+            }
+            if (!labFaxRx.isEmpty()) {
+                const bool configured = bridge.configureSstvRadiofaxRxAligned(
+                    true, labFaxRx[0].toInt(), labFaxRx[1].toInt(), labFaxRx[2].toInt(),
+                    labFaxRx.size() == 4 && labFaxRx[3] == "1");
+                qInfo() << "[LAB][SSTV] Radiofax RX configured" << configured;
+                if (!configured) return;
+            }
             if (!labSstvRxMode.isEmpty()) {
                 const bool controlsAccepted = bridge.updateSstvRxControls(
                     {{QStringLiteral("modeControl"), QStringLiteral("manual")},
@@ -3332,6 +3702,118 @@ int main(int argc, char* argv[])
                     << "[LAB][SSTV] RX manual mode requested mode="
                     << labSstvRxMode << "accepted=" << controlsAccepted;
             }
+#if DECODIUM_HAS_HAMDRM
+            if (labHamDrm) {
+                auto* digital = qobject_cast<decodium::sstv::hamdrm::HamDrmController*>(bridge.sstvDigital());
+                if (!digital) { qWarning() << "[LAB][HAMDRM] RX controller unavailable"; return; }
+                if (!labHamDrmProfile.isEmpty()) {
+                    digital->setSelectedProfileId(labHamDrmProfile);
+                    if (digital->selectedProfileId() != labHamDrmProfile) {
+                        qWarning() << "[LAB][HAMDRM] RX profile rejected" << labHamDrmProfile;
+                        return;
+                    }
+                }
+                QObject::connect(digital, &decodium::sstv::hamdrm::HamDrmController::objectCompleted,
+                    &bridge, [digital, labSstvRxImageFile](quint16 id, const QString& filename) {
+                        const auto object = digital->takeCompletedObject(id);
+                        if (!object.ok() || labSstvRxImageFile.isEmpty()) {
+                            qWarning() << "[LAB][HAMDRM] completed object unavailable" << filename;
+                            return;
+                        }
+                        QSaveFile file(labSstvRxImageFile);
+                        const auto& bytes = object.value->originalBytes;
+                        if (!file.open(QIODevice::WriteOnly)
+                            || file.write(reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size())) != qsizetype(bytes.size())
+                            || !file.commit()) {
+                            qWarning() << "[LAB][HAMDRM] RX image save failed";
+                            return;
+                        }
+                        qInfo() << "[LAB][HAMDRM] RX object saved" << labSstvRxImageFile << "bytes" << bytes.size();
+                    });
+                QObject::connect(digital, &decodium::sstv::hamdrm::HamDrmController::bsrReceived,
+                    &bridge, [digital, labSstvRxImageFile](quint16, quint16 requested) {
+                        if (labSstvRxImageFile.isEmpty()) return;
+                        QSaveFile file(labSstvRxImageFile);
+                        const QByteArray text = digital->receivedBsrText().toLatin1();
+                        if (!file.open(QIODevice::WriteOnly) || file.write(text) != text.size() || !file.commit()) {
+                            qWarning() << "[LAB][HAMDRM] RX BSR save failed"; return;
+                        }
+                        qInfo() << "[LAB][HAMDRM] RX BSR saved" << labSstvRxImageFile << "requested" << requested;
+                    });
+                const QString repairFixture = QStandardPaths::isTestModeEnabled()
+                    ? qEnvironmentVariable("DECODIUM_LAB_REPAIR_FIXTURE") : QString {};
+                if (!repairFixture.isEmpty()) {
+                    if (qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AIR") == 1
+                        && !bridge.enterSstvWorkspace()) {
+                        qWarning() << "[LAB][REPAIR] receiver workspace failed"; return;
+                    }
+                    using namespace decodium::sstv::hamdrm;
+                    QFile input(repairFixture);
+                    if (!input.open(QIODevice::ReadOnly)) { qWarning() << "[LAB][REPAIR] fixture unavailable"; return; }
+                    const QByteArray raw = input.readAll();
+                    HamDrmMotObjectMetadata metadata;
+                    metadata.filename = QFileInfo(repairFixture).fileName().toStdString();
+                    metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+                    const auto encoded = encodeHamDrmObject(metadata,
+                        std::vector<std::uint8_t>(raw.cbegin(), raw.cend()), 1024);
+                    if (!encoded.ok() || encoded.value->bodyGroups.size() < 3) {
+                        qWarning() << "[LAB][REPAIR] invalid fixture"; return;
+                    }
+                    auto ingest = [digital](const std::vector<std::uint8_t>& group) {
+                        return digital->ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok();
+                    };
+                    for (const auto& group : encoded.value->headerGroups)
+                        if (!ingest(group)) { qWarning() << "[LAB][REPAIR] seed header failed"; return; }
+                    for (std::size_t i = 0; i < encoded.value->bodyGroups.size(); ++i)
+                        if (i != 1 && !ingest(encoded.value->bodyGroups[i])) { qWarning() << "[LAB][REPAIR] seed body failed"; return; }
+                    if (digital->missingSegments().size() != 1) { qWarning() << "[LAB][REPAIR] fixture is not partial"; return; }
+                    qInfo() << "[LAB][REPAIR] RX partial seeded" << metadata.transportId;
+                    if (qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AIR") == 1) {
+                        if (QObject* cat = bridge.catManagerObj()) cat->setProperty("pttMethod", QStringLiteral("VOX"));
+                        const QString variant = qEnvironmentVariable("DECODIUM_LAB_REPAIR_VARIANT");
+                        const QString ready = qEnvironmentVariable("DECODIUM_LAB_REPAIR_READY");
+                        if ((variant != QStringLiteral("a") && variant != QStringLiteral("b"))
+                            || !QDir::isAbsolutePath(ready)) return;
+                        auto handled = std::make_shared<bool>(false);
+                        QObject::connect(digital, &HamDrmController::operationStateChanged, &bridge,
+                            [digital, handled, ready, &bridge]() {
+                            if (*handled || digital->txState() != HamDrmController::OperationState::Completed) return;
+                            *handled = true;
+                            QTimer::singleShot(1000, &bridge, [digital, ready, &bridge]() {
+                                if (!digital->startRx()) {
+                                    qWarning() << "[LAB][REPAIR] receiver restart failed" << digital->error(); return;
+                                }
+                                auto* readyTimer = new QTimer(&bridge);
+                                readyTimer->setInterval(500);
+                                auto previous = std::make_shared<qulonglong>(0);
+                                auto advancing = std::make_shared<int>(0);
+                                QObject::connect(readyTimer, &QTimer::timeout, &bridge,
+                                    [readyTimer, ready, previous, advancing, &bridge]() {
+                                    QVariantMap d = bridge.sstvRxDiagnostics();
+                                    const qulonglong chunks = d.value(QStringLiteral("hamdrmAcceptedChunks")).toULongLong();
+                                    *advancing = chunks > *previous ? *advancing + 1 : 0;
+                                    *previous = chunks;
+                                    if (*advancing < 3) return;
+                                    d.insert(QStringLiteral("sourceDevice"), bridge.audioInputDevice());
+                                    QSaveFile file(ready);
+                                    const QByteArray json = QJsonDocument::fromVariant(d).toJson(QJsonDocument::Compact);
+                                    if (!file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit())
+                                        qWarning() << "[LAB][REPAIR] receiver ready marker failed";
+                                    readyTimer->stop(); readyTimer->deleteLater();
+                                });
+                                readyTimer->start();
+                            });
+                        });
+                        const bool started = digital->startBsrTx(metadata.transportId, variant == QStringLiteral("a"));
+                        qInfo() << "[LAB][REPAIR] over-audio BSR TX started" << started << digital->error();
+                        return;
+                    }
+                }
+                const bool started = digital->startRx();
+                qInfo() << "[LAB][HAMDRM] RX started" << started << digital->selectedProfileId() << digital->error();
+                if (!started) return;
+            }
+#endif
             const bool accepted = bridge.startSstvRx();
             qInfo().noquote()
                 << "[LAB][SSTV] RX requested accepted=" << accepted
@@ -3382,9 +3864,24 @@ int main(int argc, char* argv[])
         });
         auto* sstvRxTraceTimer = new QTimer(&bridge);
         sstvRxTraceTimer->setInterval(5'000);
+        const auto labRxImageSaved = std::make_shared<bool>(false);
         QObject::connect(sstvRxTraceTimer, &QTimer::timeout, &bridge,
-                         [&bridge]() {
+                         [&bridge, labSstvRxImageFile, labRxImageSaved, labHamDrm]() {
             const QVariantMap diagnostics = bridge.sstvRxDiagnostics();
+            if (!labHamDrm && !*labRxImageSaved && !labSstvRxImageFile.isEmpty()
+                && (diagnostics.value(QStringLiteral("imageComplete")).toBool()
+                    || diagnostics.value(QStringLiteral("imageRadiofaxStopDetected")).toBool())) {
+                DecodiumSstvImageProvider provider(&bridge);
+                const QImage image = provider.requestImage(QStringLiteral("rx"), nullptr, {});
+                QSaveFile file(labSstvRxImageFile);
+                if (!image.isNull() && file.open(QIODevice::WriteOnly)
+                    && image.save(&file, "PNG") && file.commit()) {
+                    *labRxImageSaved = true;
+                    qInfo().noquote() << "[LAB][SSTV] terminal RX PNG saved" << labSstvRxImageFile;
+                } else {
+                    qWarning().noquote() << "[LAB][SSTV] RX PNG save failed" << labSstvRxImageFile;
+                }
+            }
             qInfo().noquote()
                 << "[LAB][SSTV] RX diagnostics"
                 << QJsonDocument::fromVariant(diagnostics)
@@ -3392,18 +3889,39 @@ int main(int argc, char* argv[])
         });
         sstvRxTraceTimer->start();
     }
+    if (!labFax480Tx.isEmpty()) {
+        const auto lastState=std::make_shared<QString>();
+        QObject::connect(&bridge, &DecodiumBridge::sstvTxStateChanged, &bridge,
+                         [&bridge,lastState]() {
+            const QString state=bridge.sstvTxState();
+            if (state!=*lastState) {
+                *lastState=state;
+                qInfo().noquote() << "[LAB][FAX480] TX state" << state << "error" << bridge.sstvTxError();
+            }
+        });
+    }
     if (parser.isSet(labSstvTxMsOption)) {
         QTimer::singleShot(labSstvTxMs, &bridge,
                            [&bridge,
                             labSstvMode,
                             labSstvImage,
                             labSstvVox,
+                            labHamDrm,
+                            labHamDrmProfile,
+                            labFaxTx,
+                            labFax480Tx,
+                            labSstvTxImageFile,
                             labSstvTxWaitFile,
                             labSstvTxWaitTimeoutMs]() {
             auto startTxPreparation = [&bridge,
                                        labSstvMode,
                                        labSstvImage,
-                                       labSstvVox]() {
+                                       labSstvVox,
+                                       labHamDrm,
+                                       labHamDrmProfile,
+                                       labFaxTx,
+                                       labFax480Tx,
+                                       labSstvTxImageFile]() {
             auto* studio = qobject_cast<decodium::sstv::SstvStudioController*>(
                 bridge.sstvStudio());
             if (!studio) {
@@ -3417,6 +3935,156 @@ int main(int argc, char* argv[])
                     qInfo() << "[LAB][SSTV] VOX PTT forced on active CAT manager";
                 }
             }
+#if DECODIUM_HAS_HAMDRM
+            if (labHamDrm) {
+                auto* digital = qobject_cast<decodium::sstv::hamdrm::HamDrmController*>(bridge.sstvDigital());
+                if (!digital || labSstvImage.isEmpty()) { qWarning() << "[LAB][HAMDRM] TX requires controller and image"; return; }
+                if (!labHamDrmProfile.isEmpty()) {
+                    digital->setSelectedProfileId(labHamDrmProfile);
+                    if (digital->selectedProfileId() != labHamDrmProfile) {
+                        qWarning() << "[LAB][HAMDRM] TX profile rejected" << labHamDrmProfile;
+                        return;
+                    }
+                }
+                QObject::connect(digital, &decodium::sstv::hamdrm::HamDrmController::operationStateChanged,
+                    &bridge, [digital]() { qInfo() << "[LAB][HAMDRM] TX state" << digital->txStateName() << digital->error(); });
+                const QString bsrLab = QStandardPaths::isTestModeEnabled()
+                    ? qEnvironmentVariable("DECODIUM_LAB_HAMDRM_BSR") : QString {};
+                if (!bsrLab.isEmpty()) {
+                    if (bsrLab != QStringLiteral("a") && bsrLab != QStringLiteral("b")) {
+                        qWarning() << "[LAB][HAMDRM] invalid BSR lab fixture"; return;
+                    }
+                    using namespace decodium::sstv::hamdrm;
+                    HamDrmMotObjectMetadata metadata;
+                    metadata.transportId = bsrLab == QStringLiteral("a") ? 0x2451 : 0x5372;
+                    metadata.filename = bsrLab == QStringLiteral("a") ? "probe-a.jpg" : "probe-b.jpg";
+                    const auto partial = encodeHamDrmObject(metadata, std::vector<std::uint8_t>(320, 0x42), 64);
+                    if (!partial.ok() || partial.value->bodyGroups.size() != 5) {
+                        qWarning() << "[LAB][HAMDRM] BSR fixture encoding failed"; return;
+                    }
+                    auto ingest = [digital](const std::vector<std::uint8_t>& data) {
+                        return digital->ingestMotGroup(QByteArray(reinterpret_cast<const char*>(data.data()), qsizetype(data.size()))).ok();
+                    };
+                    for (const auto& header : partial.value->headerGroups)
+                        if (!ingest(header)) { qWarning() << "[LAB][HAMDRM] BSR fixture header failed"; return; }
+                    if (!ingest(partial.value->bodyGroups.front()) || !ingest(partial.value->bodyGroups.back())) {
+                        qWarning() << "[LAB][HAMDRM] BSR fixture body failed"; return;
+                    }
+                    if (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_BSR_REPEAT") == 1) {
+                        const auto nextGroup = partial.value->bodyGroups[1];
+                        auto repeated = std::make_shared<bool>(false);
+                        QObject::connect(digital, &HamDrmController::operationStateChanged, &bridge,
+                            [digital, repeated, nextGroup, metadata, bsrLab, &bridge]() {
+                            if (*repeated || digital->txState() != HamDrmController::OperationState::Completed) return;
+                            *repeated = true;
+                            QTimer::singleShot(1500, &bridge, [digital, nextGroup, metadata, bsrLab]() {
+                                const QByteArray group(reinterpret_cast<const char*>(nextGroup.data()), qsizetype(nextGroup.size()));
+                                if (!digital->ingestMotGroup(group).ok()) {
+                                    qWarning() << "[LAB][HAMDRM] repeated BSR fixture body failed"; return;
+                                }
+                                const bool started = digital->startBsrTx(metadata.transportId, bsrLab == QStringLiteral("a"));
+                                qInfo() << "[LAB][HAMDRM] repeated BSR TX started" << started << digital->error();
+                            });
+                        });
+                    }
+                    const bool started = digital->startBsrTx(metadata.transportId, bsrLab == QStringLiteral("a"));
+                    qInfo() << "[LAB][HAMDRM] BSR TX started" << started << digital->selectedProfileId() << digital->error();
+                    return;
+                }
+                const QString repairLab = QStandardPaths::isTestModeEnabled()
+                    ? qEnvironmentVariable("DECODIUM_LAB_REPAIR_VARIANT") : QString {};
+                if (repairLab == QStringLiteral("a") || repairLab == QStringLiteral("b")) {
+                    if (qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AIR") == 1
+                        && !bridge.enterSstvWorkspace()) {
+                        qWarning() << "[LAB][REPAIR] sender workspace failed"; return;
+                    }
+                    using namespace decodium::sstv::hamdrm;
+                    const QString marker = qEnvironmentVariable("DECODIUM_LAB_REPAIR_INITIAL");
+                    const QString ready = qEnvironmentVariable("DECODIUM_LAB_REPAIR_READY");
+                    if (!QDir::isAbsolutePath(marker) || !QDir::isAbsolutePath(ready)) {
+                        qWarning() << "[LAB][REPAIR] absolute marker paths required"; return;
+                    }
+                    auto handled = std::make_shared<bool>(false);
+                    QObject::connect(digital, &HamDrmController::operationStateChanged, &bridge,
+                        [digital, handled, marker, ready, repairLab, labSstvImage, &bridge]() {
+                        if (*handled || digital->txState() != HamDrmController::OperationState::Completed) return;
+                        *handled = true;
+                        if (qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AIR") == 1) {
+                            QObject::connect(digital, &HamDrmController::bsrReceived, &bridge,
+                                [digital, ready, &bridge](quint16, quint16 requested) {
+                                qInfo() << "[LAB][REPAIR] over-audio BSR received" << requested;
+                                if (!digital->cancelRx()) { qWarning() << "[LAB][REPAIR] sender RX stop failed"; return; }
+                                bridge.stopSstvRx();
+                                auto* timer = new QTimer(&bridge);
+                                timer->setInterval(200);
+                                QObject::connect(timer, &QTimer::timeout, &bridge, [digital, timer, ready, &bridge]() {
+                                    if (!QFile::exists(ready)) return;
+                                    timer->stop(); timer->deleteLater();
+                                    QTimer::singleShot(3000, &bridge, [digital]() {
+                                        const bool started = digital->startBsrRepair();
+                                        qInfo() << "[LAB][REPAIR] TX started" << started << digital->error();
+                                    });
+                                });
+                                timer->start();
+                            });
+                            if (!digital->startRx() || !bridge.startSstvRx()) {
+                                qWarning() << "[LAB][REPAIR] sender RX start failed" << digital->error(); return;
+                            }
+                            auto* timer = new QTimer(&bridge);
+                            timer->setInterval(200);
+                            QObject::connect(timer, &QTimer::timeout, &bridge, [timer, marker, &bridge]() {
+                                const QVariantMap d = bridge.sstvRxDiagnostics();
+                                if (!d.value(QStringLiteral("active")).toBool()
+                                    || d.value(QStringLiteral("chunksProcessed")).toULongLong() == 0) return;
+                                QSaveFile file(marker);
+                                if (!file.open(QIODevice::WriteOnly) || file.write("complete\n") != 9 || !file.commit())
+                                    qWarning() << "[LAB][REPAIR] sender ready marker failed";
+                                timer->stop(); timer->deleteLater();
+                            });
+                            timer->start();
+                            return;
+                        }
+                        QSaveFile file(marker);
+                        if (!file.open(QIODevice::WriteOnly) || file.write("complete\n") != 9 || !file.commit()) {
+                            qWarning() << "[LAB][REPAIR] initial marker failed"; return;
+                        }
+                        auto* timer = new QTimer(&bridge);
+                        timer->setInterval(200);
+                        QObject::connect(timer, &QTimer::timeout, &bridge,
+                            [digital, timer, ready, repairLab, labSstvImage]() {
+                            if (!QFile::exists(ready)) return;
+                            timer->stop(); timer->deleteLater();
+                            HamDrmBsrRequest request;
+                            request.filename = QFileInfo(labSstvImage).fileName().toStdString();
+                            request.transportId = qsstvCompatibleTransportId(*request.filename);
+                            request.segmentSize = 1024;
+                            request.missingSegments = {1};
+                            if (repairLab == QStringLiteral("a")) request.qsstvCompatibilityCode = 0;
+                            else request.filename.reset();
+                            const auto body = encodeHamDrmBsr(request, repairLab == QStringLiteral("a")
+                                ? HamDrmBsrDialect::QsstvExtended : HamDrmBsrDialect::EasyPalCompatible);
+                            HamDrmMotObjectMetadata metadata;
+                            metadata.filename = "bsr.bin";
+                            metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+                            if (!body.ok()) { qWarning() << "[LAB][REPAIR] request encode failed"; return; }
+                            const auto object = encodeHamDrmObject(metadata, *body.value, 1024);
+                            if (!object.ok()) { qWarning() << "[LAB][REPAIR] request object failed"; return; }
+                            auto ingest = [digital](const std::vector<std::uint8_t>& group) {
+                                return digital->ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok();
+                            };
+                            for (const auto& group : object.value->headerGroups) if (!ingest(group)) return;
+                            for (const auto& group : object.value->bodyGroups) if (!ingest(group)) return;
+                            const bool started = digital->startBsrRepair();
+                            qInfo() << "[LAB][REPAIR] TX started" << started << digital->error();
+                        });
+                        timer->start();
+                    });
+                }
+                const bool started = digital->startTx(QUrl::fromLocalFile(QFileInfo(labSstvImage).absoluteFilePath()));
+                qInfo() << "[LAB][HAMDRM] TX started" << started << digital->selectedProfileId() << digital->error();
+                return;
+            }
+#endif
             studio->setModeId(labSstvMode.isEmpty()
                               ? QStringLiteral("martin-m1") : labSstvMode);
             const auto txStarted = std::make_shared<bool>(false);
@@ -3431,11 +4099,29 @@ int main(int argc, char* argv[])
                 });
             QObject::connect(
                 studio, &decodium::sstv::SstvStudioController::preparedChanged,
-                &bridge, [&bridge, studio, txStarted]() {
+                &bridge, [&bridge, studio, txStarted, labSstvTxImageFile, labFaxTx, labFax480Tx]() {
                     if (*txStarted || !studio->preparedReady() || studio->busy()) {
                         return;
                     }
                     *txStarted = true;
+                    if (!labSstvTxImageFile.isEmpty()) {
+                        const auto image = studio->preparedSnapshot();
+                        QImage reference;
+                        if (image && !image->isNull()) {
+                            if (!labFax480Tx.isEmpty()) {
+                                const int height = labFax480Tx == QStringLiteral("qsstv-500") ? 500 : 480;
+                                reference = image->scaled(512, height, Qt::IgnoreAspectRatio,
+                                    Qt::SmoothTransformation).convertToFormat(QImage::Format_Grayscale8);
+                            } else reference = labFaxTx.isEmpty() ? *image : image->convertToFormat(QImage::Format_Grayscale8);
+                        }
+                        QSaveFile file(labSstvTxImageFile);
+                        if (reference.isNull() || !file.open(QIODevice::WriteOnly)
+                            || !reference.save(&file, "PNG") || !file.commit()) {
+                            qWarning().noquote() << "[LAB][SSTV] TX reference save failed" << labSstvTxImageFile;
+                            return;
+                        }
+                        qInfo().noquote() << "[LAB][SSTV] TX reference PNG saved" << labSstvTxImageFile;
+                    }
                     qInfo().noquote()
                         << "[LAB][SSTV] TX preflight snapshot canStart="
                         << bridge.sstvTxCanStart()
@@ -3445,7 +4131,10 @@ int main(int argc, char* argv[])
                         << "pttPending=" << bridge.pttPending()
                         << "pttConfirmed=" << bridge.pttConfirmed()
                         << "output=" << bridge.audioOutputDevice();
-                    const bool accepted = bridge.startSstvTx();
+                    const bool accepted = !labFax480Tx.isEmpty() ? bridge.startSstvFax480Tx(labFax480Tx)
+                        : (labFaxTx.isEmpty() ? bridge.startSstvTx()
+                        : bridge.startSstvRadiofaxTxAligned(labFaxTx[0].toInt(), labFaxTx[1].toInt(),
+                                                          labFaxTx.size() == 3 && labFaxTx[2] == "1"));
                     qInfo().noquote()
                         << "[LAB][SSTV] TX requested accepted=" << accepted
                         << "mode=" << studio->modeId()

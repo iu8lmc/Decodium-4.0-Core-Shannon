@@ -3,12 +3,18 @@
 #include "SstvShareController.h"
 
 #include "src/security/SecureSettings.hpp"
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#include "src/security/MacKeychainBackend.h"
+#include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#endif
 #include "src/sstv/diagnostics/SstvDiagnosticLogging.h"
 #include "src/sstv/sharing/SstvHttpShareProviders.h"
 #include "src/sstv/sharing/SstvShareQueueManager.h"
 #include "src/sstv/sharing/SstvShareSecurity.h"
 
 #include <QCryptographicHash>
+#include <QCoreApplication>
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -22,6 +28,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -37,7 +44,6 @@ namespace {
 using namespace decodium::sstv::sharing;
 
 constexpr qsizetype kUiQueryLimit = 100;
-constexpr quint64 kHashReadBlockBytes = 256U * 1024U;
 constexpr quint64 kRestChunkBytes = 1024U * 1024U;
 constexpr int kQueueTickMs = 750;
 constexpr qsizetype kMaximumCredentialCharacters = 4'096;
@@ -331,43 +337,11 @@ bool pathWithinRoot(const QString& root, const QString& candidate)
         && !QDir::isAbsolutePath(relative);
 }
 
-std::optional<QString> writeSanitizedUpload(const QString& storageRoot,
-                                            const QUuid& transferId,
-                                            const QImage& decoded,
-                                            QString* error)
+std::optional<QByteArray> encodeSanitizedUpload(const QImage& decoded, QString* error)
 {
-    if (decoded.isNull()) {
-        if (error) {
-            *error = QStringLiteral("Could not decode the selected SSTV image");
-        }
-        return {};
-    }
-    const QString outgoingRoot = QDir(storageRoot).absoluteFilePath(
-        QStringLiteral("sharing/outgoing"));
-    const QFileInfo before(outgoingRoot);
-    if ((before.exists() && (before.isSymLink() || !before.isDir()))
-        || (!before.exists() && !QDir().mkpath(outgoingRoot))) {
-        if (error) {
-            *error = QStringLiteral("Could not create private sharing staging");
-        }
-        return {};
-    }
-    const QFileInfo directory(outgoingRoot);
-    if (!directory.exists() || !directory.isDir() || directory.isSymLink()
-        || directory.canonicalFilePath().isEmpty()) {
-        if (error) {
-            *error = QStringLiteral("Private sharing staging is unsafe");
-        }
-        return {};
-    }
-
-    // Reconstruct pixels into a new image. QImageReader text/EXIF metadata is
-    // deliberately not copied to the payload that leaves Decodium.
     QImage sanitized(decoded.size(), QImage::Format_RGB888);
-    if (sanitized.isNull()) {
-        if (error) {
-            *error = QStringLiteral("Could not allocate sanitized SSTV pixels");
-        }
+    if (decoded.isNull() || sanitized.isNull()) {
+        if (error) *error = QStringLiteral("Could not allocate sanitized SSTV pixels");
         return {};
     }
     sanitized.fill(Qt::black);
@@ -375,80 +349,56 @@ std::optional<QString> writeSanitizedUpload(const QString& storageRoot,
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     painter.drawImage(QPoint(0, 0), decoded);
     painter.end();
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !sanitized.save(&buffer, "PNG")
+        || bytes.isEmpty() || static_cast<quint64>(bytes.size()) > kMaximumSharedImageBytes) {
+        if (error) *error = QStringLiteral("Sanitized upload exceeded its storage bounds");
+        return {};
+    }
+    return bytes;
+}
 
+std::optional<QString> writeStagedUpload(const QString& storageRoot, const QUuid& transferId,
+                                         const QByteArray& payload, QString* error)
+{
+    const QString outgoingRoot = QDir(storageRoot).absoluteFilePath(QStringLiteral("sharing/outgoing"));
+    const QFileInfo before(outgoingRoot);
+    if ((before.exists() && (before.isSymLink() || !before.isDir()))
+        || (!before.exists() && !QDir().mkpath(outgoingRoot))) {
+        if (error) *error = QStringLiteral("Could not create private sharing staging");
+        return {};
+    }
+    const QFileInfo directory(outgoingRoot);
+    if (!directory.exists() || !directory.isDir() || directory.isSymLink()
+        || directory.canonicalFilePath().isEmpty() || payload.isEmpty()
+        || static_cast<quint64>(payload.size()) > kMaximumSharedImageBytes) {
+        if (error) *error = QStringLiteral("Private sharing staging is unsafe");
+        return {};
+    }
     const QString destination = QDir(outgoingRoot).absoluteFilePath(
-        transferId.toString(QUuid::WithoutBraces).toLower()
-            + QStringLiteral(".png"));
+        transferId.toString(QUuid::WithoutBraces).toLower() + QStringLiteral(".png"));
     if (QFileInfo::exists(destination) || QFileInfo(destination).isSymLink()) {
-        if (error) {
-            *error = QStringLiteral("Private sharing staging name collision");
-        }
+        if (error) *error = QStringLiteral("Private sharing staging name collision");
         return {};
     }
     QSaveFile output(destination);
     output.setDirectWriteFallback(false);
     if (!output.open(QIODevice::WriteOnly)
-        || !output.setPermissions(QFileDevice::ReadOwner
-                                  | QFileDevice::WriteOwner)
-        || !sanitized.save(&output, "PNG") || !output.commit()) {
+        || !output.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)
+        || output.write(payload) != payload.size() || !output.commit()) {
         output.cancelWriting();
-        if (error) {
-            *error = QStringLiteral("Could not atomically store sanitized upload");
-        }
+        if (error) *error = QStringLiteral("Could not atomically store upload");
         return {};
     }
     const QFileInfo written(destination);
     if (!written.exists() || !written.isFile() || written.isSymLink()
-        || written.size() <= 0
-        || static_cast<quint64>(written.size()) > kMaximumSharedImageBytes
-        || !pathWithinRoot(outgoingRoot, destination)) {
+        || written.size() != payload.size() || !pathWithinRoot(outgoingRoot, destination)) {
         QFile::remove(destination);
-        if (error) {
-            *error = QStringLiteral("Sanitized upload failed its storage bounds");
-        }
+        if (error) *error = QStringLiteral("Upload failed its storage bounds");
         return {};
     }
     return written.canonicalFilePath();
-}
-
-std::optional<QString> hashFile(const QString& path,
-                                quint64 expectedBytes,
-                                QString* error)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        if (error) {
-            *error = QStringLiteral("Could not open the selected SSTV image");
-        }
-        return {};
-    }
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    quint64 total = 0U;
-    while (!file.atEnd()) {
-        const QByteArray block = file.read(
-            static_cast<qint64>(kHashReadBlockBytes));
-        if (block.isEmpty() && file.error() != QFileDevice::NoError) {
-            if (error) {
-                *error = QStringLiteral("Could not read the selected SSTV image");
-            }
-            return {};
-        }
-        if (static_cast<quint64>(block.size()) > expectedBytes - total) {
-            if (error) {
-                *error = QStringLiteral("The selected image changed while reading");
-            }
-            return {};
-        }
-        total += static_cast<quint64>(block.size());
-        hash.addData(block);
-    }
-    if (total != expectedBytes) {
-        if (error) {
-            *error = QStringLiteral("The selected image changed while hashing");
-        }
-        return {};
-    }
-    return QString::fromLatin1(hash.result().toHex());
 }
 
 QString manifestFileName(const QByteArray& canonicalManifest)
@@ -712,6 +662,7 @@ signals:
                        QVariantMap state);
     void operationResult(QString operation, bool ok, QString message);
     void incomingHandoffResult(QVariantMap handoff);
+    void sharingIdentityResult(QString publicKeyHex, QString fingerprint);
 
 public slots:
     void initialize(QString storageRoot, QString stationProfile)
@@ -736,6 +687,8 @@ public slots:
         loadConfiguration();
         m_enabled = m_settings->value(
             QStringLiteral("SSTV/Share/Enabled"), false).toBool();
+        m_requireIncomingEncryption = m_settings->value(
+            QStringLiteral("SSTV/Share/RequireIncomingEncryption"), false).toBool();
 
         QString error;
         if (!rebuildManager(m_enabled, &error)) {
@@ -790,6 +743,25 @@ public slots:
         } else {
             publishSnapshot();
         }
+    }
+
+    void setRequireIncomingEncryption(bool enabled)
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+        if (!requireInitialized(QStringLiteral("incoming-encryption-policy"))) return;
+        m_settings->setValue(QStringLiteral("SSTV/Share/RequireIncomingEncryption"), enabled);
+        m_settings->sync();
+        if (m_settings->status() != QSettings::NoError) {
+            failOperation(QStringLiteral("incoming-encryption-policy"),
+                          tr("Cannot save the incoming encryption policy"));
+            publishSnapshot();
+            return;
+        }
+        m_requireIncomingEncryption = enabled;
+        finishOperation(QStringLiteral("incoming-encryption-policy"), true,
+                        enabled ? tr("New downloads require end-to-end encryption")
+                                : tr("New downloads may use TLS only"));
+        publishSnapshot();
     }
 
     void configure(QVariantMap values)
@@ -911,7 +883,8 @@ public slots:
                 QString mode,
                 QString message,
                 bool recipientConfirmed,
-                QVariantMap privacyValues)
+                QVariantMap privacyValues,
+                bool requireEncryption = false)
     {
         Q_ASSERT(QThread::currentThread() == thread());
         if (!requireEnabled(QStringLiteral("upload"))) {
@@ -940,6 +913,18 @@ public slots:
             publishSnapshot();
             return;
         }
+        if (requireEncryption && !m_providerCapabilities.endToEndEncryptionEnvelope) {
+            failOperation(QStringLiteral("upload"), tr("The provider does not support encrypted envelopes"));
+            publishSnapshot();
+            return;
+        }
+#ifndef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+        if (requireEncryption) {
+            failOperation(QStringLiteral("upload"), tr("Encrypted sharing is unavailable in this build"));
+            publishSnapshot();
+            return;
+        }
+#endif
         const QFileInfo info(sourcePath);
         if (!pathWithinRoot(m_storageRoot, sourcePath) || info.size() <= 0
             || static_cast<quint64>(info.size()) > kMaximumSharedImageBytes) {
@@ -984,22 +969,15 @@ public slots:
 
         const QUuid transferUuid = QUuid::createUuid();
         QString stagingError;
-        const auto stagedPath = writeSanitizedUpload(
-            m_storageRoot, transferUuid, decoded, &stagingError);
-        if (!stagedPath) {
+        auto payload = encodeSanitizedUpload(decoded, &stagingError);
+        if (!payload) {
             failOperation(QStringLiteral("upload"), stagingError);
             publishSnapshot();
             return;
         }
-        const QFileInfo stagedInfo(*stagedPath);
-        const quint64 bytes = static_cast<quint64>(stagedInfo.size());
-        const auto digest = hashFile(*stagedPath, bytes, &stagingError);
-        if (!digest) {
-            QFile::remove(*stagedPath);
-            failOperation(QStringLiteral("upload"), stagingError);
-            publishSnapshot();
-            return;
-        }
+        const quint64 bytes = static_cast<quint64>(payload->size());
+        const QString digest = QString::fromLatin1(QCryptographicHash::hash(
+            *payload, QCryptographicHash::Sha256).toHex());
 
         QString fileName = sanitizeShareFilename(
             info.completeBaseName() + QStringLiteral(".png"));
@@ -1019,7 +997,7 @@ public slots:
         manifest.safeDisplayFilename = fileName;
         manifest.mimeType = QStringLiteral("image/png");
         manifest.byteSize = bytes;
-        manifest.sha256 = *digest;
+        manifest.sha256 = digest;
         manifest.width = static_cast<quint32>(decoded.width());
         manifest.height = static_cast<quint32>(decoded.height());
         manifest.sstvMode = mode;
@@ -1049,6 +1027,37 @@ public slots:
                   1U, (bytes + m_providerCapabilities.maximumChunkBytes - 1U)
                       / m_providerCapabilities.maximumChunkBytes))
             : 1U;
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+        if (requireEncryption) {
+            if (!m_identityBackend || bytes > kMaximumSharedImageBytes - 16U) {
+                payload->fill('\0');
+                failOperation(QStringLiteral("upload"), tr("Encrypted sharing key storage or payload is unavailable"));
+                publishSnapshot();
+                return;
+            }
+            manifest.chunkCount = m_providerCapabilities.chunkedUpload
+                && m_providerCapabilities.maximumChunkBytes > 0U
+                ? static_cast<quint32>(std::max<quint64>(1U,
+                    (bytes + 16U + m_providerCapabilities.maximumChunkBytes - 1U)
+                        / m_providerCapabilities.maximumChunkBytes)) : 1U;
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            auto encrypted = sstvShareSealPinnedEnvelope(keys, manifest, *payload);
+            payload->fill('\0');
+            if (!encrypted) {
+                failOperation(QStringLiteral("upload"), tr("A verified recipient key is required for encrypted sharing"));
+                publishSnapshot();
+                return;
+            }
+            manifest = std::move(encrypted->manifest);
+            *payload = std::move(encrypted->bytes);
+        }
+#endif
+        const auto stagedPath = writeStagedUpload(m_storageRoot, transferUuid, *payload, &stagingError);
+        if (!stagedPath) {
+            failOperation(QStringLiteral("upload"), stagingError);
+            publishSnapshot();
+            return;
+        }
         QString error;
         const QString transferId = m_manager->queueUpload(
             manifest, *stagedPath, &error);
@@ -1062,6 +1071,53 @@ public slots:
         finishOperation(QStringLiteral("upload"), true,
                         tr("Upload queued for the confirmed recipient"));
         publishSnapshot();
+    }
+
+    void createSharingIdentity()
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+        if (m_initialized && m_identityBackend) {
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            const auto result = keys.createOrLoadPublicKey();
+            if (result.ok()) {
+                emit sharingIdentityResult(QString::fromLatin1(result.key->toHex()),
+                                           sstvShareX25519Fingerprint(*result.key));
+                finishOperation(QStringLiteral("sharing-identity"), true, tr("Sharing identity is ready"));
+                return;
+            }
+        }
+#endif
+        failOperation(QStringLiteral("sharing-identity"), tr("Could not access secure sharing identity"));
+    }
+
+    void pinSharingRecipient(QString recipient, QString keyHex, QString fingerprint, bool confirmed)
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+        const QByteArray encoded = keyHex.trimmed().toLatin1();
+        const QByteArray key = QByteArray::fromHex(encoded);
+        if (m_initialized && m_identityBackend && confirmed && encoded.size() == 64
+            && key.size() == 32 && key.toHex() == encoded) {
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            const auto result = keys.pinRecipient(m_configuration.providerId, recipient.trimmed(), key,
+                                                   fingerprint.trimmed());
+            if (result == SstvShareKeyStoreError::None) {
+                finishOperation(QStringLiteral("sharing-pin"), true, tr("Verified recipient key saved"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Conflict) {
+                failOperation(QStringLiteral("sharing-pin"), tr("Recipient key conflicts with an existing pin"));
+                return;
+            }
+        }
+#else
+        Q_UNUSED(recipient)
+        Q_UNUSED(keyHex)
+        Q_UNUSED(fingerprint)
+        Q_UNUSED(confirmed)
+#endif
+        failOperation(QStringLiteral("sharing-pin"), tr("Recipient key or independent confirmation is invalid"));
     }
 
     void refreshInbox()
@@ -1107,7 +1163,7 @@ public slots:
         publishSnapshot();
     }
 
-    void download(QString incomingId, QString destinationFileName)
+    void download(QString incomingId, QString destinationFileName, bool requireEndToEnd = false)
     {
         Q_ASSERT(QThread::currentThread() == thread());
         if (!requireEnabled(QStringLiteral("download"))) {
@@ -1124,7 +1180,7 @@ public slots:
         QString error;
         const QString id = m_manager->queueDownload(
             m_configuration.providerId, incomingId,
-            destinationFileName, &error);
+            destinationFileName, &error, requireEndToEnd || m_requireIncomingEncryption);
         if (id.isEmpty()) {
             failOperation(QStringLiteral("download"), error);
         } else {
@@ -1578,8 +1634,7 @@ private:
             if (capabilities.strictTlsRequired
                 && capabilities.download && capabilities.incomingList
                 && capabilities.maximumChunkBytes > 0U
-                && capabilities.maximumResponseBytes > 0U
-                && !capabilities.endToEndEncryptionEnvelope) {
+                && capabilities.maximumResponseBytes > 0U) {
                 return true;
             }
         }
@@ -1813,6 +1868,35 @@ private:
                              : std::optional<bool> {value != 0};
         };
 
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+        // Construct on this worker and retain it for the queue's lifetime.
+        // This only loads an existing identity, never creates one implicitly.
+        m_identityBackend.reset();
+        if (m_localIntegrationProvider && m_secureBackend
+            && m_secureBackend->supports_private_key_storage()) {
+            // Developer injection has the same lifetime contract as credential storage.
+            m_identityBackend = {m_secureBackend, [](const secure_settings::Backend*) {}};
+        } else {
+            // A test-mode process may use an explicitly created, isolated
+            // keychain. Normal application sessions always use the platform
+            // default and never read this lab property.
+            const auto* application = QCoreApplication::instance();
+            const QString labKeychain = QStandardPaths::isTestModeEnabled() && application
+                ? application->property("decodiumLabShareKeychain").toString() : QString {};
+            if (!labKeychain.isEmpty()) {
+                // A lab run must fail explicitly instead of waiting forever
+                // for an OS access prompt on an old test keychain.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                SecKeychainSetUserInteractionAllowed(false);
+#pragma clang diagnostic pop
+            }
+            m_identityBackend = std::make_shared<secure_settings::MacKeychainBackend>(labKeychain);
+        }
+        configuration.openEncryptedPayload = sstvShareMakeStoredEnvelopeOpener(
+            m_identityBackend, m_profile, m_configuration.providerId,
+            senderIdentifier(m_profile));
+#endif
         auto candidate = std::make_unique<SstvShareQueueManager>(configuration);
         if (withProvider) {
             std::shared_ptr<SstvShareProvider> provider = makeProvider(error);
@@ -2061,7 +2145,15 @@ private:
                 : tr("Sharing enabled for %1").arg(
                       m_configuration.providerId);
         }
+        bool encryptedSharingAvailable = false;
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+        encryptedSharingAvailable = m_enabled && m_identityBackend
+            && m_identityBackend->available() && m_identityBackend->supports_private_key_storage()
+            && m_providerCapabilities.endToEndEncryptionEnvelope;
+#endif
         QVariantMap state {
+            {QStringLiteral("encryptedSharingAvailable"), encryptedSharingAvailable},
+            {QStringLiteral("requireIncomingEncryption"), m_requireIncomingEncryption},
             {QStringLiteral("ready"), m_initialized && m_manager},
             {QStringLiteral("enabled"), m_enabled},
             {QStringLiteral("configured"), structurallyConfigured},
@@ -2095,6 +2187,9 @@ private:
                            std::move(inboxRows), std::move(state));
     }
 
+#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+    std::shared_ptr<const secure_settings::Backend> m_identityBackend;
+#endif
     const secure_settings::Backend* m_secureBackend {nullptr};
     std::shared_ptr<std::atomic<int>> m_meteredNetworkState;
     std::unique_ptr<QSettings> m_settings;
@@ -2113,6 +2208,7 @@ private:
     bool m_credentialStored {false};
     bool m_initialized {false};
     bool m_enabled {false};
+    bool m_requireIncomingEncryption {false};
     bool m_shutdown {false};
     bool m_capabilityDiscoveryActive {false};
     quint64 m_providerGeneration {0U};
@@ -2241,6 +2337,8 @@ SstvShareController::SstvShareController(
     connect(worker, &SstvShareWorker::operationResult,
             this, &SstvShareController::operationFinished,
             Qt::QueuedConnection);
+    connect(worker, &SstvShareWorker::sharingIdentityResult,
+            this, &SstvShareController::sharingIdentityReady, Qt::QueuedConnection);
     connect(worker, &SstvShareWorker::incomingHandoffResult,
             this, &SstvShareController::incomingHandoffReady,
             Qt::QueuedConnection);
@@ -2264,6 +2362,13 @@ bool SstvShareController::setEnabled(bool enabled)
 {
     return queueWorkerCall([enabled](SstvShareWorker* worker) {
         worker->setEnabled(enabled);
+    });
+}
+
+bool SstvShareController::setRequireIncomingEncryption(bool enabled)
+{
+    return queueWorkerCall([enabled](SstvShareWorker* worker) {
+        worker->setRequireIncomingEncryption(enabled);
     });
 }
 
@@ -2311,6 +2416,30 @@ bool SstvShareController::uploadWithOptions(
         });
 }
 
+bool SstvShareController::uploadEncryptedWithOptions(
+    const QUrl& source, const QString& recipientId, const QString& mode,
+    const QString& message, bool recipientConfirmed, const QVariantMap& options)
+{
+    if (!source.isLocalFile()) return false;
+    const QString path = source.toLocalFile();
+    return queueWorkerCall([path, recipientId, mode, message, recipientConfirmed, options](SstvShareWorker* worker) {
+        worker->upload(path, recipientId, mode, message, recipientConfirmed, options, true);
+    });
+}
+
+bool SstvShareController::createSharingIdentity()
+{
+    return queueWorkerCall([](SstvShareWorker* worker) { worker->createSharingIdentity(); });
+}
+
+bool SstvShareController::pinSharingRecipient(const QString& recipientId, const QString& publicKeyHex,
+                                               const QString& verifiedFingerprint, bool independentlyConfirmed)
+{
+    return queueWorkerCall([recipientId, publicKeyHex, verifiedFingerprint, independentlyConfirmed](SstvShareWorker* worker) {
+        worker->pinSharingRecipient(recipientId, publicKeyHex, verifiedFingerprint, independentlyConfirmed);
+    });
+}
+
 bool SstvShareController::refreshInbox()
 {
     return queueWorkerCall([](SstvShareWorker* worker) {
@@ -2324,6 +2453,15 @@ bool SstvShareController::download(const QString& incomingId,
     return queueWorkerCall(
         [incomingId, destinationFileName](SstvShareWorker* worker) {
             worker->download(incomingId, destinationFileName);
+        });
+}
+
+bool SstvShareController::downloadEncrypted(const QString& incomingId,
+                                            const QString& destinationFileName)
+{
+    return queueWorkerCall(
+        [incomingId, destinationFileName](SstvShareWorker* worker) {
+            worker->download(incomingId, destinationFileName, true);
         });
 }
 
@@ -2471,6 +2609,8 @@ void SstvShareController::applySnapshot(QVariantList active,
     m_busy = state.value(QStringLiteral("busy")).toBool();
     m_secureStorageAvailable = state.value(
         QStringLiteral("secureStorageAvailable")).toBool();
+    m_encryptedSharingAvailable = state.value(QStringLiteral("encryptedSharingAvailable")).toBool();
+    m_requireIncomingEncryption = state.value(QStringLiteral("requireIncomingEncryption")).toBool();
     m_providerSupportsInbox = state.value(
         QStringLiteral("providerSupportsInbox")).toBool();
     m_providerSupportsIncomingDelete = state.value(

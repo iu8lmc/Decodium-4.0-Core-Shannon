@@ -133,6 +133,7 @@ private slots:
                 || mode.id == "pd-240"
                 || mode.id == "pd-290"
                 || mode.family == "AVT"
+                || mode.family == "AVT variant"
                 || mode.family == "MMSSTV extended"
                 || mode.family == "MMSSTV narrow") {
                 QVERIFY(mode.protocolDataComplete);
@@ -296,17 +297,18 @@ private slots:
         for (const auto& item : variants) {
             const auto* mode = registry.findById(item.id);
             QVERIFY2(mode != nullptr, item.id);
-            QVERIFY(!mode->protocolDataComplete);
-            QVERIFY(!mode->claimsAnySupport());
+            QVERIFY(mode->protocolDataComplete);
+            QVERIFY(mode->claimsRxSupport());
+            QVERIFY(mode->claimsTxSupport());
             QCOMPARE(mode->autoDetectStatus,
-                     CapabilityStatus::Unimplemented);
+                     CapabilityStatus::Implemented);
             QVERIFY(mode->vis.has_value());
             QCOMPARE(mode->vis->encoding, VisEncoding::StandardSevenBit);
             QCOMPARE(*mode->vis->standardCode, item.vis);
-            QCOMPARE(mode->evidenceStatus, EvidenceStatus::AuditedSources);
-            QCOMPARE(mode->fixtureStatus, FixtureStatus::Missing);
-            QVERIFY(!mode->hasImplementationEvidence());
-            QVERIFY(mode->statusNote.find("Catalogue-only")
+            QCOMPARE(mode->evidenceStatus, EvidenceStatus::DeterministicTests);
+            QCOMPARE(mode->fixtureStatus, FixtureStatus::SelfGeneratedOnly);
+            QVERIFY(mode->hasImplementationEvidence());
+            QVERIFY(mode->statusNote.find("local PCM")
                     != std::string::npos);
         }
     }

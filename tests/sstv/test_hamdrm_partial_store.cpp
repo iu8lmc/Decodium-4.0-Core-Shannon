@@ -3,7 +3,9 @@
 #include "src/sstv/digital/HamDrmMotCodec.h"
 #include "src/sstv/digital/HamDrmObjectAssembler.h"
 #include "src/sstv/digital/HamDrmPartialStore.h"
+#include "src/sstv/digital/HamDrmCrc.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QTemporaryDir>
 
@@ -74,6 +76,45 @@ int main()
     CHECK(restored.ok()
           && restored.value->missingBodySegments()
               == partial.missingBodySegments());
+
+    // Recreate a valid v1 snapshot written by the old reflected-CRC encoder.
+    // load() must preserve the original file while translating only the
+    // checksum-verified local groups for the current assembler.
+    QFile legacy(store.pathForTransportId(metadata.transportId));
+    CHECK(legacy.open(QIODevice::ReadWrite));
+    if (legacy.isOpen()) {
+        QByteArray bytes = legacy.readAll();
+        auto be32 = [&bytes](qsizetype offset) {
+            const auto* p = reinterpret_cast<const unsigned char*>(bytes.constData() + offset);
+            return (static_cast<std::uint32_t>(p[0]) << 24U)
+                | (static_cast<std::uint32_t>(p[1]) << 16U)
+                | (static_cast<std::uint32_t>(p[2]) << 8U) | p[3];
+        };
+        const auto groupCount = be32(14);
+        qsizetype offset = 18;
+        for (std::uint32_t i = 0; i < groupCount; ++i) {
+            const auto length = be32(offset);
+            offset += 4;
+            const auto* raw = reinterpret_cast<const std::uint8_t*>(bytes.constData() + offset);
+            const auto oldCrc = hamdrm::hamDrmCrc16X25(raw, length - 2U);
+            bytes[offset + length - 2U] = static_cast<char>(oldCrc >> 8U);
+            bytes[offset + length - 1U] = static_cast<char>(oldCrc);
+            offset += length;
+        }
+        bytes.replace(bytes.size() - 32, 32,
+                      QCryptographicHash::hash(bytes.first(bytes.size() - 32),
+                                               QCryptographicHash::Sha256));
+        CHECK(legacy.seek(0));
+        CHECK(legacy.write(bytes) == bytes.size());
+        legacy.close();
+        const auto migrated = store.load(metadata.transportId);
+        CHECK(migrated.ok());
+        CHECK(migrated.ok() && migrated.value->missingBodySegments()
+                                   == partial.missingBodySegments());
+        CHECK(legacy.open(QIODevice::ReadOnly));
+        CHECK(legacy.readAll() == bytes);
+        legacy.close();
+    }
 
     QFile damaged(store.pathForTransportId(metadata.transportId));
     CHECK(damaged.open(QIODevice::ReadWrite));

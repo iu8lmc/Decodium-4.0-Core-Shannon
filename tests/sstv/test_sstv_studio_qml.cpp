@@ -87,6 +87,15 @@ public:
     }
 
     Q_INVOKABLE bool startSstvTx(const QString&) { return true; }
+    Q_INVOKABLE bool startSstvRadiofaxTx(int ioc, int rate) { faxIoc = ioc; faxRate = rate; return true; }
+    Q_INVOKABLE bool startSstvRadiofaxTxAligned(int ioc, int rate, bool centered) {
+        faxIoc = ioc; faxRate = rate; faxCentered = centered; return true;
+    }
+    Q_INVOKABLE bool startSstvFax480Tx(const QString& profile) { fax480Profile=profile; return true; }
+    QString fax480Profile;
+    int faxIoc {0};
+    int faxRate {0};
+    bool faxCentered {false};
     Q_INVOKABLE bool startSstvCalibrationTone(const QString& id)
     {
         m_lastCalibrationTone = id;
@@ -280,6 +289,33 @@ private slots:
         QVERIFY2(studio.preparedReady(), qPrintable(studio.error()));
         // No page reload, mode change or coordinator TX event is needed.
         QTRY_VERIFY(transmit->isEnabled());
+        auto* faxTx = page->findChild<QQuickItem*>(QStringLiteral("sstvRadiofaxTransmitButton"));
+        auto* faxIoc = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxTxIoc"));
+        auto* faxRate = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxTxRate"));
+        QVERIFY(faxTx && faxIoc && faxRate);
+        QVERIFY(faxTx->isEnabled());
+        QVERIFY(faxIoc->setProperty("currentIndex", 1));
+        QVERIFY(faxRate->setProperty("currentIndex", 2));
+        QVERIFY(QMetaObject::invokeMethod(faxTx, "clicked"));
+        QCOMPARE(fixture.faxIoc, 288);
+        QCOMPARE(fixture.faxRate, 90);
+        QVERIFY(!fixture.faxCentered);
+        auto* faxCentered = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxTxCenteredPhasing"));
+        QVERIFY(faxCentered);
+        QVERIFY(faxCentered->setProperty("checked", true));
+        QVERIFY(QMetaObject::invokeMethod(faxTx, "clicked"));
+        QVERIFY(fixture.faxCentered);
+        auto* fax480Button = page->findChild<QQuickItem*>(QStringLiteral("sstvFax480TransmitButton"));
+        auto* fax480Profile = page->findChild<QObject*>(QStringLiteral("sstvFax480TxProfile"));
+        QVERIFY(fax480Button && fax480Profile && fax480Button->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(fax480Button, "clicked"));
+        QCOMPARE(fixture.fax480Profile, QStringLiteral("dayton-480"));
+        QVERIFY(fax480Profile->setProperty("currentIndex", 1));
+        QVERIFY(QMetaObject::invokeMethod(fax480Button, "clicked"));
+        QCOMPARE(fixture.fax480Profile, QStringLiteral("qsstv-500"));
+        QVERIFY(fax480Profile->setProperty("currentIndex", 2));
+        QVERIFY(QMetaObject::invokeMethod(fax480Button, "clicked"));
+        QCOMPARE(fixture.fax480Profile, QStringLiteral("libsstv-vis-480"));
         QVERIFY(!unavailable->isVisible());
         QTRY_VERIFY_WITH_TIMEOUT(page->window() == &window, 2'000);
         QTest::qWait(250);
