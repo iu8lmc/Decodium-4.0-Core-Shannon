@@ -267,6 +267,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DQt6_DIR="${QT6_DIR}" \
             -DCMAKE_PREFIX_PATH="${QT_PREFIX};${HAMLIB_PREFIX};${RTLSDR_PREFIX}" \
+            -DOPENSSL_ROOT_DIR="$(cygpath -m /mingw64)" \
+            -DOPENSSL_INCLUDE_DIR="$(cygpath -m /mingw64/include)" \
+            -DOPENSSL_CRYPTO_LIBRARY="$(cygpath -m /mingw64/lib/libcrypto.dll.a)" \
             -DHamlib_INCLUDE_DIR="${HAMLIB_INCLUDE_DIR}" \
             -DHamlib_LIBRARY="${HAMLIB_LIBRARY}" \
             -DRtlSdr_INCLUDE_DIR="${RtlSdr_INCLUDE_DIR}" \
@@ -299,6 +302,12 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build-windows --target decodium_app --parallel "$(nproc)"
+
+      - name: Verify SSTV encrypted sharing
+        run: |
+          set -euo pipefail
+          cmake --build build-windows --target test_sstv_share_aead --parallel "$(nproc)"
+          ctest --test-dir build-windows -R '^test_sstv_share_aead$' --output-on-failure
 
       - name: Prepare portable bundle
         run: |
