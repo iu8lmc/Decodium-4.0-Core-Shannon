@@ -306,6 +306,7 @@ jobs:
       - name: Verify SSTV encrypted sharing
         run: |
           set -euo pipefail
+          export PATH="${QT_PREFIX}/bin:/mingw64/bin:${HAMLIB_PREFIX}/bin:${RTLSDR_PREFIX}/bin:${PATH}"
           cmake --build build-windows --target test_sstv_share_aead --parallel "$(nproc)"
           ctest --test-dir build-windows -R '^test_sstv_share_aead$' --output-on-failure
 
