@@ -251,6 +251,7 @@ jobs:
             libsecret-tools \
             libudev-dev \
             libusb-1.0-0-dev \
+            libvulkan-dev \
             libxkbcommon-dev \
             ninja-build \
             pkg-config \

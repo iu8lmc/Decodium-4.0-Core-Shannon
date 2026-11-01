@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "DecodiumBridge.h"
+#include "DecodiumLegacyBackend.h"
 
 #if DECODIUM_HAS_SSTV
 #include "Audio/soundout.h"
 #include "Modulator/Modulator.hpp"
 #include "DecodiumAudioSink.h"
-#include "DecodiumLegacyBackend.h"
 #include "DecoPortLink.h"
 #include "DecolinkLink.h"
 #include "src/rtl/RtlSdrInput.h"
