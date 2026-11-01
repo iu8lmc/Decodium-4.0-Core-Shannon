@@ -3,9 +3,11 @@
 #include "src/sstv/digital/HamDrmBsrCodec.h"
 #include "src/sstv/digital/HamDrmImageValidator.h"
 #include "src/sstv/digital/HamDrmMotCodec.h"
+#include "src/sstv/digital/HamDrmRsCodec.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 using namespace decodium::sstv::hamdrm;
 
@@ -19,6 +21,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data,
 
     (void) parseHamDrmMotDataGroup(data, size);
     (void) parseHamDrmBsr(data, size);
+    if (size % 255U == 0U) {
+        const std::vector<std::uint8_t> container(data, data + size);
+        (void) decodeHamDrmRs(container, size == 0U ? 1U : (data[0] % 4U) + 1U);
+    }
     const std::uint16_t transportId = size >= 2U
         ? static_cast<std::uint16_t>(
               (static_cast<std::uint16_t>(data[0]) << 8U) | data[1])

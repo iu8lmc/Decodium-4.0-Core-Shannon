@@ -239,6 +239,22 @@ SstvPage {
                                   : qsTr("State: unavailable")
                             color: root.secondaryTextColor
                         }
+                        CheckBox {
+                            objectName: "hamdrmExperimentalTiming"
+                            text: qsTr("Experimental adaptive reception")
+                            enabled: root.controller && root.controller.experimentalTimingAvailable
+                                     && !root.controller.busy
+                            checked: root.controller ? root.controller.experimentalTiming : false
+                            onClicked: if (root.controller)
+                                           root.controller.experimentalTiming = !root.controller.experimentalTiming
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            visible: root.controller && root.controller.experimentalTiming
+                            text: qsTr("Uses additional processing for difficult signals; results and compatibility are experimental.")
+                            color: root.secondaryTextColor
+                            wrapMode: Text.WordWrap
+                        }
                         ProgressBar {
                             Layout.fillWidth: true
                             from: 0
@@ -300,6 +316,15 @@ SstvPage {
                             elide: Text.ElideMiddle
                         }
                         RowLayout {
+                            Label { text: qsTr("File recovery"); color: root.secondaryTextColor }
+                            ComboBox {
+                                id: rsLevel
+                                objectName: "hamdrmRsLevel"
+                                enabled: root.controller && !root.controller.busy
+                                model: [qsTr("None"), "RS1", "RS2", "RS3", "RS4"]
+                            }
+                        }
+                        RowLayout {
                             Button {
                                 objectName: "hamdrmChooseTxImage"
                                 text: qsTr("Choose image")
@@ -321,7 +346,7 @@ SstvPage {
                                 enabled: root.controller
                                          && !root.controller.busy
                                          && root.selectedTxImage.toString().length > 0
-                                onClicked: root.controller.startTx(root.selectedTxImage)
+                                onClicked: root.controller.startTxWithRs(root.selectedTxImage, rsLevel.currentIndex)
                             }
                             Button {
                                 objectName: "hamdrmCancelTx"
@@ -505,6 +530,22 @@ SstvPage {
                                      && root.controller.selectedTransportId >= 0
                             onClicked: root.controller.discardObject(
                                            root.controller.selectedTransportId)
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            objectName: "hamdrmRecoverRs"
+                            text: qsTr("Recover RS")
+                            enabled: root.controller && !root.controller.busy
+                                     && root.controller.selectedTransportId >= 0
+                            onClicked: root.controller.tryRsRecovery(root.controller.selectedTransportId)
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("If the final RS segment is missing, stop RX and select Recover RS.")
+                            color: root.secondaryTextColor
+                            wrapMode: Text.WordWrap
                         }
                     }
                     Label {

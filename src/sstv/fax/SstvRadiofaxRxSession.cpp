@@ -10,14 +10,32 @@ namespace decodium::sstv {
 
 SstvRadiofaxRxSession::SstvRadiofaxRxSession(SstvFaxConfig config,
                                              std::uint64_t imageStartSample,
-                                             double frequencyOffsetHz)
+                                             double frequencyOffsetHz,
+                                             std::optional<SstvRadiofaxClockEstimate> clock,
+                                             SstvRadiofaxLevels levels)
     : mapper_(config), image_(config.width, config.height), imageStart_(imageStartSample),
-      imageEnd_(0U), frequencyOffset_(frequencyOffsetHz), sums_(config.width, 0.0),
+      imageEnd_(0U), lineSamples_(std::uint64_t(config.sampleRate) * 60U),
+      lineCount_(config.linesPerMinute), frequencyOffset_(frequencyOffsetHz), levels_(levels), sums_(config.width, 0.0),
       weights_(config.width, 0.0)
 {
-    const auto imageSamples = mapper_.imageEndSample() - mapper_.imageStartSample();
+    if (clock) {
+        const double nominal = double(config.sampleRate) * 60.0 / config.linesPerMinute;
+        if (!clock->lines || clock->lines > 14'400U || !clock->samples
+            || clock->samples > std::uint64_t(config.sampleRate) * 3600U
+            || clock->samples / clock->lines < config.width
+            || std::abs(double(clock->samples) / clock->lines - nominal) > nominal * kRadiofaxMaximumClockDeviation)
+            throw std::invalid_argument("invalid radiofax receive clock estimate");
+        lineSamples_ = clock->samples;
+        lineCount_ = clock->lines;
+    }
+    const auto imageSamples = std::uint64_t(config.height) * lineSamples_ / lineCount_;
     if (imageSamples > std::numeric_limits<std::uint64_t>::max() - imageStart_
-        || !std::isfinite(frequencyOffset_) || std::abs(frequencyOffset_) > 400.0) {
+        || !std::isfinite(frequencyOffset_) || std::abs(frequencyOffset_) > 400.0
+        || !std::isfinite(levels_.blackHz) || !std::isfinite(levels_.whiteHz)
+        || std::abs(levels_.blackHz - 1500.0) > 50.0
+        || std::abs(levels_.whiteHz - 2300.0) > 50.0
+        || levels_.whiteHz - levels_.blackHz < 760.0
+        || levels_.whiteHz - levels_.blackHz > 840.0) {
         throw std::invalid_argument("invalid radiofax receiver anchor or offset");
     }
     imageEnd_ = imageStart_ + imageSamples;
@@ -28,7 +46,9 @@ void SstvRadiofaxRxSession::publishLine()
     if (!hasLine_) return;
     for (std::size_t x = 0U; x < sums_.size(); ++x) {
         if (weights_[x] > 0.0) {
-            const auto value = SstvRadiofaxMapper::valueForFrequency(sums_[x] / weights_[x]);
+            const double measured = sums_[x] / weights_[x];
+            const auto value = SstvRadiofaxMapper::valueForFrequency(
+                1500.0 + (measured - levels_.blackHz) * 800.0 / (levels_.whiteHz - levels_.blackHz));
             image_.writeChannel(static_cast<std::uint32_t>(x), line_,
                                 SstvImageChannel::Grayscale, value);
         }
@@ -63,16 +83,18 @@ std::size_t SstvRadiofaxRxSession::consume(const SstvFrequencyObservation* obser
         if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz)
             || !std::isfinite(obs.confidence) || obs.confidence <= 0.0
             || obs.confidence > 1.0) continue;
-        const auto pos = mapper_.positionAtSample(
-            mapper_.imageStartSample() + (obs.centreSample - imageStart_));
-        if (pos.region != SstvFaxRegion::Image) continue;
-        if (!hasLine_ || line_ != pos.line) {
+        const auto offset = obs.centreSample - imageStart_;
+        const auto line = ((offset + 1U) * lineCount_ - 1U) / lineSamples_;
+        const auto start = line * lineSamples_ / lineCount_;
+        const auto end = (line + 1U) * lineSamples_ / lineCount_;
+        const auto pixel = (offset - start) * sums_.size() / (end - start);
+        if (!hasLine_ || line_ != line) {
             publishLine();
-            line_ = pos.line;
+            line_ = static_cast<std::uint32_t>(line);
             hasLine_ = true;
         }
-        sums_[pos.pixel] += (obs.correctedFrequencyHz - frequencyOffset_) * obs.confidence;
-        weights_[pos.pixel] += obs.confidence;
+        sums_[pixel] += (obs.correctedFrequencyHz - frequencyOffset_) * obs.confidence;
+        weights_[pixel] += obs.confidence;
         ++accepted;
     }
     return accepted;

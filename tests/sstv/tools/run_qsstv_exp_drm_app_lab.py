@@ -4,6 +4,7 @@ import ctypes as c
 import ctypes.util
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -62,12 +63,48 @@ try:
     pa.Pa_StopStream(stream);pa.Pa_CloseStream(stream);pa.Pa_Terminate()
     if proc.wait(timeout=duration_ms/1000+15): raise RuntimeError('RX exited with failure')
     log=(root/'rx.log').read_text(errors='replace')
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
+        and '[HAMDRM] operator selected experimental adaptive dual timing' not in log):
+        raise RuntimeError('operator-selected timing was not active; artifacts '+str(root))
     if '[LAB][HAMDRM] RX started true "'+profile+'"' not in log:
         raise RuntimeError('HAMDRM RX did not start; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_STRICT_ADAPTIVE') == '1'
+        and '[LAB][HAMDRM] experimental adaptive estimator with strict pilot limits' not in log):
+        raise RuntimeError('strict adaptive estimator did not start; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_STRICT_MULTISTAGE') == '1'
+        and '[LAB][HAMDRM] strict-pilot CRC-gated multistage packet retry' not in log):
+        raise RuntimeError('strict multistage retry did not start; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_FRACTIONAL_TIMING') == '1'
+        and '[LAB][HAMDRM] experimental fractional timing candidate' not in log):
+        raise RuntimeError('fractional timing did not start; artifacts '+str(root))
+    if os.environ.get('DECODIUM_LAB_HAMDRM_DUAL_TIMING') == '1':
+        if '[LAB][HAMDRM] experimental independent dual timing' not in log:
+            raise RuntimeError('dual timing did not start; artifacts '+str(root))
+        diagnostics = [json.loads(line.split(' RX diagnostics ', 1)[1])
+                       for line in log.splitlines() if '[LAB][SSTV] RX diagnostics ' in line]
+        if not diagnostics or any(row.get('hamdrmRejectedChunks') != 0
+                                  or row.get('hamdrmQueueOverflows') != 0 for row in diagnostics):
+            raise RuntimeError('dual timing rejected or overflowed audio; artifacts '+str(root))
+        early = [int(value) for value in re.findall(r'\[HAMDRM RX dual timing\] early groups\s+(\d+)', log)]
+        print('dual timing early groups', max(early, default=0), flush=True)
+        fractional = [int(value) for value in re.findall(r'\[HAMDRM RX fractional timing\] groups\s+(\d+)', log)]
+        if os.environ.get('DECODIUM_LAB_HAMDRM_FRACTIONAL_TIMING') == '1':
+            print('fractional timing groups', max(fractional, default=0), flush=True)
+    expect_fallback = os.environ.get('DECODIUM_LAB_EXPECT_FALLBACK_GROUPS') == '1'
+    if expect_fallback or os.environ.get('DECODIUM_LAB_EXPECT_BODY_GROUPS') == '1':
+        if expect_fallback and ('[LAB][HAMDRM] experimental CRC-gated flat packet fallback' not in log
+            or not any(int(value) > 0 for value in re.findall(r'flat fallback packets\s+(\d+)', log))):
+            raise RuntimeError('no CRC-gated fallback was observed; artifacts '+str(root))
+        diagnostics = [json.loads(line.split(' RX diagnostics ', 1)[1])
+                       for line in log.splitlines() if '[LAB][SSTV] RX diagnostics ' in line]
+        if not diagnostics or max(row.get('hamdrmDeliveredGroups', 0) for row in diagnostics) < 2:
+            raise RuntimeError('two synthetic body groups were not delivered; artifacts '+str(root))
+        print('PASS application received two synthetic body groups; fallback required',expect_fallback,'artifacts',root,flush=True)
+        sys.exit(0)
     received=root/'received.jp2'
     if not received.exists() or received.read_bytes()!=expected.read_bytes():
         raise RuntimeError('QSSTV image was not reconstructed byte-exactly; artifacts '+str(root))
-    print('PASS full QSSTV DRM TX to Decodium RX, exact bytes',len(received.read_bytes()),'artifacts',root,flush=True)
+    print('PASS DRM WAV replay to Decodium RX, exact bytes',len(received.read_bytes()),'artifacts',root,flush=True)
 
 finally:
     if proc and proc.poll() is None:

@@ -24,7 +24,7 @@ class ShareFixture(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, certificate, private_key, tamper=False, tamper_manifest=False, first_output=None):
+    def __init__(self, certificate, private_key, tamper=False, tamper_manifest=False, first_output=None, downgrade_manifest=None):
         super().__init__(('127.0.0.1', 0), _Handler)
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         tls.load_cert_chain(str(certificate), str(private_key))
@@ -33,6 +33,9 @@ class ShareFixture(ThreadingHTTPServer):
         self.uploads = {}
         self.tamper = tamper
         self.tamper_manifest = tamper_manifest
+        self.downgrade_manifest = downgrade_manifest
+        self.downgraded_id = None
+        self.downgraded_downloads = 0
         self.first_output = first_output
         self.tamper_count = 0
 
@@ -102,7 +105,10 @@ class _Handler(BaseHTTPRequestHandler):
                 digest = hashlib.sha256(payload).hexdigest()
                 if digest != item['manifest']['sha256'] or len(payload) != item['manifest']['byteSize']:
                     return self._reply(400)
-                if self.server.tamper:
+                if (self.server.tamper is True or
+                    (self.server.tamper in ('a', 'b') and
+                     item['manifest']['safeDisplayFilename'] ==
+                     'image-{}.png'.format(self.server.tamper))):
                     altered = bytearray(payload)
                     altered[0] ^= 1
                     changed_digest = hashlib.sha256(altered).hexdigest()
@@ -120,6 +126,19 @@ class _Handler(BaseHTTPRequestHandler):
                         return self._reply(400)
                     item['canonical'] = item['canonical'].replace(old, new)
                     item['manifest']['sstvMode'] = 'altered'
+                    self.server.tamper_count += 1
+                if (self.server.downgrade_manifest
+                        and item['manifest']['safeDisplayFilename'] ==
+                            'image-{}.png'.format(self.server.downgrade_manifest)):
+                    item['manifest']['encryption'] = {
+                        'algorithm': 'none', 'downgradeProtected': True,
+                        'keyId': '', 'manifestBoundAsAuthenticatedData': False,
+                        'mode': 'transport-tls', 'nonceBase64': '',
+                        'recipientKeyFingerprint': ''}
+                    item['manifest']['transport']['providerCanReadContent'] = True
+                    item['canonical'] = json.dumps(item['manifest'], ensure_ascii=False,
+                        sort_keys=True, separators=(',', ':')).encode('utf-8')
+                    self.server.downgraded_id = match.group(1)
                     self.server.tamper_count += 1
                 item['complete'] = True
             return self._json(200, {'byteSize': len(payload), 'remoteObjectId': match.group(1),
@@ -174,6 +193,8 @@ class _Handler(BaseHTTPRequestHandler):
         match = re.fullmatch(r'/api/v1/inbox/([a-f0-9]{24})/content', parsed.path)
         if match:
             with self.server.lock:
+                if match.group(1) == self.server.downgraded_id:
+                    self.server.downgraded_downloads += 1
                 item = self.server.uploads.get(match.group(1))
                 if not item or not item['complete']:
                     return self._reply(404)

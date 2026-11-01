@@ -39,6 +39,7 @@ struct HamDrmNativeRxStatistics final
     std::uint64_t acceptedChunks {0U};
     std::uint64_t acceptedSamples {0U};
     std::uint64_t rejectedChunks {0U};
+    std::uint64_t queueOverflows {0U};
     std::uint64_t streamResets {0U};
     std::uint64_t deliveredGroups {0U};
 };
@@ -58,6 +59,8 @@ public:
     HamDrmNativeRxBackend& operator=(const HamDrmNativeRxBackend&) = delete;
 
     HamDrmWaveformCapability capability() const override;
+    bool supportsExperimentalTiming() const noexcept override { return true; }
+    bool setExperimentalTiming(bool enabled) noexcept override;
     HamDrmStatus start(const HamDrmProfile& profile,
                        std::uint64_t sessionId,
                        HamDrmWaveformRxSink& sink) override;

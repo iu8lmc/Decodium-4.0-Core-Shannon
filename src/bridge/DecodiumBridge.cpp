@@ -13506,6 +13506,12 @@ void DecodiumBridge::rearmLegacyPcmSpectrumFeed(const QString& reason)
     if (!usingLegacyBackendForRx()) {
         return;
     }
+    // Native SSTV/HAMDRM owns the dedicated local capture while active.  A
+    // delayed legacy-spectrum retry must not stop that capture or reactivate
+    // the legacy decoder behind the active receiver's back.
+    if (nativeSstvRxForcesDedicatedAudioCapture()) {
+        return;
+    }
     if (isFt2LinkApplicationMode(m_mode) && !useModernSpectrumFeedWithLegacy()) {
         m_legacyPcmSpectrumFeed = false;
         return;

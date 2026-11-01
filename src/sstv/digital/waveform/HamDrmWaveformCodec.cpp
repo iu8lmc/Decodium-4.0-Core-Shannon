@@ -5,6 +5,7 @@
 #include "HamDrmPacketCodec.h"
 #include "../HamDrmMotCodec.h"
 #include "../channel/HamDrmCellPlan.h"
+#include "../channel/HamDrmChannelCrc.h"
 #include "../channel/HamDrmFacCodec.h"
 #include "../channel/HamDrmInterleaver.h"
 #include "../channel/HamDrmMlcCodec.h"
@@ -64,7 +65,9 @@ bool limitsValid(const HamDrmWaveformLimits& limits,
         && limits.corruptedPilotSquaredErrorThreshold >= 0.0
         && finite(limits.maximumCorruptedPilotFraction)
         && limits.maximumCorruptedPilotFraction >= 0.0
-        && limits.maximumCorruptedPilotFraction <= 1.0;
+        && limits.maximumCorruptedPilotFraction <= 1.0
+        && (!limits.experimentalFlatPacketFallback
+            || limits.experimentalAdaptiveEqualizer);
 }
 
 struct WaveformProfile final
@@ -196,23 +199,6 @@ std::vector<std::uint8_t> bytesToBits(
         }
     }
     return bits;
-}
-
-std::vector<std::uint8_t> bitsToBytes(
-    const std::vector<std::uint8_t>& bits,
-    std::size_t byteCount)
-{
-    if (byteCount > bits.size() / 8U) {
-        throw std::invalid_argument("HAMDRM bit vector is too short");
-    }
-    std::vector<std::uint8_t> bytes(byteCount, 0U);
-    for (std::size_t byte = 0U; byte < byteCount; ++byte) {
-        for (std::size_t bit = 0U; bit < 8U; ++bit) {
-            bytes[byte] = static_cast<std::uint8_t>(
-                (bytes[byte] << 1U) | bits[byte * 8U + bit]);
-        }
-    }
-    return bytes;
 }
 
 bool facMatchesConfig(const channel::HamDrmFacDecodeResult& decoded,
@@ -798,6 +784,11 @@ public:
                              limits.maximumDataGroupBytes}),
           nominalDemodulator(profile, config.carrierOffsetHz)
     {
+        if (limits.experimentalFlatPacketFallback) {
+            flatInterleaver = std::make_unique<channel::HamDrmSymbolInterleaverDecoder>(
+                profile.capacity.usefulMscCellsPerFrame,
+                profile.capacity.interleaverDepthFrames);
+        }
     }
 
     HamDrmWaveformReceiveBatch push(const double* samples,
@@ -829,6 +820,8 @@ public:
                                    "HAMDRM PCM receive buffer limit exceeded");
             resetSignalPath();
             pcm.clear();
+            pilotScoreCache.clear();
+            prefixMetricCache.clear();
             batch.statistics = statistics;
             return batch;
         }
@@ -859,8 +852,7 @@ public:
                         const std::size_t searched = std::min(
                             limits.maximumSyncSearchSamples,
                             pcm.size() - profile.capacity.samplesPerFrame) + 1U;
-                        pcm.erase(pcm.begin(), pcm.begin()
-                            + static_cast<std::ptrdiff_t>(searched));
+                        discardPcm(searched);
                         progress = true;
                         continue;
                     }
@@ -888,6 +880,8 @@ public:
                     break;
                 }
                 const std::size_t previousPilotFailures = statistics.pilotFailures;
+                const std::size_t previousPacketFailures = statistics.packetCrcFailures;
+                const std::size_t previousMotFailures = statistics.motCrcFailures;
                 const HamDrmStatus frameStatus = processFrame(
                     frameStart, batch.dataGroups);
                 // A false timing lock can cover the beginning of the next
@@ -897,14 +891,25 @@ public:
                     && statistics.pilotFailures != previousPilotFailures;
                 const std::size_t consumed = frameStart + (rejectedCandidate
                     ? 1U : profile.capacity.samplesPerFrame);
-                pcm.erase(pcm.begin(),
-                          pcm.begin() + static_cast<std::ptrdiff_t>(consumed));
+                discardPcm(consumed);
                 frameStart = 0U;
                 progress = true;
                 if (!frameStatus.ok()) {
                     recordFirstFailure(batch.status, frameStatus);
-                    locked = false;
-                    resetDataPath();
+                    // A rejected packet or MOT group does not change the
+                    // already-validated frame timeline or interleaver state.
+                    // PacketReassembler has discarded any partial unit; keep
+                    // following frames so one corrupt packet cannot erase the
+                    // next interleaver window as well.
+                    const bool rejectedData =
+                        (statistics.packetCrcFailures != previousPacketFailures
+                         || statistics.motCrcFailures != previousMotFailures)
+                        && (frameStatus.code == HamDrmErrorCode::CrcMismatch
+                            || frameStatus.code == HamDrmErrorCode::Incomplete);
+                    if (!rejectedData) {
+                        locked = false;
+                        resetDataPath();
+                    }
                 }
             }
         }
@@ -919,6 +924,17 @@ public:
         return batch;
     }
 
+    void discardPcm(std::size_t count)
+    {
+        pcm.erase(pcm.begin(), pcm.begin() + static_cast<std::ptrdiff_t>(count));
+        const auto discardCached = [count](std::vector<double>& cache) {
+            const auto removed = std::min(count, cache.size());
+            cache.erase(cache.begin(), cache.begin() + static_cast<std::ptrdiff_t>(removed));
+        };
+        discardCached(pilotScoreCache);
+        discardCached(prefixMetricCache);
+    }
+
     HamDrmValueResult<std::size_t> acquire()
     {
         if (pcm.size() < profile.capacity.samplesPerFrame) {
@@ -929,12 +945,15 @@ public:
         const std::size_t maximumCandidate = std::min(
             limits.maximumSyncSearchSamples,
             pcm.size() - profile.capacity.samplesPerFrame);
-        std::vector<double> metrics(maximumCandidate + 1U, 0.0);
+        const double missing = std::numeric_limits<double>::quiet_NaN();
+        prefixMetricCache.resize(maximumCandidate + 1U, missing);
+        pilotScoreCache.resize(maximumCandidate + 1U, missing);
         double maximumMetric = 0.0;
         for (std::size_t candidate = 0U; candidate <= maximumCandidate;
              ++candidate) {
-            metrics[candidate] = cyclicPrefixMetric(candidate);
-            maximumMetric = std::max(maximumMetric, metrics[candidate]);
+            auto& metric = prefixMetricCache[candidate];
+            if (std::isnan(metric)) metric = cyclicPrefixMetric(candidate);
+            maximumMetric = std::max(maximumMetric, metric);
         }
         if (maximumMetric < limits.minimumCyclicPrefixMetric) {
             return {std::nullopt,
@@ -947,15 +966,16 @@ public:
         bool found = false;
         for (std::size_t candidate = 0U; candidate <= maximumCandidate;
              ++candidate) {
-            if (metrics[candidate] < shortlistMetric) {
+            if (prefixMetricCache[candidate] < shortlistMetric) {
                 continue;
             }
-            const double pilotScore = leastSquaresPilotScore(candidate);
+            auto& pilotScore = pilotScoreCache[candidate];
+            if (std::isnan(pilotScore)) pilotScore = leastSquaresPilotScore(candidate);
             if (!finite(pilotScore)) {
                 continue;
             }
             const double objective = pilotScore
-                + 0.01 * (1.0 - metrics[candidate] / maximumMetric);
+                + 0.01 * (1.0 - prefixMetricCache[candidate] / maximumMetric);
             if (objective < bestObjective) {
                 bestObjective = objective;
                 bestCandidate = candidate;
@@ -967,7 +987,10 @@ public:
                     failure(HamDrmErrorCode::Incomplete,
                             "HAMDRM pilot-aided timing synchronization failed")};
         }
-        statistics.lastCyclicPrefixMetric = metrics[bestCandidate];
+        if (limits.experimentalEarlyTiming && bestCandidate > 0U) {
+            --bestCandidate;
+        }
+        statistics.lastCyclicPrefixMetric = prefixMetricCache[bestCandidate];
         statistics.lastFrameStartSample = bestCandidate;
         const auto estimated = estimateFrequencyOffset(bestCandidate);
         if (!estimated.ok()) {
@@ -1116,8 +1139,11 @@ public:
         }
         std::vector<phy::HamDrmComplex> mscCells;
         std::vector<phy::HamDrmComplex> facCells;
+        std::vector<phy::HamDrmComplex> flatMscCells;
+        bool flatFrameUsable = static_cast<bool>(flatInterleaver);
         mscCells.reserve(profile.capacity.usefulMscCellsPerFrame);
         facCells.reserve(channel::kHamDrmFacCells);
+        if (flatFrameUsable) flatMscCells.reserve(profile.capacity.usefulMscCellsPerFrame);
         double pilotErrorSum = 0.0;
         std::size_t pilotCount = 0U;
         std::size_t corruptedPilots = 0U;
@@ -1128,9 +1154,32 @@ public:
                 + profile.guardSamples;
             const auto raw = demodulator->demodulate(pcm.data()
                                                       + usefulStart);
-            const auto equalized = channel::hamDrmEqualizeFlatPilotChannel(
-                profile.cellPlan, symbol, raw,
-                limits.corruptedPilotSquaredErrorThreshold);
+            auto equalized = (limits.experimentalFrequencySelective
+                              || limits.experimentalAdaptiveEqualizer)
+                ? channel::hamDrmEqualizeInterpolatedPilotChannel(
+                    profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold)
+                : channel::hamDrmEqualizeFlatPilotChannel(
+                    profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold);
+            if (limits.experimentalAdaptiveEqualizer) {
+                auto flat = channel::hamDrmEqualizeCrossValidatedFlatPilotChannel(
+                    profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold);
+                if (flatFrameUsable) {
+                    const auto fallbackFlat = channel::hamDrmEqualizeFlatPilotChannel(
+                        profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold);
+                    if (fallbackFlat.ok()) {
+                        const auto flatExtracted = channel::hamDrmExtractCellSymbol(
+                            profile.cellPlan, symbol, fallbackFlat.value->carriers,
+                            limits.corruptedPilotSquaredErrorThreshold);
+                        if (flatExtracted.ok())
+                            flatMscCells.insert(flatMscCells.end(), flatExtracted.value->mscCells.begin(),
+                                                flatExtracted.value->mscCells.end());
+                        else flatFrameUsable = false;
+                    } else flatFrameUsable = false;
+                }
+                if (flat.ok() && (!equalized.ok()
+                    || flat.value->normalizedPilotSquaredError < equalized.value->normalizedPilotSquaredError))
+                    equalized = std::move(flat);
+            }
             if (!equalized.ok()) {
                 ++statistics.pilotFailures;
                 return equalized.status;
@@ -1193,8 +1242,14 @@ public:
         lastFrameIdentity = identity;
 
         std::optional<std::vector<phy::HamDrmComplex>> logicalMsc;
+        std::optional<std::vector<phy::HamDrmComplex>> flatLogicalMsc;
         try {
             logicalMsc = interleaver.push(mscCells);
+            if (flatInterleaver) {
+                if (flatFrameUsable && flatMscCells.size() == profile.capacity.usefulMscCellsPerFrame)
+                    flatLogicalMsc = flatInterleaver->push(flatMscCells);
+                else flatInterleaver->reset();
+            }
         } catch (const std::exception& error) {
             ++statistics.mscFailures;
             return failure(HamDrmErrorCode::Malformed, error.what());
@@ -1203,8 +1258,7 @@ public:
         if (!logicalMsc.has_value()) {
             return HamDrmStatus::success();
         }
-        const auto decoded = channel::hamDrmDecodeMscCells(*logicalMsc,
-                                                            profile.mlc);
+        const auto decoded = channel::hamDrmDecodeMscCells(*logicalMsc, profile.mlc);
         if (!decoded.ok()) {
             ++statistics.mscFailures;
             return decoded.status;
@@ -1212,17 +1266,70 @@ public:
         const std::size_t packetBytes = profile.capacity.packetBodyBytes
             + kHamDrmPacketOverheadBytes;
         const std::size_t packetBits = packetBytes * 8U;
-        if (decoded.value->bits.size() < packetBits
-                || std::any_of(
-                    decoded.value->bits.begin()
-                        + static_cast<std::ptrdiff_t>(packetBits),
-                    decoded.value->bits.end(),
-                    [](std::uint8_t bit) { return bit != 0U; })) {
+        // Only complete bytes belong to the packet. QSSTV likewise truncates
+        // the decoded bit count before checking its packet CRC; the trailing
+        // fractional byte is not part of that protected packet.
+        if (decoded.value->bits.size() < packetBits) {
             ++statistics.mscFailures;
             return failure(HamDrmErrorCode::Malformed,
-                           "HAMDRM MSC byte-alignment fill bits are non-zero");
+                           "HAMDRM MSC packet is shorter than its configured size");
         }
-        const auto packet = bitsToBytes(decoded.value->bits, packetBytes);
+        auto packet = hamDrmPacketBytesFromMscBits(decoded.value->bits, packetBytes);
+        if (!channel::hamDrmVerifyAndStripChannelCrc16(packet).ok()) {
+            // Retain the fast hard-decision path for valid packets. If its
+            // CRC fails, retry from the same cells with soft QAM metrics;
+            // never submit an unverified alternate to the reassembler.
+            const auto soft = channel::hamDrmDecodeMscCellsSoft(*logicalMsc, profile.mlc);
+            if (soft.ok() && soft.value->bits.size() >= packetBits) {
+                auto retry = hamDrmPacketBytesFromMscBits(soft.value->bits, packetBytes);
+                if (channel::hamDrmVerifyAndStripChannelCrc16(retry).ok())
+                    packet = std::move(retry);
+            }
+        }
+        if (limits.experimentalMultistagePacketRetry
+            && !channel::hamDrmVerifyAndStripChannelCrc16(packet).ok()) {
+            const auto staged = channel::hamDrmDecodeMscCellsMultistage(*logicalMsc, profile.mlc);
+            if (staged.ok() && staged.value->bits.size() >= packetBits) {
+                auto retry = hamDrmPacketBytesFromMscBits(staged.value->bits, packetBytes);
+                if (channel::hamDrmVerifyAndStripChannelCrc16(retry).ok()) {
+                    packet = std::move(retry);
+                    ++statistics.multistagePacketRecoveries;
+                }
+            }
+        }
+        if (!channel::hamDrmVerifyAndStripChannelCrc16(packet).ok() && flatLogicalMsc) {
+            // Use a single packet reassembler. A fallback is admitted only
+            // after its own channel CRC succeeds, avoiding duplicate groups.
+            const auto flatDecoded = channel::hamDrmDecodeMscCells(*flatLogicalMsc, profile.mlc);
+            if (flatDecoded.ok() && flatDecoded.value->bits.size() >= packetBits) {
+                auto retry = hamDrmPacketBytesFromMscBits(flatDecoded.value->bits, packetBytes);
+                if (channel::hamDrmVerifyAndStripChannelCrc16(retry).ok()) {
+                    packet = std::move(retry);
+                    ++statistics.flatFallbackPacketRecoveries;
+                }
+            }
+            if (!channel::hamDrmVerifyAndStripChannelCrc16(packet).ok()) {
+                const auto flatSoft = channel::hamDrmDecodeMscCellsSoft(*flatLogicalMsc, profile.mlc);
+                if (flatSoft.ok() && flatSoft.value->bits.size() >= packetBits) {
+                    auto retry = hamDrmPacketBytesFromMscBits(flatSoft.value->bits, packetBytes);
+                    if (channel::hamDrmVerifyAndStripChannelCrc16(retry).ok()) {
+                        packet = std::move(retry);
+                        ++statistics.flatFallbackPacketRecoveries;
+                    }
+                }
+            }
+            if (limits.experimentalMultistagePacketRetry
+                && !channel::hamDrmVerifyAndStripChannelCrc16(packet).ok()) {
+                const auto staged = channel::hamDrmDecodeMscCellsMultistage(*flatLogicalMsc, profile.mlc);
+                if (staged.ok() && staged.value->bits.size() >= packetBits) {
+                    auto retry = hamDrmPacketBytesFromMscBits(staged.value->bits, packetBytes);
+                    if (channel::hamDrmVerifyAndStripChannelCrc16(retry).ok()) {
+                        packet = std::move(retry);
+                        ++statistics.multistagePacketRecoveries;
+                    }
+                }
+            }
+        }
         const auto reassembled = packetReassembler.push(packet);
         if (!reassembled.ok()) {
             ++statistics.packetCrcFailures;
@@ -1246,6 +1353,7 @@ public:
     void resetDataPath() noexcept
     {
         interleaver.reset();
+        if (flatInterleaver) flatInterleaver->reset();
         packetReassembler.reset();
         haveFrameIdentity = false;
         lastFrameIdentity = 0U;
@@ -1262,6 +1370,8 @@ public:
     void cancelStream() noexcept
     {
         pcm.clear();
+        pilotScoreCache.clear();
+        prefixMetricCache.clear();
         resetSignalPath();
         cancelled = true;
     }
@@ -1269,6 +1379,8 @@ public:
     void resetStream()
     {
         pcm.clear();
+        pilotScoreCache.clear();
+        prefixMetricCache.clear();
         resetSignalPath();
         cancelled = false;
         statistics = {};
@@ -1278,10 +1390,15 @@ public:
     HamDrmWaveformLimits limits;
     WaveformProfile profile;
     channel::HamDrmSymbolInterleaverDecoder interleaver;
+    std::unique_ptr<channel::HamDrmSymbolInterleaverDecoder> flatInterleaver;
     HamDrmPacketReassembler packetReassembler;
     RealToneLeastSquares nominalDemodulator;
     std::unique_ptr<RealToneLeastSquares> demodulator;
     std::vector<double> pcm;
+    // Acquisition examines overlapping windows after a rejected pilot. PCM
+    // already examined cannot change, so retain its scores until discarded.
+    std::vector<double> pilotScoreCache;
+    std::vector<double> prefixMetricCache;
     std::size_t frameStart {0U};
     std::size_t lastFrameIdentity {0U};
     bool haveFrameIdentity {false};

@@ -32,6 +32,12 @@ struct SstvPreprocessorConfig
   double humFrequencyHz {50.0};
   double humNotchQ {20.0};
 
+  // Optional operator-selected narrow interference rejection. A signal tone
+  // at this frequency is suppressed too; no automatic detection is implied.
+  bool interferenceNotchEnabled {false};
+  double interferenceFrequencyHz {1'700.0};
+  double interferenceNotchQ {300.0};
+
   // Optional three-sample causal outlier suppressor.  Only a current sample
   // whose distance from the median of the last two inputs and itself exceeds
   // this normalized-amplitude threshold is replaced.  Keeping this opt-in
@@ -143,6 +149,7 @@ private:
   Biquad highPass_;
   Biquad lowPass_;
   Biquad humNotch_;
+  Biquad interferenceNotch_;
 
   mutable std::mutex mutex_;
   double previousDcInput_ {0.0};

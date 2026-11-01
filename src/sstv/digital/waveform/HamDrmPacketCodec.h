@@ -13,6 +13,11 @@ namespace decodium::sstv::hamdrm::waveform {
 
 constexpr std::size_t kHamDrmPacketOverheadBytes = 3U;
 
+// Convert the requested complete packet bytes; any remaining fractional byte
+// is outside the CRC-protected packet. Throws if the input is too short.
+std::vector<std::uint8_t> hamDrmPacketBytesFromMscBits(
+    const std::vector<std::uint8_t>& bits, std::size_t byteCount);
+
 struct HamDrmPacketParameters final
 {
     std::size_t bodyBytes {0U};

@@ -1,5 +1,108 @@
 # Remote sharing E2EE: implementation in progress
 
+The coordinated create-only backend now rejects an inconsistent lookup that
+reports a missing item while returning a nonempty value, including the lookup
+performed under its cross-process lock. Previously that response could trigger
+a write over an existing item. A test-only backend reproduced the failure for
+two existing values; after the fix both remain unchanged with no write.
+The coordinated-backend, secure-settings and AEAD tests passed on macOS ARM64,
+as did two-application HTTPS transfer and targeted ciphertext-tampering A/B
+tests. The contradictory response was injected in a fixture; the full app
+tests used macOS Keychain, not the Windows or Linux coordinated backends.
+
+On 2026-11-01 the controller's cryptographic path was made available to
+OpenSSL-enabled Windows and Linux builds. It uses a per-user cross-process
+lock to coordinate create-only identity and pin writes over Windows DPAPI or
+Linux `secret-tool`; those backends are explicitly selected because private
+values are not put into command-line arguments. On Linux, an accessible
+Secret Service and the host `secret-tool` executable are required. Missing or
+failing storage must reject the operation; there is no plaintext fallback.
+Two-application A/B transfer and tampering tests pass on macOS ARM64 and on a
+Debian 13 ARM64 virtual machine using the real GNOME Secret Service. Windows,
+Linux x86_64, release packaging and other desktop keyrings remain unverified.
+This experimental protocol does not authenticate the sender and has not had
+an independent security review.
+
+The Windows CI configuration now registers four full-application DPAPI lab
+cases: A/B HTTPS transfer, ciphertext tampering, and manifest tampering for
+each image. The test-only entry point requires an explicit opt-in, a sentinel,
+and existing absolute isolated settings and lock roots; the harness places
+both applications and their DPAPI-backed INI files in temporary roots. It
+also checks that non-test launches, missing opt-in or roots, and invalid
+sentinels are rejected. The Windows runner installs its Python and FFmpeg
+dependencies and fails if the four cases are not registered. This is test
+infrastructure, not a Windows pass: no Windows runner was available for this
+worktree. The existing macOS two-application identity, A/B transfer and three
+tampering tests were rerun after these changes and passed. Native SSTV CI now
+also triggers for security backend, secure-settings test and CI script
+changes; its Windows, Linux and Intel jobs still need execution.
+
+The macOS release workflows build OpenSSL 3.5.8 from its SHA-256-pinned
+official source for each architecture and declared minimum macOS version.
+The release script requires E2EE, bundles the OpenSSL licence, and checks the
+executable's `@rpath` link, library architecture and minimum OS version even
+when the general Intel compatibility check is skipped. A local cross-build
+produced x86_64 `libcrypto` with minimum macOS 13.0. A small runtime check
+executed it under Rosetta and passed two AES-256-GCM round trips, tag-tamper
+rejection and two X25519 exchanges; the same checks passed natively with an
+arm64 build. This does not verify the complete Intel application or an Intel
+Mac. The arm64 build was also used in two full Decodium
+processes for HTTPS encrypted A/B image transfer and ciphertext-tampering
+rejection. A fresh CMake configuration with `DECODIUM_REQUIRE_SSTV_E2EE=ON`
+compiled and passed `test_sstv_share_aead`, with its Mach-O dependency pointing
+to the newly built arm64 `libcrypto`. A second A/B run loaded the same library from an `@rpath`-linked
+test `.app` bundle. That fixture used locally installed Qt and a symlink to
+the development QML tree, and is not a packaged-DMG test. The actual GitHub
+release workflows, their final bundles, and older macOS installations remain
+unverified. The gate's local A/B and negative checks are reproducible with
+`bash tests/sstv/tools/test_macos_sstv_crypto_gate.sh`.
+Both macOS release workflows also run
+`tests/sstv/tools/test_macos_openssl_runtime.sh` against their freshly built
+library before building release assets.
+
+The Linux secret-tool lookup now distinguishes the normal missing-item
+result (exit 1 without output) from an unexpected exit, diagnostics, or
+partial output. An ambiguous failure cannot be treated as permission to
+create a replacement identity. This is based on the
+[libsecret secret-tool lookup implementation](https://github.com/GNOME/libsecret/blob/main/tool/secret-tool.c).
+The same process wrapper and coordinated create-only backend were exercised
+on macOS with two synthetic identities, missing items, errors, a terminated
+helper and partial output. The actual Linux backend was then compiled on an
+isolated Debian 13 ARM64 VirtualBox guest and exercised with GNOME Keyring 48
+and `secret-tool`: for two different identities, two competing processes
+produced exactly one create and one already-exists result, and the winning
+value was read back and removed from the real Secret Service. The reproducible
+actor is `tests/sstv/tools/linux_secret_service_lab.cpp`. This test does not
+by itself prove a full application transfer or x86_64 Linux behavior.
+An additional Linux ARM64 application test built Decodium with Qt 6.8.2,
+HAMDRM and required E2EE, then used two isolated application processes,
+GNOME Keyring and a verified loopback HTTPS fixture. Both images were received
+with a mean RGB error of 0.3333 and maximum 1; altered ciphertext and altered
+manifests for images A and B were rejected. The four registered CTests
+`test_sstv_share_linux_*` passed on Debian 13 ARM64. The wrapper
+`tests/sstv/tools/run_share_linux_secret_service_lab.sh` uses a private D-Bus
+session, temporary XDG data and an explicit test-mode opt-in; Linux CI installs
+the required tools. The Linux lab runs without a QML window. Earlier attempts
+that quit during asynchronous BootLoader loading crashed in Qt QML engine
+teardown; this lab-specific change avoids that race but does not prove a fix
+for graphical application shutdown. The actual GitHub jobs and AppImage
+bundles were not run in this experiment.
+Windows DPAPI removal now
+syncs QSettings and reports storage errors. The shared QSettings removal helper
+passed A/B removal and error checks on macOS; the Windows DPAPI runtime path
+has not been executed here. Following these changes, the macOS full-application HTTPS
+transfer A/B and altered-ciphertext rejection tests passed again.
+
+The Windows DPAPI lookup also distinguishes an absent settings entry from a
+present but empty protected blob. The latter now returns an error, so the
+coordinated create-only identity path cannot silently replace it. A portable
+QSettings-backed A/B test covers absent, present, empty and inaccessible
+entries, and checks that an empty existing value is not overwritten. A
+Windows-only DPAPI test adds A/B empty and malformed blobs to the native
+create-only test; it has not been run on Windows in this worktree. On macOS,
+the two-application encrypted A/B transfer and ciphertext/manifest tampering
+tests passed after this change; those use Keychain and do not prove DPAPI.
+
 `SstvShareAead` is an optional OpenSSL AES-256-GCM building block. It creates
 fresh 96-bit random nonces and uses 128-bit tags. Decryption returns no
 plaintext when authentication fails and clears its temporary plaintext buffer.
@@ -45,6 +148,16 @@ rejects low-order keys and mismatched fingerprints, and reports a conflict
 instead of silently replacing a pinned key. Identity and pin creation require
 an atomic insert-if-absent backend operation, so concurrent creators cannot
 silently replace the winner.
+
+The keystore also rejects an internally inconsistent backend response that
+reports an item missing while returning a nonempty value. Such a response is
+treated as a storage failure, not permission to create an identity or pin.
+The A/B component check injects that response for an existing identity and
+an existing recipient pin, verifies that no insertion is attempted, and then
+checks that both original values still load. The normal two-Decodium-process
+identity, HTTPS image A/B transfer, ciphertext-tampering and manifest-tampering
+tests passed again after this change on macOS ARM64. The inconsistent response
+itself was injected into the component test, not a platform keychain.
 
 `MacKeychainBackend` provides that operation using native macOS Security
 framework calls. Its integration test creates a temporary keychain and checks
@@ -114,11 +227,12 @@ two-full-application HTTPS transfer and tampering tests now use the strict
 download API for both images; they pass on the loopback fixture.
 For encrypted uploads the sanitized image is encoded and encrypted in memory;
 only the ciphertext is written to the outgoing staging file. Memory copies
-cannot be guaranteed erased. A
-complete protocol still needs authenticated recipient public keys, secure key
-storage and exchange, an interoperable versioned envelope, upload/download
-integration, downgrade prevention across the entire UI and two-process tests. Metadata visible to
-a provider must be considered separately from content confidentiality.
+cannot be guaranteed erased. Later sections describe subsequent key-storage,
+upload/download and two-process integration. Recipient keys still require
+independent authentication, downgrade prevention must cover the entire UI,
+and the experimental envelope requires independent interoperability and
+security review. Metadata visible to a provider must be considered separately
+from content confidentiality.
 
 `test_sstv_share_aead` tests identity and pin isolation with a fake backend,
 backend failures, corruption, changed pins and low-order key rejection, plus
@@ -126,8 +240,8 @@ an independent AES-256-GCM known-answer decryption,
 an RFC 7748 X25519 vector with independently computed HKDF output, matching
 sender/recipient transfer keys, random-nonce A/B round trips and rejection of
 modified ciphertext, nonce, tag,
-associated data and wrong keys. These are component tests, not a security audit
-or a working end-to-end sharing demonstration. OpenSSL is optional at build
+associated data and wrong keys. These are component tests, not a security audit;
+the separate full-application evidence is described below. OpenSSL is optional at build
 time; absence leaves existing TLS-only sharing unchanged.
 
 A separate REST transport A/B test uses two independent provider instances and
@@ -219,6 +333,27 @@ payloads still require successful authenticated decryption before acceptance.
 The QML test exercises the policy in both states and checks persistence; the
 two-application transfer and tampering tests use the ordinary download action
 with the policy enabled.
+
+Two further full-application tests run the ordinary download action with the
+policy enabled while the loopback HTTPS provider rewrites an encrypted
+manifest as a syntactically valid TLS-only manifest and recomputes its public
+manifest digest. The receiver rejects the downgraded A or B before the
+provider receives a request for that item's content; in the B case it first
+receives and checks the legitimate image A. Both passed on macOS ARM64 with
+two Decodium processes. Equivalent tests are registered for Windows DPAPI and
+Linux Secret Service but have not yet run there. These tests cover the local
+policy and this fixture, not sender authentication, provider omission or
+modification of local settings.
+
+Two more two-application cases target ciphertext for only image A or only
+image B. The HTTPS fixture alters exactly one selected payload and recomputes
+its public SHA-256; for B it waits until the receiver has saved A, whose
+pixels are checked. In both cases the modified payload is rejected by
+authenticated decryption and no modified image is accepted. The clean A/B
+transfer and both targeted cases passed on macOS ARM64. Equivalent tests are
+registered for Windows DPAPI and Linux Secret Service but have not been run
+on those platforms. These local fixture tests do not establish sender
+authentication or an independent cryptographic security review.
 
 Two additional full-application cases alter the `sstvMode` manifest field
 at the HTTPS fixture, then recompute the public manifest digest while leaving

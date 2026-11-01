@@ -4,6 +4,7 @@
 #include "SstvRadiofaxPhasing.h"
 #include "SstvRadiofaxRxSession.h"
 #include "SstvRadiofaxStop.h"
+#include <array>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -30,6 +31,9 @@ public:
     std::optional<std::uint64_t> imageStartSample() const noexcept;
     std::optional<SstvRadiofaxPhaseLock> phasing() const noexcept;
     std::optional<std::uint64_t> stopSample() const noexcept;
+    std::optional<SstvRadiofaxClockEstimate> imageClock() const noexcept;
+    std::optional<SstvRadiofaxLevels> imageLevels() const noexcept;
+    bool stopWasAudioTone() const noexcept;
     std::size_t bufferedObservations() const noexcept;
     std::size_t maximumBufferedObservations() const noexcept;
     std::optional<SstvImageSnapshot> snapshot() const;
@@ -38,6 +42,8 @@ private:
     void updateRxState() noexcept;
     void buffer(const SstvFrequencyObservation& observation);
     void beginImage(std::uint64_t sample);
+    void collectPhasingLevel(const SstvFrequencyObservation& observation) noexcept;
+    SstvRadiofaxLevels measuredLevels() const noexcept;
     void consumeImageObservation(const SstvFrequencyObservation& observation);
     void flushPending(std::optional<std::uint64_t> before = std::nullopt);
     std::uint64_t refineStopBoundary(std::uint64_t candidate) const;
@@ -47,6 +53,11 @@ private:
     SstvRadiofaxStopDetector stop_;
     std::optional<SstvRadiofaxPhaseLock> lock_;
     std::unique_ptr<SstvRadiofaxImageStartDetector> start_;
+    std::unique_ptr<SstvRadiofaxClockTracker> clockTracker_;
+    std::optional<SstvRadiofaxClockEstimate> clock_;
+    std::optional<SstvRadiofaxLevels> levels_;
+    std::array<std::uint64_t, 101> blackLevels_ {};
+    std::array<std::uint64_t, 101> whiteLevels_ {};
     std::unique_ptr<SstvRadiofaxRxSession> receiver_;
     std::deque<SstvFrequencyObservation> replay_;
     std::deque<SstvFrequencyObservation> pendingImage_;
@@ -54,6 +65,7 @@ private:
     std::optional<std::uint64_t> imageStart_;
     std::uint64_t lastSample_ {0U};
     bool hasLast_ {false};
+    bool stopWasAudioTone_ {false};
     SstvRadiofaxAutoRxState state_ {SstvRadiofaxAutoRxState::SearchingPhasing};
 };
 

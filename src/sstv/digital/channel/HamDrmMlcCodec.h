@@ -64,4 +64,15 @@ HamDrmValueResult<HamDrmMscDecodeResult> hamDrmDecodeMscCells(
     const std::vector<phy::HamDrmComplex>& cells,
     const HamDrmMlcProfile& profile);
 
+// Bounded max-log QAM bit metrics followed by a soft Viterbi decoder.
+HamDrmValueResult<HamDrmMscDecodeResult> hamDrmDecodeMscCellsSoft(
+    const std::vector<phy::HamDrmComplex>& cells,
+    const HamDrmMlcProfile& profile);
+
+// Bounded experimental multistage soft decoder; callers must still verify CRC.
+HamDrmValueResult<HamDrmMscDecodeResult> hamDrmDecodeMscCellsMultistage(
+    const std::vector<phy::HamDrmComplex>& cells,
+    const HamDrmMlcProfile& profile,
+    std::size_t maximumIterations = 2U);
+
 } // namespace decodium::sstv::hamdrm::channel

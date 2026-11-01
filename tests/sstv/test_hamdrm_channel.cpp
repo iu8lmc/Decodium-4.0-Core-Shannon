@@ -6,6 +6,7 @@
 #include "../../src/sstv/digital/channel/HamDrmFacCodec.h"
 #include "../../src/sstv/digital/channel/HamDrmInterleaver.h"
 #include "../../src/sstv/digital/channel/HamDrmMlcCodec.h"
+#include "../../src/sstv/digital/channel/HamDrmPilotEqualizer.h"
 #include "../../src/sstv/digital/phy/HamDrmOfdmParameters.h"
 #include "../../src/sstv/digital/phy/HamDrmQam.h"
 
@@ -739,6 +740,12 @@ void testMscMlcProfiles()
         const auto decoded = hamDrmDecodeMscCells(reference, *profile.value);
         require(decoded.ok() && decoded.value->bits == input,
                 "QSSTV MSC cells failed to decode");
+        const auto soft = hamDrmDecodeMscCellsSoft(reference, *profile.value);
+        require(soft.ok() && soft.value->bits == input,
+                "QSSTV MSC cells failed soft decoding");
+        const auto multistage = hamDrmDecodeMscCellsMultistage(reference, *profile.value);
+        require(multistage.ok() && multistage.value->bits == input,
+                "QSSTV MSC cells failed multistage decoding");
     }
     require(fixture.eof() && combinations.size() == 36U, "QSSTV MSC fixture incomplete");
 
@@ -802,13 +809,189 @@ void testMscMlcProfiles()
             "unsupported MSC protection was accepted");
 }
 
+void testSoftMscOnDeterministicNoise()
+{
+    const auto profile = hamDrmMlcProfile(369U, HamDrmConstellation::Qam64,
+                                         HamDrmProtection::Normal);
+    require(profile.ok(), "soft MSC test profile rejected");
+    unsigned improvements = 0U, hardSuccess = 0U, softSuccess = 0U;
+    unsigned multistageSuccess = 0U, multistageBetter = 0U, multistageWorse = 0U;
+    for (std::uint32_t trial = 0; trial < 20U; ++trial) {
+        const auto input = patternBits(profile.value->inputBits, 0x12340000U + trial);
+        const auto encoded = hamDrmEncodeMscCells(input, *profile.value);
+        require(encoded.ok(), "soft MSC test encoding failed");
+        auto noisy = *encoded.value;
+        std::uint32_t state = 0x65ab1234U + trial;
+        const auto noise = [&state]() {
+            state = state * 1'664'525U + 1'013'904'223U;
+            return (double(state >> 8U) / double(1U << 24U) * 2.0 - 1.0) * 0.19;
+        };
+        for (auto& cell : noisy) {
+            const auto real = noise();
+            const auto imaginary = noise();
+            cell += HamDrmComplex(real, imaginary);
+        }
+        const auto hard = hamDrmDecodeMscCells(noisy, *profile.value);
+        const auto soft = hamDrmDecodeMscCellsSoft(noisy, *profile.value);
+        const auto multistage = hamDrmDecodeMscCellsMultistage(noisy, *profile.value);
+        require(hard.ok() && soft.ok() && multistage.ok(), "MSC decoding failed unexpectedly");
+        if (hard.value->bits == input) ++hardSuccess;
+        if (soft.value->bits == input) ++softSuccess;
+        if (multistage.value->bits == input) ++multistageSuccess;
+        if (multistage.value->bits == input && soft.value->bits != input) ++multistageBetter;
+        if (multistage.value->bits != input && soft.value->bits == input) ++multistageWorse;
+        if (hard.value->bits != input && soft.value->bits == input) ++improvements;
+    }
+    std::cout << "soft comparison hard=" << hardSuccess << " soft=" << softSuccess
+              << " multistage=" << multistageSuccess << " better=" << multistageBetter
+              << " worse=" << multistageWorse << '\n';
+    unsigned difficultSoft = 0U, difficultStaged = 0U, difficultBetter = 0U, difficultWorse = 0U;
+    for (std::uint32_t trial = 0; trial < 20U; ++trial) {
+        const auto input = patternBits(profile.value->inputBits, 0x76540000U + trial);
+        const auto encoded = hamDrmEncodeMscCells(input, *profile.value);
+        require(encoded.ok(), "difficult MSC fixture failed to encode");
+        auto noisy = *encoded.value;
+        std::uint32_t state = 0x98760000U + trial;
+        for (auto& cell : noisy) {
+            state = state * 1'664'525U + 1'013'904'223U;
+            const double re = (double(state >> 8U) / double(1U << 24U) * 2.0 - 1.0) * 0.28;
+            state = state * 1'664'525U + 1'013'904'223U;
+            const double im = (double(state >> 8U) / double(1U << 24U) * 2.0 - 1.0) * 0.28;
+            cell += HamDrmComplex(re, im);
+        }
+        const auto soft = hamDrmDecodeMscCellsSoft(noisy, *profile.value);
+        const auto staged = hamDrmDecodeMscCellsMultistage(noisy, *profile.value);
+        require(soft.ok() && staged.ok(), "difficult MSC decoder rejected finite input");
+        const bool softOk = soft.value->bits == input, stagedOk = staged.value->bits == input;
+        difficultSoft += softOk; difficultStaged += stagedOk;
+        difficultBetter += stagedOk && !softOk; difficultWorse += softOk && !stagedOk;
+    }
+    std::cout << "difficult soft=" << difficultSoft << " multistage=" << difficultStaged
+              << " better=" << difficultBetter << " worse=" << difficultWorse << '\n';
+    for (const double amplitude : {0.21, 0.23, 0.25}) {
+        unsigned better = 0U, worse = 0U;
+        for (std::uint32_t trial = 0; trial < 20U; ++trial) {
+            const auto input = patternBits(profile.value->inputBits, 0x76540000U + trial);
+            const auto encoded = hamDrmEncodeMscCells(input, *profile.value);
+            require(encoded.ok(), "MSC sweep fixture failed to encode");
+            auto noisy = *encoded.value;
+            std::uint32_t state = 0x98760000U + trial;
+            for (auto& cell : noisy) {
+                state = state * 1'664'525U + 1'013'904'223U;
+                const double re = (double(state >> 8U) / double(1U << 24U) * 2.0 - 1.0) * amplitude;
+                state = state * 1'664'525U + 1'013'904'223U;
+                const double im = (double(state >> 8U) / double(1U << 24U) * 2.0 - 1.0) * amplitude;
+                cell += HamDrmComplex(re, im);
+            }
+            const auto soft = hamDrmDecodeMscCellsSoft(noisy, *profile.value);
+            const auto staged = hamDrmDecodeMscCellsMultistage(noisy, *profile.value);
+            require(soft.ok() && staged.ok(), "MSC sweep decoder rejected finite input");
+            const bool a = soft.value->bits == input, b = staged.value->bits == input;
+            better += b && !a; worse += a && !b;
+        }
+        std::cout << "MSC sweep noise=" << amplitude << " better=" << better << " worse=" << worse << '\n';
+        require(better > 0U, "multistage MSC did not recover any additional noisy cases");
+    }
+    require(improvements >= 2U, "soft MSC did not improve deterministic noisy cases");
+    const auto cleanBits = patternBits(profile.value->inputBits, 42U);
+    const auto clean = hamDrmEncodeMscCells(cleanBits, *profile.value);
+    require(clean.ok(), "soft MSC bounds fixture failed");
+    auto malformed = *clean.value;
+    malformed[0] = HamDrmComplex(std::numeric_limits<double>::quiet_NaN(), 0.0);
+    require(!hamDrmDecodeMscCellsSoft(malformed, *profile.value).ok(),
+            "non-finite soft MSC cell was accepted");
+    require(!hamDrmDecodeMscCellsMultistage(malformed, *profile.value).ok(),
+            "non-finite multistage MSC cell was accepted");
+    require(!hamDrmDecodeMscCellsMultistage(*clean.value, *profile.value, 0U).ok()
+                && !hamDrmDecodeMscCellsMultistage(*clean.value, *profile.value, 5U).ok(),
+            "unbounded multistage iteration count was accepted");
+    malformed[0] = HamDrmComplex(std::numeric_limits<double>::max(), 0.0);
+    require(hamDrmDecodeMscCellsSoft(malformed, *profile.value).ok(),
+            "finite extreme soft MSC input did not remain bounded");
+    auto badProfile = *profile.value;
+    badProfile.constellation = HamDrmConstellation::Qam4;
+    require(!hamDrmDecodeMscCellsSoft(*clean.value, badProfile).ok(),
+            "inconsistent soft MSC profile was accepted");
+    require(!hamDrmViterbiDecodeSoft(std::vector<std::int8_t> {std::int8_t(-128)},
+                                     1U, 0U, HamDrmPunctureTailMode::Msc).ok(),
+            "out-of-range soft reliability was accepted");
+}
+
+void testInterpolatedPilotChannel()
+{
+    for (const auto mode : {HamDrmRobustness::B, HamDrmRobustness::E}) {
+        const auto parameters = hamDrmOfdmParameters(mode, HamDrmOccupiedBandwidth::Hz2500);
+        require(parameters.has_value(), "missing OFDM profile");
+        const auto built = hamDrmBuildCellPlan(*parameters);
+        require(built.ok(), "pilot plan failed");
+        const auto& plan = *built.value;
+        const auto* cells = plan.symbolCells(0U);
+        std::vector<HamDrmComplex> original(parameters->carrierCount(), {0.4, -0.3});
+        std::vector<std::size_t> pilots;
+        for (std::size_t i = 0; i < original.size(); ++i) {
+            if (hamDrmCellHas(cells[i].kind, HamDrmCellKind::ScatteredPilot)
+                || hamDrmCellHas(cells[i].kind, HamDrmCellKind::TimePilot)
+                || hamDrmCellHas(cells[i].kind, HamDrmCellKind::FrequencyPilot)) {
+                pilots.push_back(i);
+                original[i] = cells[i].pilotValue;
+            }
+        }
+        require(pilots.size() >= 3, "insufficient pilots for A/B");
+        auto received = original;
+        for (std::size_t i = 0; i < received.size(); ++i)
+            received[i] *= HamDrmComplex(0.65 + 0.005 * double(i), 0.2 - 0.001 * double(i));
+        const auto flat = hamDrmEqualizeFlatPilotChannel(plan, 0, received, 0.01);
+        const auto selective = hamDrmEqualizeInterpolatedPilotChannel(plan, 0, received, 0.01);
+        const auto flatCross = hamDrmEqualizeCrossValidatedFlatPilotChannel(plan, 0, received, 0.01);
+        require(flat.ok() && selective.ok() && flatCross.ok(), "equalization failed");
+        require(selective.value->normalizedPilotSquaredError < 1e-20
+                && flat.value->normalizedPilotSquaredError > 1e-4,
+                "selective A/B pilot error did not improve");
+        require(flatCross.value->normalizedPilotSquaredError > 1e-4
+                && selective.value->normalizedPilotSquaredError < flatCross.value->normalizedPilotSquaredError,
+                "comparable cross-validation did not favour the affine channel");
+        auto constantChannel = original;
+        for (auto& carrier : constantChannel) carrier *= HamDrmComplex(0.8, 0.15);
+        const auto constantFlat = hamDrmEqualizeCrossValidatedFlatPilotChannel(plan, 0, constantChannel, 0.01);
+        require(constantFlat.ok() && constantFlat.value->normalizedPilotSquaredError < 1e-20,
+                "flat channel cross-validation reported error on a clean channel");
+        for (auto i = pilots.front(); i <= pilots.back(); ++i)
+            requireNear(selective.value->carriers[i], original[i], 1e-10,
+                        "interpolated carrier differs");
+        received[pilots[pilots.size() / 2]] *= HamDrmComplex(2.0, 0.0);
+        const auto corrupted = hamDrmEqualizeInterpolatedPilotChannel(plan, 0, received, 0.01);
+        require(corrupted.ok() && corrupted.value->corruptedPilotCells > 0,
+                "leave-one-out check missed corrupted pilot");
+        received[pilots[pilots.size() / 2]] *= HamDrmComplex(10000.0, 0.0);
+        const auto outlier = hamDrmEqualizeInterpolatedPilotChannel(plan, 0, received, 0.01);
+        const auto flatOutlier = hamDrmEqualizeCrossValidatedFlatPilotChannel(plan, 0, received, 0.01);
+        require(outlier.ok() && std::isfinite(outlier.value->normalizedPilotSquaredError)
+                && outlier.value->normalizedPilotSquaredError <= 4.0 + 1e-12
+                && outlier.value->corruptedPilotCells > 0,
+                "pilot outlier did not produce bounded error and corruption evidence");
+        require(flatOutlier.ok() && std::isfinite(flatOutlier.value->normalizedPilotSquaredError)
+                && flatOutlier.value->normalizedPilotSquaredError <= 4.0 + 1e-12
+                && flatOutlier.value->corruptedPilotCells > 0,
+                "flat cross-validation failed to bound or detect pilot outlier");
+        received[0] = HamDrmComplex(std::numeric_limits<double>::quiet_NaN(), 0.0);
+        require(!hamDrmEqualizeInterpolatedPilotChannel(plan, 0, received, 0.01).ok(),
+                "non-finite input accepted");
+        require(!hamDrmEqualizeCrossValidatedFlatPilotChannel(plan, 0, received, 0.01).ok(),
+                "non-finite flat cross-validation input accepted");
+        std::fill(received.begin(), received.end(),
+                  HamDrmComplex(std::numeric_limits<double>::max(), 0.0));
+        require(!hamDrmEqualizeCrossValidatedFlatPilotChannel(plan, 0, received, 0.01).ok(),
+                "overflowing flat cross-validation input accepted");
+    }
+}
+
 using TestFunction = void (*)();
 
 } // namespace
 
 int main()
 {
-    const std::array<std::pair<const char*, TestFunction>, 10U> tests {{
+    const std::array<std::pair<const char*, TestFunction>, 12U> tests {{
         {"CRC and energy vectors", &testCrcAndEnergyVectors},
         {"puncturing and Viterbi", &testPuncturingAndViterbi},
         {"block and symbol interleavers", &testBlockAndSymbolInterleavers},
@@ -818,6 +1001,8 @@ int main()
         {"QSSTV cell maps", &testQsstvCellMaps},
         {"FAC codec", &testFacCodec},
         {"MSC MLC profiles", &testMscMlcProfiles},
+        {"soft MSC deterministic noise A/B", &testSoftMscOnDeterministicNoise},
+        {"interpolated pilot channel A/B", &testInterpolatedPilotChannel},
         {"MSC MLC deterministic repeat", &testMscMlcProfiles},
     }};
 

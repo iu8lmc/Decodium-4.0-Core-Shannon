@@ -86,4 +86,7 @@ if '[LAB][HAMDRM] TX started true "'+profile+'"' not in log:
     raise RuntimeError('TX was not accepted; artifacts '+str(root))
 if '[LAB][HAMDRM] TX state "Completed"' not in log:
     raise RuntimeError('HAMDRM TX did not report completion; artifacts '+str(root))
+rs_level = env.get('DECODIUM_LAB_HAMDRM_RS_LEVEL')
+if rs_level and ('[LAB][HAMDRM] RS level ' + rs_level) not in log:
+    raise RuntimeError('requested RS protection was not selected; artifacts '+str(root))
 print('PASS HAMDRM TX capture:',variant,'artifacts',root,flush=True)

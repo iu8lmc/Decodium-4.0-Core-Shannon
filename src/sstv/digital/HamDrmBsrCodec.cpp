@@ -262,7 +262,9 @@ HamDrmValueResult<HamDrmBsrRequest> parseHamDrmBsr(
                 request.missingSegments.back()) + 1U;
             continue;
         }
-        if (value < 0 || static_cast<std::size_t>(value) >= limits.maximumSegments) {
+        if (value < 0
+            || static_cast<std::size_t>(value) >= limits.maximumSegments
+            || static_cast<unsigned int>(value) > std::numeric_limits<std::uint16_t>::max()) {
             return {std::nullopt,
                     HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
                                           "BSR segment is out of range")};

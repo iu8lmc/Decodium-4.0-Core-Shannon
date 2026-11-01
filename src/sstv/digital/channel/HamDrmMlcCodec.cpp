@@ -7,6 +7,7 @@
 #include "../phy/HamDrmQam.h"
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <limits>
 
@@ -261,6 +262,168 @@ HamDrmValueResult<HamDrmMscDecodeResult> hamDrmDecodeMscCells(
         result.levelPathMetric[level] = decoded.value->pathMetric;
         dispersed.insert(dispersed.end(), decoded.value->bits.begin(),
                          decoded.value->bits.end());
+    }
+    result.bits = hamDrmEnergyDisperse(dispersed);
+    return {std::move(result), HamDrmStatus::success()};
+}
+
+HamDrmValueResult<HamDrmMscDecodeResult> hamDrmDecodeMscCellsMultistage(
+    const std::vector<phy::HamDrmComplex>& cells,
+    const HamDrmMlcProfile& profile,
+    std::size_t maximumIterations)
+{
+    if (!profileShapeValid(profile) || cells.size() != profile.usefulCells
+        || maximumIterations == 0U || maximumIterations > 4U
+        || (profile.constellation == HamDrmConstellation::Qam4 && profile.levelCount != 1U)
+        || (profile.constellation == HamDrmConstellation::Qam16 && profile.levelCount != 2U)
+        || (profile.constellation == HamDrmConstellation::Qam64 && profile.levelCount != 3U)
+        || (profile.constellation != HamDrmConstellation::Qam4
+            && profile.constellation != HamDrmConstellation::Qam16
+            && profile.constellation != HamDrmConstellation::Qam64)) {
+        return {std::nullopt, invalid(HamDrmErrorCode::InvalidArgument,
+                                      "invalid HAMDRM multistage MSC decoder input")};
+    }
+    try {
+        const auto initial = hamDrmDecodeMscCellsSoft(cells, profile);
+        if (!initial.ok()) return {std::nullopt, initial.status};
+        const auto initialDispersed = hamDrmEnergyDisperse(initial.value->bits);
+        std::array<std::vector<std::uint8_t>, 3U> decisions;
+        std::array<std::vector<std::uint8_t>, 3U> decodedBits;
+        std::size_t sourceOffset = 0U;
+        for (std::size_t level = 0; level < profile.levelCount; ++level) {
+            const auto length = profile.inputBitsPerLevel[level];
+            decodedBits[level] = std::vector<std::uint8_t>(
+                initialDispersed.begin() + static_cast<std::ptrdiff_t>(sourceOffset),
+                initialDispersed.begin() + static_cast<std::ptrdiff_t>(sourceOffset + length));
+            sourceOffset += length;
+            const auto encoded = hamDrmConvolutionEncode(decodedBits[level], profile.puncturePatternIndex[level],
+                2U*profile.usefulCells, HamDrmPunctureTailMode::Msc);
+            if (!encoded.ok()) return {std::nullopt, encoded.status};
+            decisions[level] = *encoded.value;
+            if (profile.bitInterleaverT0[level] != 0U)
+                decisions[level] = hamDrmBitInterleave(decisions[level], profile.bitInterleaverT0[level]);
+        }
+        HamDrmMscDecodeResult result;
+        for (std::size_t iteration = 0; iteration < maximumIterations; ++iteration) {
+            bool changed = false;
+            for (std::size_t level = 0; level < profile.levelCount; ++level) {
+                std::vector<std::int8_t> reliability(2U * profile.usefulCells);
+                for (std::size_t cell = 0; cell < cells.size(); ++cell) {
+                    if (!std::isfinite(cells[cell].real()) || !std::isfinite(cells[cell].imag()))
+                        return {std::nullopt, invalid(HamDrmErrorCode::InvalidArgument, "non-finite HAMDRM MSC cell")};
+                    for (std::size_t dimension = 0; dimension < 2U; ++dimension) {
+                        std::array<std::uint8_t, 6U> bits {};
+                        for (std::size_t bit = 0; bit < profile.levelCount; ++bit)
+                            bits[bit] = decisions[bit][2U*cell+dimension];
+                        const double observed = std::clamp(dimension == 0U ? cells[cell].real() : cells[cell].imag(), -1000.0, 1000.0);
+                        bits[level] = 0U;
+                        const double zero = phy::hamDrmMapQamCell(bits.data(), 2U*profile.levelCount, profile.constellation).real();
+                        bits[level] = 1U;
+                        const double one = phy::hamDrmMapQamCell(bits.data(), 2U*profile.levelCount, profile.constellation).real();
+                        const double d0 = observed-zero, d1 = observed-one;
+                        const double score = std::clamp((d1*d1-d0*d0)*300.0, -127.0, 127.0);
+                        reliability[2U*cell+dimension] = static_cast<std::int8_t>(std::lround(score));
+                    }
+                }
+                if (profile.bitInterleaverT0[level] != 0U) {
+                    const auto permutation = hamDrmBlockInterleaverPermutation(reliability.size(), profile.bitInterleaverT0[level]);
+                    std::vector<std::int8_t> reordered(reliability.size());
+                    for (std::size_t i = 0; i < permutation.size(); ++i) reordered[permutation[i]] = reliability[i];
+                    reliability = std::move(reordered);
+                }
+                const auto decoded = hamDrmViterbiDecodeSoft(reliability, profile.inputBitsPerLevel[level],
+                    profile.puncturePatternIndex[level], HamDrmPunctureTailMode::Msc);
+                if (!decoded.ok()) return {std::nullopt, decoded.status};
+                result.levelPathMetric[level] = decoded.value->pathMetric;
+                decodedBits[level] = decoded.value->bits;
+                const auto encoded = hamDrmConvolutionEncode(decodedBits[level], profile.puncturePatternIndex[level],
+                    2U*profile.usefulCells, HamDrmPunctureTailMode::Msc);
+                if (!encoded.ok()) return {std::nullopt, encoded.status};
+                auto next = *encoded.value;
+                if (profile.bitInterleaverT0[level] != 0U)
+                    next = hamDrmBitInterleave(next, profile.bitInterleaverT0[level]);
+                changed = changed || next != decisions[level];
+                decisions[level] = std::move(next);
+            }
+            if (!changed) break;
+        }
+        std::vector<std::uint8_t> dispersed;
+        dispersed.reserve(profile.inputBits);
+        for (std::size_t level = 0; level < profile.levelCount; ++level)
+            dispersed.insert(dispersed.end(), decodedBits[level].begin(), decodedBits[level].end());
+        result.bits = hamDrmEnergyDisperse(dispersed);
+        return {std::move(result), HamDrmStatus::success()};
+    } catch (const std::exception& error) {
+        return {std::nullopt, HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument, error.what())};
+    }
+}
+
+HamDrmValueResult<HamDrmMscDecodeResult> hamDrmDecodeMscCellsSoft(
+    const std::vector<phy::HamDrmComplex>& cells,
+    const HamDrmMlcProfile& profile)
+{
+    if (!profileShapeValid(profile) || cells.size() != profile.usefulCells) {
+        return {std::nullopt, invalid(HamDrmErrorCode::InvalidArgument,
+                                      "invalid HAMDRM soft MSC decoder input")};
+    }
+    if ((profile.constellation == HamDrmConstellation::Qam4 && profile.levelCount != 1U)
+        || (profile.constellation == HamDrmConstellation::Qam16 && profile.levelCount != 2U)
+        || (profile.constellation == HamDrmConstellation::Qam64 && profile.levelCount != 3U)
+        || (profile.constellation != HamDrmConstellation::Qam4
+            && profile.constellation != HamDrmConstellation::Qam16
+            && profile.constellation != HamDrmConstellation::Qam64))
+        return {std::nullopt, invalid(HamDrmErrorCode::InvalidArgument, "invalid HAMDRM soft MSC constellation")};
+    std::array<std::vector<std::int8_t>, 3U> levels;
+    for (std::size_t level = 0U; level < profile.levelCount; ++level)
+        levels[level].resize(2U * profile.usefulCells);
+    const std::size_t points = 1U << profile.levelCount;
+    for (std::size_t cell = 0U; cell < cells.size(); ++cell) {
+        if (!std::isfinite(cells[cell].real()) || !std::isfinite(cells[cell].imag()))
+            return {std::nullopt, invalid(HamDrmErrorCode::InvalidArgument, "non-finite HAMDRM MSC cell")};
+        for (std::size_t dimension = 0U; dimension < 2U; ++dimension) {
+            // Keep squared distances finite for adversarial but finite input.
+            const double observed = std::clamp(dimension == 0U ? cells[cell].real() : cells[cell].imag(),
+                                               -1000.0, 1000.0);
+            for (std::size_t level = 0U; level < profile.levelCount; ++level) {
+                double minimum[2] = {std::numeric_limits<double>::infinity(),
+                                     std::numeric_limits<double>::infinity()};
+                for (std::size_t point = 0U; point < points; ++point) {
+                    std::array<std::uint8_t, 6U> bits {};
+                    for (std::size_t bit = 0U; bit < profile.levelCount; ++bit)
+                        bits[bit] = static_cast<std::uint8_t>((point >> (profile.levelCount - bit - 1U)) & 1U);
+                    const auto mapped = phy::hamDrmMapQamCell(bits.data(), 2U * profile.levelCount,
+                                                              profile.constellation);
+                    const double delta = observed - mapped.real();
+                    const auto bit = bits[level];
+                    minimum[bit] = std::min(minimum[bit], delta * delta);
+                }
+                const double score = std::clamp((minimum[1] - minimum[0]) * 300.0, -127.0, 127.0);
+                levels[level][2U * cell + dimension] = static_cast<std::int8_t>(std::lround(score));
+            }
+        }
+    }
+    HamDrmMscDecodeResult result;
+    std::vector<std::uint8_t> dispersed;
+    dispersed.reserve(profile.inputBits);
+    for (std::size_t level = 0U; level < profile.levelCount; ++level) {
+        if (profile.bitInterleaverT0[level] != 0U) {
+            try {
+                const auto permutation = hamDrmBlockInterleaverPermutation(
+                    levels[level].size(), profile.bitInterleaverT0[level]);
+                std::vector<std::int8_t> reordered(levels[level].size());
+                for (std::size_t i = 0U; i < permutation.size(); ++i)
+                    reordered[permutation[i]] = levels[level][i];
+                levels[level] = std::move(reordered);
+            } catch (const std::exception& error) {
+                return {std::nullopt, HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument, error.what())};
+            }
+        }
+        const auto decoded = hamDrmViterbiDecodeSoft(levels[level], profile.inputBitsPerLevel[level],
+                                                     profile.puncturePatternIndex[level],
+                                                     HamDrmPunctureTailMode::Msc);
+        if (!decoded.ok()) return {std::nullopt, decoded.status};
+        result.levelPathMetric[level] = decoded.value->pathMetric;
+        dispersed.insert(dispersed.end(), decoded.value->bits.begin(), decoded.value->bits.end());
     }
     result.bits = hamDrmEnergyDisperse(dispersed);
     return {std::move(result), HamDrmStatus::success()};

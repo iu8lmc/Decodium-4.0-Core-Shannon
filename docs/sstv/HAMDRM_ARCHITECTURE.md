@@ -141,6 +141,34 @@ tests passed after this change, but automatic capture ownership/restoration
 and operation on Linux and Windows need further independent tests. These are
 local BlackHole observations; they do not establish a hardware-radio failure.
 
+On 2026-11-01 the `a air` failure was reproduced again: delayed legacy
+panadapter rearm calls stopped the dedicated SSTV capture after BSR TX. The
+rearm now leaves the active native SSTV capture alone. With that change,
+both `a air` (extended BSR) and `b air` (compact BSR) completed on macOS:
+each sent the BSR and repair over BlackHole between two Decodium processes,
+and the received 2,725-byte JPEG matched its input byte for byte. The initial
+partial object was still seeded by the laboratory, and this does not verify
+Linux, Windows, RF or interoperability with another application. Artifacts:
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-repair-a-ed1e39hv`
+and `.../decodium-hamdrm-repair-b-p3iufbu8`.
+
+The subsequent `a live` and `b live` laboratory runs exercise the complete
+local sequence without seeding the partial image: the receiver starts first,
+the sender transmits the image over BlackHole, and the test-only receiver
+discards decoded MOT body segment 1 until the sender finishes and is listening.
+The receiver then sends an extended or compact BSR over BlackHole; the sender
+receives the request and transmits the selected repair segment over the same
+virtual audio path. Both 2,725-byte images were reconstructed exactly.
+Artifacts are
+`/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-repair-a-39gja431`
+and `.../decodium-hamdrm-repair-b-20r9qrgg`.
+Reproduce with `python3 tests/sstv/tools/run_hamdrm_repair_two_app_lab.py a live`
+and the corresponding `b live` command. The missing segment is injected
+after demodulation, not caused by RF; Windows, Linux, physical PTT and
+external-application repair remain unverified. A controller test checks both
+fixtures with test mode off and on, including acceptance of the segment after
+the sender-ready marker exists.
+
 Completed `bsr.bin` objects can be followed by another request using the same
 transport ID in the same receive session. The last complete request stays
 visible while the following candidate is assembled; a differing header can

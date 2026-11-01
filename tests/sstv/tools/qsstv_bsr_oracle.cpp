@@ -39,11 +39,32 @@ int main()
                     missing.push_back(static_cast<std::uint16_t>(offset + bit));
             cases.push_back(std::move(missing));
         }
+    // Exercise long objects and ranges that cross the previously tested
+    // eight-segment boundaries, including the highest default MOT segment.
+    cases.insert(cases.end(), {
+        {0, 7, 8, 9, 15, 16, 31, 32, 63},
+        {60, 61, 62, 63, 64, 65, 127, 128, 129},
+        {0, 255, 256, 257, 1022, 1023},
+        {0, 32765, 32766, 32767},
+        {32760, 32761, 32762, 32763, 32764, 32765, 32766, 32767}
+    });
+    // Deterministic A/B-like patterns across a wider object, including
+    // multiple consecutive runs separated by present segments.
+    std::uint32_t state = 0x539a7U;
+    for (unsigned c = 0; c < 256; ++c) {
+        std::vector<std::uint16_t> missing;
+        for (unsigned bit = 0; bit < 128; ++bit) {
+            state = state * 1664525U + 1013904223U;
+            if ((state >> 29U) < 3U)
+                missing.push_back(static_cast<std::uint16_t>(bit));
+        }
+        if (!missing.empty()) cases.push_back(std::move(missing));
+    }
     int checked = 0;
     for (std::size_t c = 0; c < cases.size(); ++c) {
         for (const bool compact : {true, false}) {
             transportBlock block;
-            block.totalSegments = 16;
+            block.totalSegments = std::max(16, int(cases[c].back()) + 1);
             block.defaultSegmentSize = c % 2 ? 128 : 82;
             block.transportID = c % 2 ? 0x4321 : 0x2345;
             block.modeCode = 0;
@@ -51,7 +72,7 @@ int main()
             std::vector<std::unique_ptr<Segment>> segments;
             for (int i = 0; i < block.totalSegments; ++i) {
                 segments.push_back(std::make_unique<Segment>(Segment {
-                    std::find(cases[c].begin(), cases[c].end(), i) == cases[c].end()}));
+                    !std::binary_search(cases[c].begin(), cases[c].end(), i)}));
                 block.dataSegmentPtrList.append(segments.back().get());
             }
             sourceDecoder reference;

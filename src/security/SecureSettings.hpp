@@ -23,6 +23,9 @@ namespace secure_settings
     virtual ~Backend () = default;
 
     virtual bool available () const = 0;
+    // Explicit opt-in for adapters that coordinate atomic creation: values
+    // must be protected at rest and never passed in process arguments.
+    virtual bool protects_private_values () const { return false; }
     // Private E2EE keys require a backend that never exposes their value in
     // process arguments. Existing credential backends have not all met this
     // stronger contract; explicit opt-in is required.

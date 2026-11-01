@@ -964,6 +964,16 @@ void SoundOutput::handleStateChanged(QAudio::State newState)
     if (m_trackedSessionId != 0U) {
       const SoundOutputPlaybackStatus playback =
           trackedPlaybackStatus(m_trackedSessionId);
+      if (QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+          && qEnvironmentVariableIntValue("DECODIUM_LAB_TX_IDLE_TRACE") == 1) {
+        qInfo().noquote() << "[LAB][SSTV] TX sink idle"
+                          << "source_frames=" << playback.sourceFrames
+                          << "processed_frames=" << playback.processedFrames
+                          << "expected_frames=" << playback.expectedFrames
+                          << "pending_frames=" << playback.pendingFrames
+                          << "drained=" << playback.drained
+                          << "qt_error=" << (m_stream ? audioErrorName(m_stream->error()) : QStringLiteral("no-sink"));
+      }
       if (!playback.drained
           && playback.sourceFrames < playback.expectedFrames) {
         // CoreAudio virtual devices (notably BlackHole) can report Idle while

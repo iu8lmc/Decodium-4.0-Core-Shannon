@@ -299,4 +299,68 @@ HamDrmValueResult<HamDrmConvolutionDecodeResult> hamDrmViterbiDecode(
             HamDrmStatus::success()};
 }
 
+HamDrmValueResult<HamDrmConvolutionDecodeResult> hamDrmViterbiDecodeSoft(
+    const std::vector<std::int8_t>& reliability,
+    std::size_t inputBitCount,
+    std::size_t patternIndex,
+    HamDrmPunctureTailMode tailMode)
+{
+    if (std::any_of(reliability.begin(), reliability.end(),
+                    [](std::int8_t value) { return value == -128; })) {
+        return {std::nullopt, codingError(HamDrmErrorCode::Malformed,
+                                          "invalid HAMDRM soft reliability")};
+    }
+    std::vector<HamDrmPunctureMask> schedule;
+    try {
+        schedule = hamDrmPunctureSchedule(inputBitCount, patternIndex,
+                                          reliability.size(), tailMode);
+    } catch (const std::exception& error) {
+        return {std::nullopt, HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument, error.what())};
+    }
+    constexpr std::size_t infinity = std::numeric_limits<std::size_t>::max() / 4U;
+    std::array<std::size_t, kStateCount> metric {}, nextMetric {};
+    metric.fill(infinity);
+    metric[0U] = 0U;
+    std::vector<std::uint8_t> predecessors(schedule.size() * kStateCount, 0U);
+    std::size_t observedOffset = 0U;
+    for (std::size_t step = 0U; step < schedule.size(); ++step) {
+        nextMetric.fill(infinity);
+        const auto mask = static_cast<std::uint8_t>(schedule[step]);
+        for (std::size_t state = 0U; state < kStateCount; ++state) {
+            if (metric[state] == infinity) continue;
+            for (std::uint8_t input = 0U; input <= 1U; ++input) {
+                const auto shift = static_cast<std::uint8_t>((state << 1U) | input);
+                const std::size_t next = shift & 0x3FU;
+                std::size_t branch = 0U, local = observedOffset;
+                for (std::size_t generator = 0U; generator < kGeneratorMasks.size(); ++generator) {
+                    if ((mask & static_cast<std::uint8_t>(1U << generator)) == 0U) continue;
+                    const auto expected = parity(static_cast<std::uint8_t>(shift & kGeneratorMasks[generator]));
+                    const int confidence = reliability[local++];
+                    branch += static_cast<std::size_t>(127 + (expected ? confidence : -confidence));
+                }
+                const auto candidate = metric[state] + branch;
+                if (candidate < nextMetric[next]) {
+                    nextMetric[next] = candidate;
+                    predecessors[step * kStateCount + next] = static_cast<std::uint8_t>(state);
+                }
+            }
+        }
+        observedOffset += maskBits(schedule[step]);
+        metric = nextMetric;
+    }
+    if (metric[0U] == infinity)
+        return {std::nullopt, codingError(HamDrmErrorCode::Malformed, "HAMDRM soft Viterbi has no terminated path")};
+    std::vector<std::uint8_t> bits(schedule.size(), 0U);
+    std::size_t state = 0U;
+    for (std::size_t step = schedule.size(); step-- > 0U;) {
+        bits[step] = static_cast<std::uint8_t>(state & 1U);
+        state = predecessors[step * kStateCount + state];
+    }
+    if (state != 0U || std::any_of(bits.begin() + static_cast<std::ptrdiff_t>(inputBitCount),
+                                    bits.end(), [](std::uint8_t bit) { return bit != 0U; }))
+        return {std::nullopt, codingError(HamDrmErrorCode::Malformed, "HAMDRM soft Viterbi violates zero termination")};
+    bits.resize(inputBitCount);
+    return {HamDrmConvolutionDecodeResult {std::move(bits), metric[0U]}, HamDrmStatus::success()};
+}
+
 } // namespace decodium::sstv::hamdrm::channel

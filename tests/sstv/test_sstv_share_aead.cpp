@@ -15,16 +15,20 @@ public:
     bool online {true};
     bool privateStorage {true};
     bool failStore {false};
+    bool inconsistentLookup {false};
+    mutable unsigned insertCalls {0};
     mutable QHash<QString, QString> values;
     bool available() const override { return online; }
     bool supports_private_key_storage() const override { return privateStorage; }
     secure_settings::LookupResult lookup(const QString& service, const QString& account) const override {
         secure_settings::LookupResult result; result.backend_available = online;
+        if (inconsistentLookup) { result.value = QStringLiteral("partial-result"); return result; }
         const auto key = service + QLatin1Char('/') + account;
         result.found = values.contains(key); if (result.found) result.value = values.value(key);
         return result;
     }
     secure_settings::InsertResult store_if_absent(const QString& service, const QString& account, const QString& value) const override {
+        ++insertCalls;
         if (failStore) return secure_settings::InsertResult::Error;
         const auto key = service + QLatin1Char('/') + account;
         if (values.contains(key)) return secure_settings::InsertResult::AlreadyExists;
@@ -69,6 +73,21 @@ int main() {
     const auto pinnedBob = sstvShareX25519Fingerprint(*bobIdentity.key);
     check(aliceStore.pinRecipient("provider", "bob", *bobIdentity.key, pinnedBob) == SstvShareKeyStoreError::None, "pin failed");
     check(aliceReload.pinnedRecipient("provider", "bob").key == bobIdentity.key, "pin reload failed");
+    const auto storedBeforeInconsistentLookup = backend.values;
+    const auto insertCallsBeforeInconsistentLookup = backend.insertCalls;
+    backend.inconsistentLookup = true;
+    check(aliceStore.createOrLoadPublicKey().error == SstvShareKeyStoreError::StorageFailure,
+          "inconsistent missing identity lookup was treated as absence");
+    check(aliceStore.pinRecipient("provider", "bob", *bobIdentity.key, pinnedBob)
+              == SstvShareKeyStoreError::StorageFailure,
+          "inconsistent missing pin lookup was treated as absence");
+    check(backend.values == storedBeforeInconsistentLookup
+              && backend.insertCalls == insertCallsBeforeInconsistentLookup,
+          "inconsistent lookup triggered a secret-store write");
+    backend.inconsistentLookup = false;
+    check(aliceStore.createOrLoadPublicKey().key == aliceIdentity.key
+              && aliceStore.pinnedRecipient("provider", "bob").key == bobIdentity.key,
+          "identity or pin changed after inconsistent lookup");
     check(bobStore.pinnedRecipient("provider", "bob").error == SstvShareKeyStoreError::Missing, "pin leaked between profiles");
     check(aliceStore.pinRecipient("provider", "bob", *aliceIdentity.key,
           sstvShareX25519Fingerprint(*aliceIdentity.key)) == SstvShareKeyStoreError::Conflict, "changed key silently accepted");

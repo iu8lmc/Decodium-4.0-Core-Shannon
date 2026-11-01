@@ -3,10 +3,13 @@
 #include "HamDrmWaveformAdapters.h"
 
 #include "HamDrmPacketCodec.h"
+#include "HamDrmFractionalDelay.h"
 #include "HamDrmWaveformCodec.h"
 #include "../../dsp/SstvResampler.h"
 
 #include <QDebug>
+#include <QCoreApplication>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <atomic>
@@ -558,6 +561,14 @@ public:
         shutdown();
     }
 
+    bool setExperimentalTiming(bool enabled) noexcept
+    {
+        const std::lock_guard<std::mutex> lock(mutex);
+        if (activeFlag) return false;
+        experimentalTimingSelected = enabled;
+        return true;
+    }
+
     HamDrmStatus start(const HamDrmProfile& profile,
                        std::uint64_t requestedSession,
                        HamDrmWaveformRxSink& requestedSink)
@@ -579,6 +590,7 @@ public:
                 "HAMDRM RX shared-audio hooks are not connected");
         }
 
+        bool selectedExperimentalTiming = false;
         {
             const std::lock_guard<std::mutex> lock(mutex);
             if (activeFlag) {
@@ -586,12 +598,77 @@ public:
                     HamDrmErrorCode::Incomplete,
                     "another HAMDRM RX session is active");
             }
+            selectedExperimentalTiming = experimentalTimingSelected;
         }
         joinWorker();
         const HamDrmWaveformConfig requestedConfig = waveformConfig(
             profile, kHamDrmPcmSampleRateHz);
         HamDrmWaveformLimits requestedWaveformLimits;
+        bool requestedDualTiming = false;
+        bool requestedEarlyOnly = false;
+        bool requestedFractionalTiming = false;
+        bool requestedFractionalOnly = false;
         requestedWaveformLimits.maximumFrames = limits.maximumRxSessionFrames;
+        if (selectedExperimentalTiming) {
+            requestedWaveformLimits.experimentalFrequencySelective = true;
+            requestedWaveformLimits.experimentalAdaptiveEqualizer = true;
+            requestedDualTiming = true;
+            qInfo() << "[HAMDRM] operator selected experimental adaptive dual timing";
+        }
+        // Diagnostic-only replay of difficult recorded channels. Never select
+        // the relaxed limits in a normal session, even if the environment is set.
+        const bool strictAdaptiveLab = qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_STRICT_ADAPTIVE") == 1;
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_SELECTIVE") == 1 || strictAdaptiveLab)) {
+            requestedWaveformLimits.experimentalFrequencySelective = true;
+            requestedWaveformLimits.experimentalAdaptiveEqualizer = true;
+            if (strictAdaptiveLab) {
+                qInfo() << "[LAB][HAMDRM] experimental adaptive estimator with strict pilot limits";
+            } else {
+                requestedWaveformLimits.maximumNormalizedPilotSquaredError = 0.40;
+                requestedWaveformLimits.maximumCorruptedPilotFraction = 0.60;
+                qInfo() << "[LAB][HAMDRM] experimental adaptive estimator and relaxed pilot limits";
+            }
+            if (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_FLAT_FALLBACK") == 1) {
+                requestedWaveformLimits.experimentalFlatPacketFallback = true;
+                qInfo() << "[LAB][HAMDRM] experimental CRC-gated flat packet fallback";
+            }
+            if (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_MULTISTAGE") == 1) {
+                requestedWaveformLimits.experimentalMultistagePacketRetry = true;
+                qInfo() << "[LAB][HAMDRM] experimental CRC-gated multistage packet retry";
+            }
+        }
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_STRICT_MULTISTAGE") == 1
+            && !requestedWaveformLimits.experimentalAdaptiveEqualizer) {
+            requestedWaveformLimits.experimentalMultistagePacketRetry = true;
+            qInfo() << "[LAB][HAMDRM] strict-pilot CRC-gated multistage packet retry";
+        }
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && (requestedWaveformLimits.experimentalAdaptiveEqualizer
+                || requestedWaveformLimits.experimentalMultistagePacketRetry)
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_DUAL_TIMING") == 1) {
+            requestedDualTiming = true;
+            qInfo() << "[LAB][HAMDRM] experimental independent dual timing";
+            if (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_EARLY_ONLY") == 1) {
+                requestedEarlyOnly = true;
+                qInfo() << "[LAB][HAMDRM] only early timing groups delivered";
+            }
+            if (!requestedEarlyOnly && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_FRACTIONAL_TIMING") == 1) {
+                requestedFractionalTiming = true;
+                qInfo() << "[LAB][HAMDRM] experimental fractional timing candidate";
+                if (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_FRACTIONAL_ONLY") == 1) {
+                    requestedFractionalOnly = true;
+                    qInfo() << "[LAB][HAMDRM] only fractional timing groups delivered";
+                }
+            }
+        }
         try {
             static_cast<void>(HamDrmWaveformReceiver(
                 requestedConfig, requestedWaveformLimits));
@@ -609,6 +686,10 @@ public:
             }
             config = requestedConfig;
             waveformLimits = requestedWaveformLimits;
+            dualTiming = requestedDualTiming;
+            earlyOnly = requestedEarlyOnly;
+            fractionalTiming = requestedFractionalTiming;
+            fractionalOnly = requestedFractionalOnly;
             sessionId = requestedSession;
             sink = &requestedSink;
             queue.clear();
@@ -670,6 +751,7 @@ public:
                         > limits.maximumRxQueuedSamples - sampleCount) {
                     saturatingAdd(stats.rejectedChunks);
                     if (activeFlag && !stopRequested) {
+                        saturatingAdd(stats.queueOverflows);
                         fatalStatus = HamDrmStatus::failure(
                             HamDrmErrorCode::LimitExceeded,
                             "HAMDRM RX audio queue capacity was exceeded");
@@ -909,6 +991,16 @@ private:
     {
         try {
             HamDrmWaveformReceiver receiver(config, waveformLimits);
+            std::unique_ptr<HamDrmWaveformReceiver> earlyReceiver;
+            std::unique_ptr<HamDrmWaveformReceiver> fractionalReceiver;
+            HamDrmFractionalDelay fractionalDelay;
+            if (dualTiming) {
+                auto earlyLimits = waveformLimits;
+                earlyLimits.experimentalEarlyTiming = true;
+                earlyReceiver = std::make_unique<HamDrmWaveformReceiver>(config, earlyLimits);
+            }
+            if (fractionalTiming)
+                fractionalReceiver = std::make_unique<HamDrmWaveformReceiver>(config, waveformLimits);
             std::unique_ptr<SstvResampler> resampler;
             std::uint32_t inputRate = 0U;
             std::uint64_t workerGeneration = 0U;
@@ -929,6 +1021,9 @@ private:
                     } else if (generation != workerGeneration) {
                         workerGeneration = generation;
                         receiver.reset();
+                        if (earlyReceiver) earlyReceiver->reset();
+                        if (fractionalReceiver) fractionalReceiver->reset();
+                        fractionalDelay.reset();
                         resampler.reset();
                         inputRate = 0U;
                         continue;
@@ -950,6 +1045,9 @@ private:
                 if (chunk.sampleRate == kHamDrmPcmSampleRateHz) {
                     if (inputRate != chunk.sampleRate) {
                         receiver.reset();
+                        if (earlyReceiver) earlyReceiver->reset();
+                        if (fractionalReceiver) fractionalReceiver->reset();
+                        fractionalDelay.reset();
                         resampler.reset();
                         inputRate = chunk.sampleRate;
                     }
@@ -963,6 +1061,9 @@ private:
                 } else {
                     if (!resampler || inputRate != chunk.sampleRate) {
                         receiver.reset();
+                        if (earlyReceiver) earlyReceiver->reset();
+                        if (fractionalReceiver) fractionalReceiver->reset();
+                        fractionalDelay.reset();
                         resampler = std::make_unique<SstvResampler>(
                             chunk.sampleRate);
                         inputRate = chunk.sampleRate;
@@ -984,22 +1085,53 @@ private:
                 const HamDrmWaveformReceiveBatch batch = receiver.pushPcm(
                     pcm.data(), pcm.size(), false);
                 if (qEnvironmentVariableIsSet("DECODIUM_HAMDRM_RX_TRACE")
-                    && batch.statistics.receivedFrames != loggedFrames) {
+                    && (batch.statistics.receivedFrames != loggedFrames || !batch.status.ok())) {
                     loggedFrames = batch.statistics.receivedFrames;
                     qInfo() << "[HAMDRM RX trace] frames" << loggedFrames
                             << "pilot failures" << batch.statistics.pilotFailures
                             << "FAC failures" << batch.statistics.facFailures
                             << "MSC failures" << batch.statistics.mscFailures
+                            << "packet failures" << batch.statistics.packetCrcFailures
+                            << "flat fallback packets" << batch.statistics.flatFallbackPacketRecoveries
+                            << "multistage packets" << batch.statistics.multistagePacketRecoveries
+                            << "MOT failures" << batch.statistics.motCrcFailures
                             << "groups" << batch.statistics.validatedDataGroups
+                            << "pilot error" << batch.statistics.lastNormalizedPilotSquaredError
                             << "CFO" << batch.statistics.estimatedFrequencyOffsetHz
                             << "status" << QString::fromStdString(batch.status.detail);
                 }
-                if (!deliverBatch(batch, chunk.generation)) {
+                if (!earlyOnly && !fractionalOnly && !deliverBatch(batch, chunk.generation)) {
                     return;
                 }
                 if (!batch.status.ok() && terminalRxStatus(batch.status)) {
                     finishFromWorker(batch.status);
                     return;
+                }
+                if (earlyReceiver) {
+                    const auto earlyBatch = earlyReceiver->pushPcm(pcm.data(), pcm.size(), false);
+                    if (qEnvironmentVariableIsSet("DECODIUM_HAMDRM_RX_TRACE")
+                        && !earlyBatch.dataGroups.empty()) {
+                        qInfo() << "[HAMDRM RX dual timing] early groups"
+                                << earlyBatch.statistics.validatedDataGroups
+                                << "multistage packets"
+                                << earlyBatch.statistics.multistagePacketRecoveries;
+                    }
+                    if (!fractionalOnly && !deliverBatch(earlyBatch, chunk.generation)) return;
+                    if (!earlyBatch.status.ok() && terminalRxStatus(earlyBatch.status)) {
+                        finishFromWorker(earlyBatch.status);
+                        return;
+                    }
+                }
+                if (fractionalReceiver) {
+                    const auto delayedPcm = fractionalDelay.process(pcm);
+                    const auto delayedBatch = fractionalReceiver->pushPcm(delayedPcm);
+                    if (qEnvironmentVariableIsSet("DECODIUM_HAMDRM_RX_TRACE") && !delayedBatch.dataGroups.empty())
+                        qInfo() << "[HAMDRM RX fractional timing] groups" << delayedBatch.statistics.validatedDataGroups;
+                    if (!deliverBatch(delayedBatch, chunk.generation)) return;
+                    if (!delayedBatch.status.ok() && terminalRxStatus(delayedBatch.status)) {
+                        finishFromWorker(delayedBatch.status);
+                        return;
+                    }
                 }
             }
         } catch (const std::exception& exception) {
@@ -1020,6 +1152,11 @@ private:
     std::thread worker;
     HamDrmWaveformConfig config;
     HamDrmWaveformLimits waveformLimits;
+    bool dualTiming {false};
+    bool experimentalTimingSelected {false};
+    bool earlyOnly {false};
+    bool fractionalTiming {false};
+    bool fractionalOnly {false};
     HamDrmWaveformRxSink* sink {nullptr};
     std::optional<HamDrmStatus> fatalStatus;
     std::size_t queuedSamples {0U};
@@ -1044,6 +1181,11 @@ HamDrmNativeRxBackend::~HamDrmNativeRxBackend() = default;
 HamDrmWaveformCapability HamDrmNativeRxBackend::capability() const
 {
     return nativeCapability(implementation_->connected(), "RX");
+}
+
+bool HamDrmNativeRxBackend::setExperimentalTiming(bool enabled) noexcept
+{
+    return implementation_->setExperimentalTiming(enabled);
 }
 
 HamDrmStatus HamDrmNativeRxBackend::start(

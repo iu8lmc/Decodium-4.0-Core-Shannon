@@ -127,6 +127,20 @@ jobs:
           echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${OPENJPEG_PREFIX};${HAMLIB_PREFIX};${RTLSDR_PREFIX}" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=${RTLSDR_PREFIX}/lib:${HAMLIB_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
+      - name: Build macOS-compatible SSTV encryption dependency
+        run: |
+          set -euo pipefail
+          OPENSSL_PREFIX="${RUNNER_TEMP}/decodium-openssl-${{ matrix.compat_macos }}-arm64"
+          bash scripts/ci/build-macos-openssl.sh "${OPENSSL_PREFIX}" "${{ matrix.compat_macos }}" arm64
+          echo "OPENSSL_ROOT_DIR=${OPENSSL_PREFIX}" >> "$GITHUB_ENV"
+          echo "DECODIUM_REQUIRE_SSTV_E2EE=ON" >> "$GITHUB_ENV"
+
+      - name: Test macOS SSTV crypto bundle gate
+        run: bash tests/sstv/tools/test_macos_sstv_crypto_gate.sh
+
+      - name: Test SSTV crypto runtime
+        run: bash tests/sstv/tools/test_macos_openssl_runtime.sh "$OPENSSL_ROOT_DIR" "${{ matrix.compat_macos }}" arm64
+
       - name: Build release assets
         env:
           # Qt 6.11 marks the legacy Q_ENUMS/Q_FLAGS macros used by the

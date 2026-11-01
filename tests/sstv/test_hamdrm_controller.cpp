@@ -2,6 +2,7 @@
 
 #include "src/sstv/digital/HamDrmController.h"
 #include "src/sstv/digital/HamDrmBsrCodec.h"
+#include "src/sstv/digital/HamDrmRsCodec.h"
 
 #include <QtTest/QtTest>
 
@@ -9,6 +10,7 @@
 #include <QImage>
 #include <QSet>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -77,6 +79,9 @@ public:
     QString profileId;
     int starts {0};
     int cancels {0};
+    bool timing {false};
+    bool supportsExperimentalTiming() const noexcept override { return true; }
+    bool setExperimentalTiming(bool enabled) noexcept override { timing = enabled; return true; }
 
     hamdrm::HamDrmWaveformCapability capability() const override
     {
@@ -232,6 +237,24 @@ class TestHamDrmController final : public QObject
     Q_OBJECT
 
 private slots:
+    void experimentalTimingRequiresIdleBackend()
+    {
+        auto rx = std::make_shared<FakeRxBackend>();
+        hamdrm::HamDrmController controller({}, backends(rx, {}));
+        QVERIFY(controller.experimentalTimingAvailable());
+        QVERIFY(!controller.experimentalTiming());
+        controller.setExperimentalTiming(true);
+        QVERIFY(controller.experimentalTiming());
+        QVERIFY(rx->timing);
+        QVERIFY(controller.startRx());
+        controller.setExperimentalTiming(false);
+        QVERIFY(controller.experimentalTiming());
+        QVERIFY(rx->timing);
+        QVERIFY(controller.cancelRx());
+        controller.setExperimentalTiming(false);
+        QVERIFY(!controller.experimentalTiming());
+        QVERIFY(!rx->timing);
+    }
     void capabilitiesAndProfileModelAreTypedAndHonest()
     {
         hamdrm::HamDrmControllerConfig config;
@@ -316,6 +339,50 @@ private slots:
         QVERIFY(!controller.busy());
     }
 
+    void liveRepairLossInjectionIsTestModeOnly()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString marker = temporary.filePath(QStringLiteral("sender-ready"));
+        struct Restore final {
+            bool testMode = QStandardPaths::isTestModeEnabled();
+            bool hadValue = qEnvironmentVariableIsSet("DECODIUM_LAB_DROP_MOT_UNTIL");
+            QByteArray value = qgetenv("DECODIUM_LAB_DROP_MOT_UNTIL");
+            ~Restore() {
+                QStandardPaths::setTestModeEnabled(testMode);
+                if (hadValue) qputenv("DECODIUM_LAB_DROP_MOT_UNTIL", value);
+                else qunsetenv("DECODIUM_LAB_DROP_MOT_UNTIL");
+            }
+        } restore;
+        QVERIFY(qputenv("DECODIUM_LAB_DROP_MOT_UNTIL", marker.toUtf8()));
+        for (const bool testMode : {false, true}) {
+            QStandardPaths::setTestModeEnabled(testMode);
+            for (const unsigned variant : {0U, 1U}) {
+                hamdrm::HamDrmMotObjectMetadata metadata;
+                metadata.transportId = static_cast<std::uint16_t>(0x4770U + variant);
+                metadata.filename = variant ? "live-b.jpg" : "live-a.jpg";
+                const auto original = jpegFixture(48U, 32U, 192U + variant);
+                const auto object = hamdrm::encodeHamDrmObject(metadata, original, 64U);
+                QVERIFY(object.ok());
+                hamdrm::HamDrmController receiver({}, backends({}, {}));
+                for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                if (testMode) {
+                    QCOMPARE(receiver.missingSegments().size(), 1);
+                    QCOMPARE(receiver.missingSegments().front().toInt(), 1);
+                    QFile done(marker);
+                    QVERIFY(done.open(QIODevice::WriteOnly));
+                    done.close();
+                    QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[1])).ok());
+                    QVERIFY(done.remove());
+                }
+                const auto received = receiver.takeCompletedObject(metadata.transportId);
+                QVERIFY(received.ok());
+                QCOMPARE(received.value->originalBytes, original);
+            }
+        }
+    }
+
     void partialMotObjectPersistsResumesBuildsBsrAndCompletes()
     {
         QTemporaryDir temporary;
@@ -391,6 +458,166 @@ private slots:
         QVERIFY(resumed.inbox().isEmpty());
     }
 
+    void sendsRsContainers()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        for (unsigned variant = 0; variant < 2; ++variant) {
+            QImage image(48, 32, QImage::Format_RGB32);
+            image.fill(variant ? QColor(20, 140, 80) : QColor(150, 30, 90));
+            const QString path = temporary.filePath(QStringLiteral("image-%1.png").arg(variant));
+            QVERIFY(image.save(path, "PNG"));
+            QFile source(path);
+            QVERIFY(source.open(QIODevice::ReadOnly));
+            const auto original = source.readAll();
+            for (int level = 1; level <= 4; ++level) {
+                auto tx = std::make_shared<FakeTxBackend>();
+                hamdrm::HamDrmController sender({}, backends({}, tx));
+                QVERIFY2(sender.startTxWithRs(QUrl::fromLocalFile(path), level), qPrintable(sender.error()));
+                QVERIFY(tx->object.has_value());
+                QVERIFY(tx->object->bodyGroups.size() >= 2U);
+                QCOMPARE(QString::fromStdString(tx->object->metadata.filename),
+                         QStringLiteral("image-%1.rs%2").arg(variant).arg(level));
+                hamdrm::HamDrmController receiver({}, backends({}, {}));
+                for (const auto& group : tx->object->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                for (const auto& group : tx->object->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                const auto received = receiver.takeCompletedObject(tx->object->metadata.transportId);
+                QVERIFY(received.ok());
+                QCOMPARE(bytes(received.value->originalBytes), original);
+            }
+        }
+    }
+
+    void receivesCompleteRsContainers()
+    {
+        for (unsigned level = 1; level <= 4; ++level) {
+            for (unsigned variant = 0; variant < 2; ++variant) {
+                const auto original = jpegFixture(32U + variant, 24U, 400U + variant * 137U);
+                const auto protectedBytes = hamdrm::encodeHamDrmRs(original, "jpg", level);
+                QVERIFY2(protectedBytes.ok(), protectedBytes.status.detail.c_str());
+                hamdrm::HamDrmMotObjectMetadata metadata;
+                metadata.transportId = static_cast<std::uint16_t>(0x4300U + level * 2U + variant);
+                metadata.filename = "protected.rs" + std::to_string(level);
+                const auto object = hamdrm::encodeHamDrmObject(metadata, *protectedBytes.value, 128U);
+                QVERIFY2(object.ok(), object.status.detail.c_str());
+                hamdrm::HamDrmController receiver({}, backends({}, {}));
+                QSignalSpy completed(&receiver, &hamdrm::HamDrmController::objectCompleted);
+                for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                QCOMPARE(completed.size(), 1);
+                const auto received = receiver.takeCompletedObject(metadata.transportId);
+                QVERIFY2(received.ok(), received.status.detail.c_str());
+                QCOMPARE(received.value->metadata.filename, std::string("protected.jpg"));
+                QCOMPARE(received.value->originalBytes, original);
+            }
+        }
+    }
+
+    void repairsMissingRsSegments()
+    {
+        for (unsigned level = 1; level <= 4; ++level) {
+            for (unsigned variant = 0; variant < 2; ++variant) {
+                const auto original = jpegFixture(32U + variant, 24U, 997U + variant * 101U);
+                const auto protectedBytes = hamdrm::encodeHamDrmRs(original, "jpg", level);
+                QVERIFY(protectedBytes.ok());
+                hamdrm::HamDrmMotObjectMetadata metadata;
+                metadata.transportId = static_cast<std::uint16_t>(0x4400U + level * 2U + variant);
+                metadata.filename = "repair.rs" + std::to_string(level);
+                const auto object = hamdrm::encodeHamDrmObject(metadata, *protectedBytes.value, 64U);
+                QVERIFY(object.ok());
+                hamdrm::HamDrmController receiver({}, backends({}, {}));
+                QSignalSpy completed(&receiver, &hamdrm::HamDrmController::objectCompleted);
+                for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                for (std::size_t index = 0; index < object.value->bodyGroups.size(); ++index) {
+                    if (index != 1U) QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[index])).ok());
+                }
+                QCOMPARE(completed.size(), 1);
+                const auto received = receiver.takeCompletedObject(metadata.transportId);
+                QVERIFY2(received.ok(), received.status.detail.c_str());
+                QCOMPARE(received.value->originalBytes, original);
+            }
+        }
+    }
+
+    void rsRepairCorrectsUnmarkedDamage()
+    {
+        const auto original = jpegFixture(40U, 24U, 997U);
+        auto protectedBytes = hamdrm::encodeHamDrmRs(original, "jpg", 1U);
+        QVERIFY(protectedBytes.ok());
+        // A damaged, received segment has a fresh MOT CRC. RS must correct
+        // its unknown byte error as well as the declared missing segment.
+        protectedBytes.value->at(10U) ^= 0x40U;
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = 0x4512U;
+        metadata.filename = "damage.rs1";
+        const auto object = hamdrm::encodeHamDrmObject(metadata, *protectedBytes.value, 64U);
+        QVERIFY(object.ok());
+        hamdrm::HamDrmController receiver({}, backends({}, {}));
+        QSignalSpy completed(&receiver, &hamdrm::HamDrmController::objectCompleted);
+        for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        for (std::size_t index = 0; index < object.value->bodyGroups.size(); ++index)
+            if (index != 1U) QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[index])).ok());
+        QCOMPARE(completed.size(), 1);
+        const auto received = receiver.takeCompletedObject(metadata.transportId);
+        QVERIFY(received.ok());
+        QCOMPARE(received.value->originalBytes, original);
+    }
+
+    void rsRecoveryRespectsAvailableParity()
+    {
+        const auto original = jpegFixture(32U, 24U, 2725U);
+        for (const unsigned level : {1U, 4U}) {
+            const auto protectedBytes = hamdrm::encodeHamDrmRs(original, "jpg", level);
+            QVERIFY(protectedBytes.ok());
+            hamdrm::HamDrmMotObjectMetadata metadata;
+            metadata.transportId = static_cast<std::uint16_t>(0x4600U + level);
+            metadata.filename = "budget.rs" + std::to_string(level);
+            const auto object = hamdrm::encodeHamDrmObject(metadata, *protectedBytes.value, 1024U);
+            QVERIFY(object.ok());
+            QVERIFY(object.value->bodyGroups.size() > 2U);
+            hamdrm::HamDrmController receiver({}, backends({}, {}));
+            QSignalSpy completed(&receiver, &hamdrm::HamDrmController::objectCompleted);
+            for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            for (std::size_t index = 0; index < object.value->bodyGroups.size(); ++index)
+                if (index != 1U) QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[index])).ok());
+            QCOMPARE(completed.size(), level == 4U ? 1 : 0);
+            if (level == 4U) {
+                const auto received = receiver.takeCompletedObject(metadata.transportId);
+                QVERIFY(received.ok());
+                QCOMPARE(received.value->originalBytes, original);
+            } else {
+                QVERIFY(receiver.canBuildBsr());
+            }
+        }
+    }
+
+    void manuallyRecoversMissingFinalRsSegment()
+    {
+        for (unsigned level = 1; level <= 4; ++level) {
+            for (unsigned variant = 0; variant < 2; ++variant) {
+                const auto original = jpegFixture(32U + variant, 24U, 997U + variant * 101U);
+                const auto protectedBytes = hamdrm::encodeHamDrmRs(original, "jpg", level);
+                QVERIFY(protectedBytes.ok());
+                hamdrm::HamDrmMotObjectMetadata metadata;
+                metadata.transportId = static_cast<std::uint16_t>(0x4700U + level * 2U + variant);
+                metadata.filename = "final.rs" + std::to_string(level);
+                const auto object = hamdrm::encodeHamDrmObject(metadata, *protectedBytes.value, 64U);
+                QVERIFY(object.ok());
+                hamdrm::HamDrmController receiver({}, backends({}, {}));
+                QSignalSpy completed(&receiver, &hamdrm::HamDrmController::objectCompleted);
+                for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                for (std::size_t index = 0; index + 1U < object.value->bodyGroups.size(); ++index)
+                    QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[index])).ok());
+                QCOMPARE(completed.size(), 0);
+                QVERIFY2(receiver.tryRsRecovery(metadata.transportId), qPrintable(receiver.error()));
+                QCOMPARE(completed.size(), 1);
+                const auto received = receiver.takeCompletedObject(metadata.transportId);
+                QVERIFY(received.ok());
+                QCOMPARE(received.value->originalBytes, original);
+            }
+        }
+    }
+
     void bsrTransfersBetweenControllers_data()
     {
         QTest::addColumn<int>("transportId");
@@ -459,6 +686,37 @@ private slots:
         QVERIFY(recipient.cancelRx());
         QVERIFY(!sender.startBsrTx(transportId, extended));
         QVERIFY(sender.cancelTx());
+    }
+
+    void completedCarouselManySegments_data()
+    {
+        QTest::addColumn<int>("segmentSize");
+        QTest::newRow("A-single-byte-segments") << 1;
+        QTest::newRow("B-regular-segments") << 64;
+    }
+
+    void completedCarouselManySegments()
+    {
+        QFETCH(int, segmentSize);
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = 0x7412;
+        metadata.filename = "many.jpg";
+        const auto original = jpegFixture(16, 16, 4096);
+        const auto encoded = hamdrm::encodeHamDrmObject(metadata, original,
+                                                        static_cast<std::size_t>(segmentSize));
+        QVERIFY(encoded.ok());
+        hamdrm::HamDrmController receiver({}, backends({}, {}));
+        QSignalSpy completed(&receiver, &hamdrm::HamDrmController::objectCompleted);
+        for (const auto& group : encoded.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        for (const auto& group : encoded.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        QCOMPARE(completed.size(), 1);
+        for (const auto& group : encoded.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        for (const auto& group : encoded.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        QCOMPARE(completed.size(), 1);
+        const auto result = receiver.completedObject(metadata.transportId);
+        QVERIFY(result.ok());
+        QCOMPARE(result.value->originalBytes, original);
+        QVERIFY(receiver.error().isEmpty());
     }
 
     void malformedBsrIsRejectedBeforePublication()
@@ -560,9 +818,43 @@ private slots:
         for (const auto& group : tx->object->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
         for (const auto& group : tx->object->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
         QCOMPARE(completed.size(), 1);
+        const auto snapshot = receiver.completedObject(static_cast<std::uint16_t>(imageId));
+        QVERIFY(snapshot.ok());
+        QCOMPARE(bytes(snapshot.value->originalBytes), expected);
+        QVERIFY(receiver.completedObject(static_cast<std::uint16_t>(imageId)).ok());
+        for (const auto& group : sent.headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        for (const auto& group : sent.bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        QCOMPARE(completed.size(), 1);
+        auto collision = hamdrm::parseHamDrmMotDataGroup(sent.bodyGroups.front().data(),
+                                                        sent.bodyGroups.front().size(), config.limits);
+        QVERIFY(collision.ok());
+        auto repeated = *collision.value;
+        repeated.continuityIndex = (repeated.continuityIndex + 1U) & 0x0fU;
+        repeated.repetitionIndex = (repeated.repetitionIndex + 1U) & 0x0fU;
+        const auto repeatedWire = hamdrm::encodeHamDrmMotDataGroup(repeated, config.limits);
+        QVERIFY(repeatedWire.ok());
+        QVERIFY(receiver.ingestMotGroup(bytes(*repeatedWire.value)).ok());
+        auto wrongLast = *collision.value;
+        wrongLast.lastSegment = !wrongLast.lastSegment;
+        const auto wrongLastWire = hamdrm::encodeHamDrmMotDataGroup(wrongLast, config.limits);
+        QVERIFY(wrongLastWire.ok());
+        QVERIFY(!receiver.ingestMotGroup(bytes(*wrongLastWire.value)).ok());
+        receiver.clearError();
+        auto unknown = *collision.value;
+        unknown.segmentNumber = static_cast<std::uint16_t>(sent.bodyGroups.size());
+        const auto unknownWire = hamdrm::encodeHamDrmMotDataGroup(unknown, config.limits);
+        QVERIFY(unknownWire.ok());
+        QVERIFY(!receiver.ingestMotGroup(bytes(*unknownWire.value)).ok());
+        receiver.clearError();
+        collision.value->payload.front() ^= 1U;
+        const auto changed = hamdrm::encodeHamDrmMotDataGroup(*collision.value, config.limits);
+        QVERIFY(changed.ok());
+        QVERIFY(!receiver.ingestMotGroup(bytes(*changed.value)).ok());
+        QVERIFY(receiver.completedObject(static_cast<std::uint16_t>(imageId)).ok());
         const auto result = receiver.takeCompletedObject(static_cast<std::uint16_t>(imageId));
         QVERIFY(result.ok());
         QCOMPARE(bytes(result.value->originalBytes), expected);
+        QVERIFY(!receiver.completedObject(static_cast<std::uint16_t>(imageId)).ok());
         tx->finish();
         QCOMPARE(sender.txState(), hamdrm::HamDrmController::OperationState::Completed);
         QVERIFY(receiver.cancelTx());

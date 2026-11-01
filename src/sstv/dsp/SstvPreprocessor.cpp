@@ -41,6 +41,9 @@ SstvPreprocessor::SstvPreprocessor (SstvPreprocessorConfig config)
   humNotch_ = makeNotch (config_.sampleRateHz,
                          config_.humFrequencyHz,
                          config_.humNotchQ);
+  interferenceNotch_ = makeNotch (config_.sampleRateHz,
+                                  config_.interferenceFrequencyHz,
+                                  config_.interferenceNotchQ);
   resetStateUnlocked ();
 }
 
@@ -124,6 +127,10 @@ bool SstvPreprocessor::process (float const* input,
         {
           filtered = humNotch_.process (filtered);
         }
+      if (config_.interferenceNotchEnabled)
+        {
+          filtered = interferenceNotch_.process (filtered);
+        }
       if (config_.bandPassEnabled)
         {
           filtered = lowPass_.process (highPass_.process (filtered));
@@ -184,6 +191,7 @@ bool SstvPreprocessor::process (float const* input,
           highPass_.reset ();
           lowPass_.reset ();
           humNotch_.reset ();
+          interferenceNotch_.reset ();
           previousDcInput_ = 0.0;
           previousDcOutput_ = 0.0;
           impulsePreviousOne_ = 0.0;
@@ -204,6 +212,7 @@ bool SstvPreprocessor::process (float const* input,
           highPass_.reset ();
           lowPass_.reset ();
           humNotch_.reset ();
+          interferenceNotch_.reset ();
           previousDcInput_ = 0.0;
           previousDcOutput_ = 0.0;
           impulsePreviousOne_ = 0.0;
@@ -362,6 +371,12 @@ void SstvPreprocessor::validateConfig (SstvPreprocessorConfig const& config)
       || !std::isfinite (config.humNotchQ)
       || config.humNotchQ < 2.0
       || config.humNotchQ > 100.0
+      || !std::isfinite (config.interferenceFrequencyHz)
+      || config.interferenceFrequencyHz < 900.0
+      || config.interferenceFrequencyHz > 2'500.0
+      || !std::isfinite (config.interferenceNotchQ)
+      || config.interferenceNotchQ < 2.0
+      || config.interferenceNotchQ > 500.0
       || !std::isfinite (config.impulseThreshold)
       || config.impulseThreshold <= 0.0
       || config.impulseThreshold > 4.0
@@ -437,6 +452,7 @@ void SstvPreprocessor::resetStateUnlocked () noexcept
   highPass_.reset ();
   lowPass_.reset ();
   humNotch_.reset ();
+  interferenceNotch_.reset ();
   counters_ = {};
 }
 

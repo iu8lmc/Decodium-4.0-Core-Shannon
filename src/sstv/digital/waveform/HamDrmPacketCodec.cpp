@@ -9,6 +9,19 @@
 #include <stdexcept>
 
 namespace decodium::sstv::hamdrm::waveform {
+
+std::vector<std::uint8_t> hamDrmPacketBytesFromMscBits(
+    const std::vector<std::uint8_t>& bits, std::size_t byteCount)
+{
+    if (byteCount > bits.size() / 8U)
+        throw std::invalid_argument("HAMDRM bit vector is too short");
+    std::vector<std::uint8_t> bytes(byteCount, 0U);
+    for (std::size_t byte = 0U; byte < byteCount; ++byte)
+        for (std::size_t bit = 0U; bit < 8U; ++bit)
+            bytes[byte] = static_cast<std::uint8_t>(
+                (bytes[byte] << 1U) | bits[byte * 8U + bit]);
+    return bytes;
+}
 namespace {
 
 constexpr std::uint8_t kFirstFlag = 0x80U;

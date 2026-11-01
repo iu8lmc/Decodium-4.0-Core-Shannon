@@ -2641,6 +2641,9 @@ QVariantMap DecodiumBridge::sstvRxControls() const
         return result;
     }
     const auto controls = m_sstvRxRuntime->rxControlSnapshot();
+    const auto notch = m_sstvRxRuntime->interferenceNotch();
+    result.insert(QStringLiteral("interferenceNotchEnabled"), notch.has_value());
+    result.insert(QStringLiteral("interferenceNotchHz"), notch.value_or(1700));
     const auto fax480 = m_sstvRxRuntime->fax480Config();
     result.insert(QStringLiteral("fax480Enabled"), fax480.has_value());
     result.insert(QStringLiteral("fax480Profile"), !fax480 || *fax480 == decodium::sstv::SstvFax480Profile::Dayton480
@@ -2758,10 +2761,19 @@ QVariantMap DecodiumBridge::sstvRxDiagnostics() const
     result.insert(QStringLiteral("audioSuspendedForTx"), m_rxAudioSuspendedForTx);
     result.insert(QStringLiteral("transmitting"), m_transmitting);
     result.insert(QStringLiteral("monitoring"), m_monitoring);
+    result.insert(QStringLiteral("legacyRxSelected"), usingLegacyBackendForRx());
+    result.insert(QStringLiteral("legacyBackendAvailable"), bool(m_legacyBackend));
+    result.insert(QStringLiteral("legacyBackendMonitoring"),
+                  m_legacyBackend && m_legacyBackend->monitoring());
+    result.insert(QStringLiteral("legacyBackendStartPending"),
+                  m_legacyBackend && m_legacyBackend->monitoringStartPending());
+    result.insert(QStringLiteral("legacyPcmSpectrumFeed"), m_legacyPcmSpectrumFeed);
+    result.insert(QStringLiteral("legacyPcmLastSampleMs"), m_lastLegacyPcmSampleMs);
 #if DECODIUM_HAS_SSTV
     result.insert(QStringLiteral("audioDiscarding"), m_audioSink && m_audioSink->discardingSamples());
     result.insert(QStringLiteral("localAudioTapConnected"), bool(m_sstvLocalAudioTap));
     result.insert(QStringLiteral("legacyAudioTapConnected"), bool(m_sstvLegacyAudioTap));
+    result.insert(QStringLiteral("sstvRestoresLegacyMonitoring"), m_sstvRestoresLegacyMonitoring);
 #endif
     result.insert(QStringLiteral("audioSinkPresent"), bool(m_audioSink));
     result.insert(QStringLiteral("audioHealthTimestampMs"), m_lastAudioHealthMs);
@@ -2771,6 +2783,8 @@ QVariantMap DecodiumBridge::sstvRxDiagnostics() const
         const auto stats = m_hamDrmRxBackend->statistics();
         result.insert(QStringLiteral("hamdrmAcceptedChunks"), QVariant::fromValue<qulonglong>(stats.acceptedChunks));
         result.insert(QStringLiteral("hamdrmAcceptedSamples"), QVariant::fromValue<qulonglong>(stats.acceptedSamples));
+        result.insert(QStringLiteral("hamdrmRejectedChunks"), QVariant::fromValue<qulonglong>(stats.rejectedChunks));
+        result.insert(QStringLiteral("hamdrmQueueOverflows"), QVariant::fromValue<qulonglong>(stats.queueOverflows));
         result.insert(QStringLiteral("hamdrmDeliveredGroups"), QVariant::fromValue<qulonglong>(stats.deliveredGroups));
         result.insert(QStringLiteral("hamdrmRequested"), m_hamDrmRxRequested);
         result.insert(QStringLiteral("hamdrmActive"), m_hamDrmRxBackend->active());
@@ -5273,10 +5287,10 @@ bool DecodiumBridge::startSstvRx()
     const bool previousMonitoringOwnership = m_sstvOwnsMonitoring;
     const bool monitoringWasAlreadyRequested =
         m_monitoring || m_monitorRequested;
-    const bool legacyMonitorWasActive = usingLegacyBackendForRx()
-        && m_monitoring
+    const bool legacyMonitorNeedsRestore = usingLegacyBackendForRx()
+        && (m_monitoring || m_monitorRequested)
         && m_legacyBackend
-        && m_legacyBackend->monitoring();
+        && (m_legacyBackend->monitoring() || m_legacyBackend->monitoringStartPending());
     auto rollbackStart = [this](bool releaseOwnedMonitoring) {
         const bool releaseDedicatedCapture =
             m_sstvOwnsDedicatedAudioCapture;
@@ -5338,10 +5352,10 @@ bool DecodiumBridge::startSstvRx()
         }
     }
 
-    // If the user starts SSTV while the legacy FT8/FT2 monitor is already
-    // active, release that backend before opening the native capture.  The
-    // previous state is restored by stopSstvRx().
-    if (legacyMonitorWasActive) {
+    // Also cancel a pending legacy startup: otherwise its delayed enable can
+    // reopen the endpoint after the native SSTV capture has taken ownership.
+    // stopSstvRx() restores the previous monitor request.
+    if (legacyMonitorNeedsRestore) {
         m_sstvRestoresLegacyMonitoring = true;
         m_monitorRequested = false;
         m_legacyBackend->setMonitoring(false);
@@ -5382,7 +5396,7 @@ bool DecodiumBridge::startSstvRx()
     m_sstvOwnsMonitoring = retryingRequestedSession
         ? previousMonitoringOwnership
         : !monitoringWasAlreadyRequested;
-    if (legacyMonitorWasActive) {
+    if (legacyMonitorNeedsRestore) {
         m_sstvOwnsMonitoring = true;
     }
     refreshSstvProducerTaps();
@@ -5578,6 +5592,21 @@ bool DecodiumBridge::abortSstvRxFrame()
     }
     return aborted;
 #else
+    return false;
+#endif
+}
+
+bool DecodiumBridge::configureSstvInterferenceNotch(bool enabled, int frequencyHz)
+{
+#if DECODIUM_HAS_SSTV
+    initialiseSstvRuntime();
+    if (!m_sstvRxRuntime || m_sstvRxRequested || m_sstvRedecodeActive || sstvWavReplayActive()) return false;
+    const bool accepted = m_sstvRxRuntime->setInterferenceNotch(
+        enabled ? std::optional<int>(frequencyHz) : std::nullopt);
+    if (accepted) emit sstvRxSnapshotChanged();
+    return accepted;
+#else
+    Q_UNUSED(enabled) Q_UNUSED(frequencyHz)
     return false;
 #endif
 }

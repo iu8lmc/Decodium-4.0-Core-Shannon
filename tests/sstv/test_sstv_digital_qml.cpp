@@ -20,6 +20,20 @@ namespace hamdrm = decodium::sstv::hamdrm;
 
 namespace {
 
+class TimingRxFixture final : public hamdrm::HamDrmWaveformRxBackend
+{
+public:
+    bool selected {false};
+    hamdrm::HamDrmWaveformCapability capability() const override
+    { return {true, QStringLiteral("fixture"), QStringLiteral("fixture")}; }
+    bool supportsExperimentalTiming() const noexcept override { return true; }
+    bool setExperimentalTiming(bool enabled) noexcept override { selected = enabled; return true; }
+    hamdrm::HamDrmStatus start(const hamdrm::HamDrmProfile&, std::uint64_t,
+                               hamdrm::HamDrmWaveformRxSink&) override
+    { return hamdrm::HamDrmStatus::success(); }
+    void cancel(std::uint64_t) noexcept override {}
+};
+
 QString qmlErrors(const QList<QQmlError>& errors)
 {
     QStringList lines;
@@ -90,6 +104,43 @@ class TestSstvDigitalQml final : public QObject
     Q_OBJECT
 
 private slots:
+    void experimentalTimingToggle()
+    {
+        auto rx = std::make_shared<TimingRxFixture>();
+        hamdrm::HamDrmControllerBackends backends;
+        backends.waveformRx = rx;
+        hamdrm::HamDrmController controller({}, std::move(backends));
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)), QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial;
+        initial.insert(QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller)));
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        QObject* toggle = requiredObject(page.data(), "hamdrmExperimentalTiming");
+        QVERIFY(toggle && toggle->property("enabled").toBool());
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        auto* checkbox = qobject_cast<QQuickItem*>(toggle);
+        QVERIFY(item && checkbox);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QTest::qWait(100);
+        const QPoint click = checkbox->mapToScene(QPointF(checkbox->width() / 2,
+                                                            checkbox->height() / 2)).toPoint();
+        QVERIFY(!toggle->property("checked").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, click);
+        QVERIFY(controller.experimentalTiming() && rx->selected);
+        QVERIFY(toggle->property("checked").toBool());
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, click);
+        QVERIFY(!controller.experimentalTiming() && !rx->selected);
+        QVERIFY(!toggle->property("checked").toBool());
+        QVERIFY(controller.startRx());
+        QVERIFY(!toggle->property("enabled").toBool());
+    }
     void pageCreatesExposesNamedControlsAndRendersOffscreen()
     {
         QTemporaryDir partialRoot;
@@ -132,6 +183,7 @@ private slots:
             "hamdrmCapabilityMessage",
             "hamdrmProfileSelector",
             "hamdrmStartRx",
+            "hamdrmExperimentalTiming",
             "hamdrmCancelRx",
             "hamdrmChooseTxImage",
             "hamdrmValidateTxImage",

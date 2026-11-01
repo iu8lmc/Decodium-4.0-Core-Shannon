@@ -343,7 +343,13 @@ void testAdapterConfigurationAndChunkHardLimits()
                 && sink.finishSession == 10U
                 && sink.finishStatus.code == HamDrmErrorCode::InvalidArgument,
             "RX adapter did not fail closed before queuing an oversized chunk");
+    require(backend.statistics().queueOverflows == 0U,
+            "invalid chunk was incorrectly reported as a queue overflow");
     backend.shutdown();
+    const std::array<std::int16_t, 1U> afterStop {{0}};
+    require(!backend.submitPcm16(afterStop.data(), afterStop.size(), 12'000U)
+                && backend.statistics().queueOverflows == 0U,
+            "chunk after shutdown was incorrectly reported as a queue overflow");
 }
 
 void testRxAdapterLoopbackAndBounds()

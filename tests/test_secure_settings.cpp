@@ -8,6 +8,12 @@
 #include <QTemporaryDir>
 
 #include "SecureSettings.hpp"
+#include "../src/security/CoordinatedSecretBackend.h"
+#include "../src/security/SecretToolLookupStatus.h"
+#include "../src/security/SecretToolLookup.h"
+#include "../src/security/SettingsRemove.h"
+#include "../src/security/SettingsBlobLookup.h"
+#include <QUuid>
 
 namespace
 {
@@ -128,6 +134,170 @@ class TestSecureSettings
   Q_OBJECT
 
 private:
+  Q_SLOT void settings_blob_lookup_fails_closed ()
+  {
+    QTemporaryDir dir;
+    QVERIFY (dir.isValid ());
+    struct SettingsTestBackend final : secure_settings::Backend {
+      QString path;
+      mutable int writes {0};
+      bool available () const override { return true; }
+      bool protects_private_values () const override { return true; }
+      secure_settings::LookupResult lookup (const QString& service, const QString& account) const override
+      {
+        QSettings settings (path, QSettings::IniFormat);
+        const auto stored = secure_settings::lookupSettingsBlob (settings, service + QLatin1Char ('/') + account);
+        if (stored.state == secure_settings::SettingsBlobState::Error)
+          return {true, false, {}, QStringLiteral ("corrupt or unreadable secure item")};
+        if (stored.state == secure_settings::SettingsBlobState::Missing) return {true, false, {}, {}};
+        return {true, true, QString::fromLatin1 (stored.value), {}};
+      }
+      bool store (const QString& service, const QString& account, const QString& value, QString*) const override
+      {
+        ++writes;
+        QSettings settings (path, QSettings::IniFormat);
+        settings.setValue (service + QLatin1Char ('/') + account, value.toLatin1 ());
+        settings.sync ();
+        return settings.status () == QSettings::NoError;
+      }
+      bool remove (const QString&, const QString&, QString*) const override { return true; }
+    } raw;
+    raw.path = dir.filePath (QStringLiteral ("store.ini"));
+    secure_settings::CoordinatedSecretBackend backend (raw, dir.filePath (QStringLiteral ("locks")));
+    for (const auto& account : {QStringLiteral ("identity-a"), QStringLiteral ("identity-b")}) {
+      QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), account, QStringLiteral ("initial")),
+                secure_settings::InsertResult::Created);
+      QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), account, QStringLiteral ("replacement")),
+                secure_settings::InsertResult::AlreadyExists);
+      {
+        QSettings settings (raw.path, QSettings::IniFormat);
+        settings.setValue (QStringLiteral ("service/") + account, QByteArray {});
+        settings.sync ();
+        QCOMPARE (settings.status (), QSettings::NoError);
+      }
+      QVERIFY (!backend.lookup (QStringLiteral ("service"), account).error.isEmpty ());
+      QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), account, QStringLiteral ("replacement")),
+                secure_settings::InsertResult::Error);
+      QSettings reopened (raw.path, QSettings::IniFormat);
+      QVERIFY (reopened.contains (QStringLiteral ("service/") + account));
+      QVERIFY (reopened.value (QStringLiteral ("service/") + account).toByteArray ().isEmpty ());
+    }
+    QCOMPARE (raw.writes, 2);
+    QFile obstacle (dir.filePath (QStringLiteral ("not-a-directory")));
+    QVERIFY (obstacle.open (QIODevice::WriteOnly));
+    obstacle.write ("x");
+    obstacle.close ();
+    QSettings invalid (obstacle.fileName () + QStringLiteral ("/store.ini"), QSettings::IniFormat);
+    invalid.setValue (QStringLiteral ("pending"), QStringLiteral ("write"));
+    QCOMPARE (secure_settings::lookupSettingsBlob (invalid, QStringLiteral ("service/identity-a")).state,
+              secure_settings::SettingsBlobState::Error);
+  }
+
+  Q_SLOT void synced_removal_reports_failures ()
+  {
+    QTemporaryDir dir;
+    QVERIFY (dir.isValid ());
+    for (const auto& account : {QStringLiteral ("identity-a"), QStringLiteral ("identity-b")})
+      {
+        const QString path = dir.filePath (account + QStringLiteral (".ini"));
+        QSettings settings (path, QSettings::IniFormat);
+        settings.setValue (QStringLiteral ("service/account"), QStringLiteral ("protected-value"));
+        settings.sync ();
+        QCOMPARE (settings.status (), QSettings::NoError);
+        QString error;
+        QVERIFY2 (secure_settings::removeSettingAndSync (settings, QStringLiteral ("service/account"), &error),
+                  qPrintable (error));
+        QSettings reopened (path, QSettings::IniFormat);
+        reopened.sync ();
+        QVERIFY (!reopened.contains (QStringLiteral ("service/account")));
+      }
+    QFile obstacle {dir.filePath (QStringLiteral ("not-a-directory"))};
+    QVERIFY (obstacle.open (QIODevice::WriteOnly));
+    obstacle.write ("x");
+    obstacle.close ();
+    for (const auto& account : {QStringLiteral ("identity-a"), QStringLiteral ("identity-b")})
+      {
+        QSettings inaccessible (obstacle.fileName () + QLatin1Char ('/') + account + QStringLiteral (".ini"),
+                                QSettings::IniFormat);
+        inaccessible.setValue (QStringLiteral ("other-key"), QStringLiteral ("pending-write"));
+        QString error;
+        QVERIFY (!secure_settings::removeSettingAndSync (inaccessible, QStringLiteral ("service/account"), &error));
+        QVERIFY (!error.isEmpty ());
+      }
+  }
+
+  Q_SLOT void secret_tool_lookup_exit_classification ()
+  {
+    using secure_settings::SecretToolLookupStatus;
+    using secure_settings::classifySecretToolLookup;
+    QCOMPARE (classifySecretToolLookup (0, false), SecretToolLookupStatus::Found);
+    QCOMPARE (classifySecretToolLookup (0, true), SecretToolLookupStatus::Found);
+    QCOMPARE (classifySecretToolLookup (1, false), SecretToolLookupStatus::Missing);
+    QCOMPARE (classifySecretToolLookup (1, true), SecretToolLookupStatus::Failed);
+    QCOMPARE (classifySecretToolLookup (2, false), SecretToolLookupStatus::Failed);
+    QCOMPARE (classifySecretToolLookup (127, false), SecretToolLookupStatus::Failed);
+  }
+#if defined (Q_OS_UNIX)
+  Q_SLOT void secret_tool_process_failures_preserve_identity ()
+  {
+    QTemporaryDir dir;
+    QVERIFY (dir.isValid ());
+    const QString path = dir.filePath (QStringLiteral ("secret-tool"));
+    QFile script {path};
+    QVERIFY (script.open (QIODevice::WriteOnly));
+    const QByteArray body = QByteArrayLiteral (
+      "#!/bin/sh\n"
+      "case \"$DECODIUM_FAKE_STATUS\" in\n"
+      " found) printf 'original-%s' \"$5\"; exit 0 ;;\n"
+      " missing) exit 1 ;;\n"
+      " error) printf 'keyring failed' >&2; exit 1 ;;\n"
+      " blank_error) printf '\\n' >&2; exit 1 ;;\n"
+      " bad_exit) exit 2 ;;\n"
+      " crashed) kill -TERM $$ ;;\n"
+      " partial) printf 'unexpected'; exit 1 ;;\n"
+      "esac\nexit 2\n");
+    QCOMPARE (script.write (body), body.size ());
+    script.close ();
+    QVERIFY (QFile::setPermissions (path, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                          | QFileDevice::ExeOwner));
+    struct ProcessBackend final : secure_settings::Backend
+    {
+      QString path;
+      mutable int writes {0};
+      QProcessEnvironment env {QProcessEnvironment::systemEnvironment ()};
+      bool available () const override { return true; }
+      bool protects_private_values () const override { return true; }
+      secure_settings::LookupResult lookup (const QString& service, const QString& account) const override
+      { return secure_settings::lookupWithSecretTool (path, service, account, env); }
+      bool store (const QString&, const QString&, const QString&, QString*) const override
+      { ++writes; return true; }
+      bool remove (const QString&, const QString&, QString*) const override { return true; }
+    } process;
+    process.path = path;
+    secure_settings::CoordinatedSecretBackend backend (process, dir.path ());
+    for (const auto& account : {QStringLiteral ("identity-a"), QStringLiteral ("identity-b")})
+      {
+        process.env.insert (QStringLiteral ("DECODIUM_FAKE_STATUS"), QStringLiteral ("found"));
+        QCOMPARE (backend.lookup (QStringLiteral ("service"), account).value,
+                  QStringLiteral ("original-") + account);
+        QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), account, QStringLiteral ("replacement")),
+                  secure_settings::InsertResult::AlreadyExists);
+        for (const auto& mode : {QStringLiteral ("error"), QStringLiteral ("blank_error"),
+                                 QStringLiteral ("bad_exit"), QStringLiteral ("crashed"), QStringLiteral ("partial")})
+          {
+            process.env.insert (QStringLiteral ("DECODIUM_FAKE_STATUS"), mode);
+            QVERIFY (!backend.lookup (QStringLiteral ("service"), account).error.isEmpty ());
+            QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), account, QStringLiteral ("replacement")),
+                      secure_settings::InsertResult::Error);
+          }
+      }
+    QCOMPARE (process.writes, 0);
+    process.env.insert (QStringLiteral ("DECODIUM_FAKE_STATUS"), QStringLiteral ("missing"));
+    QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), QStringLiteral ("new-identity"),
+                                       QStringLiteral ("new-key")), secure_settings::InsertResult::Created);
+    QCOMPARE (process.writes, 1);
+  }
+#endif
   QTemporaryDir temp_dir_;
 
   QString settings_path (QString const& name) const
@@ -285,6 +455,53 @@ private:
   }
 
 #if defined (Q_OS_LINUX)
+  Q_SLOT void secret_tool_failures_do_not_replace_existing_identity ()
+  {
+    QTemporaryDir dir;
+    QVERIFY (dir.isValid ());
+    const QString path = dir.filePath (QStringLiteral ("secret-tool"));
+    QFile script {path};
+    QVERIFY (script.open (QIODevice::WriteOnly));
+    const QByteArray body = QByteArrayLiteral (
+      "#!/bin/sh\n"
+      "case \"$1\" in\n"
+      " lookup) case \"$DECODIUM_SECRET_STATUS_TEST\" in\n"
+      "   absent) exit 1 ;;\n"
+      "   diagnostic) echo 'backend failure' >&2; exit 1 ;;\n"
+      "   malformed) exit 2 ;;\n"
+      "   present) printf 'original-key'; exit 0 ;;\n"
+      " esac ;;\n"
+      " store) /bin/cat >/dev/null; /usr/bin/touch \"$DECODIUM_SECRET_STATUS_MARKER\"; exit 0 ;;\n"
+      "esac\nexit 2\n");
+    QCOMPARE (script.write (body), body.size ());
+    script.close ();
+    QVERIFY (QFile::setPermissions (path, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                          | QFileDevice::ExeOwner));
+    ScopedProcessEnvironment env;
+    env.set ("PATH", dir.path ().toUtf8 () + ':' + qgetenv ("PATH"));
+    env.set ("DECODIUM_SECRET_STATUS_MARKER", dir.filePath (QStringLiteral ("stored")).toUtf8 ());
+    auto const& platform = secure_settings::default_backend ();
+    secure_settings::CoordinatedSecretBackend backend (platform, dir.path ());
+    for (const auto& scenario : {QByteArrayLiteral ("diagnostic"), QByteArrayLiteral ("malformed")})
+      {
+        env.set ("DECODIUM_SECRET_STATUS_TEST", scenario);
+        const auto read = backend.lookup (QStringLiteral ("service"), QStringLiteral ("account"));
+        QVERIFY (!read.error.isEmpty ());
+        QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), QStringLiteral ("account"),
+                                           QStringLiteral ("replacement")), secure_settings::InsertResult::Error);
+        QVERIFY (!QFile::exists (dir.filePath (QStringLiteral ("stored"))));
+      }
+    env.set ("DECODIUM_SECRET_STATUS_TEST", QByteArrayLiteral ("present"));
+    QCOMPARE (backend.lookup (QStringLiteral ("service"), QStringLiteral ("account")).value,
+              QStringLiteral ("original-key"));
+    QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), QStringLiteral ("account"),
+                                       QStringLiteral ("replacement")), secure_settings::InsertResult::AlreadyExists);
+    env.set ("DECODIUM_SECRET_STATUS_TEST", QByteArrayLiteral ("absent"));
+    QCOMPARE (backend.store_if_absent (QStringLiteral ("service"), QStringLiteral ("account"),
+                                       QStringLiteral ("new-key")), secure_settings::InsertResult::Created);
+    QVERIFY (QFile::exists (dir.filePath (QStringLiteral ("stored"))));
+  }
+
   Q_SLOT void appimage_secret_tool_uses_host_environment_for_all_actions ()
   {
     QTemporaryDir tool_dir;
@@ -298,6 +515,7 @@ private:
       "action=\"$1\"\n"
       "capture=\"${DECODIUM_SECRET_TOOL_TEST_CAPTURE}.${action}\"\n"
       "{\n"
+      "  printf 'ARG=%s\\n' \"$@\"\n"
       "  printf 'LD_LIBRARY_PATH=%s\\n' \"${LD_LIBRARY_PATH-<unset>}\"\n"
       "  printf 'LD_PRELOAD=%s\\n' \"${LD_PRELOAD-<unset>}\"\n"
       "  printf 'GIO_EXTRA_MODULES=%s\\n' \"${GIO_EXTRA_MODULES-<unset>}\"\n"
@@ -396,6 +614,7 @@ private:
 
     auto const& backend = secure_settings::default_backend ();
     QVERIFY (backend.available ());
+    QVERIFY (backend.protects_private_values ());
 
     auto const lookup = backend.lookup (QStringLiteral ("test-service"),
                                         QStringLiteral ("test-account"));
@@ -432,6 +651,7 @@ private:
         auto const captured = verify_capture (action);
         QVERIFY2 (!captured.isEmpty (), qPrintable (action));
         QVERIFY (!captured.contains (QStringLiteral (".mount_decodium")));
+        QVERIFY (!captured.contains (QStringLiteral ("secret-to-store")));
         QVERIFY (captured.contains (QStringLiteral ("LD_LIBRARY_PATH=/host/lib\n")));
         QVERIFY (captured.contains (QStringLiteral ("LD_PRELOAD=<unset>\n")));
         QVERIFY (captured.contains (QStringLiteral ("GIO_EXTRA_MODULES=/host/gio/modules\n")));
@@ -462,6 +682,58 @@ private:
     QFile stored_input {capture_prefix + QStringLiteral (".store.stdin")};
     QVERIFY (stored_input.open (QIODevice::ReadOnly));
     QCOMPARE (stored_input.readAll (), QByteArrayLiteral ("secret-to-store"));
+  }
+#endif
+#if defined (Q_OS_WIN)
+  Q_SLOT void dpapi_coordinated_create_only_and_reload ()
+  {
+    QTemporaryDir locks;
+    QVERIFY (locks.isValid ());
+    auto const& platform = secure_settings::default_backend ();
+    QVERIFY (platform.protects_private_values ());
+    secure_settings::CoordinatedSecretBackend backend (platform, locks.path ());
+    const QString service = QStringLiteral ("Decodium.Sstv.Test.") + QUuid::createUuid ().toString (QUuid::WithoutBraces);
+    const QString account = QStringLiteral ("identity");
+    const QString secret = QStringLiteral ("test-only-private-value");
+    struct Cleanup { const secure_settings::Backend& backend; QString service; QString account;
+      ~Cleanup () { backend.remove (service, account); } } cleanup {backend, service, account};
+    QCOMPARE (backend.store_if_absent (service, account, secret), secure_settings::InsertResult::Created);
+    QCOMPARE (backend.store_if_absent (service, account, QStringLiteral ("replacement")), secure_settings::InsertResult::AlreadyExists);
+    const auto loaded = backend.lookup (service, account);
+    QVERIFY2 (loaded.error.isEmpty (), qPrintable (loaded.error));
+    QVERIFY (loaded.found);
+    QCOMPARE (loaded.value, secret);
+    QSettings raw (QSettings::IniFormat, QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
+    raw.sync ();
+    const auto blob = raw.value (service + QLatin1Char ('/') + account).toByteArray ();
+    QVERIFY (!blob.isEmpty ());
+    QVERIFY (!blob.contains (secret.toUtf8 ()));
+    QVERIFY (backend.remove (service, account));
+    QVERIFY (!backend.lookup (service, account).found);
+    for (const auto& broken : {QStringLiteral ("empty-a"), QStringLiteral ("empty-b")}) {
+      Cleanup corruptedCleanup {backend, service, broken};
+      raw.setValue (service + QLatin1Char ('/') + broken, QByteArray {});
+      raw.sync ();
+      QCOMPARE (raw.status (), QSettings::NoError);
+      const auto corrupted = backend.lookup (service, broken);
+      QVERIFY (!corrupted.error.isEmpty ());
+      QCOMPARE (backend.store_if_absent (service, broken, QStringLiteral ("replacement")),
+                secure_settings::InsertResult::Error);
+      raw.sync ();
+      QVERIFY (raw.contains (service + QLatin1Char ('/') + broken));
+      QVERIFY (raw.value (service + QLatin1Char ('/') + broken).toByteArray ().isEmpty ());
+    }
+    for (const auto& broken : {QStringLiteral ("invalid-a"), QStringLiteral ("invalid-b")}) {
+      Cleanup corruptedCleanup {backend, service, broken};
+      raw.setValue (service + QLatin1Char ('/') + broken, QByteArrayLiteral ("not-valid-dpapi"));
+      raw.sync ();
+      QCOMPARE (raw.status (), QSettings::NoError);
+      QVERIFY (!backend.lookup (service, broken).error.isEmpty ());
+      QCOMPARE (backend.store_if_absent (service, broken, QStringLiteral ("replacement")),
+                secure_settings::InsertResult::Error);
+      raw.sync ();
+      QCOMPARE (raw.value (service + QLatin1Char ('/') + broken).toByteArray (), QByteArrayLiteral ("not-valid-dpapi"));
+    }
   }
 #endif
 };

@@ -54,4 +54,12 @@ HamDrmValueResult<HamDrmConvolutionDecodeResult> hamDrmViterbiDecode(
     std::size_t patternIndex,
     HamDrmPunctureTailMode tailMode);
 
+// Signed reliability in [-127,127]: positive favours bit zero, negative bit
+// one, and zero is an erasure. The puncturing schedule is unchanged.
+HamDrmValueResult<HamDrmConvolutionDecodeResult> hamDrmViterbiDecodeSoft(
+    const std::vector<std::int8_t>& reliability,
+    std::size_t inputBitCount,
+    std::size_t patternIndex,
+    HamDrmPunctureTailMode tailMode);
+
 } // namespace decodium::sstv::hamdrm::channel

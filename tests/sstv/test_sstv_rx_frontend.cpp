@@ -249,6 +249,42 @@ private Q_SLOTS:
     QVERIFY (tailRms (sixty, 18'000u) < inputRms / 20.0);
   }
 
+  void optionalInterferenceNotchHasBoundedResponseAndChunking ()
+  {
+    SstvPreprocessorConfig config = SstvPreprocessorConfig::sstvDefaults ();
+    config.dcBlockerEnabled = false;
+    config.bandPassEnabled = false;
+    config.levelControlEnabled = false;
+    config.limiterEnabled = false;
+    for (double frequency : {1'700.0, 1'900.0})
+      {
+        config.interferenceFrequencyHz = frequency;
+        auto const tone = makeTone (frequency, 36'000u, 0.4);
+        SstvPreprocessor disabled {config};
+        auto const unfiltered = disabled.process (tone);
+        config.interferenceNotchEnabled = true;
+        SstvPreprocessor whole {config};
+        auto const filtered = whole.process (tone);
+        QVERIFY (tailRms (filtered, 18'000u) < tailRms (unfiltered, 18'000u) / 100.0);
+        auto const adjacent = makeTone (frequency + 80.0, 36'000u, 0.4);
+        SstvPreprocessor adjacentProcessor {config};
+        auto const preserved = adjacentProcessor.process (adjacent);
+        QVERIFY (tailRms (preserved, 18'000u) > 0.4 / std::sqrt (2.0) * 0.99);
+        SstvPreprocessor chunks {config};
+        std::vector<float> actual (tone.size ());
+        for (std::size_t offset = 0; offset < tone.size (); )
+          {
+            std::size_t const count = std::min (std::size_t {113}, tone.size () - offset);
+            QVERIFY (chunks.process (tone.data () + offset, count, actual.data () + offset));
+            offset += count;
+          }
+        QCOMPARE (actual, filtered);
+        chunks.reset ();
+        QCOMPARE (chunks.process (tone), filtered);
+        config.interferenceNotchEnabled = false;
+      }
+  }
+
   void optionalImpulseSuppressorIsBoundedAndChunkInvariant ()
   {
     SstvPreprocessorConfig config = SstvPreprocessorConfig::sstvDefaults ();
@@ -620,6 +656,14 @@ private Q_SLOTS:
                               SstvPreprocessor {invalidPre});
     invalidPre = SstvPreprocessorConfig::sstvDefaults ();
     invalidPre.humNotchQ = 1.0;
+    QVERIFY_THROWS_EXCEPTION (std::invalid_argument,
+                              SstvPreprocessor {invalidPre});
+    invalidPre = SstvPreprocessorConfig::sstvDefaults ();
+    invalidPre.interferenceFrequencyHz = 2'501.0;
+    QVERIFY_THROWS_EXCEPTION (std::invalid_argument,
+                              SstvPreprocessor {invalidPre});
+    invalidPre = SstvPreprocessorConfig::sstvDefaults ();
+    invalidPre.interferenceNotchQ = 501.0;
     QVERIFY_THROWS_EXCEPTION (std::invalid_argument,
                               SstvPreprocessor {invalidPre});
     invalidPre = SstvPreprocessorConfig::sstvDefaults ();

@@ -49,6 +49,24 @@ this environment, and neither the configured Linux fuzz job nor any GitHub
 workflow, package, hardware/radio, provider or independent-interoperability
 test was executed.
 
+On 2026-11-01 Homebrew LLVM 23.1.4 was installed separately from Apple Clang.
+An independent macOS arm64 build with libFuzzer, ASan and UBSan built all six
+SSTV/HAMDRM fuzz targets. Each completed a 30-second run after correcting a
+test invariant that had incorrectly required canonical encoding of arbitrary
+JSON numbers. The observed offending input and separate fraction/large-number
+seeds now run without aborting; the canonical sharing format continues to
+reject non-integral or inexact numbers. This is local sanitizer and fuzzing
+evidence, not a Linux or Windows CI result or a security audit. Leak detection
+remained disabled because macOS ASan does not support it.
+
+A subsequent local rerun on the current tree rebuilt all six targets with
+the same Homebrew LLVM runtime and used temporary copies of the seed corpora.
+Each completed a bounded 15-second libFuzzer run with address and undefined
+behaviour instrumentation and exit status zero: protocol 320,881 executions,
+WAV 265,261, sharing 127,317, incoming media 48,056, QSO 769,217 and HAMDRM
+160,218. These are short exploratory runs on macOS arm64, not exhaustive
+coverage or platform/interoperability evidence.
+
 ## Evidence classes
 
 Every result is labelled as one of:

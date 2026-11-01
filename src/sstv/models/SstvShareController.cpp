@@ -3,9 +3,13 @@
 #include "SstvShareController.h"
 
 #include "src/security/SecureSettings.hpp"
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
-#include "src/security/MacKeychainBackend.h"
+#ifdef DECODIUM_SSTV_E2EE
 #include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#if defined(Q_OS_MACOS)
+#include "src/security/MacKeychainBackend.h"
+#elif defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+#include "src/security/CoordinatedSecretBackend.h"
+#endif
 #endif
 #include "src/sstv/diagnostics/SstvDiagnosticLogging.h"
 #include "src/sstv/sharing/SstvHttpShareProviders.h"
@@ -918,7 +922,7 @@ public slots:
             publishSnapshot();
             return;
         }
-#ifndef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifndef DECODIUM_SSTV_E2EE
         if (requireEncryption) {
             failOperation(QStringLiteral("upload"), tr("Encrypted sharing is unavailable in this build"));
             publishSnapshot();
@@ -1027,7 +1031,7 @@ public slots:
                   1U, (bytes + m_providerCapabilities.maximumChunkBytes - 1U)
                       / m_providerCapabilities.maximumChunkBytes))
             : 1U;
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifdef DECODIUM_SSTV_E2EE
         if (requireEncryption) {
             if (!m_identityBackend || bytes > kMaximumSharedImageBytes - 16U) {
                 payload->fill('\0');
@@ -1076,7 +1080,7 @@ public slots:
     void createSharingIdentity()
     {
         Q_ASSERT(QThread::currentThread() == thread());
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifdef DECODIUM_SSTV_E2EE
         if (m_initialized && m_identityBackend) {
             const SstvShareKeyStore keys(*m_identityBackend, m_profile);
             const auto result = keys.createOrLoadPublicKey();
@@ -1094,7 +1098,7 @@ public slots:
     void pinSharingRecipient(QString recipient, QString keyHex, QString fingerprint, bool confirmed)
     {
         Q_ASSERT(QThread::currentThread() == thread());
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifdef DECODIUM_SSTV_E2EE
         const QByteArray encoded = keyHex.trimmed().toLatin1();
         const QByteArray key = QByteArray::fromHex(encoded);
         if (m_initialized && m_identityBackend && confirmed && encoded.size() == 64
@@ -1868,7 +1872,7 @@ private:
                              : std::optional<bool> {value != 0};
         };
 
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifdef DECODIUM_SSTV_E2EE
         // Construct on this worker and retain it for the queue's lifetime.
         // This only loads an existing identity, never creates one implicitly.
         m_identityBackend.reset();
@@ -1877,6 +1881,7 @@ private:
             // Developer injection has the same lifetime contract as credential storage.
             m_identityBackend = {m_secureBackend, [](const secure_settings::Backend*) {}};
         } else {
+#if defined(Q_OS_MACOS)
             // A test-mode process may use an explicitly created, isolated
             // keychain. Normal application sessions always use the platform
             // default and never read this lab property.
@@ -1892,6 +1897,26 @@ private:
 #pragma clang diagnostic pop
             }
             m_identityBackend = std::make_shared<secure_settings::MacKeychainBackend>(labKeychain);
+#elif defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+            // The platform backend uses DPAPI on Windows and secret-tool via
+            // stdin on Linux; neither passes the private value in arguments.
+            // All Decodium sessions use the same per-user lock namespace.
+            if (m_secureBackend && m_secureBackend->protects_private_values()) {
+                const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+                if (!base.isEmpty()) {
+                    QString locks = QDir(base).absoluteFilePath(QStringLiteral("Decodium/SstvShareIdentityLocks"));
+#if defined(Q_OS_WIN)
+                    if (QStandardPaths::isTestModeEnabled()
+                        && qEnvironmentVariableIntValue("DECODIUM_LAB_ALLOW_DPAPI") == 1) {
+                        const QFileInfo labLocks(qEnvironmentVariable("DECODIUM_LAB_DPAPI_LOCK_DIR"));
+                        if (labLocks.isAbsolute() && labLocks.isDir() && !labLocks.isSymLink())
+                            locks = labLocks.canonicalFilePath();
+                    }
+#endif
+                    m_identityBackend = std::make_shared<secure_settings::CoordinatedSecretBackend>(*m_secureBackend, locks);
+                }
+            }
+#endif
         }
         configuration.openEncryptedPayload = sstvShareMakeStoredEnvelopeOpener(
             m_identityBackend, m_profile, m_configuration.providerId,
@@ -2146,7 +2171,7 @@ private:
                       m_configuration.providerId);
         }
         bool encryptedSharingAvailable = false;
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifdef DECODIUM_SSTV_E2EE
         encryptedSharingAvailable = m_enabled && m_identityBackend
             && m_identityBackend->available() && m_identityBackend->supports_private_key_storage()
             && m_providerCapabilities.endToEndEncryptionEnvelope;
@@ -2187,7 +2212,7 @@ private:
                            std::move(inboxRows), std::move(state));
     }
 
-#ifdef DECODIUM_SSTV_MACOS_E2EE_RECEIVE
+#ifdef DECODIUM_SSTV_E2EE
     std::shared_ptr<const secure_settings::Backend> m_identityBackend;
 #endif
     const secure_settings::Backend* m_secureBackend {nullptr};

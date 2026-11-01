@@ -58,6 +58,12 @@ HamDrmStatus contentDescription(const std::string& filename,
     } else if (extension == "bmp") {
         contentSubtype = 2U;
         mimeType = "image/bmp";
+    } else if (extension == "rs1" || extension == "rs2"
+               || extension == "rs3" || extension == "rs4") {
+        // QSSTV/EasyPal mark protected objects as image subtype 1; the
+        // filename identifies the RS container, not its inner image format.
+        contentSubtype = 1U;
+        mimeType = "application/x-hamdrm-rs";
     } else if (filename == "bsr.bin") {
         contentSubtype = 1U;
         mimeType = "application/x-hamdrm-bsr";

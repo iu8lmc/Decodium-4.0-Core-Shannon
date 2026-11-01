@@ -225,6 +225,7 @@ cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -G "Unix Makefiles" \
   -DDECODIUM_REQUIRE_RTLSDR=ON \
   -DDECODIUM_ENABLE_SSTV=ON \
   -DDECODIUM_ENABLE_HAMDRM=ON \
+  -DDECODIUM_REQUIRE_SSTV_E2EE=ON \
   -DRIGCTL_EXE="${HAMLIB_PREFIX}/bin/rigctl" \
   -DRIGCTLD_EXE="${HAMLIB_PREFIX}/bin/rigctld" \
   -DRIGCTLCOM_EXE="${HAMLIB_PREFIX}/bin/rigctlcom" \
@@ -235,12 +236,23 @@ cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -G "Unix Makefiles" \
   -DWSJT_SKIP_MANPAGES=ON \
   -DWSJT_BUILD_UTILS=OFF
 
-for release_feature in DECODIUM_ENABLE_SSTV DECODIUM_ENABLE_HAMDRM; do
+for release_feature in DECODIUM_ENABLE_SSTV DECODIUM_ENABLE_HAMDRM DECODIUM_REQUIRE_SSTV_E2EE; do
   if ! grep -Fxq "${release_feature}:BOOL=ON" "${BUILD_DIR}/CMakeCache.txt"; then
     echo "error: advertised AppImage release must enable ${release_feature}" >&2
     exit 1
   fi
 done
+
+crypto_build_library="$(sed -n 's/^OPENSSL_CRYPTO_LIBRARY:FILEPATH=//p' "${BUILD_DIR}/CMakeCache.txt" | head -n1)"
+if [[ ! -f "${crypto_build_library}" || "${crypto_build_library}" != *.so* ]]; then
+  echo "error: SSTV encrypted sharing requires a shared OpenSSL crypto library" >&2
+  exit 1
+fi
+ssl_build_library="$(sed -n 's/^OPENSSL_SSL_LIBRARY:FILEPATH=//p' "${BUILD_DIR}/CMakeCache.txt" | head -n1)"
+if [[ ! -f "${ssl_build_library}" || "${ssl_build_library}" != *.so* ]]; then
+  echo "error: encrypted sharing requires a shared OpenSSL TLS library" >&2
+  exit 1
+fi
 
 log "Verify AppImage GPU build path"
 RHI_FLAG="$(cat "${BUILD_DIR}/decodium_qt_rhi_texture_upload.enabled" 2>/dev/null || echo 0)"
@@ -420,6 +432,8 @@ linuxdeploy_args=(
   --executable "${APPDIR}/usr/bin/wsprd"
   --executable "${APPDIR}/usr/bin/message_aggregator"
   --library "${HAMLIB_LIBRARY}"
+  --library "${crypto_build_library}"
+  --library "${ssl_build_library}"
 )
 for helper in rigctl-wsjtx rigctld-wsjtx rigctlcom-wsjtx; do
   if [[ -x "${APPDIR}/usr/bin/${helper}" ]]; then
@@ -596,6 +610,7 @@ copy_qt_plugin_dir() {
 
 copy_qt_plugin_dir audio
 copy_qt_plugin_dir multimedia
+copy_qt_plugin_dir tls
 copy_qt_plugin_dir wayland-decoration-client
 copy_qt_plugin_dir wayland-graphics-integration-client
 copy_qt_plugin_dir wayland-shell-integration
@@ -796,6 +811,15 @@ if [[ -z "${openjpeg_library}" ]]; then
   echo "error: final AppImage does not contain libopenjp2 for HAMDRM" >&2
   exit 1
 fi
+crypto_library="$(find "${EXTRACTED_APPDIR}/usr/lib" -maxdepth 1 -name 'libcrypto.so*' -print -quit)"
+if [[ -z "${crypto_library}" ]]; then
+  echo "error: final AppImage does not contain libcrypto for encrypted sharing" >&2
+  exit 1
+fi
+if ! find "${EXTRACTED_APPDIR}/usr/plugins/tls" -type f -name 'libqopensslbackend.so' -print -quit 2>/dev/null | grep -q .; then
+  echo "error: final AppImage does not contain the Qt OpenSSL TLS backend" >&2
+  exit 1
+fi
 if ! find "${EXTRACTED_APPDIR}/usr/share/doc" -type f \
     -name 'THIRD_PARTY_LICENSES_OPENJPEG.md' -print -quit | grep -q .; then
   echo "error: final AppImage does not contain the OpenJPEG notice" >&2
@@ -816,6 +840,11 @@ if ! grep -q 'librtlsdr.so' <<<"${decodium_ldd_output}"; then
 fi
 if ! grep -q 'libopenjp2.so' <<<"${decodium_ldd_output}"; then
   echo "error: final AppImage executable is not linked to bundled OpenJPEG" >&2
+  printf '%s\n' "${decodium_ldd_output}" >&2
+  exit 1
+fi
+if ! grep -q 'libcrypto.so' <<<"${decodium_ldd_output}"; then
+  echo "error: final AppImage executable is not linked to OpenSSL crypto" >&2
   printf '%s\n' "${decodium_ldd_output}" >&2
   exit 1
 fi

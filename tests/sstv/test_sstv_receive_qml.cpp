@@ -152,6 +152,14 @@ public:
         Q_EMIT rxChanged();
         return true;
     }
+    Q_INVOKABLE bool configureSstvInterferenceNotch(bool enabled, int hz)
+    {
+        if (m_rxActive || m_replayActive || hz < 900 || hz > 2500) return false;
+        m_controls.insert(QStringLiteral("interferenceNotchEnabled"), enabled);
+        m_controls.insert(QStringLiteral("interferenceNotchHz"), hz);
+        Q_EMIT rxChanged();
+        return true;
+    }
     Q_INVOKABLE bool resetSstvRx() { return !m_replayActive; }
     Q_INVOKABLE bool abortSstvRxFrame() { ++abortCount; return !m_replayActive; }
     Q_INVOKABLE bool updateSstvRxControls(const QVariantMap& values)
@@ -342,6 +350,20 @@ private slots:
         QCOMPARE(faxApply->property("enabled").toBool(), false);
         fixture.stopSstvRx();
         QTRY_VERIFY(faxApply->property("enabled").toBool());
+        auto* notchEnabled = page->findChild<QObject*>(QStringLiteral("sstvInterferenceNotchEnabled"));
+        auto* notchHz = page->findChild<QObject*>(QStringLiteral("sstvInterferenceNotchHz"));
+        auto* notchApply = page->findChild<QObject*>(QStringLiteral("sstvInterferenceNotchApply"));
+        QVERIFY(notchEnabled && notchHz && notchApply);
+        for (int frequency : {1700, 1900}) {
+            QVERIFY(notchEnabled->setProperty("checked", true));
+            QVERIFY(notchHz->setProperty("value", frequency));
+            QVERIFY(QMetaObject::invokeMethod(notchApply, "clicked"));
+            QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("interferenceNotchHz")).toInt(), frequency);
+            QVERIFY(fixture.sstvRxControls().value(QStringLiteral("interferenceNotchEnabled")).toBool());
+        }
+        QVERIFY(notchEnabled->setProperty("checked", false));
+        QVERIFY(QMetaObject::invokeMethod(notchApply, "clicked"));
+        QVERIFY(!fixture.sstvRxControls().value(QStringLiteral("interferenceNotchEnabled")).toBool());
         QVERIFY(faxEnabled->setProperty("checked", true));
         QVERIFY(faxWidth->setProperty("value", 512));
         QVERIFY(faxHeight->setProperty("value", 400));
@@ -366,6 +388,7 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(fax480Apply,"clicked"));
         QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("fax480Profile")).toString(),QStringLiteral("libsstv-vis-480"));
         fixture.startSstvRx();
+        QTRY_COMPARE(notchApply->property("enabled").toBool(), false);
         QTRY_COMPARE(faxApply->property("enabled").toBool(), false);
         QTRY_COMPARE(fax480Apply->property("enabled").toBool(), false);
         QCOMPARE(open->property("enabled").toBool(), true);
@@ -437,6 +460,22 @@ private slots:
             }
         }
         QVERIFY(colours.size() > 10);
+        auto* notchContainer = page->findChild<QQuickItem*>(QStringLiteral("sstvInterferenceNotchControls"));
+        QVERIFY(notchContainer);
+        for (int width : {940, 640}) {
+            window.resize(width, 700);
+            page->setSize(QSizeF(width, 700));
+            QTest::qWait(100);
+            QVERIFY(notchContainer->width() > 0);
+            for (const char* name : {"sstvInterferenceNotchEnabled", "sstvInterferenceNotchHz", "sstvInterferenceNotchApply"}) {
+                auto* item = page->findChild<QQuickItem*>(QString::fromLatin1(name));
+                QVERIFY(item);
+                const QRectF rect = item->mapRectToItem(notchContainer, item->boundingRect());
+                QVERIFY2(rect.left() >= -0.5 && rect.right() <= notchContainer->width() + 0.5,
+                         qPrintable(QString::fromLatin1(name)));
+            }
+            QVERIFY(!window.grabWindow().isNull());
+        }
         QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join('\n')));
     }
 };

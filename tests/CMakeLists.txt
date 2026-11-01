@@ -682,6 +682,7 @@ if (DECODIUM_SUPERLDPC_ARM64_TARGET OR DECODIUM_SUPERLDPC_X86_TARGET)
 endif ()
 
 add_executable (test_secure_settings test_secure_settings.cpp)
+target_sources (test_secure_settings PRIVATE ../src/security/CoordinatedSecretBackend.cpp)
 target_link_libraries (test_secure_settings wsjt_qt wsjt_cxx Qt6::Test)
 add_test (NAME test_secure_settings COMMAND $<TARGET_FILE:test_secure_settings>)
 

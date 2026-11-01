@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import platform
 from pathlib import Path
 import secrets
 import shutil
@@ -30,7 +31,9 @@ def main():
     parser = argparse.ArgumentParser()
     attacks = parser.add_mutually_exclusive_group()
     attacks.add_argument('--tamper', action='store_true')
+    attacks.add_argument('--tamper-payload', choices=('a', 'b'))
     attacks.add_argument('--tamper-manifest', choices=('a', 'b'))
+    attacks.add_argument('--downgrade-manifest', choices=('a', 'b'))
     parser.add_argument('decodium', type=Path)
     parser.add_argument('certificate', type=Path)
     parser.add_argument('key', type=Path)
@@ -41,9 +44,35 @@ def main():
     cert, key = args.certificate.resolve(strict=True), args.key.resolve(strict=True)
     source_a, source_b = args.image_a.resolve(strict=True), args.image_b.resolve(strict=True)
     root = Path(tempfile.mkdtemp(prefix='decodium-share-transfer-'))
-    security, core, refs = keychains([root / 'sender.keychain-db', root / 'receiver.keychain-db'])
-    server = ShareFixture(cert, key, tamper=args.tamper, tamper_manifest=args.tamper_manifest,
-                          first_output=(root / 'out' / 'image-a.png') if args.tamper_manifest == 'b' else None)
+    base_env = os.environ.copy()
+    security = core = None
+    refs = []
+    if platform.system() == 'Darwin':
+        security, core, refs = keychains([root / 'sender.keychain-db', root / 'receiver.keychain-db'])
+    elif platform.system() == 'Linux':
+        if os.environ.get('DECODIUM_LAB_ALLOW_SECRET_SERVICE') != '1' or not os.environ.get('DBUS_SESSION_BUS_ADDRESS'):
+            raise RuntimeError('Linux lab requires an explicitly enabled isolated Secret Service session')
+        for role in ('sender', 'receiver'):
+            (root / (role + '.keychain-db')).write_bytes(b'decodium-linux-secret-service-lab-v1\n')
+    elif platform.system() == 'Windows':
+        # Each app's INI root is private to this test, while both processes
+        # share an isolated APPDATA lock namespace. DPAPI remains the real OS
+        # backend and no production SecureStore entries are touched.
+        for name in ('preflight-settings', 'appdata', 'localappdata', 'locks'):
+            (root / name).mkdir()
+        for role in ('sender', 'receiver'):
+            (root / (role + '-settings')).mkdir()
+            (root / (role + '.keychain-db')).write_bytes(b'decodium-windows-dpapi-lab-v1\n')
+        base_env.update(DECODIUM_LAB_ALLOW_DPAPI='1',
+                        DECODIUM_LAB_SETTINGS_DIR=str(root / 'preflight-settings'),
+                        DECODIUM_LAB_DPAPI_LOCK_DIR=str(root / 'locks'),
+                        APPDATA=str(root / 'appdata'), LOCALAPPDATA=str(root / 'localappdata'))
+    else:
+        raise RuntimeError('sharing application lab is unsupported on this platform')
+    server = ShareFixture(cert, key, tamper=args.tamper_payload or args.tamper, tamper_manifest=args.tamper_manifest,
+                          downgrade_manifest=args.downgrade_manifest,
+                          first_output=(root / 'out' / 'image-a.png')
+                          if args.tamper_payload == 'b' or args.tamper_manifest == 'b' or args.downgrade_manifest == 'b' else None)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     processes = []
@@ -61,18 +90,71 @@ def main():
                            imageA=str(root / 'image-a.jpg'), imageB=str(root / 'image-b.jpg'),
                            result=str(root / 'sender-ok')),
         }
+        if platform.system() == 'Linux':
+            valid = root / 'preflight.json'
+            valid.write_text(json.dumps(sessions['receiver']))
+            denied_env = os.environ.copy()
+            denied_env.pop('DECODIUM_LAB_ALLOW_SECRET_SERVICE', None)
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(valid)],
+                env=denied_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Linux sharing lab was not rejected without explicit opt-in')
+            bad_sentinel = root / 'bad-sentinel'
+            bad_sentinel.write_text('invalid sentinel\n')
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                str(bad_sentinel), '--lab-share-session-file', str(valid)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Linux sharing lab accepted an invalid sentinel')
+        elif platform.system() == 'Windows':
+            valid = root / 'preflight.json'
+            valid.write_text(json.dumps(sessions['receiver']))
+            denied = subprocess.run([str(binary), '--lab-share-keychain',
+                str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(valid)],
+                env=base_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Windows sharing lab accepted a launch outside test mode')
+            denied_env = base_env.copy()
+            denied_env.pop('DECODIUM_LAB_ALLOW_DPAPI', None)
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(valid)],
+                env=denied_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Windows sharing lab was not rejected without explicit opt-in')
+            bad_sentinel = root / 'bad-sentinel'
+            bad_sentinel.write_text('invalid sentinel\n')
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                str(bad_sentinel), '--lab-share-session-file', str(valid)], env=base_env,
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Windows sharing lab accepted an invalid sentinel')
+            unsafe_env = base_env.copy()
+            unsafe_env.pop('DECODIUM_LAB_SETTINGS_DIR', None)
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(valid)],
+                env=unsafe_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Windows sharing lab accepted a missing isolated settings root')
+            unsafe_env = base_env.copy()
+            unsafe_env.pop('DECODIUM_LAB_DPAPI_LOCK_DIR', None)
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(valid)],
+                env=unsafe_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'receiver-ok').exists():
+                raise RuntimeError('Windows sharing lab accepted a missing isolated lock root')
         invalid = root / 'invalid.json'
         invalid.write_text(json.dumps(dict(sessions['receiver'], endpoint='https://example.com:443/')))
         blocked = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
             str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(invalid)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            env=base_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
         if blocked.returncode != 2 or (root / 'receiver-ok').exists():
             raise RuntimeError('session lab did not reject a non-loopback endpoint')
         suffix = secrets.token_hex(4)
         for role in ('receiver', 'sender'):
             config = root / (role + '.json')
             config.write_text(json.dumps(sessions[role]))
-            env = os.environ.copy()
+            env = base_env.copy()
             env['QT_QUICK_BACKEND'] = 'software'
             env['DECODIUM_LAB_SETTINGS_DIR'] = str(root / (role + '-settings'))
             cmd = [str(binary), '--test-mode', '--rig-name', 'SHARE' + suffix + role,
@@ -84,13 +166,15 @@ def main():
         deadline = time.monotonic() + 105
         while True:
             states = [process.poll() for process in processes]
-            if (args.tamper or args.tamper_manifest) and states[0] is not None:
+            if (args.tamper or args.tamper_payload or args.tamper_manifest or args.downgrade_manifest) and states[0] is not None:
                 if states[0] != 2 or not server.tamper_count:
                     raise RuntimeError('tampered transfer was not rejected')
+                if args.tamper_payload and server.tamper_count != 1:
+                    raise RuntimeError('targeted payload was not altered exactly once')
                 if (root / 'receiver-ok').exists():
                     raise RuntimeError('tampered transfer produced a completion marker')
                 accepted = {p.name for p in (root / 'out').iterdir()}
-                if args.tamper_manifest == 'b':
+                if args.tamper_payload == 'b' or args.tamper_manifest == 'b' or args.downgrade_manifest == 'b':
                     if accepted != {'image-a.png'}:
                         raise RuntimeError('valid A missing or altered B was accepted')
                     reference, received = image_bytes(source_a), image_bytes(root / 'out' / 'image-a.png')
@@ -100,14 +184,21 @@ def main():
                 elif accepted:
                     raise RuntimeError('tampered transfer produced accepted output')
                 log = (root / 'receiver.log').read_text(errors='replace')
-                if 'download failed: encrypted payload authentication or decryption failed' not in log:
+                if args.downgrade_manifest:
+                    if 'download: this download requires end-to-end encryption' not in log:
+                        raise RuntimeError('receiver did not report the strict encryption policy')
+                    with server.lock:
+                        if server.downgraded_downloads:
+                            raise RuntimeError('downgraded item content was requested')
+                elif 'download failed: encrypted payload authentication or decryption failed' not in log:
                     raise RuntimeError('receiver did not report authenticated-open failure')
                 successful = True
                 print('PASS: two Decodium applications rejected altered {} with recomputed manifest digest'.format(
-                    'manifest' if args.tamper_manifest else 'ciphertext'))
+                    'downgraded manifest' if args.downgrade_manifest else
+                    ('manifest' if args.tamper_manifest else 'ciphertext')))
                 return
             if any(code is not None and code != 0 for code in states):
-                raise RuntimeError('Decodium sharing actor failed')
+                raise RuntimeError('Decodium sharing actor failed: receiver={}, sender={}'.format(*states))
             if all(code == 0 for code in states):
                 break
             if time.monotonic() >= deadline:
@@ -157,9 +248,10 @@ def main():
         server.shutdown()
         server.server_close()
         server_thread.join(timeout=5)
-        for handle in refs:
-            security.SecKeychainDelete(handle)
-            core.CFRelease(handle)
+        if security and core:
+            for handle in refs:
+                security.SecKeychainDelete(handle)
+                core.CFRelease(handle)
         if successful:
             shutil.rmtree(root)
         else:

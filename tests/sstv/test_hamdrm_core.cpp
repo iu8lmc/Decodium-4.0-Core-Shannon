@@ -399,6 +399,29 @@ void testMotHeaderAndObjectAssembly()
                          encodedObject.value->bodyGroups.back().size()).ok());
     const auto snapshot = partial.snapshotGroups();
     CHECK(snapshot.ok());
+    const auto compareVisitor = [](const hamdrm::HamDrmObjectAssembler& source) {
+        const auto canonical = source.snapshotGroups();
+        CHECK(canonical.ok());
+        if (!canonical.ok()) return;
+        std::size_t index = 0;
+        source.forEachSegment([&](hamdrm::HamDrmMotGroupKind kind, std::uint16_t number,
+                                  bool last, const std::vector<std::uint8_t>& bytes) {
+            CHECK(index < canonical.value->size());
+            if (index >= canonical.value->size()) return;
+            const auto& wire = canonical.value->at(index++);
+            const auto parsed = hamdrm::parseHamDrmMotDataGroup(wire.data(), wire.size());
+            CHECK(parsed.ok());
+            if (parsed.ok()) {
+                CHECK(parsed.value->kind == kind);
+                CHECK(parsed.value->segmentNumber == number);
+                CHECK(parsed.value->lastSegment == last);
+                CHECK(parsed.value->payload == bytes);
+            }
+        });
+        CHECK(index == canonical.value->size());
+    };
+    compareVisitor(partial);
+    compareVisitor(assembler);
     hamdrm::HamDrmObjectAssembler resumed(metadata.transportId);
     if (snapshot.ok()) {
         for (const auto& group : *snapshot.value) {
@@ -469,6 +492,24 @@ void testBsr()
     CHECK(!unsupportedResult.ok());
     CHECK(unsupportedResult.status.code
           == hamdrm::HamDrmErrorCode::UnsupportedProfile);
+
+    // The public parser accepts caller-supplied limits. Even an oversized
+    // limit must never let an on-wire segment wrap during uint16 conversion.
+    hamdrm::HamDrmLimits largeLimits;
+    largeLimits.maximumSegments = 65'537U;
+    for (const std::string& text : {std::string("1\nH_OK\n82\n65535\n-99\n"),
+                                   std::string("1\nH_OK\n82\n65534\n-1\n65535\n-99\n")}) {
+        const auto parsed = hamdrm::parseHamDrmBsr(
+            reinterpret_cast<const std::uint8_t*>(text.data()), text.size(), largeLimits);
+        CHECK(parsed.ok());
+        CHECK(parsed.ok() && parsed.value->missingSegments.back() == 65535U);
+    }
+    for (const std::string& text : {std::string("1\nH_OK\n82\n65536\n-99\n"),
+                                   std::string("1\nH_OK\n82\n65535\n-1\n65536\n-99\n")}) {
+        const auto parsed = hamdrm::parseHamDrmBsr(
+            reinterpret_cast<const std::uint8_t*>(text.data()), text.size(), largeLimits);
+        CHECK(!parsed.ok());
+    }
 }
 
 void testImageValidation()

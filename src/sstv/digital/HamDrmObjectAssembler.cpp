@@ -250,6 +250,45 @@ HamDrmObjectAssembler::assembledObject() const
     return {std::move(output), HamDrmStatus::success()};
 }
 
+std::optional<HamDrmPartialBody> HamDrmObjectAssembler::partialBodyForRepair(bool allowMissingFinal) const
+{
+    if (!metadata_ || metadata_->mimeType != "application/x-hamdrm-rs"
+        || (!body_.totalSegments && !allowMissingFinal) || body_.segments.empty() || isComplete()) return {};
+    std::size_t regularSize = 0U;
+    for (const auto& [index, payload] : body_.segments) {
+        if (body_.totalSegments && std::size_t(index) + 1U == *body_.totalSegments) continue;
+        if (!regularSize) regularSize = payload.size();
+        else if (payload.size() != regularSize) return {};
+    }
+    if (!regularSize) return {};
+    const std::size_t inferredTotal = (metadata_->bodySize + regularSize - 1U) / regularSize;
+    const std::size_t total = body_.totalSegments.value_or(inferredTotal);
+    if (total != inferredTotal || total < 2U) return {};
+    if (!body_.segments.empty() && body_.segments.rbegin()->first >= total) return {};
+    if (!regularSize || total > limits_.maximumSegments
+        || (total - 1U) > metadata_->bodySize / regularSize) return {};
+    const std::size_t prefixSize = (total - 1U) * regularSize;
+    if (prefixSize >= metadata_->bodySize || metadata_->bodySize - prefixSize > regularSize) return {};
+    HamDrmPartialBody result;
+    result.segmentSize = regularSize;
+    result.totalSegments = total;
+    result.bytes.resize(metadata_->bodySize, 0U);
+    for (std::size_t index = 0; index < total; ++index) {
+        const std::size_t offset = index * regularSize;
+        const std::size_t length = index + 1U == total
+            ? metadata_->bodySize - offset : regularSize;
+        const auto found = body_.segments.find(static_cast<std::uint16_t>(index));
+        if (found == body_.segments.end()) {
+            result.missingSegments.push_back(static_cast<std::uint16_t>(index));
+            for (std::size_t byte = 0; byte < length; ++byte) result.erasures.push_back(offset + byte);
+        } else {
+            if (found->second.size() != length) return {};
+            std::copy(found->second.begin(), found->second.end(), result.bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+        }
+    }
+    return result.missingSegments.empty() ? std::optional<HamDrmPartialBody> {} : std::move(result);
+}
+
 HamDrmValueResult<std::vector<std::vector<std::uint8_t>>>
 HamDrmObjectAssembler::snapshotGroups() const
 {

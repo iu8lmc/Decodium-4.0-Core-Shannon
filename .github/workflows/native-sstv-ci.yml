@@ -18,6 +18,7 @@ on:
       - 'src/net/DecoPortLink.*'
       - 'src/net/DecodiumSerialPortRegistry.*'
       - 'src/radio/DecodiumTransceiverManager.*'
+      - 'src/security/**'
       - 'Transceiver/**'
       - 'src/cw/**'
       - 'qml/decodium/components/SettingsDialog.qml'
@@ -26,10 +27,12 @@ on:
       - 'src/services/SatelliteTrackingService.*'
       - 'src/sstv/**'
       - 'tests/CMakeLists.txt'
+      - 'tests/test_secure_settings.cpp'
       - 'tests/sstv/**'
       - 'translations/decodium_it.*'
       - 'packaging/**'
       - 'scripts/build/**'
+      - 'scripts/ci/**'
       - 'scripts/ci-build-linux-appimage-x64.sh'
       - 'scripts/release-macos.sh'
   push:
@@ -48,6 +51,7 @@ on:
       - 'src/net/DecoPortLink.*'
       - 'src/net/DecodiumSerialPortRegistry.*'
       - 'src/radio/DecodiumTransceiverManager.*'
+      - 'src/security/**'
       - 'Transceiver/**'
       - 'src/cw/**'
       - 'qml/decodium/components/SettingsDialog.qml'
@@ -56,10 +60,12 @@ on:
       - 'src/services/SatelliteTrackingService.*'
       - 'src/sstv/**'
       - 'tests/CMakeLists.txt'
+      - 'tests/test_secure_settings.cpp'
       - 'tests/sstv/**'
       - 'translations/decodium_it.*'
       - 'packaging/**'
       - 'scripts/build/**'
+      - 'scripts/ci/**'
       - 'scripts/ci-build-linux-appimage-x64.sh'
       - 'scripts/release-macos.sh'
 
@@ -110,9 +116,9 @@ jobs:
         run: |
           set -euo pipefail
           brew update
-          brew install qt gcc fftw libusb boost hamlib openjpeg pkg-config libomp
+          brew install qt gcc fftw libusb boost hamlib openjpeg openssl@3 pkg-config libomp
           echo "$(brew --prefix qt)/bin" >> "${GITHUB_PATH}"
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt);$(brew --prefix hamlib);$(brew --prefix openjpeg);$(brew --prefix libomp)" >> "${GITHUB_ENV}"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt);$(brew --prefix hamlib);$(brew --prefix openjpeg);$(brew --prefix openssl@3);$(brew --prefix libomp)" >> "${GITHUB_ENV}"
 
       - name: Configure full native SSTV and HAMDRM
         run: |
@@ -124,6 +130,7 @@ jobs:
             -DBUILD_TESTING=ON \
             -DDECODIUM_ENABLE_SSTV=ON \
             -DDECODIUM_ENABLE_HAMDRM=ON \
+            -DDECODIUM_REQUIRE_SSTV_E2EE=ON \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
@@ -227,7 +234,10 @@ jobs:
           sudo apt-get install -y -qq \
             build-essential \
             cmake \
+            dbus-x11 \
+            ffmpeg \
             gfortran \
+            gnome-keyring \
             libboost-filesystem-dev \
             libboost-log-dev \
             libboost-thread-dev \
@@ -236,7 +246,9 @@ jobs:
             libhamlib-dev \
             libomp-dev \
             libopenjp2-7-dev \
+            libssl-dev \
             libreadline-dev \
+            libsecret-tools \
             libudev-dev \
             libusb-1.0-0-dev \
             libxkbcommon-dev \
@@ -309,6 +321,7 @@ jobs:
             -DBUILD_TESTING=ON \
             -DDECODIUM_ENABLE_SSTV="${SSTV}" \
             -DDECODIUM_ENABLE_HAMDRM="${HAMDRM}" \
+            -DDECODIUM_REQUIRE_SSTV_E2EE="${SSTV}" \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF \
@@ -392,6 +405,7 @@ jobs:
             libhamlib-dev \
             libomp-dev \
             libopenjp2-7-dev \
+            libssl-dev \
             libreadline-dev \
             libudev-dev \
             libusb-1.0-0-dev \
@@ -438,6 +452,7 @@ jobs:
             -DDECODIUM_ENABLE_SSTV=ON \
             -DDECODIUM_ENABLE_HAMDRM=ON \
             -DDECODIUM_ENABLE_SSTV_FUZZING=ON \
+            -DDECODIUM_REQUIRE_SSTV_E2EE=ON \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
@@ -514,10 +529,13 @@ jobs:
             mingw-w64-x86_64-boost
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-ffmpeg
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-openjpeg2
+            mingw-w64-x86_64-openssl
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-python
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-qt6-5compat
             mingw-w64-x86_64-qt6-activeqt
@@ -562,6 +580,7 @@ jobs:
             -DBUILD_TESTING=ON \
             -DDECODIUM_ENABLE_SSTV=ON \
             -DDECODIUM_ENABLE_HAMDRM=ON \
+            -DDECODIUM_REQUIRE_SSTV_E2EE=ON \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
@@ -577,6 +596,11 @@ jobs:
               decodium_regression_test_binaries \
               translations \
             --parallel "$(nproc)"
+
+      - name: Require Windows E2EE application tests
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv -N -R '^test_sstv_share_windows_' | grep -Eq 'Total Tests: 6$'
 
       - name: Run native SSTV suite
         env:

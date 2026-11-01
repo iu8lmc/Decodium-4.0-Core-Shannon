@@ -462,6 +462,18 @@ case "${DECODIUM_REQUIRE_RTLSDR:-OFF}" in
     cmake_args+=("-DDECODIUM_REQUIRE_RTLSDR=ON")
     ;;
 esac
+case "${DECODIUM_REQUIRE_SSTV_E2EE:-OFF}" in
+  1|ON|on|TRUE|true|YES|yes)
+    if [[ -z "${OPENSSL_ROOT_DIR:-}" || ! -s "${OPENSSL_ROOT_DIR}/share/licenses/openssl/LICENSE.txt" \
+      || ! -f "${OPENSSL_ROOT_DIR}/lib/libcrypto.dylib" || ! -f "${OPENSSL_ROOT_DIR}/include/openssl/evp.h" ]]; then
+      echo "error: required SSTV E2EE needs OPENSSL_ROOT_DIR and its licence" >&2
+      exit 1
+    fi
+    cmake_args+=("-DDECODIUM_REQUIRE_SSTV_E2EE=ON" "-DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
+      "-DOPENSSL_CRYPTO_LIBRARY=${OPENSSL_ROOT_DIR}/lib/libcrypto.dylib"
+      "-DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include")
+    ;;
+esac
 BOOST_ROOT_VALUE="${Boost_ROOT:-${BOOST_ROOT:-}}"
 if [[ -n "${BOOST_ROOT_VALUE}" ]]; then
   cmake_args+=("-DBoost_ROOT=${BOOST_ROOT_VALUE}" "-DBOOST_ROOT=${BOOST_ROOT_VALUE}")
@@ -557,6 +569,14 @@ STAGED_ROOT_ABS="$(dirname "${STAGED_APP_ABS}")"
 echo "[4/7] Normalizing macOS bundle layout and runtime paths..."
 "${ROOT_DIR}/scripts/normalize-macos-app.sh" "${STAGED_APP_ABS}"
 verify_app_identity "${STAGED_APP_ABS}"
+case "${DECODIUM_REQUIRE_SSTV_E2EE:-OFF}" in
+  1|ON|on|TRUE|true|YES|yes)
+    install -m 0644 "${OPENSSL_ROOT_DIR}/share/licenses/openssl/LICENSE.txt" \
+      "${STAGED_APP_ABS}/Contents/Resources/doc/wsjtx/OPENSSL_LICENSE.txt"
+    bash "${ROOT_DIR}/scripts/ci/verify-macos-sstv-crypto.sh" \
+      "${STAGED_APP_ABS}" "${COMPAT_MACOS}" "${ARCH_LABEL}"
+    ;;
+esac
 case "${DECODIUM_REQUIRE_RTLSDR:-OFF}" in
   1|ON|on|TRUE|true|YES|yes)
     if ! find "${STAGED_APP_ABS}/Contents/Frameworks" -maxdepth 1 \

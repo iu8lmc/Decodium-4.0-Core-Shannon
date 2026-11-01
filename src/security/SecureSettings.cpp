@@ -1,4 +1,7 @@
 #include "SecureSettings.hpp"
+#include "SecretToolLookup.h"
+#include "SettingsRemove.h"
+#include "SettingsBlobLookup.h"
 #include "src/core/HostProcessEnvironment.h"
 
 #include <QFileInfo>
@@ -84,6 +87,15 @@ namespace
     : public secure_settings::Backend
   {
   public:
+    bool protects_private_values () const override
+    {
+#if defined (Q_OS_WIN) || defined (Q_OS_LINUX)
+      return true;
+#else
+      return false;
+#endif
+    }
+
     bool available () const override
     {
 #if defined (Q_OS_MACOS)
@@ -136,54 +148,25 @@ namespace
       return result;
 #elif defined (Q_OS_LINUX)
       auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));
-      if (secret_tool.isEmpty ())
-        {
-          result.backend_available = false;
-          return result;
-        }
-      QProcess p;
-      prepare_secret_tool_process (p);
-      p.start (secret_tool,
-               QStringList {
-                 QStringLiteral ("lookup"),
-                 QStringLiteral ("service"), service,
-                 QStringLiteral ("account"), account
-               });
-      if (!p.waitForStarted (3000))
-        {
-          result.error = QObject::tr ("secret-tool lookup failed to start");
-          return result;
-        }
-      if (!p.waitForFinished (5000))
-        {
-          result.error = QObject::tr ("secret-tool lookup timeout");
-          return result;
-        }
-      if (0 == p.exitCode ())
-        {
-          result.found = true;
-          result.value = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardOutput ()));
-          return result;
-        }
-      auto const stderr_text = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardError ()));
-      if (!stderr_text.isEmpty ())
-        {
-          result.error = stderr_text;
-        }
-      result.found = false;
-      return result;
+      return secure_settings::lookupWithSecretTool (secret_tool, service, account,
+        decodium::host_process::sanitizedSystemEnvironment ());
 #elif defined (Q_OS_WIN)
       // Windows DPAPI: the encrypted blob is stored in a QSettings key
       // named "dpapi:<service>/<account>" as a base64 string.
       QSettings reg (QSettings::IniFormat, QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
       auto const key = service + QStringLiteral ("/") + account;
-      auto const blob64 = reg.value (key).toByteArray ();
-      if (blob64.isEmpty ())
+      auto const stored = secure_settings::lookupSettingsBlob (reg, key);
+      if (stored.state == secure_settings::SettingsBlobState::Error)
+        {
+          result.error = QObject::tr ("DPAPI secure store read failed");
+          return result;
+        }
+      if (stored.state == secure_settings::SettingsBlobState::Missing)
         {
           result.found = false;
           return result;
         }
-      auto const blob = QByteArray::fromBase64 (blob64);
+      auto const blob = QByteArray::fromBase64 (stored.value);
       DATA_BLOB in_blob;
       in_blob.cbData = static_cast<DWORD> (blob.size ());
       in_blob.pbData = reinterpret_cast<BYTE *> (const_cast<char *> (blob.data ()));
@@ -256,11 +239,26 @@ namespace
           if (error) *error = QObject::tr ("secret-tool store failed to start");
           return false;
         }
-      p.write (value.toUtf8 ());
+      auto value_bytes = value.toUtf8 ();
+      const auto written = p.write (value_bytes);
+      const auto expected = value_bytes.size ();
+      value_bytes.fill ('\0');
+      if (written != expected)
+        {
+          if (error) *error = QObject::tr ("secret-tool store input failed");
+          p.kill ();
+          p.waitForFinished (1000);
+          return false;
+        }
       p.closeWriteChannel ();
       if (!p.waitForFinished (5000))
         {
           if (error) *error = QObject::tr ("secret-tool store timeout");
+          return false;
+        }
+      if (p.exitStatus () == QProcess::CrashExit)
+        {
+          if (error) *error = QObject::tr ("secret-tool store crashed");
           return false;
         }
       if (0 != p.exitCode ())
@@ -285,6 +283,12 @@ namespace
       QSettings reg (QSettings::IniFormat, QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
       auto const key = service + QStringLiteral ("/") + account;
       reg.setValue (key, blob64);
+      reg.sync ();
+      if (reg.status () != QSettings::NoError)
+        {
+          if (error) *error = QObject::tr ("DPAPI secure store write failed");
+          return false;
+        }
       return true;
 #else
       Q_UNUSED (service);
@@ -363,11 +367,9 @@ namespace
       if (error) *error = stderr_text.isEmpty () ? QObject::tr ("secret-tool clear failed") : stderr_text;
       return false;
 #elif defined (Q_OS_WIN)
-      Q_UNUSED (error);
       QSettings reg (QSettings::IniFormat, QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
       auto const key = service + QStringLiteral ("/") + account;
-      reg.remove (key);
-      return true;
+      return secure_settings::removeSettingAndSync (reg, key, error);
 #else
       Q_UNUSED (service);
       Q_UNUSED (account);

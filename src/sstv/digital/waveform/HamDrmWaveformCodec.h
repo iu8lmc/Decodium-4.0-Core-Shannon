@@ -66,11 +66,19 @@ struct HamDrmWaveformLimits final
     std::size_t maximumBufferedPcmSamples {1U << 20U};
     std::size_t maximumFrames {4'096U};
     std::size_t maximumSyncSearchSamples {2'048U};
+    // Laboratory candidate, kept independent from the normal timing path.
+    bool experimentalEarlyTiming {false};
     double minimumCyclicPrefixMetric {0.015};
     double maximumFrequencyOffsetHz {15.0};
     double maximumNormalizedPilotSquaredError {0.12};
     double corruptedPilotSquaredErrorThreshold {0.25};
     double maximumCorruptedPilotFraction {0.30};
+    // Explicit diagnostic opt-in; production continues to use flat pilots.
+    bool experimentalFrequencySelective {false};
+    bool experimentalAdaptiveEqualizer {false};
+    // Diagnostic: retain a second flat MSC deinterleaver for CRC-gated retry.
+    bool experimentalFlatPacketFallback {false};
+    bool experimentalMultistagePacketRetry {false};
 };
 
 struct HamDrmWaveformCapacity final
@@ -99,6 +107,8 @@ struct HamDrmWaveformStatistics final
     std::size_t mscFailures {0U};
     std::size_t packetCrcFailures {0U};
     std::size_t motCrcFailures {0U};
+    std::size_t flatFallbackPacketRecoveries {0U};
+    std::size_t multistagePacketRecoveries {0U};
     std::size_t resourceFailures {0U};
     double estimatedFrequencyOffsetHz {0.0};
     double lastCyclicPrefixMetric {0.0};

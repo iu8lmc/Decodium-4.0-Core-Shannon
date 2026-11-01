@@ -951,6 +951,25 @@ private slots:
         QVERIFY(!runtime.radiofaxConfig().has_value());
     }
 
+    void interferenceNotchConfigurationOnlyChangesWhenStopped()
+    {
+        SstvRxRuntime runtime(smallConfig());
+        QVERIFY(!runtime.interferenceNotch().has_value());
+        for (int frequency : {1700, 1900}) {
+            QVERIFY(runtime.setInterferenceNotch(frequency));
+            QCOMPARE(*runtime.interferenceNotch(), frequency);
+        }
+        QVERIFY(!runtime.setInterferenceNotch(899));
+        QVERIFY(!runtime.setInterferenceNotch(2501));
+        QCOMPARE(*runtime.interferenceNotch(), 1900);
+        QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 45U));
+        QVERIFY(!runtime.setInterferenceNotch(std::nullopt));
+        QCOMPARE(*runtime.interferenceNotch(), 1900);
+        QVERIFY(runtime.stop());
+        QVERIFY(runtime.setInterferenceNotch(std::nullopt));
+        QVERIFY(!runtime.interferenceNotch().has_value());
+    }
+
     void radiofaxManualRuntimeReceivesAcrossChunkSizes()
     {
         SstvFaxConfig fax;
@@ -1946,6 +1965,34 @@ private slots:
         }
         QVERIFY(!mismatch.snapshot().image.available);
         QVERIFY(mismatch.stop());
+    }
+
+    void avtVisSurvivesManualInterferenceNotch()
+    {
+        auto config = smallConfig();
+        config.ingress.maximumQueuedSamples = 65'536U;
+        config.ingress.maximumSamplesPerCall = 16'384U;
+        const auto pcm = avtPrefix(SstvAvtMode::Avt24, 8U, SstvAvtVariant::Qrm);
+        for (int hz : {1700, 1900}) {
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.setInterferenceNotch(hz));
+            QVERIFY(runtime.setRxModeControl(SstvRxModeControl::Manual, "avt-24-qrm"));
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay, static_cast<std::uint64_t>(hz)));
+            std::uint64_t chunks = 0U;
+            for (std::size_t offset = 0; offset < pcm.size(); offset += 4093U) {
+                const auto count = std::min(std::size_t {4093U}, pcm.size() - offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), kRate,
+                    runtime.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+                ++chunks;
+                QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+            }
+            const auto snapshot = runtime.snapshot();
+            QVERIFY(snapshot.vis.valid);
+            QVERIFY(snapshot.image.available);
+            QCOMPARE(snapshot.image.mode, QStringLiteral("avt-24-qrm"));
+            QVERIFY(snapshot.image.coverage > 0.01);
+            QVERIFY(runtime.stop());
+        }
     }
 
     void avtNormalVisAndProtectedCountdownSelectEveryNativeSession()

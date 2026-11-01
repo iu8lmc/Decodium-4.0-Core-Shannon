@@ -34,12 +34,72 @@ void SstvRadiofaxAutoRx::buffer(const SstvFrequencyObservation& obs)
     replay_.push_back(obs);
 }
 
+void SstvRadiofaxAutoRx::collectPhasingLevel(const SstvFrequencyObservation& obs) noexcept
+{
+    if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz)
+        || !std::isfinite(obs.confidence) || obs.confidence < 0.7 || obs.confidence > 1.0)
+        return;
+    const double f = obs.correctedFrequencyHz - offset_;
+    if (f >= 1450.0 && f <= 1550.0)
+        ++blackLevels_[static_cast<std::size_t>(std::lround(f - 1450.0))];
+    else if (f >= 2250.0 && f <= 2350.0)
+        ++whiteLevels_[static_cast<std::size_t>(std::lround(f - 2250.0))];
+}
+
+SstvRadiofaxLevels SstvRadiofaxAutoRx::measuredLevels() const noexcept
+{
+    if (!clockTracker_ || !clockTracker_->estimate()) return {};
+    const auto median = [](const auto& bins) -> std::optional<std::size_t> {
+        std::uint64_t total = 0U;
+        for (auto count : bins) total += count;
+        if (total < 64U) return std::nullopt;
+        std::uint64_t cumulative = 0U;
+        for (std::size_t i = 0; i < bins.size(); ++i) {
+            cumulative += bins[i];
+            if (cumulative >= (total + 1U) / 2U) {
+                std::uint64_t nearby = 0U;
+                for (std::size_t j = i > 5U ? i - 5U : 0U;
+                     j < bins.size() && j <= i + 5U; ++j) nearby += bins[j];
+                if (nearby * 2U < total) return std::nullopt;
+                return i;
+            }
+        }
+        return std::nullopt;
+    };
+    const auto black = median(blackLevels_);
+    const auto white = median(whiteLevels_);
+    if (!black || !white) return {};
+    const SstvRadiofaxLevels levels {1450.0 + double(*black), 2250.0 + double(*white)};
+    const double span = levels.whiteHz - levels.blackHz;
+    return span >= 760.0 && span <= 840.0 ? levels : SstvRadiofaxLevels {};
+}
+
 void SstvRadiofaxAutoRx::beginImage(std::uint64_t sample)
 {
     config_.linesPerMinute = lock_->linesPerMinute;
     config_.phasing = lock_->pattern;
+    clock_ = clockTracker_ ? clockTracker_->estimate() : std::nullopt;
+    if (clock_) {
+        const double nominal = double(config_.sampleRate) * 60.0 / config_.linesPerMinute;
+        if (!clock_->lines || clock_->samples / clock_->lines < config_.width
+            || std::abs(double(clock_->samples) / clock_->lines - nominal) > nominal * kRadiofaxMaximumClockDeviation)
+            clock_.reset();
+    }
+    if (clock_) {
+        const auto elapsed = sample - lock_->latestWhiteEdgeSample;
+        const auto line = (elapsed * clock_->lines + clock_->samples / 2U)
+            / clock_->samples;
+        sample = lock_->latestWhiteEdgeSample + line * clock_->samples / clock_->lines;
+    }
+    if (config_.centeredPhasingWithWhiteEndLine
+        && lock_->pattern == SstvFaxPhasePattern::WhiteFivePercent) {
+        const std::uint64_t lineSamples = clock_ ? clock_->samples / clock_->lines
+            : std::uint64_t(config_.sampleRate) * 60U / lock_->linesPerMinute;
+        sample += lineSamples + lineSamples / 40U;
+    }
     try {
-        receiver_ = std::make_unique<SstvRadiofaxRxSession>(config_, sample, offset_);
+        levels_ = measuredLevels();
+        receiver_ = std::make_unique<SstvRadiofaxRxSession>(config_, sample, offset_, clock_, *levels_);
     } catch (const std::invalid_argument&) {
         state_ = SstvRadiofaxAutoRxState::Failed;
         replay_.clear();
@@ -103,10 +163,11 @@ std::uint64_t SstvRadiofaxAutoRx::refineStopBoundary(std::uint64_t candidate) co
             || 2.0 * std::hypot(re, im) < 0.85 * amplitude) break;
         boundary = begin;
     }
-    const std::uint64_t numerator = (boundary - *imageStart_) * config_.linesPerMinute;
-    const std::uint64_t denominator = std::uint64_t(config_.sampleRate) * 60U;
+    const std::uint64_t lineCount = clock_ ? clock_->lines : config_.linesPerMinute;
+    const std::uint64_t denominator = clock_ ? clock_->samples : std::uint64_t(config_.sampleRate) * 60U;
+    const std::uint64_t numerator = (boundary - *imageStart_) * lineCount;
     const std::uint64_t nearestLine = (numerator + denominator / 2U) / denominator;
-    return *imageStart_ + nearestLine * denominator / config_.linesPerMinute;
+    return *imageStart_ + nearestLine * denominator / lineCount;
 }
 
 void SstvRadiofaxAutoRx::consumeImageObservation(const SstvFrequencyObservation& obs)
@@ -163,9 +224,16 @@ void SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, std::size
             lock_ = phase_.consume(&obs, 1U);
             if (!lock_) continue;
             start_ = std::make_unique<SstvRadiofaxImageStartDetector>(config_.sampleRate, *lock_, offset_);
+            clockTracker_ = std::make_unique<SstvRadiofaxClockTracker>(config_.sampleRate, *lock_, offset_);
             state_ = SstvRadiofaxAutoRxState::SearchingImage;
         }
         if (state_ == SstvRadiofaxAutoRxState::SearchingImage) {
+            collectPhasingLevel(obs);
+            clockTracker_->consume(obs);
+            if (const auto estimate = clockTracker_->estimate())
+                start_->setClockEstimate(estimate);
+            else if (!clockTracker_->valid())
+                start_->setClockEstimate(std::nullopt);
             buffer(obs);
             if (state_ == SstvRadiofaxAutoRxState::Failed) break;
             const auto candidate = start_->consume(&obs, 1U);
@@ -173,14 +241,7 @@ void SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, std::size
                 replay_.clear();
                 state_ = SstvRadiofaxAutoRxState::Failed;
             } else if (candidate) {
-                std::uint64_t imageStart = *candidate;
-                if (config_.centeredPhasingWithWhiteEndLine
-                    && lock_->pattern == SstvFaxPhasePattern::WhiteFivePercent) {
-                    const std::uint64_t lineSamples =
-                        std::uint64_t(config_.sampleRate) * 60U / lock_->linesPerMinute;
-                    imageStart += lineSamples + lineSamples / 40U;
-                }
-                beginImage(imageStart);
+                beginImage(*candidate);
             }
         } else if (state_ == SstvRadiofaxAutoRxState::Receiving) {
             consumeImageObservation(obs);
@@ -198,10 +259,12 @@ bool SstvRadiofaxAutoRx::stopAtAudioSample(std::uint64_t sample)
     if (state_ != SstvRadiofaxAutoRxState::Receiving || !receiver_
         || !imageStart_ || sample < *imageStart_ || !hasLast_ || sample > lastSample_)
         return false;
-    const std::uint64_t denominator = std::uint64_t(config_.sampleRate) * 60U;
-    const std::uint64_t line = ((sample - *imageStart_) * config_.linesPerMinute
+    const std::uint64_t denominator = clock_ ? clock_->samples : std::uint64_t(config_.sampleRate) * 60U;
+    const std::uint64_t lineCount = clock_ ? clock_->lines : config_.linesPerMinute;
+    const std::uint64_t line = ((sample - *imageStart_) * lineCount
                                 + denominator / 2U) / denominator;
-    stopSample_ = *imageStart_ + line * denominator / config_.linesPerMinute;
+    stopSample_ = *imageStart_ + line * denominator / lineCount;
+    stopWasAudioTone_ = true;
     flushPending(stopSample_);
     receiver_->finish();
     updateRxState();
@@ -244,6 +307,9 @@ SstvRadiofaxAutoRxState SstvRadiofaxAutoRx::state() const noexcept { return stat
 std::optional<std::uint64_t> SstvRadiofaxAutoRx::imageStartSample() const noexcept { return imageStart_; }
 std::optional<SstvRadiofaxPhaseLock> SstvRadiofaxAutoRx::phasing() const noexcept { return lock_; }
 std::optional<std::uint64_t> SstvRadiofaxAutoRx::stopSample() const noexcept { return stopSample_; }
+std::optional<SstvRadiofaxClockEstimate> SstvRadiofaxAutoRx::imageClock() const noexcept { return clock_; }
+std::optional<SstvRadiofaxLevels> SstvRadiofaxAutoRx::imageLevels() const noexcept { return levels_; }
+bool SstvRadiofaxAutoRx::stopWasAudioTone() const noexcept { return stopWasAudioTone_; }
 std::size_t SstvRadiofaxAutoRx::bufferedObservations() const noexcept { return replay_.size() + pendingImage_.size(); }
 std::optional<SstvImageSnapshot> SstvRadiofaxAutoRx::snapshot() const
 {

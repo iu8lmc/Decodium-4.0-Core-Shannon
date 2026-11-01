@@ -368,6 +368,8 @@ public:
     // Configuration changes are accepted only with the worker stopped.
     bool setRadiofaxConfig(std::optional<SstvFaxConfig> config);
     std::optional<SstvFaxConfig> radiofaxConfig() const;
+    bool setInterferenceNotch(std::optional<int> frequencyHz);
+    std::optional<int> interferenceNotch() const;
     bool setFax480Config(std::optional<SstvFax480Profile> profile);
     std::optional<SstvFax480Profile> fax480Config() const;
     State state() const noexcept;
@@ -607,6 +609,7 @@ private:
     const Config m_config;
     std::optional<SstvFaxConfig> m_radiofaxConfig;
     std::optional<SstvFax480Profile> m_fax480Config;
+    std::optional<int> m_interferenceNotchHz;
     // Worker-owned ID space, distinct from ordinary low-numbered RX sessions.
     std::uint64_t m_nextRadiofaxAcquisitionId {1ULL << 48U};
     // QObject child rather than a by-value QObject member: Qt then moves the

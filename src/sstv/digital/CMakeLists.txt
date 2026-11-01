@@ -5,6 +5,7 @@ set (DECODIUM_HAMDRM_CORE_SOURCES
   HamDrmMotCodec.cpp
   HamDrmObjectAssembler.cpp
   HamDrmProfileRegistry.cpp
+  HamDrmRsCodec.cpp
   channel/HamDrmCellPlan.cpp
   channel/HamDrmChannelCoding.cpp
   channel/HamDrmChannelCrc.cpp
@@ -27,6 +28,7 @@ set (DECODIUM_HAMDRM_CORE_HEADERS
   HamDrmMotCodec.h
   HamDrmObjectAssembler.h
   HamDrmProfileRegistry.h
+  HamDrmRsCodec.h
   HamDrmTypes.h
   channel/HamDrmCellPlan.h
   channel/HamDrmChannelCoding.h

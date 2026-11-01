@@ -20,6 +20,8 @@
 #include "../rx/SstvFskIdDetector.h"
 
 #include <QMetaObject>
+#include <QCoreApplication>
+#include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
 
@@ -749,6 +751,7 @@ struct SstvRxRuntime::WorkerPipeline final
     std::uint32_t inputSampleRate {0U};
     std::unique_ptr<SstvResampler> resampler;
     std::unique_ptr<SstvPreprocessor> preprocessor;
+    std::unique_ptr<SstvPreprocessor> acquisitionPreprocessor;
     std::unique_ptr<SstvFrequencyDemodulator> frequencyDemodulator;
     std::unique_ptr<SstvToneDetector> toneDetector;
     std::unique_ptr<SstvVisDetector> visDetector;
@@ -846,6 +849,7 @@ struct SstvRxRuntime::WorkerPipeline final
         inputSampleRate = rate;
         resampler = std::make_unique<SstvResampler>(rate);
         preprocessor->reset();
+        if (acquisitionPreprocessor) acquisitionPreprocessor->reset();
         frequencyDemodulator->reset(false);
         if (radiofaxAudioStop) radiofaxAudioStop->reset();
         toneDetector->reset(false);
@@ -912,6 +916,20 @@ SstvRxRuntime::~SstvRxRuntime()
 SstvRxRuntime::Config SstvRxRuntime::configuration() const noexcept
 {
     return m_config;
+}
+
+bool SstvRxRuntime::setInterferenceNotch(std::optional<int> frequencyHz)
+{
+    if (!isOnOwnerThread() || state() != State::Inactive || m_worker.joinable()
+        || (frequencyHz && (*frequencyHz < 900 || *frequencyHz > 2500))) return false;
+    m_interferenceNotchHz = frequencyHz;
+    scheduleSnapshotNotification(true);
+    return true;
+}
+
+std::optional<int> SstvRxRuntime::interferenceNotch() const
+{
+    return isOnOwnerThread() ? m_interferenceNotchHz : std::nullopt;
 }
 
 bool SstvRxRuntime::setRadiofaxConfig(std::optional<SstvFaxConfig> config)
@@ -1978,6 +1996,12 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
     std::vector<float> resampled = pipeline.resampler->process(normalized);
     std::vector<float> preprocessed =
         pipeline.preprocessor->process(resampled);
+    // VIS and FSK discovery must retain the original leader tones even when
+    // the operator chooses a notch at a protocol frequency such as 1900 Hz.
+    const std::vector<float> acquisitionAudio = pipeline.acquisitionPreprocessor
+        ? pipeline.acquisitionPreprocessor->process(resampled) : std::vector<float> {};
+    const std::vector<float>& toneAudio = pipeline.acquisitionPreprocessor
+        ? acquisitionAudio : preprocessed;
     SstvAudioChunk retainedChunk;
     retainedChunk.source = chunk.source;
     retainedChunk.sampleRate = SstvResampler::kOutputSampleRate;
@@ -2082,7 +2106,7 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
         pipeline.narrowVisDetector->reset(false);
         const std::uint64_t toneStart =
             pipeline.toneDetector->metrics().samplesConsumed;
-        const std::uint64_t available = preprocessed.size();
+        const std::uint64_t available = toneAudio.size();
         const std::uint64_t toneEnd = saturatingUnsignedAdd(
             toneStart, available);
         if (qEnvironmentVariableIsSet("DECODIUM_SSTV_TRACE_FRAME")) {
@@ -2094,20 +2118,20 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
             const std::size_t prefix = static_cast<std::size_t>(
                 *resumeToneAtSample - toneStart);
             static_cast<void>(pipeline.toneDetector->consume(
-                preprocessed.data(), prefix));
+                toneAudio.data(), prefix));
             pipeline.toneDetector->resetAtStreamSample(
                 *resumeToneAtSample, false);
             tones = pipeline.toneDetector->consume(
-                preprocessed.data() + prefix,
-                preprocessed.size() - prefix);
+                toneAudio.data() + prefix,
+                toneAudio.size() - prefix);
         } else if (*resumeToneAtSample <= toneStart) {
             pipeline.toneDetector->resetAtStreamSample(toneStart, false);
-            tones = pipeline.toneDetector->consume(preprocessed);
+            tones = pipeline.toneDetector->consume(toneAudio);
         } else {
-            tones = pipeline.toneDetector->consume(preprocessed);
+            tones = pipeline.toneDetector->consume(toneAudio);
         }
     } else {
-        tones = pipeline.toneDetector->consume(preprocessed);
+        tones = pipeline.toneDetector->consume(toneAudio);
     }
 
     std::vector<SstvVisClassifiedEvent> events;
@@ -2623,7 +2647,14 @@ void SstvRxRuntime::resetWorkerPipeline(WorkerPipeline& pipeline,
     pipeline.generation = generation;
     pipeline.inputSampleRate = 0U;
     pipeline.resampler.reset();
-    pipeline.preprocessor = std::make_unique<SstvPreprocessor>();
+    SstvPreprocessorConfig preprocessorConfig;
+    if (m_interferenceNotchHz) {
+        preprocessorConfig.interferenceNotchEnabled = true;
+        preprocessorConfig.interferenceFrequencyHz = *m_interferenceNotchHz;
+    }
+    pipeline.preprocessor = std::make_unique<SstvPreprocessor>(preprocessorConfig);
+    pipeline.acquisitionPreprocessor = preprocessorConfig.interferenceNotchEnabled
+        ? std::make_unique<SstvPreprocessor>() : nullptr;
     SstvFrequencyDemodulatorConfig demodulatorConfig =
         SstvFrequencyDemodulatorConfig::sstvDefaults();
     // A fast Martin M2/M4 pixel is about 2.75 samples at the native 12 kHz
@@ -5264,6 +5295,29 @@ void SstvRxRuntime::publishRadiofaxImage(WorkerPipeline& pipeline, bool force)
         image->completedPixelsPerScanline.begin(), image->completedPixelsPerScanline.end(),
         [width = image->width](std::size_t n) { return n == width; }));
     summary.mode = QStringLiteral("hffax-experimental");
+    if ((summary.complete || summary.partial) && QStandardPaths::isTestModeEnabled()
+        && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_FAX_DIAGNOSTICS") == 1) {
+        const auto lock = pipeline.radiofax->phasing();
+        const auto clock = pipeline.radiofax->imageClock();
+        const auto levels = pipeline.radiofax->imageLevels();
+        QStringList incomplete;
+        for (std::size_t row = 0; row < image->completedPixelsPerScanline.size(); ++row) {
+            const auto pixels = image->completedPixelsPerScanline[row];
+            if (pixels != image->width)
+                incomplete.append(QStringLiteral("%1:%2").arg(row).arg(pixels));
+        }
+        qInfo().noquote() << "[LAB][RADIOFAX] terminal"
+                          << "start=" << pipeline.radiofax->imageStartSample().value_or(0U)
+                          << "stop=" << pipeline.radiofax->stopSample().value_or(0U)
+                          << "stop_kind=" << (pipeline.radiofax->stopWasAudioTone() ? "audio" : "frequency-or-none")
+                          << "lpm=" << (lock ? lock->linesPerMinute : 0U)
+                          << "clock_samples=" << (clock ? clock->samples : 0U)
+                          << "clock_lines=" << (clock ? clock->lines : 0U)
+                          << "black_hz=" << (levels ? levels->blackHz : 0.0)
+                          << "white_hz=" << (levels ? levels->whiteHz : 0.0)
+                          << "incomplete=" << incomplete.join(QLatin1Char(','));
+    }
     recordProgressiveUpdate(pipeline);
     {
         const std::lock_guard<std::mutex> lock(m_snapshotMutex);

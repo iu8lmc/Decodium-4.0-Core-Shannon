@@ -866,6 +866,7 @@ public:
     Q_INVOKABLE bool abortSstvRxFrame();
     Q_INVOKABLE bool updateSstvRxControls(const QVariantMap& controls);
     Q_INVOKABLE bool configureSstvFax480Rx(bool enabled, const QString& profile);
+    Q_INVOKABLE bool configureSstvInterferenceNotch(bool enabled, int frequencyHz);
     Q_INVOKABLE bool configureSstvRadiofaxRx(bool enabled, int ioc, int width, int height);
     Q_INVOKABLE bool configureSstvRadiofaxRxAligned(bool enabled, int ioc, int width, int height,
                                                     bool centeredPhasingWithWhiteEndLine);

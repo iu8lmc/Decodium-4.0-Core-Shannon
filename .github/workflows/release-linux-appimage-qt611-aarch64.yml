@@ -125,6 +125,7 @@ jobs:
             libglib2.0-dev \
             libopengl-dev \
             libopenjp2-7-dev \
+            libssl-dev \
             libpulse-dev \
             libreadline-dev \
             libswresample-dev \

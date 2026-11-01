@@ -341,6 +341,20 @@ jobs:
           echo "CMAKE_PREFIX_PATH=${RTLSDR_PREFIX};${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=${RTLSDR_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
+      - name: Build macOS-compatible SSTV encryption dependency
+        run: |
+          set -euo pipefail
+          OPENSSL_PREFIX="${RUNNER_TEMP}/decodium-openssl-${{ matrix.compat_macos }}-x86_64"
+          bash scripts/ci/build-macos-openssl.sh "${OPENSSL_PREFIX}" "${{ matrix.compat_macos }}" x86_64
+          echo "OPENSSL_ROOT_DIR=${OPENSSL_PREFIX}" >> "$GITHUB_ENV"
+          echo "DECODIUM_REQUIRE_SSTV_E2EE=ON" >> "$GITHUB_ENV"
+
+      - name: Test macOS SSTV crypto bundle gate
+        run: bash tests/sstv/tools/test_macos_sstv_crypto_gate.sh
+
+      - name: Test SSTV crypto runtime
+        run: bash tests/sstv/tools/test_macos_openssl_runtime.sh "$OPENSSL_ROOT_DIR" "${{ matrix.compat_macos }}" x86_64
+
       - name: Build release assets
         env:
           # Boost 1.85 triggers deprecated-copy diagnostics with the newer

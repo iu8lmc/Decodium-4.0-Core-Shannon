@@ -68,6 +68,8 @@ class HamDrmWaveformRxBackend
 public:
     virtual ~HamDrmWaveformRxBackend() = default;
     virtual HamDrmWaveformCapability capability() const = 0;
+    virtual bool supportsExperimentalTiming() const noexcept { return false; }
+    virtual bool setExperimentalTiming(bool enabled) noexcept { return !enabled; }
     virtual HamDrmStatus start(const HamDrmProfile& profile,
                                std::uint64_t sessionId,
                                HamDrmWaveformRxSink& sink) = 0;
@@ -153,6 +155,9 @@ class HamDrmController final : public QObject,
     Q_PROPERTY(QVariantMap capabilities READ capabilities CONSTANT)
     Q_PROPERTY(QString capabilityMessage READ capabilityMessage CONSTANT)
     Q_PROPERTY(bool waveformRxAvailable READ waveformRxAvailable CONSTANT)
+    Q_PROPERTY(bool experimentalTimingAvailable READ experimentalTimingAvailable CONSTANT)
+    Q_PROPERTY(bool experimentalTiming READ experimentalTiming WRITE setExperimentalTiming
+               NOTIFY experimentalTimingChanged)
     Q_PROPERTY(bool waveformTxAvailable READ waveformTxAvailable CONSTANT)
     Q_PROPERTY(bool jpeg2000DecodeAvailable READ jpeg2000DecodeAvailable CONSTANT)
     Q_PROPERTY(bool jpeg2000EncodeAvailable READ jpeg2000EncodeAvailable CONSTANT)
@@ -209,6 +214,9 @@ public:
     QVariantMap capabilities() const;
     QString capabilityMessage() const;
     bool waveformRxAvailable() const;
+    bool experimentalTimingAvailable() const noexcept;
+    bool experimentalTiming() const noexcept;
+    void setExperimentalTiming(bool enabled);
     bool waveformTxAvailable() const;
     bool jpeg2000DecodeAvailable() const;
     bool jpeg2000EncodeAvailable() const;
@@ -235,6 +243,8 @@ public:
 
     Q_INVOKABLE bool startRx();
     Q_INVOKABLE bool startTx(const QUrl& localImage);
+    Q_INVOKABLE bool startTxWithRs(const QUrl& localImage, int level);
+    Q_INVOKABLE bool tryRsRecovery(int transportId);
     Q_INVOKABLE bool cancelRx();
     Q_INVOKABLE bool cancelTx();
     Q_INVOKABLE bool cancelAll();
@@ -251,11 +261,14 @@ public:
     // Owner-thread handoff for an adapter that already has a complete MOT
     // data group.  RF callbacks normally enter through HamDrmWaveformRxSink.
     HamDrmStatus ingestMotGroup(const QByteArray& encodedGroup);
+    HamDrmValueResult<HamDrmAssembledObject> completedObject(
+        std::uint16_t transportId) const;
     HamDrmValueResult<HamDrmAssembledObject> takeCompletedObject(
         std::uint16_t transportId);
 
 signals:
     void selectedProfileChanged();
+    void experimentalTimingChanged();
     void operationStateChanged();
     void errorChanged();
     void inboxChanged();
@@ -315,6 +328,7 @@ private:
     HamDrmStatus rebuildRecordMetadata(InboxRecord& record);
     HamDrmStatus persistRecord(InboxRecord& record);
     HamDrmStatus finishRecord(InboxRecord& record);
+    bool reconstructRsSegments(InboxRecord& record, std::uint16_t transportId, bool allowMissingFinal);
     void publishInbox(std::uint16_t preferredTransportId);
     InboxRecord* recordFor(int transportId) noexcept;
     const InboxRecord* recordFor(int transportId) const noexcept;
@@ -338,7 +352,10 @@ private:
                           HamDrmStatus status) override;
 
     HamDrmControllerConfig config_;
+    bool labDroppedRsSegment_ {false};
+    bool labDroppedMotSegment_ {false};
     HamDrmControllerBackends backends_;
+    bool experimentalTiming_ {false};
     std::unique_ptr<HamDrmPartialStore> partialStore_;
     QVariantList profiles_;
     QString selectedProfileId_;

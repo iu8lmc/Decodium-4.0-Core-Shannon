@@ -2,6 +2,7 @@
 
 #include "src/sstv/models/SstvShareController.h"
 #ifdef DECODIUM_TEST_MAC_E2EE
+#include "src/security/CoordinatedSecretBackend.h"
 #include "src/security/MacKeychainBackend.h"
 #include "src/sstv/sharing/SstvShareSecureEnvelope.h"
 #include <Security/Security.h>
@@ -715,6 +716,7 @@ void TestSstvLocalIntegrationProvider::controllerReceivesAuthenticatedEnvelopesW
         }
     } cleanup {rawKeychain};
     secure_settings::MacKeychainBackend backend(QString::fromUtf8(path));
+    secure_settings::CoordinatedSecretBackend coordinated(backend, storage.filePath(QStringLiteral("locks")));
     SstvShareKeyStore sender(backend, QStringLiteral("sender-test"));
     SstvShareKeyStore receiver(backend, QStringLiteral("STATION-LOCAL"));
     const auto publicKey = receiver.createOrLoadPublicKey();
@@ -761,7 +763,7 @@ void TestSstvLocalIntegrationProvider::controllerReceivesAuthenticatedEnvelopesW
         QVERIFY(completed.completed && completed.result.ok());
     }
     QSettings settings; settings.clear(); settings.sync();
-    SstvShareController controller(&backend, provider);
+    SstvShareController controller(&coordinated, provider);
     QSignalSpy operations(&controller, &SstvShareController::operationFinished);
     QSignalSpy handoffs(&controller, &SstvShareController::incomingHandoffReady);
     QSignalSpy identities(&controller, &SstvShareController::sharingIdentityReady);

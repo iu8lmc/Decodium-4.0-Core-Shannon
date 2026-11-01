@@ -64,6 +64,7 @@ jobs:
             mingw-w64-x86_64-fftw
             mingw-w64-x86_64-portaudio
             mingw-w64-x86_64-openjpeg2
+            mingw-w64-x86_64-openssl
 
       - name: Install libusb from the official MSYS2 package archive
         shell: msys2 {0}
@@ -273,6 +274,7 @@ jobs:
             -DDECODIUM_REQUIRE_RTLSDR=ON \
             -DDECODIUM_ENABLE_SSTV=ON \
             -DDECODIUM_ENABLE_HAMDRM=ON \
+            -DDECODIUM_REQUIRE_SSTV_E2EE=ON \
             -DRIGCTL_EXE="${RIGCTL_EXE}" \
             -DRIGCTLD_EXE="${RIGCTLD_EXE}" \
             -DRIGCTLCOM_EXE="${RIGCTLCOM_EXE}" \
@@ -281,7 +283,7 @@ jobs:
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
 
-          for release_feature in DECODIUM_ENABLE_SSTV DECODIUM_ENABLE_HAMDRM; do
+          for release_feature in DECODIUM_ENABLE_SSTV DECODIUM_ENABLE_HAMDRM DECODIUM_REQUIRE_SSTV_E2EE; do
             if ! grep -Fxq "${release_feature}:BOOL=ON" build-windows/CMakeCache.txt; then
               echo "error: advertised Windows release must enable ${release_feature}" >&2
               exit 1
@@ -526,6 +528,9 @@ jobs:
           echo "Qt runtime ABI verified: $(tr '\n' ' ' <<< "${core_private_abis}")"
           test -f "${DIST}/librtlsdr.dll"
           test -f "${DIST}/libopenjp2-7.dll"
+          find "${DIST}" -maxdepth 1 -type f -iname 'libcrypto-*.dll' -print -quit | grep -q .
+          decodium_imports="$(objdump -p "${DIST}/decodium.exe")"
+          grep -iq 'DLL Name: libcrypto-.*\.dll' <<<"${decodium_imports}"
           test -f "${DIST}/sqldrivers/qsqlite.dll"
           test -f "${DIST}/imageformats/qgif.dll"
           test -f "${DIST}/imageformats/qjpeg.dll"

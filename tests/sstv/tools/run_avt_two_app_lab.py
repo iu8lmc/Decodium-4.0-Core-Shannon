@@ -19,12 +19,16 @@ allowed.add('robot-c12')
 if mode not in allowed: raise SystemExit('expected robot-c12 or an AVT 24/90/94 QRM or narrow-QRM mode')
 root=Path(tempfile.mkdtemp(prefix='decodium-avt-two-app-'+mode+'-'))
 binary=Path('build/decodium').resolve(strict=True)
+if len(sys.argv) > 4: raise SystemExit('expected mode, optional variant, and optional image path')
 variant=sys.argv[2] if len(sys.argv)>2 else 'a'
 if variant not in ('a','b'): raise SystemExit('image variant must be a or b')
-fixture=Path('tests/sstv/fixtures/qsstv-image-'+variant+'.jpg').resolve(strict=True)
+fixture=(Path(sys.argv[3]) if len(sys.argv)==4 else Path('tests/sstv/fixtures/qsstv-image-'+variant+'.jpg')).resolve(strict=True)
+if not fixture.is_file(): raise SystemExit('image path must be a file')
 duration_ms=35000 if mode == 'robot-c12' else (60000 if mode.startswith('avt-24-') else 130000)
 common=['--test-mode','--lab-no-cat','--lab-audio-input','BlackHole 2ch',
-        '--lab-audio-output','BlackHole 2ch','--lab-reapply-ms','500']
+        '--lab-reapply-ms','500']
+tx_output=os.environ.get('DECODIUM_LAB_AVT_TX_OUTPUT','BlackHole 2ch')
+if tx_output not in ('BlackHole 2ch','BlackHole 16ch'): raise SystemExit('unsupported lab output')
 processes=[]
 class Info(c.Structure):
     _fields_=[('version',c.c_int),('name',c.c_char_p),('host',c.c_int),('inputs',c.c_int),
@@ -61,7 +65,8 @@ try:
         env=os.environ.copy()
         env.update(QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',
                    DECODIUM_LAB_SETTINGS_DIR=str(root/(role+'-settings')))
-        args=[str(binary),*common,'--rig-name','AVT'+role+secrets.token_hex(4)]
+        args=[str(binary),*common,'--lab-audio-output',tx_output if role=='tx' else 'BlackHole 2ch',
+              '--rig-name','AVT'+role+secrets.token_hex(4)]
         if role=='rx':
             args+=['--lab-monitor-ms','1800','--lab-sstv-rx-ms','3500',
                    '--lab-sstv-rx-ready-file',str(root/'ready'),
@@ -97,8 +102,13 @@ try:
     rx=(root/'rx.log').read_text(errors='replace')
     lines=[json.loads(line.split(' RX diagnostics ',1)[1]) for line in rx.splitlines()
            if '[LAB][SSTV] RX diagnostics ' in line]
-    if not lines or not lines[-1]['imageComplete'] or lines[-1]['processingFailures']:
+    if (not lines or not lines[-1]['imageComplete'] or lines[-1]['imageMode'] != mode
+        or any(item.get('sourceDevice') != 'BlackHole 2ch' or item.get('processingFailures') != 0
+               or item.get('discontinuities') != 0 or item.get('droppedChunks') != 0 for item in lines)):
         raise RuntimeError('RX did not report a complete image; artifacts '+str(root))
+    notch=env.get('DECODIUM_LAB_SSTV_NOTCH_HZ')
+    if notch and ('[LAB][SSTV] manual interference notch '+notch+' Q 300') not in rx:
+        raise RuntimeError('requested notch was not active; artifacts '+str(root))
     if not (root/'received.png').exists(): raise RuntimeError('RX did not save image; artifacts '+str(root))
     subprocess.run([sys.executable,'tests/sstv/tools/compare_sstv_lab_images.py',
                     str(root/'reference.png'),str(root/'received.png'),

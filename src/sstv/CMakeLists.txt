@@ -335,9 +335,14 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif ()
 
 # E2EE is optional; builds without OpenSSL retain TLS-only sharing.
+option (DECODIUM_REQUIRE_SSTV_E2EE "Require the SSTV encrypted-sharing crypto backend" OFF)
 find_package (OpenSSL QUIET COMPONENTS Crypto)
+if (DECODIUM_REQUIRE_SSTV_E2EE AND NOT OpenSSL_Crypto_FOUND)
+  message (FATAL_ERROR "SSTV encrypted sharing requires OpenSSL Crypto")
+endif ()
 if (OpenSSL_Crypto_FOUND)
   add_library (decodium_sstv_share_aead STATIC
+    ../security/CoordinatedSecretBackend.cpp ../security/CoordinatedSecretBackend.h
     sharing/SstvShareAead.cpp sharing/SstvShareAead.h
     sharing/SstvShareEncryptedPayload.cpp sharing/SstvShareEncryptedPayload.h
     sharing/SstvShareKeyAgreement.cpp sharing/SstvShareKeyAgreement.h
@@ -455,9 +460,9 @@ target_link_libraries (decodium_sstv_sharing_ui
     Qt6::Core
     Qt6::Gui
   )
-if (APPLE AND TARGET decodium_sstv_share_aead)
+if (TARGET decodium_sstv_share_aead)
   target_link_libraries (decodium_sstv_sharing_ui PRIVATE decodium_sstv_share_aead)
-  target_compile_definitions (decodium_sstv_sharing_ui PRIVATE DECODIUM_SSTV_MACOS_E2EE_RECEIVE=1)
+  target_compile_definitions (decodium_sstv_sharing_ui PRIVATE DECODIUM_SSTV_E2EE=1)
 endif ()
 target_compile_features (decodium_sstv_sharing_ui PUBLIC cxx_std_17)
 set_target_properties (decodium_sstv_sharing_ui PROPERTIES

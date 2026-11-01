@@ -501,6 +501,46 @@ private slots:
         }
     }
 
+    void qrmSessionClosesOnSilentTailWithoutInventingMissingRows()
+    {
+        const auto mode = SstvAvtMode::Avt24;
+        const auto spec = SstvAvtProtocol::spec(mode);
+        for (const auto variant : {SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+            const SstvAvtMapper mapper({mode, kSampleRate, 0, variant});
+            SstvAvtRxSessionConfig config;
+            config.mode = mode;
+            config.variant = variant;
+            config.sampleRate = kSampleRate;
+            config.imageStartSample = kImageStart;
+            config.observationSpanSamples = 1U;
+            config.frequencyOffsetHz = kOffsetHz;
+            config.maximumInterpolationGapPixels = 0U;
+            SstvAvtRxSession complete(config), missing(config);
+            std::uint64_t sequence = 1U;
+            for (std::uint32_t line = 0; line < spec.height; ++line) {
+                auto observations = lineObservations(mapper, line, sequence);
+                complete.consume(observations);
+                if (line == spec.height / 2U) {
+                    for (auto& item : observations)
+                        item.status = SstvFrequencyStatus::LowSignal;
+                }
+                missing.consume(observations);
+            }
+            auto tail = observation(sequence, complete.imageEndSample(), 1900.0);
+            tail.status = SstvFrequencyStatus::LowSignal;
+            complete.consume(&tail, 1U);
+            missing.consume(&tail, 1U);
+            QCOMPARE(complete.state(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(missing.state(), SstvAvtRxSessionState::Partial);
+            QVERIFY(complete.snapshot().isComplete());
+            QVERIFY(!missing.snapshot().isComplete());
+            QCOMPARE(complete.decoderMetrics().linesPublished,
+                     static_cast<std::uint64_t>(spec.height));
+            QCOMPARE(missing.decoderMetrics().linesPublished,
+                     static_cast<std::uint64_t>(spec.height - 1U));
+        }
+    }
+
     void variantDecoderReconstructsDistinctRows()
     {
         const auto mode = SstvAvtMode::Avt24;

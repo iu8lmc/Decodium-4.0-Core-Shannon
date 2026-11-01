@@ -49,11 +49,14 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data,
     if (bounded.ok()) {
         SstvShareValidationError error;
         const QByteArray canonical = canonicalJson(bounded.object, &error);
-        if (!error.ok()
-            || !parseBoundedJsonObject(
+        // Bounded JSON accepts general JSON numbers; the canonical sharing
+        // format intentionally supports only exactly representable integers.
+        // A clean encoding error is therefore valid for e.g. 0.5 or 1e30.
+        if ((!error.ok() && !canonical.isEmpty())
+            || (error.ok() && !parseBoundedJsonObject(
                     canonical, kMaximumPersistenceJsonBytes,
                     kMaximumJsonDepth, kMaximumJsonNodes)
-                    .ok()) {
+                    .ok())) {
             invariantFailure();
         }
     }

@@ -29,4 +29,24 @@ hamDrmEqualizeFlatPilotChannel(
     double corruptedPilotSquaredErrorThreshold,
     double minimumChannelMagnitude = 1.0e-9);
 
+// Experimental flat estimate scored with the same bounded leave-one-out
+// residual used by the interpolated estimator.
+HamDrmValueResult<HamDrmPilotEqualizationResult>
+hamDrmEqualizeCrossValidatedFlatPilotChannel(
+    const HamDrmCellPlan& plan, std::size_t absoluteSymbol,
+    const std::vector<phy::HamDrmComplex>& carriers,
+    double corruptedPilotSquaredErrorThreshold,
+    double minimumChannelMagnitude = 1.0e-9);
+
+// Experimental per-symbol interpolation between observed pilot gains.
+// Pilot error is measured using a leave-one-out estimate so interpolation
+// cannot report a perfect fit merely by passing through every pilot.
+HamDrmValueResult<HamDrmPilotEqualizationResult>
+hamDrmEqualizeInterpolatedPilotChannel(
+    const HamDrmCellPlan& plan,
+    std::size_t absoluteSymbol,
+    const std::vector<phy::HamDrmComplex>& carriers,
+    double corruptedPilotSquaredErrorThreshold,
+    double minimumChannelMagnitude = 1.0e-9);
+
 } // namespace decodium::sstv::hamdrm::channel

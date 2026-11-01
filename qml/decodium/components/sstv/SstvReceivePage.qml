@@ -449,6 +449,47 @@ SstvPage {
                 }
             }
 
+            ColumnLayout {
+                objectName: "sstvInterferenceNotchControls"
+                Layout.fillWidth: true
+                enabled: !!(root.engine && !root.engine.sstvRxActive && !root.replayActive)
+                CheckBox {
+                    id: interferenceNotch
+                    objectName: "sstvInterferenceNotchEnabled"
+                    text: qsTr("Manual interference filter")
+                    checked: !!root.controls.interferenceNotchEnabled
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: qsTr("Frequency (Hz)"); color: root.secondaryTextColor }
+                    SpinBox {
+                        id: interferenceFrequency
+                        objectName: "sstvInterferenceNotchHz"
+                        from: 900; to: 2500; editable: true
+                        value: Number(root.controls.interferenceNotchHz || 1700)
+                        enabled: interferenceNotch.checked
+                    }
+                    Button {
+                        objectName: "sstvInterferenceNotchApply"
+                        text: qsTr("Apply")
+                        onClicked: {
+                            const ok = root.engine.configureSstvInterferenceNotch(
+                                interferenceNotch.checked, interferenceFrequency.value)
+                            root.feedback = ok ? qsTr("Interference filter applied")
+                                               : qsTr("Stop reception before changing the filter")
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("A narrow filter also removes image tones at this frequency. Use only when needed.")
+                    color: root.secondaryTextColor
+                    font.pixelSize: 10
+                    wrapMode: Text.Wrap
+                }
+            }
+
             Rectangle {
                 objectName: "sstvRxCorrectionControls"
                 Layout.fillWidth: true

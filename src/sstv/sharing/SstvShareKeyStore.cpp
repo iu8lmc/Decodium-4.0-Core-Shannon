@@ -46,7 +46,12 @@ SstvShareStoredKeyResult SstvShareKeyStore::load(const QString& account) const
         result.value.fill(QChar('\0'));
         return {{}, SstvShareKeyStoreError::StorageFailure};
     }
-    if (!result.found) return {{}, SstvShareKeyStoreError::Missing};
+    if (!result.found) {
+        const bool inconsistent = !result.value.isEmpty();
+        result.value.fill(QChar('\0'));
+        return {{}, inconsistent ? SstvShareKeyStoreError::StorageFailure
+                                 : SstvShareKeyStoreError::Missing};
+    }
     QByteArray encoded = result.value.toLatin1();
     result.value.fill(QChar('\0'));
     QByteArray key = QByteArray::fromBase64(encoded, QByteArray::AbortOnBase64DecodingErrors);

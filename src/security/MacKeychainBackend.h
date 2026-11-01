@@ -15,6 +15,7 @@ public:
     MacKeychainBackend(const MacKeychainBackend&) = delete;
     MacKeychainBackend& operator=(const MacKeychainBackend&) = delete;
     bool available() const override;
+    bool protects_private_values() const override { return available(); }
     bool supports_private_key_storage() const override;
     LookupResult lookup(const QString& service, const QString& account) const override;
     InsertResult store_if_absent(const QString& service, const QString& account, const QString& value) const override;

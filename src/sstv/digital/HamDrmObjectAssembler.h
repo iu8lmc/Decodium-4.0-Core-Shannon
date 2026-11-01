@@ -39,6 +39,15 @@ struct HamDrmAssembledObject final
     std::vector<std::uint8_t> originalBytes;
 };
 
+struct HamDrmPartialBody final
+{
+    std::vector<std::uint8_t> bytes;
+    std::vector<std::size_t> erasures;
+    std::vector<std::uint16_t> missingSegments;
+    std::size_t segmentSize {0U};
+    std::size_t totalSegments {0U};
+};
+
 class HamDrmObjectAssembler final
 {
 public:
@@ -54,11 +63,30 @@ public:
     HamDrmAssemblyProgress progress() const noexcept;
     std::vector<std::uint16_t> missingBodySegments() const;
     HamDrmValueResult<HamDrmAssembledObject> assembledObject() const;
+    // Requires the final marker, metadata and consistent regular segment
+    // lengths to make every missing byte's offset unambiguous.
+    std::optional<HamDrmPartialBody> partialBodyForRepair(bool allowMissingFinal = false) const;
 
     // Produces canonical, CRC-protected groups suitable for an atomic partial
     // persistence layer.  Replaying them reconstructs the same state.
     HamDrmValueResult<std::vector<std::vector<std::uint8_t>>>
     snapshotGroups() const;
+
+    // Visit the existing segment payloads without creating a second copy of
+    // the object. References are valid only for the duration of the callback.
+    template<typename Visitor>
+    void forEachSegment(Visitor&& visitor) const
+    {
+        const auto visit = [&](const SegmentCollection& collection, HamDrmMotGroupKind kind) {
+            for (const auto& entry : collection.segments) {
+                const bool last = collection.totalSegments.has_value()
+                    && static_cast<std::size_t>(entry.first) + 1U == *collection.totalSegments;
+                visitor(kind, entry.first, last, entry.second);
+            }
+        };
+        visit(header_, HamDrmMotGroupKind::Header);
+        visit(body_, HamDrmMotGroupKind::Body);
+    }
 
 private:
     struct SegmentCollection final

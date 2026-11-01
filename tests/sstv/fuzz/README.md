@@ -4,6 +4,18 @@ The libFuzzer targets are developer-only and disabled by default. Configure a
 separate build from the repository root with an upstream Clang installation
 that supplies libFuzzer, ASan, and UBSan:
 
+On macOS, Xcode's Apple Clang may not include libFuzzer. Homebrew's `llvm`
+package supplies an upstream Clang and the runtime; install it with
+`brew install llvm`, then set both compilers when creating a fresh build:
+
+```sh
+-DCMAKE_C_COMPILER="$(brew --prefix llvm)/bin/clang" \
+-DCMAKE_CXX_COMPILER="$(brew --prefix llvm)/bin/clang++"
+```
+
+These are CMake configure options, not commands on their own. A compiler
+cannot safely be changed in an existing build directory; create a new one.
+
 ```sh
 cmake -S . -B build-fuzz -G Ninja \
   -DBUILD_TESTING=ON \
