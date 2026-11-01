@@ -15,8 +15,8 @@ license="$app/Contents/Resources/doc/wsjtx/OPENSSL_LICENSE.txt"
   echo "error: missing executable, OpenSSL runtime, or OpenSSL licence" >&2; exit 1;
 }
 case "$arch" in arm64|x86_64) ;; *) echo "error: unsupported architecture" >&2; exit 1 ;; esac
-lipo -verify_arch "$arch" "$executable"
-lipo -verify_arch "$arch" "$crypto"
+lipo "$executable" -verify_arch "$arch"
+lipo "$crypto" -verify_arch "$arch"
 otool -L "$executable" | awk 'NR>1 {print $1}' | grep -Fxq '@rpath/libcrypto.3.dylib' || {
   echo "error: executable is not linked to bundled OpenSSL Crypto" >&2; exit 1;
 }
