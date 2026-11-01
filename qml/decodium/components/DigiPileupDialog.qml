@@ -273,6 +273,23 @@ Dialog {
             }
 
             // ── Live status ───────────────────────────────────────────
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Text {
+                    text: qsTr("Max QSOs per call (0 = no limit)")
+                    font.pixelSize: 12
+                    color: dlg.textSecondary
+                    Layout.fillWidth: true
+                }
+                SpinBox {
+                    from: 0; to: 3
+                    editable: false
+                    value: bridge.maxQsoPerCall
+                    onValueModified: bridge.maxQsoPerCall = value
+                }
+            }
+
             Text {
                 text: qsTr("Status")
                 font.pixelSize: 14

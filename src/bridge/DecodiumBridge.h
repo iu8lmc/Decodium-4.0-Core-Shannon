@@ -705,6 +705,7 @@ class DecodiumBridge : public QObject
     // slot attivi per la UI. Default OFF: comportamento MAM seriale invariato.
     Q_PROPERTY(bool mamMultiStream READ mamMultiStream WRITE setMamMultiStream NOTIFY mamMultiStreamChanged)
     Q_PROPERTY(int mamMaxStreams READ mamMaxStreams WRITE setMamMaxStreams NOTIFY mamMaxStreamsChanged)
+    Q_PROPERTY(int maxQsoPerCall READ maxQsoPerCall WRITE setMaxQsoPerCall NOTIFY maxQsoPerCallChanged)
     Q_PROPERTY(QVariantList mamActiveSlots READ mamActiveSlots NOTIFY mamActiveSlotsChanged)
     Q_PROPERTY(int mamActiveSlotCount READ mamActiveSlotCount NOTIFY mamActiveSlotsChanged)
     // Snapshot del payload MAM appena composto: include sia i QSO attivi sia
@@ -2312,7 +2313,8 @@ signals:
     void ft2AsyncSkipRedundantSyncDecodeChanged();  // 1.0.355
     void mamMultiStreamChanged();      // 1.0.364+ — MAM multi-stream FASE 3
     void digiPileupChanged();
-    void mamMaxStreamsChanged();       // 1.0.364+ — cap stream simultanei
+    void mamMaxStreamsChanged();
+    void maxQsoPerCallChanged();  // 1.0.731       // 1.0.364+ — cap stream simultanei
     void mamActiveSlotsChanged();      // 1.0.364+ — lista slot QSO attivi per UI
     void mamTxStreamsChanged();        // payload MAM composto per marker waterfall TX
     void mamCqSlotsChanged();          // 1.0.569+ — CQ paralleli sugli slot liberi
@@ -4199,6 +4201,12 @@ private:
     QString m_courtesySignoffBase;                         // base call of the courtesy 73 in progress
     QHash<QString, QList<qint64>> m_courtesySignoffSentMs; // when courtesy 73 were sent, per partner
     QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
+    // 1.0.731: QSOs logged today per call|band|mode (MSHV-style "max QSOs per call")
+    QHash<QString, int> m_qsoCountByKey;
+    QDate m_qsoCountDay;
+    int m_maxQsoPerCall {0};   // 0 = no limit (default), 1..3 = QSOs per call per band and mode
+    bool qsoLimitReached(const QString& call, double freqHz, const QString& mode) const;
+    bool isRecentMamWorkedOrLoggedDuplicate(const QString& call, double freqHz, const QString& mode) const;
 
     // B6 — cty.dat
     bool   m_ctyDatUpdating {false};
@@ -4724,6 +4732,9 @@ public:
     bool    mamMultiStream() const { return m_mamMultiStream; }
     void    setMamMaxStreams(int v);
     int     mamMaxStreams() const { return m_mamMaxStreams; }
+    int     maxQsoPerCall() const { return m_maxQsoPerCall; }  // 1.0.731
+    Q_INVOKABLE void setMaxQsoPerCall(int v);  // 1.0.731
+    void    loadQsoCountFromLog();  // 1.0.731: today's QSOs from decodium_log.adi at startup
     QVariantList mamActiveSlots() const;
     QVariantList mamTxStreams() const;
     int     mamActiveSlotCount() const { return m_mamSlots.size(); }

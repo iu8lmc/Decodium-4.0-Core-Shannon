@@ -4947,7 +4947,9 @@ constexpr int kRecentDuplicateLogWindowSeconds {90};
 // that did not hear our RR73 goes on calling for minutes, and at 90 s it was reopened and
 // answered again (Z32AW, 27/10/2026: RR73 sent 4 more times; EA4HUK: 4 TX2). The log
 // de-duplication window stays at 90 s.
-constexpr int kRecentAutoCqPartnerWindowSeconds {300};
+constexpr int kRecentAutoCqPartnerWindowSeconds {600};  // 1.0.732: 10 minutes, as in the pile-up
+// 1.0.732: MAM queue and late-report recovery: a station worked or logged within 10 minutes is not reopened
+constexpr int kMamRecentWorkedWindowSeconds {600};
 constexpr int kLateAutoLogGraceWindowSeconds {45};
 // The short in-memory QSO cooldown only breaks immediate 73/RR73 loops.  It
 // must never become a session-long "worked before" list, especially when the
@@ -25919,6 +25921,63 @@ void DecodiumBridge::setMamMultiStream(bool on)
 // 1 = risposta a un chiamante per volta ma sulla SUA frequenza (modello MSHV),
 // 10 = pileup pieno da DX-pedition. Persistito nello store canonico Decodium3;
 // riletto da loadSettings al prossimo avvio.
+void DecodiumBridge::setMaxQsoPerCall(int v)
+{
+    int const clamped = qBound(0, v, 3);
+    if (m_maxQsoPerCall == clamped) {
+        return;
+    }
+    m_maxQsoPerCall = clamped;
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+    decodium::beginActiveSettingsProfile(settings);
+    settings.setValue(QStringLiteral("MaxQsoPerCall"), m_maxQsoPerCall);
+    emit maxQsoPerCallChanged();
+    bridgeLog(QStringLiteral("Max QSOs per call set: %1").arg(m_maxQsoPerCall));
+}
+
+void DecodiumBridge::loadQsoCountFromLog()
+{
+    // 1.0.731: count the QSOs of today (UTC) in the ADIF log, per call|band|mode, so the limit
+    // survives a restart. SUBMODE is preferred over MODE (FT2 is logged as MFSK/FT2).
+    m_qsoCountByKey.clear();
+    QDate const today = QDateTime::currentDateTimeUtc().date();
+    m_qsoCountDay = today;
+    if (m_maxQsoPerCall <= 0) {
+        return;
+    }
+    QFile file(defaultAdifLogPath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    QString const text = QString::fromUtf8(file.readAll());
+    QString const todayToken = today.toString(QStringLiteral("yyyyMMdd"));
+    static QRegularExpression const fieldRx(QStringLiteral("<([A-Za-z_]+):(\\d+)(?::[A-Za-z])?>"));
+    for (QString const& rec : text.split(QStringLiteral("<EOR>"), Qt::SkipEmptyParts)) {
+        QHash<QString, QString> f;
+        QRegularExpressionMatchIterator it = fieldRx.globalMatch(rec);
+        while (it.hasNext()) {
+            QRegularExpressionMatch m = it.next();
+            int const len = m.captured(2).toInt();
+            int const start = m.capturedEnd(0);
+            f.insert(m.captured(1).toUpper(), rec.mid(start, len).trimmed());
+        }
+        if (f.value(QStringLiteral("QSO_DATE")) != todayToken) {
+            continue;
+        }
+        QString const call = Radio::base_callsign(f.value(QStringLiteral("CALL"))).trimmed().toUpper();
+        QString const band = f.value(QStringLiteral("BAND")).trimmed().toUpper();
+        QString mode = f.value(QStringLiteral("SUBMODE")).trimmed().toUpper();
+        if (mode.isEmpty()) {
+            mode = f.value(QStringLiteral("MODE")).trimmed().toUpper();
+        }
+        if (call.isEmpty() || band.isEmpty() || mode.isEmpty()) {
+            continue;
+        }
+        m_qsoCountByKey[QStringLiteral("%1|%2|%3").arg(call, band, mode)] += 1;
+    }
+    bridgeLog(QStringLiteral("Max QSOs per call: %1 QSO(s) of today loaded from the log").arg(m_qsoCountByKey.size()));
+}
+
 void DecodiumBridge::setMamMaxStreams(int v)
 {
     int const clamped = qBound(1, v, 10);
@@ -26391,6 +26450,12 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
 
     // Anti-riapertura: stazioni gia' lavorate di recente o in cooldown non
     // devono riaprire uno slot (eviterebbe loop su 73 ripetuti).
+    // 1.0.731: per-call limit: no new slot for a call that already reached it today
+    if (qsoLimitReached(partnerBase, m_frequency, m_mode)) {
+        bridgeLog(QStringLiteral("MAM: %1 already has %2 QSO(s) today on this band and mode, not answered")
+                      .arg(partnerBase).arg(m_maxQsoPerCall));
+        return;
+    }
     // 1.0.724: a station whose exchange was just dropped may still send its final 73 or a late
     // report: that is recovery traffic, not a new caller, and is let through.
     QStringList const earlyTokens = normalizedMessageTokens(message);
@@ -26402,7 +26467,7 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
     // 1.0.727: a station worked or logged within the 5-minute window is not reopened by a
     // directed decode, whatever the queue (PA3GHO reopened 3.5 min after its log, 29/10).
     if ((isRecentAutoCqDuplicate(partnerBase, m_frequency, m_mode)
-         || isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)
+         || isRecentMamWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)
          || m_qsoCooldown.contains(partnerBase))
         && !recoveryTraffic) {
         return;
@@ -26472,7 +26537,7 @@ void DecodiumBridge::mamIngestDecode(const QStringList& f)
             auto recoveryIt = m_mamLateReportRecoveries.find(partnerBase);
             if (recoveryIt != m_mamLateReportRecoveries.end()) {
                 MamLateReportRecovery& recovery = recoveryIt.value();
-                if (isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)) {
+                if (isRecentMamWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)) {
                     // 1.0.724: already in the log: resuming would log it again (R4AGO, 28/10)
                     m_mamLateReportRecoveries.erase(recoveryIt);
                     return;
@@ -26843,7 +26908,7 @@ void DecodiumBridge::mamPromoteLateReportRecoveries()
             ++it;
             continue;
         }
-        if (isRecentAutoCqWorkedOrLoggedDuplicate(it->slot.call, m_frequency, m_mode)) {
+        if (isRecentMamWorkedOrLoggedDuplicate(it->slot.call, m_frequency, m_mode)) {
             // 1.0.724: already logged recently: do not promote a copy of the exchange (R4AGO, 28/10)
             it = m_mamLateReportRecoveries.erase(it);
             continue;
@@ -38594,6 +38659,50 @@ bool DecodiumBridge::releaseCourtesySignoffIfActive(const QString& reason)
     return true;
 }
 
+bool DecodiumBridge::qsoLimitReached(const QString& call, double freqHz, const QString& mode) const
+{
+    if (m_maxQsoPerCall <= 0) {
+        return false;
+    }
+    QString const dedupeCall = Radio::base_callsign(call).trimmed().toUpper();
+    QString const dedupeBand = autoCqBandKeyForFrequency(freqHz).trimmed().toUpper();
+    QString const dedupeMode = (mode.isEmpty() ? m_mode : mode).trimmed().toUpper();
+    if (dedupeCall.isEmpty() || dedupeBand.isEmpty() || dedupeBand == QStringLiteral("--") || dedupeMode.isEmpty()) {
+        return false;
+    }
+    if (m_qsoCountDay != QDateTime::currentDateTimeUtc().date()) {
+        return false;   // a new day starts with no count
+    }
+    QString const key = QStringLiteral("%1|%2|%3").arg(dedupeCall, dedupeBand, dedupeMode);
+    return m_qsoCountByKey.value(key, 0) >= m_maxQsoPerCall;
+}
+
+bool DecodiumBridge::isRecentMamWorkedOrLoggedDuplicate(const QString& call, double freqHz,
+                                                       const QString& mode) const
+{
+    QString const dedupeCall = Radio::base_callsign(call).trimmed().toUpper();
+    if (dedupeCall.isEmpty()) {
+        return false;
+    }
+    QString const dedupeBand = autoCqBandKeyForFrequency(freqHz).trimmed().toUpper();
+    QString const dedupeMode = (mode.isEmpty() ? m_mode : mode).trimmed().toUpper();
+    if (dedupeBand.isEmpty() || dedupeBand == QStringLiteral("--") || dedupeMode.isEmpty()) {
+        return false;
+    }
+    QString const dedupeKey = QStringLiteral("%1|%2|%3").arg(dedupeCall, dedupeBand, dedupeMode);
+    QDateTime const nowUtc = QDateTime::currentDateTimeUtc();
+    auto const inWindow = [&nowUtc](QDateTime const& seenAt) {
+        qint64 const deltaSec = seenAt.secsTo(nowUtc);
+        return deltaSec >= 0 && deltaSec <= kMamRecentWorkedWindowSeconds;
+    };
+    auto const workedIt = m_recentAutoCqWorkedUtcByKey.constFind(dedupeKey);
+    if (workedIt != m_recentAutoCqWorkedUtcByKey.constEnd() && inWindow(workedIt.value())) {
+        return true;
+    }
+    auto const loggedIt = m_recentQsoLogUtcByKey.constFind(dedupeKey);
+    return loggedIt != m_recentQsoLogUtcByKey.constEnd() && inWindow(loggedIt.value());
+}
+
 void DecodiumBridge::clearRecentAutoCqAbandoned(const QString& call,
                                                 double freqHz,
                                                 const QString& mode,
@@ -41463,6 +41572,11 @@ void DecodiumBridge::checkAndStartPeriodicTx()
     auto inFlightReset = qScopeGuard([this]() { m_periodicTxInFlight = false; });
 
     if (m_manualTxHold || !m_monitoring || m_transmitting || m_tuning) return;
+    // 1.0.732: a CQ left in TX6 after AutoCQ was stopped is not retried every period
+    if (m_currentTx == 6 && !m_autoCqRepeat && !m_multiAnswerMode && !m_txEnabled
+        && m_explicitManualTxRequest == 0) {
+        return;
+    }
     // Telemetria di stazione rimandata dopo un QSO: prende questo slot, il CQ
     // o il messaggio successivo partono dal prossimo.
     if (m_stationTelemetryPending && !shouldDeferManualSyncTxStart()) {
@@ -41756,7 +41870,7 @@ void DecodiumBridge::checkAndStartPeriodicTx()
                 int const sentCount = qMax(1, m_nTx73);
                 int const remainingPeriods = qMax(1, signoffCap - sentCount);
                 qint64 const requiredWaitMs = periodMs > 0
-                    ? static_cast<qint64>(remainingPeriods) * periodMs
+                    ? static_cast<qint64>(qMax(2, remainingPeriods)) * periodMs  // 1.0.732: at least 2 periods
                     : 0;
                 if (requiredWaitMs > 0 && waitedMs < requiredWaitMs) {
                     return true;
@@ -43881,6 +43995,8 @@ void DecodiumBridge::loadSettings()
     // 1.0.315 — cap ripetizioni 73/RR73 anche per FT4 (default 4) e FT8 (default 3). Range 1-8.
     m_ft4SignoffRetryCap = qBound(1, s.value(QStringLiteral("Ft4SignoffRetryCap"), 4).toInt(), 8);
     m_ft8SignoffRetryCap = qBound(1, s.value(QStringLiteral("Ft8SignoffRetryCap"), 3).toInt(), 8);
+    m_maxQsoPerCall = qBound(0, s.value(QStringLiteral("MaxQsoPerCall"), 0).toInt(), 3);  // 1.0.731
+    loadQsoCountFromLog();  // 1.0.731: a restart does not reset today's per-call count
     // 1.0.437 - opt-in: extra signoff retries per partner debole (FTX). Default OFF.
     m_ftxWeakSignoffBoost = s.value(QStringLiteral("FtxWeakSignoffBoost"), false).toBool();
     m_ftxWeakSnrThreshold = qBound(-30, s.value(QStringLiteral("FtxWeakSnrThreshold"), -15).toInt(), -5);
@@ -47555,6 +47671,12 @@ void DecodiumBridge::logQsoNow()
         }
         if (!suppressDuplicateLog) {
             m_recentQsoLogUtcByKey.insert(dedupeKey, nowUtc);
+            // 1.0.731: count it for the per-call limit (reset at the start of each UTC day)
+            if (m_qsoCountDay != nowUtc.date()) {
+                m_qsoCountByKey.clear();
+                m_qsoCountDay = nowUtc.date();
+            }
+            m_qsoCountByKey[dedupeKey] += 1;
         }
         pruneRecentDuplicateCache(m_recentQsoLogUtcByKey, nowUtc);
     }

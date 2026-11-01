@@ -49,6 +49,7 @@ private slots:
     void courtesySignoffNeverLogsTwice();
     void mamPileUpClosesSlotsHonestly();
     void mamReopenAndResumeFixes();
+    void perCallLimitAndAlignedFixes();
     void clickedReportIsRecordedAsReceived();
     void mamDoesNotReopenWorkedPartnerWithin300s();
     void aQueuePlaceholderSnrIsTreatedAsUnknownByThePowerBudget();
@@ -273,7 +274,7 @@ void TestMamTxPayloadPolicy::aWorkedPartnerStaysOutForFiveMinutes()
     // the already-worked window was 90 s, and answered again.
     const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
     QVERIFY(!cpp.isEmpty());
-    QVERIFY(cpp.contains(QStringLiteral("constexpr int kRecentAutoCqPartnerWindowSeconds {300};")));
+    QVERIFY(cpp.contains(QStringLiteral("constexpr int kRecentAutoCqPartnerWindowSeconds {600};")));
     QVERIFY(cpp.contains(QStringLiteral("constexpr int kRecentDuplicateLogWindowSeconds {90};")));
     const QString dup = functionBody(
         cpp,
@@ -391,8 +392,8 @@ void TestMamTxPayloadPolicy::mamReopenAndResumeFixes()
         cpp,
         QStringLiteral("void DecodiumBridge::mamPromoteLateReportRecoveries"),
         QStringLiteral("void DecodiumBridge::mamPromoteFromQueue"));
-    QVERIFY(promote.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(it->slot.call")));
-    QVERIFY(ingest.contains(QStringLiteral("isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
+    QVERIFY(promote.contains(QStringLiteral("isRecentMamWorkedOrLoggedDuplicate(it->slot.call")));
+    QVERIFY(ingest.contains(QStringLiteral("isRecentMamWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
 }
 
 void TestMamTxPayloadPolicy::clickedReportIsRecordedAsReceived()
@@ -409,7 +410,24 @@ void TestMamTxPayloadPolicy::mamDoesNotReopenWorkedPartnerWithin300s()
     // 1.0.727: PA3GHO, logged at 23:01, was reopened from a directed decode at 23:03 (inside 5 min).
     const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
     QVERIFY(!cpp.isEmpty());
-    QVERIFY(cpp.contains(QStringLiteral("|| isRecentAutoCqWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
+    QVERIFY(cpp.contains(QStringLiteral("|| isRecentMamWorkedOrLoggedDuplicate(partnerBase, m_frequency, m_mode)")));
+}
+
+void TestMamTxPayloadPolicy::perCallLimitAndAlignedFixes()
+{
+    // 1.0.732: per-call QSO limit loaded from the log and set in the PILEUP dialog; FT2 closing
+    // wait of two periods; AutoCQ 10-minute window; stale TX6 retries stop.
+    const QString cpp = readSource(QStringLiteral("src/bridge/DecodiumBridge.cpp"));
+    QVERIFY(!cpp.isEmpty());
+    QVERIFY(cpp.contains(QStringLiteral("m_maxQsoPerCall = qBound(0, s.value(QStringLiteral(\"MaxQsoPerCall\"), 0).toInt(), 3);")));
+    QVERIFY(cpp.contains(QStringLiteral("loadQsoCountFromLog();  // 1.0.731")));
+    QVERIFY(cpp.contains(QStringLiteral("m_qsoCountByKey[dedupeKey] += 1;")));
+    QVERIFY(cpp.contains(QStringLiteral("if (qsoLimitReached(partnerBase, m_frequency, m_mode)) {")));
+    QVERIFY(cpp.contains(QStringLiteral("static_cast<qint64>(qMax(2, remainingPeriods)) * periodMs")));
+    QVERIFY(cpp.contains(QStringLiteral("constexpr int kMamRecentWorkedWindowSeconds {600};")));
+    QVERIFY(cpp.contains(QStringLiteral("1.0.732: a CQ left in TX6 after AutoCQ was stopped")));
+    const QString qml = readSource(QStringLiteral("qml/decodium/components/DigiPileupDialog.qml"));
+    QVERIFY(qml.contains(QStringLiteral("bridge.maxQsoPerCall = value")));
 }
 
 void TestMamTxPayloadPolicy::bridgeWiresCleanupAtEveryExit()
