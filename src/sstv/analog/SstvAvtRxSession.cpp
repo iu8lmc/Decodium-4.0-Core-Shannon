@@ -125,8 +125,11 @@ SstvAvtRxSessionUpdate SstvAvtRxSession::consume(
         lastInputSequence_ = observations[index].sequence;
         haveLastInputSample_ = true;
         haveLastInputSequence_ = true;
+        // Mapping uses observation centres. An interval extending past the
+        // boundary does not mean later centres inside the image have arrived;
+        // closing here would make the final pixels depend on chunking.
         reachedEnd = reachedEnd
-            || lastInputEndSample_ >= decoder_.imageEndSample();
+            || lastInputSample_ >= decoder_.imageEndSample();
     }
 
     const SstvAvtDecoderMetrics before = decoder_.metrics();

@@ -469,6 +469,11 @@ add_executable (test_decodium_update_support test_decodium_update_support.cpp)
 target_link_libraries (test_decodium_update_support Qt6::Test Qt6::Core)
 add_test (NAME test_decodium_update_support COMMAND $<TARGET_FILE:test_decodium_update_support>)
 
+add_executable (test_decodium_updater test_decodium_updater.cpp
+  ../src/app/DecodiumUpdater.cpp ../src/app/DecodiumUpdater.hpp)
+target_link_libraries (test_decodium_updater Qt6::Test Qt6::Core Qt6::Gui Qt6::Network)
+add_test (NAME test_decodium_updater COMMAND $<TARGET_FILE:test_decodium_updater>)
+
 add_executable (test_adif_export_sanitizer
   test_adif_export_sanitizer.cpp
   ../src/bridge/AdifExportSanitizer.cpp

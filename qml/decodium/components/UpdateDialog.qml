@@ -110,11 +110,7 @@ Dialog {
 
                 Label {
                     id: versionLabel
-                    // Il Dialog nasce dentro un Loader, che non ha dimensioni: prendere da li'
-    // la larghezza disponibile dava misure negative e faceva sparire lo sfondo.
-    // Il riferimento giusto e' l'Overlay della finestra.
-    parent: Overlay.overlay
-    anchors.centerIn: Overlay.overlay
+                    anchors.centerIn: parent
                     text: updater.latestVersion
                     color: accentOrange
                     font.pixelSize: 12

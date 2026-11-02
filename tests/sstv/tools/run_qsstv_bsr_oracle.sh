@@ -25,4 +25,4 @@ clang++ -std=c++17 -O2 -I"$repo_root" -I"$test_dir" $(pkg-config --cflags Qt6Cor
   "$repo_root/tests/sstv/tools/qsstv_bsr_oracle.cpp" \
   "$repo_root/build/src/sstv/digital/libdecodium_sstv_hamdrm_core.a" \
   $(pkg-config --libs Qt6Core) -o "$test_dir/qsstv-bsr"
-"$test_dir/qsstv-bsr"
+"$test_dir/qsstv-bsr" "$@"

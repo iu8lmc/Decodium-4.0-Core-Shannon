@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <iterator>
 #include <stdexcept>
 #include <utility>
 
@@ -696,7 +697,7 @@ std::vector<std::uint16_t> HamDrmController::selectedMissingSegments() const
 {
     const InboxRecord* record = recordFor(selectedTransportId_);
     return record != nullptr && record->assembler
-        ? record->assembler->missingBodySegments()
+        ? bsrMissingSegments(*record)
         : std::vector<std::uint16_t> {};
 }
 
@@ -725,7 +726,66 @@ QString HamDrmController::missingSegmentsText() const
     if (shown < missing.size()) {
         result += tr(" … and %1 more").arg(missing.size() - shown);
     }
+    const InboxRecord* record = recordFor(selectedTransportId_);
+    if (!missing.empty() && record && !record->progress.bodyExtentKnown)
+        result += tr(" (segment count inferred from header)");
     return result;
+}
+
+std::optional<std::size_t> HamDrmController::bsrSegmentSize(const InboxRecord& record)
+{
+    if (!record.assembler || !record.metadata || record.bodySegmentSize == 0U) return {};
+    std::size_t segmentBytes = record.bodySegmentSize;
+    std::optional<std::size_t> finalIndex;
+    std::size_t finalBytes = 0U;
+    std::optional<std::size_t> regularBytes;
+    bool inconsistentRegular = false;
+    record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
+                                         bool last, const std::vector<std::uint8_t>& payload) {
+        if (kind != HamDrmMotGroupKind::Body) return;
+        if (last) { finalIndex = index; finalBytes = payload.size(); }
+        else if (!regularBytes) regularBytes = payload.size();
+        else if (*regularBytes != payload.size()) inconsistentRegular = true;
+    });
+    if (inconsistentRegular) return {};
+    if (finalIndex && *finalIndex > 0U) {
+        if (record.metadata->bodySize <= finalBytes) return {};
+        const std::size_t prefix = record.metadata->bodySize - finalBytes;
+        if (prefix % *finalIndex != 0U || prefix / *finalIndex < finalBytes
+            || (regularBytes && *regularBytes != prefix / *finalIndex)) return {};
+        segmentBytes = prefix / *finalIndex;
+    } else if (regularBytes) {
+        segmentBytes = *regularBytes;
+    }
+    if (segmentBytes == 0U || segmentBytes > std::numeric_limits<std::uint16_t>::max()) return {};
+    return segmentBytes;
+}
+
+std::vector<std::uint16_t> HamDrmController::bsrMissingSegments(const InboxRecord& record) const
+{
+    if (!record.assembler || !record.metadata) return {};
+    if (record.progress.bodyExtentKnown) return record.assembler->missingBodySegments();
+    const auto segmentSize = bsrSegmentSize(record);
+    if (!segmentSize) return {};
+    const std::size_t bytes = record.metadata->bodySize;
+    const std::size_t total = bytes / *segmentSize + (bytes % *segmentSize != 0U);
+    if (total < 2U || total > config_.limits.maximumSegments || total > 65536U) return {};
+    std::vector<bool> present(total, false);
+    bool inconsistent = false;
+    record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
+                                         bool last, const std::vector<std::uint8_t>& payload) {
+        if (kind != HamDrmMotGroupKind::Body) return;
+        if (last || std::size_t(index) >= total - 1U || payload.size() != *segmentSize) {
+            inconsistent = true;
+            return;
+        }
+        present[index] = true;
+    });
+    if (inconsistent) return {};
+    std::vector<std::uint16_t> missing;
+    for (std::size_t index = 0U; index < total; ++index)
+        if (!present[index]) missing.push_back(static_cast<std::uint16_t>(index));
+    return missing;
 }
 
 bool HamDrmController::canBuildBsr() const
@@ -734,8 +794,8 @@ bool HamDrmController::canBuildBsr() const
     return record != nullptr && record->assembler
         && record->progress.headerComplete
         && record->metadata.has_value()
-        && record->bodySegmentSize > 0U
-        && !record->assembler->missingBodySegments().empty();
+        && bsrSegmentSize(*record).has_value()
+        && !bsrMissingSegments(*record).empty();
 }
 
 QString HamDrmController::bsrText() const
@@ -748,15 +808,24 @@ QString HamDrmController::receivedBsrText() const
     return receivedBsrText_;
 }
 
+bool HamDrmController::receivedBsrSegmentSizeUnknown() const
+{
+    const QByteArray bytes = receivedBsrText_.toLatin1();
+    const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                         std::size_t(bytes.size()), config_.limits, true);
+    return request.ok() && request.value->segmentSize == 0U;
+}
+
 bool HamDrmController::canRepairReceivedBsr() const
 {
     if (!lastRepairSource_ || receivedBsrText_.isEmpty()
         || selectedProfileId_ != lastRepairSource_->profileId) return false;
     const QByteArray bytes = receivedBsrText_.toLatin1();
     const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
-                                         std::size_t(bytes.size()), config_.limits);
+                                         std::size_t(bytes.size()), config_.limits, true);
     if (!request.ok() || request.value->transportId != lastRepairSource_->object.metadata.transportId
-        || request.value->segmentSize != lastRepairSource_->segmentBytes
+        || (request.value->segmentSize != 0U
+            && request.value->segmentSize != lastRepairSource_->segmentBytes)
         || (request.value->filename && *request.value->filename != lastRepairSource_->object.metadata.filename))
         return false;
     return std::all_of(request.value->missingSegments.begin(), request.value->missingSegments.end(),
@@ -944,6 +1013,7 @@ bool HamDrmController::startRx()
         static_cast<void>(takeCompletedObject(id));
     if (!receivedBsrText_.isEmpty()) {
         receivedBsrText_.clear();
+        receivedBsrObjectId_.reset();
         emit receivedBsrChanged();
         emit repairStateChanged();
     }
@@ -1211,6 +1281,15 @@ bool HamDrmController::startTxWithRs(const QUrl& localImage, int level)
 
     auto metadata = candidate.value->metadata;
     auto body = byteVector(candidate.value->bytes);
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_PNG_AS_JP2") == 1
+        && level == 0 && metadata.mimeType == "image/png") {
+        metadata.filename = metadata.filename.substr(0, metadata.filename.find_last_of('.')) + ".jp2";
+        metadata.contentType = 0U;
+        metadata.contentSubtype = 0U;
+        metadata.mimeType.clear();
+        qInfo("[LAB][HAMDRM] PNG declared as JP2 for interoperability test");
+    }
     if (level != 0) {
         const std::string extension = metadata.mimeType == "image/jpeg" ? "jpg"
             : metadata.mimeType == "image/jp2" ? "jp2"
@@ -1461,7 +1540,7 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
     }
     if (assembled.value->metadata.mimeType == "application/x-hamdrm-bsr") {
         const auto parsed = parseHamDrmBsr(assembled.value->originalBytes.data(),
-                                            assembled.value->originalBytes.size(), config_.limits);
+                                            assembled.value->originalBytes.size(), config_.limits, true);
         if (!parsed.ok()) return parsed.status;
         const std::size_t size = assembled.value->originalBytes.size();
         if (completedObjects_ >= config_.maximumCompletedObjects
@@ -1469,6 +1548,14 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
             return HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
                                          "completed HAMDRM inbox capacity is exhausted");
         }
+        std::map<std::pair<HamDrmMotGroupKind, std::uint16_t>, std::pair<bool, QByteArray>> fingerprints;
+        record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t number,
+                                             bool last, const std::vector<std::uint8_t>& bytes) {
+            const QByteArray payload = QByteArray::fromRawData(
+                reinterpret_cast<const char*>(bytes.data()), static_cast<qsizetype>(bytes.size()));
+            fingerprints.emplace(std::make_pair(kind, number),
+                                 std::make_pair(last, QCryptographicHash::hash(payload, QCryptographicHash::Sha256)));
+        });
         if (partialStore_) {
             const auto removed = partialStore_->remove(record.progress.transportId);
             if (!removed.ok()) return removed;
@@ -1477,6 +1564,7 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
         record.metadata = assembled.value->metadata;
         record.persisted = false;
         record.completedObject = std::move(*assembled.value);
+        record.completedSegments = std::move(fingerprints);
         record.assembler.reset();
         record.headerSegments.clear();
         record.headerBytes = 0U;
@@ -1502,6 +1590,21 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
             : decoded.value->extension == "gif" ? 0U
             : decoded.value->extension == "bmp" ? 2U : 1U;
         object.originalBytes = std::move(decoded.value->bytes);
+    }
+    // Some QSSTV transmitters retain a small original PNG in the compressed
+    // image buffer while labelling the MOT object as JP2. Accept only the
+    // exact PNG signature here, then apply the normal bounded PNG validation
+    // and expose a filename matching the actual format.
+    auto& object = *assembled.value;
+    static constexpr unsigned char pngSignature[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+    if (object.metadata.mimeType == "image/jp2"
+        && object.originalBytes.size() >= sizeof(pngSignature)
+        && std::equal(std::begin(pngSignature), std::end(pngSignature), object.originalBytes.begin())
+        && object.metadata.filename.size() >= 4U
+        && object.metadata.filename.substr(object.metadata.filename.size() - 4U) == ".jp2") {
+        object.metadata.mimeType = "image/png";
+        object.metadata.contentSubtype = 3U;
+        object.metadata.filename.replace(object.metadata.filename.size() - 4U, 4U, ".png");
     }
     const auto image = validateHamDrmImage(
         assembled.value->metadata,
@@ -1729,18 +1832,21 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         return status;
     }
 
-    // The live-repair laboratory discards segment 1 until the initial TX is
-    // finished. No incoming object is seeded; the later repair is accepted.
+    // The live-repair laboratory discards a selected segment until the
+    // initial TX is finished. The later repair is accepted.
     const QString labDropUntil = QStandardPaths::isTestModeEnabled()
         ? qEnvironmentVariable("DECODIUM_LAB_DROP_MOT_UNTIL") : QString {};
     if (!labDropUntil.isEmpty() && QDir::isAbsolutePath(labDropUntil)
         && !QFile::exists(labDropUntil) && record.metadata
         && record.metadata->mimeType != "application/x-hamdrm-rs"
         && record.metadata->mimeType != "application/x-hamdrm-bsr"
-        && parsed.value->kind == HamDrmMotGroupKind::Body && parsed.value->segmentNumber == 1U) {
+        && parsed.value->kind == HamDrmMotGroupKind::Body
+        && (qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_MOT_FINAL") == 1
+            ? parsed.value->lastSegment : parsed.value->segmentNumber == 1U)) {
         if (!labDroppedMotSegment_) {
             labDroppedMotSegment_ = true;
-            qInfo("[LAB][HAMDRM] discarded initial MOT body segment 1");
+            qInfo() << "[LAB][HAMDRM] discarded initial MOT body segment" << parsed.value->segmentNumber
+                    << "final" << parsed.value->lastSegment;
         }
         return HamDrmStatus::success();
     }
@@ -1801,13 +1907,20 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         publishInbox(transportId);
         if (record.metadata->mimeType == "application/x-hamdrm-bsr") {
             const auto& b = record.completedObject->originalBytes;
-            const auto parsedBsr = parseHamDrmBsr(b.data(), b.size(), config_.limits);
+            const auto parsedBsr = parseHamDrmBsr(b.data(), b.size(), config_.limits, true);
             Q_ASSERT(parsedBsr.ok());
-            receivedBsrText_ = QString::fromLatin1(
+            const QString text = QString::fromLatin1(
                 reinterpret_cast<const char*>(b.data()), static_cast<qsizetype>(b.size()));
-            emit receivedBsrChanged();
-            emit repairStateChanged();
-            emit bsrReceived(transportId, parsedBsr.value->transportId);
+            const bool textChanged = text != receivedBsrText_;
+            if (textChanged || receivedBsrObjectId_ != transportId) {
+                receivedBsrObjectId_ = transportId;
+                if (textChanged) {
+                    receivedBsrText_ = text;
+                    emit receivedBsrChanged();
+                    emit repairStateChanged();
+                }
+                emit bsrReceived(transportId, parsedBsr.value->transportId);
+            }
         } else {
             emit objectCompleted(transportId, QString::fromStdString(record.metadata->filename));
         }
@@ -1869,17 +1982,16 @@ QString HamDrmController::buildBsr(int transportId, bool qsstvExtended)
             tr("Selected HAMDRM object has insufficient partial metadata for BSR")));
         return {};
     }
-    const auto missing = record->assembler->missingBodySegments();
+    const auto missing = bsrMissingSegments(*record);
     if (missing.empty()) {
         static_cast<void>(reject(
             QStringLiteral("bsr"),
             tr("Selected HAMDRM object has no missing body segments")));
         return {};
     }
+    const auto segmentBytes = bsrSegmentSize(*record);
     const HamDrmProfile* profile = currentProfile();
-    if (profile == nullptr
-        || record->bodySegmentSize
-            > std::numeric_limits<std::uint16_t>::max()) {
+    if (profile == nullptr || !segmentBytes) {
         static_cast<void>(reject(QStringLiteral("bsr"),
                                  tr("HAMDRM BSR profile or segment size is invalid")));
         return {};
@@ -1888,7 +2000,7 @@ QString HamDrmController::buildBsr(int transportId, bool qsstvExtended)
     HamDrmBsrRequest request;
     request.transportId = static_cast<std::uint16_t>(transportId);
     request.headerReceived = true;
-    request.segmentSize = static_cast<std::uint16_t>(record->bodySegmentSize);
+    request.segmentSize = static_cast<std::uint16_t>(*segmentBytes);
     request.missingSegments = missing;
     if (qsstvExtended) {
         request.filename = record->metadata->filename;
@@ -1926,7 +2038,41 @@ bool HamDrmController::startBsrTx(int transportId, bool qsstvExtended)
     if (!profile) return reject(QStringLiteral("bsr-tx"), tr("Selected HAMDRM profile is invalid"));
     const QString text = buildBsr(transportId, qsstvExtended);
     if (text.isEmpty()) return false;
-    const QByteArray body = text.toLatin1();
+    QByteArray body = text.toLatin1();
+    // Test-only bridge for transmitting an independently generated BSR
+    // through the normal modem. Require it to match the actual partial object.
+    const QString labBsr = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_BSR_UNKNOWN_FILE") : QString {};
+    if (!labBsr.isEmpty()) {
+        QFile file(labBsr);
+        if (!QDir::isAbsolutePath(labBsr) || QFileInfo(file).isSymLink()
+            || !file.open(QIODevice::ReadOnly) || file.size() <= 0 || file.size() > 128 * 1024)
+            return reject(QStringLiteral("bsr-tx"), tr("Laboratory BSR file is invalid"));
+        const QByteArray candidate = file.readAll();
+        const auto supplied = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(candidate.constData()),
+                                              std::size_t(candidate.size()), config_.limits, true);
+        const auto generated = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(body.constData()),
+                                               std::size_t(body.size()), config_.limits);
+        if (!supplied.ok() || !generated.ok() || supplied.value->segmentSize != 0U
+            || supplied.value->transportId != generated.value->transportId
+            || supplied.value->missingSegments != generated.value->missingSegments
+            || supplied.value->filename != generated.value->filename
+            || supplied.value->qsstvCompatibilityCode != generated.value->qsstvCompatibilityCode)
+            return reject(QStringLiteral("bsr-tx"), tr("Laboratory BSR does not match the partial object"));
+        body = candidate;
+        qInfo("[LAB][REPAIR] transmitting matched external BSR with unknown segment size");
+    }
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_BSR_SEPARATORS") == 1) {
+        QByteArray formatted;
+        formatted.reserve(body.size() * 3);
+        for (const char value : body) {
+            if (value == '\n') formatted.append("\r\n\r\n");
+            else formatted.append(value);
+        }
+        body = std::move(formatted);
+        qInfo("[LAB][HAMDRM] BSR separator compatibility control enabled");
+    }
     HamDrmMotObjectMetadata metadata;
     metadata.filename = "bsr.bin";
     metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
@@ -1961,7 +2107,7 @@ bool HamDrmController::startBsrRepair()
         return reject(QStringLiteral("bsr-repair"), tr("BSR does not match the last completed image transmission"));
     const QByteArray bytes = receivedBsrText_.toLatin1();
     const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
-                                         std::size_t(bytes.size()), config_.limits);
+                                         std::size_t(bytes.size()), config_.limits, true);
     if (!request.ok()) return reject(QStringLiteral("bsr-repair"), tr("Received BSR is invalid"));
     HamDrmEncodedObject repair;
     repair.metadata = lastRepairSource_->object.metadata;

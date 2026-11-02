@@ -346,6 +346,7 @@ if (OpenSSL_Crypto_FOUND)
     sharing/SstvShareAead.cpp sharing/SstvShareAead.h
     sharing/SstvShareEncryptedPayload.cpp sharing/SstvShareEncryptedPayload.h
     sharing/SstvShareKeyAgreement.cpp sharing/SstvShareKeyAgreement.h
+    sharing/SstvShareP256.cpp sharing/SstvShareP256.h
     sharing/SstvShareRecipientEncryption.cpp sharing/SstvShareRecipientEncryption.h
     sharing/SstvShareKeyStore.cpp sharing/SstvShareKeyStore.h
     sharing/SstvShareSecureEnvelope.cpp sharing/SstvShareSecureEnvelope.h)

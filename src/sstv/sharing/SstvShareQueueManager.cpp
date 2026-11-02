@@ -757,8 +757,21 @@ bool absentManagedPath(const QString& path)
     return !info.exists() && !info.isSymLink();
 }
 
+bool retainUnexpiredEncryptedAcknowledgement(const QString& state,
+                                            const QByteArray& manifestJson,
+                                            const QDateTime& now)
+{
+    if (state != sstvManagedTransferStateName(SstvManagedTransferState::Acknowledged))
+        return false;
+    const auto manifest = parseSstvShareManifestV1(manifestJson);
+    // A damaged acknowledged record must not silently become reclaimable.
+    return !manifest.ok() || (manifest.manifest->encryption.mode == SstvShareEncryptionMode::EndToEnd
+                              && manifest.manifest->expiresUtc > now);
+}
+
 bool reclaimTerminalTransfersForInsert(QSqlDatabase& database,
                                        qsizetype maximumRows,
+                                       const QDateTime& now,
                                        ReclaimedRowCounts* reclaimed,
                                        QString* error)
 {
@@ -784,6 +797,7 @@ bool reclaimTerminalTransfersForInsert(QSqlDatabase& database,
         QString incomingId;
         QString destinationPath;
         QString stagingPath;
+        bool retain {false};
     };
     QVector<Candidate> candidates;
     candidates.reserve(static_cast<qsizetype>(std::min<qint64>(
@@ -791,7 +805,7 @@ bool reclaimTerminalTransfersForInsert(QSqlDatabase& database,
     QSqlQuery select(database);
     select.prepare(QStringLiteral(
         "SELECT transfer_id,direction,provider_id,incoming_id,"
-        "destination_path,staging_path FROM sstv_share_transfers "
+        "destination_path,staging_path,state,manifest_json FROM sstv_share_transfers "
         "WHERE state IN(%1) "
         "ORDER BY updated_ms ASC,created_ms ASC,transfer_id ASC LIMIT 100000")
                        .arg(terminalManagedStatesSql()));
@@ -814,12 +828,16 @@ bool reclaimTerminalTransfersForInsert(QSqlDatabase& database,
         candidate.incomingId = select.value(3).toString();
         candidate.destinationPath = select.value(4).toString();
         candidate.stagingPath = select.value(5).toString();
+        candidate.retain = candidate.direction == SstvManagedTransferDirection::Download
+            && retainUnexpiredEncryptedAcknowledgement(select.value(6).toString(),
+                                                        select.value(7).toByteArray(), now);
         candidates.push_back(std::move(candidate));
     }
     select.finish();
 
     qint64 removedTransfers = 0;
     for (const Candidate& candidate : std::as_const(candidates)) {
+        if (candidate.retain) continue;
         if (candidate.direction == SstvManagedTransferDirection::Download
             && (!absentManagedPath(candidate.destinationPath)
                 || !absentManagedPath(candidate.stagingPath))) {
@@ -866,6 +884,7 @@ bool reclaimTerminalTransfersForInsert(QSqlDatabase& database,
 
 bool reclaimClosedInboxForInsert(QSqlDatabase& database,
                                  qsizetype maximumRows,
+                                 const QDateTime& now,
                                  ReclaimedRowCounts* reclaimed,
                                  QString* error)
 {
@@ -891,11 +910,12 @@ bool reclaimClosedInboxForInsert(QSqlDatabase& database,
         QString destinationPath;
         QString stagingPath;
         bool hasTransfer {false};
+        bool retain {false};
     };
     QSqlQuery select(database);
     select.prepare(QStringLiteral(
         "SELECT inbox.provider_id,inbox.incoming_id,inbox.transfer_id,"
-        "transfer.direction,transfer.destination_path,transfer.staging_path "
+        "transfer.direction,transfer.destination_path,transfer.staging_path,transfer.state,transfer.manifest_json "
         "FROM sstv_share_inbox AS inbox LEFT JOIN sstv_share_transfers "
         "AS transfer ON transfer.transfer_id=inbox.transfer_id "
         "WHERE inbox.disposition IN(%1) AND (transfer.transfer_id IS NULL "
@@ -927,6 +947,9 @@ bool reclaimClosedInboxForInsert(QSqlDatabase& database,
                 static_cast<SstvManagedTransferDirection>(direction);
             candidate.destinationPath = select.value(4).toString();
             candidate.stagingPath = select.value(5).toString();
+            candidate.retain = candidate.direction == SstvManagedTransferDirection::Download
+                && retainUnexpiredEncryptedAcknowledgement(select.value(6).toString(),
+                                                            select.value(7).toByteArray(), now);
         }
         candidates.push_back(std::move(candidate));
     }
@@ -934,6 +957,7 @@ bool reclaimClosedInboxForInsert(QSqlDatabase& database,
 
     qint64 removed = 0;
     for (const Candidate& candidate : std::as_const(candidates)) {
+        if (candidate.retain) continue;
         if (candidate.hasTransfer
             && candidate.direction == SstvManagedTransferDirection::Download
             && (!absentManagedPath(candidate.destinationPath)
@@ -1258,9 +1282,11 @@ SstvShareValidationError SstvShareQueueLimits::validate() const
 struct SstvShareQueueStore::Impl final
 {
     Impl(SstvShareQueueConfig suppliedConfig,
-         std::shared_ptr<SstvShareFaultInjector> suppliedFault)
+         std::shared_ptr<SstvShareFaultInjector> suppliedFault,
+         std::function<QDateTime()> suppliedClock)
         : config(std::move(suppliedConfig))
         , fault(std::move(suppliedFault))
+        , clock(std::move(suppliedClock))
         , connectionName(QStringLiteral("sstv_share_queue_%1")
               .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)))
     {
@@ -1277,8 +1303,15 @@ struct SstvShareQueueStore::Impl final
             || fail(error, QStringLiteral("share queue store used from wrong thread"));
     }
 
+    QDateTime now() const
+    {
+        const auto value = clock ? clock() : QDateTime::currentDateTimeUtc();
+        return value.isValid() ? value.toUTC() : QDateTime::currentDateTimeUtc();
+    }
+
     SstvShareQueueConfig config;
     std::shared_ptr<SstvShareFaultInjector> fault;
+    std::function<QDateTime()> clock;
     QString connectionName;
     QSqlDatabase database;
     QThread* thread {nullptr};
@@ -1295,9 +1328,10 @@ struct SstvShareQueueStore::Impl final
 
 SstvShareQueueStore::SstvShareQueueStore(
     SstvShareQueueConfig config,
-    std::shared_ptr<SstvShareFaultInjector> faultInjector)
+    std::shared_ptr<SstvShareFaultInjector> faultInjector,
+    std::function<QDateTime()> clock)
     : m_impl(std::make_unique<Impl>(std::move(config),
-                                    std::move(faultInjector)))
+                                    std::move(faultInjector), std::move(clock)))
 {
 }
 
@@ -1620,6 +1654,7 @@ bool SstvShareQueueStore::insertTransfer(SstvManagedTransferRecord& record,
     ReclaimedRowCounts reclaimed;
     if (!reclaimTerminalTransfersForInsert(
             m_impl->database, m_impl->config.limits.maximumRecords,
+            m_impl->now(),
             &reclaimed, error)) {
         m_impl->database.rollback();
         return false;
@@ -1706,9 +1741,36 @@ bool SstvShareQueueStore::insertDownloadTransferAndInbox(
         || !beginTransaction(m_impl->database, error)) {
         return false;
     }
+    // Provider-controlled inbox IDs may change while the authenticated
+    // envelope remains identical. Keep a single active or successfully
+    // accepted download per provider while its queue history is retained.
+    // Failed/cancelled/rejected records remain retryable, and rejecting a
+    // duplicate inbox item must not itself be blocked by this check.
+    if (record.state == SstvManagedTransferState::DownloadQueued) {
+        QSqlQuery duplicate(m_impl->database);
+        duplicate.prepare(QStringLiteral(
+            "SELECT 1 FROM sstv_share_transfers WHERE direction=:direction "
+            "AND provider_id=:provider AND idempotency_key=:key "
+            "AND state NOT IN ('Failed','Cancelled','Rejected','Expired') LIMIT 1"));
+        duplicate.bindValue(QStringLiteral(":direction"),
+                            static_cast<int>(SstvManagedTransferDirection::Download));
+        duplicate.bindValue(QStringLiteral(":provider"), record.providerId);
+        duplicate.bindValue(QStringLiteral(":key"), record.idempotencyKey);
+        if (!duplicate.exec()) {
+            m_impl->database.rollback();
+            return fail(error, QStringLiteral("could not check duplicate incoming envelope"));
+        }
+        if (duplicate.next()) {
+            duplicate.finish();
+            m_impl->database.rollback();
+            return fail(error, QStringLiteral("incoming envelope already queued or accepted"));
+        }
+        duplicate.finish();
+    }
     ReclaimedRowCounts reclaimed;
     if (!reclaimTerminalTransfersForInsert(
             m_impl->database, m_impl->config.limits.maximumRecords,
+            m_impl->now(),
             &reclaimed, error)) {
         m_impl->database.rollback();
         return false;
@@ -1898,6 +1960,7 @@ bool SstvShareQueueStore::upsertInboxItem(
         if (!reclaimClosedInboxForInsert(
                 m_impl->database,
                 m_impl->config.limits.maximumInboxItems,
+                m_impl->now(),
                 &reclaimed, error)) {
             m_impl->database.rollback();
             return false;
@@ -1932,6 +1995,10 @@ std::optional<SstvPersistentInboxItem> SstvShareQueueStore::inboxItem(
         fail(error, QStringLiteral("invalid inbox lookup"));
         return std::nullopt;
     }
+    if (m_impl->fault && m_impl->fault->shouldFail(SstvShareFaultPoint::BeforeInboxLookup, incomingId)) {
+        fail(error, QStringLiteral("inbox lookup failed"));
+        return std::nullopt;
+    }
     QSqlQuery query(m_impl->database);
     query.prepare(QStringLiteral("SELECT %1 FROM sstv_share_inbox "
                                  "WHERE provider_id=:provider "
@@ -1944,6 +2011,7 @@ std::optional<SstvPersistentInboxItem> SstvShareQueueStore::inboxItem(
         return std::nullopt;
     }
     if (!query.next()) {
+        if (query.lastError().isValid()) fail(error, QStringLiteral("inbox lookup failed"));
         return std::nullopt;
     }
     return readInbox(query, error);
@@ -2194,7 +2262,7 @@ struct SstvShareQueueManager::Impl final
          std::shared_ptr<SstvShareFaultInjector> suppliedFault,
          std::function<QDateTime()> suppliedClock)
         : owner(suppliedOwner)
-        , store(std::move(config), suppliedFault)
+        , store(std::move(config), suppliedFault, suppliedClock)
         , fault(std::move(suppliedFault))
         , clock(std::move(suppliedClock))
     {
@@ -2950,8 +3018,80 @@ struct SstvShareQueueManager::Impl final
         driveAgain();
     }
 
+    void cleanupAcceptedDownload(SstvManagedTransferRecord& record)
+    {
+        if (record.stagingPath.isEmpty()) return;
+        const QString directory = QDir(store.config().downloadRoot)
+            .absoluteFilePath(QStringLiteral(".partial"));
+        const QString expected = QDir(directory).absoluteFilePath(
+            record.transferId + QStringLiteral(".part"));
+        const QFileInfo info(record.stagingPath);
+        bool failed = record.stagingPath != expected || info.isSymLink();
+        if (!failed && info.exists()) {
+            failed = !info.isFile() || QFileInfo(directory).isSymLink()
+                || !pathWithin(directory, record.stagingPath, true)
+                || !QFile::remove(record.stagingPath);
+        }
+        const QString diagnostic = QStringLiteral(
+            "accepted download temporary file removal failed");
+        if (failed && record.lastErrorRedacted.isEmpty()) {
+            record.lastErrorRedacted = diagnostic;
+            updateRecord(record);
+        } else if (!failed && record.lastErrorRedacted == diagnostic) {
+            record.lastErrorRedacted.clear();
+            updateRecord(record);
+        }
+    }
+
+    void cleanupExpiredDownload(SstvManagedTransferRecord& record)
+    {
+        const QString root = store.config().downloadRoot;
+        bool failed = false;
+        const auto removeManaged = [&failed](const QString& directory,
+                                             const QString& path,
+                                             const QString& expectedName) {
+            const QFileInfo info(path);
+            if (path != QDir(directory).absoluteFilePath(expectedName)
+                || info.isSymLink() || (info.exists() && !info.isFile())) {
+                failed = failed || info.exists() || info.isSymLink();
+                return;
+            }
+            if (info.exists() && (!pathWithin(QFileInfo(directory).canonicalFilePath(), path, true)
+                                  || !QFile::remove(path))) failed = true;
+        };
+        removeManaged(QDir(root).absoluteFilePath(QStringLiteral(".partial")),
+                      record.stagingPath, record.transferId + QStringLiteral(".part"));
+        removeManaged(QDir(root).absoluteFilePath(QStringLiteral("validated")),
+                      record.destinationPath, record.transferId + QStringLiteral(".png"));
+        const QString diagnostic = failed
+            ? QStringLiteral("incoming transfer expired; temporary file removal failed")
+            : QStringLiteral("incoming transfer expired");
+        if (record.lastErrorRedacted != diagnostic) {
+            record.lastErrorRedacted = diagnostic;
+            updateRecord(record);
+        }
+    }
+
+    bool expireIncomingDownload(SstvManagedTransferRecord& record)
+    {
+        const auto manifest = parseSstvShareManifestV1(record.canonicalManifestJson);
+        if (!manifest.ok() || manifest.manifest->expiresUtc > now()) {
+            return false;
+        }
+        record.state = SstvManagedTransferState::Expired;
+        record.lastErrorRedacted = QStringLiteral("incoming transfer expired");
+        record.nextRetryUtc = {};
+        if (updateRecordAndInbox(record, SstvInboxDisposition::Expired)) {
+            if (fault && fault->shouldFail(SstvShareFaultPoint::AfterExpiryCommitBeforeCleanup,
+                                           record.transferId)) return true;
+            cleanupExpiredDownload(record);
+        }
+        return true;
+    }
+
     bool finishDownloadedPayload(SstvManagedTransferRecord& record)
     {
+        if (expireIncomingDownload(record)) return false;
         QString error;
         quint64 bytes = 0U;
         const auto digest = sha256File(record.stagingPath,
@@ -2972,7 +3112,11 @@ struct SstvShareQueueManager::Impl final
         const QString validatedRoot = QDir(store.config().downloadRoot)
             .absoluteFilePath(QStringLiteral("validated"));
         SstvIncomingMediaValidationResult validation;
-        if (parsed.ok() && item) {
+        if (parsed.ok() && item && store.config().incomingPolicyAllows
+            && !store.config().incomingPolicyAllows(*parsed.manifest)) {
+            validation.failure = SstvShareProviderFailure::Integrity;
+            validation.redactedDiagnostic = QStringLiteral("incoming item violates current sender policy");
+        } else if (parsed.ok() && item) {
             if (parsed.manifest->encryption.mode == SstvShareEncryptionMode::EndToEnd) {
                 validation.failure = SstvShareProviderFailure::Integrity;
                 validation.redactedDiagnostic = QStringLiteral(
@@ -2998,6 +3142,7 @@ struct SstvShareQueueManager::Impl final
                     item->expiresUtc);
             }
         }
+        if (expireIncomingDownload(record)) return false;
         if (!validation.ok()
             || validation.handoff->stagedCanonicalPath
                 != QFileInfo(record.destinationPath).canonicalFilePath()) {
@@ -3059,6 +3204,10 @@ struct SstvShareQueueManager::Impl final
         QString error;
         auto record = store.transfer(transferId, &error);
         if (!record) {
+            return;
+        }
+        if (expireIncomingDownload(*record)) {
+            driveAgain();
             return;
         }
         if (!result.ok()) {
@@ -3713,6 +3862,7 @@ struct SstvShareQueueManager::Impl final
     QSet<QString> uploadRecreateNeeded;
     QSet<QString> uploadResumeNeeded;
     QSet<QString> singleShotReplayNeeded;
+    QHash<QString, QDateTime> pendingGalleryRecovery;
     quint64 uploadedBytes {0U};
     quint64 downloadedBytes {0U};
     QDateTime diagnosticsResetUtc;
@@ -3772,6 +3922,20 @@ bool SstvShareQueueManager::initialize(QString* error)
         return false;
     }
     QString queryError;
+    const auto history = m_impl->store.queryTransfers(
+        SstvShareTransferView::History,
+        m_impl->store.config().limits.maximumRecords, &queryError);
+    if (!queryError.isEmpty()) {
+        return fail(error, queryError);
+    }
+    for (SstvManagedTransferRecord record : history) {
+        if (record.direction == SstvManagedTransferDirection::Download) {
+            if (record.state == SstvManagedTransferState::Expired)
+                m_impl->cleanupExpiredDownload(record);
+            else if (record.state == SstvManagedTransferState::Acknowledged)
+                m_impl->cleanupAcceptedDownload(record);
+        }
+    }
     const auto active = m_impl->store.queryTransfers(
         SstvShareTransferView::Active,
         m_impl->store.config().limits.maximumRecords, &queryError);
@@ -3816,6 +3980,13 @@ bool SstvShareQueueManager::initialize(QString* error)
                 return false;
             }
         } else {
+            if (record.state == SstvManagedTransferState::Accepted
+                || record.state == SstvManagedTransferState::Acknowledging)
+                m_impl->cleanupAcceptedDownload(record);
+            if (record.state == SstvManagedTransferState::AwaitingAcceptance
+                && m_impl->expireIncomingDownload(record)) {
+                continue;
+            }
             if (record.state == SstvManagedTransferState::Downloading) {
                 record.state = SstvManagedTransferState::DownloadQueued;
                 ++record.restartRecoveries;
@@ -3830,8 +4001,15 @@ bool SstvShareQueueManager::initialize(QString* error)
                 || record.state == SstvManagedTransferState::Acknowledging) {
                 const auto manifest = parseSstvShareManifestV1(
                     record.canonicalManifestJson);
+                QString inboxError;
                 const auto item = m_impl->store.inboxItem(
-                    record.providerId, record.incomingId, error);
+                    record.providerId, record.incomingId, &inboxError);
+                if (!inboxError.isEmpty()) {
+                    record.lastErrorRedacted = QStringLiteral("Gallery verification temporarily unavailable");
+                    if (!m_impl->updateRecord(record, error)) return false;
+                    m_impl->pendingGalleryRecovery.insert(record.transferId, m_impl->now().addSecs(5));
+                    continue;
+                }
                 const QString validatedRoot = QDir(
                     m_impl->store.config().downloadRoot)
                     .absoluteFilePath(QStringLiteral("validated"));
@@ -3842,7 +4020,27 @@ bool SstvShareQueueManager::initialize(QString* error)
                           *manifest.manifest, item->receivedUtc,
                           item->expiresUtc)
                     : SstvIncomingMediaValidationResult {};
-                if (!validation.ok()) {
+                std::optional<bool> imported {false};
+                const bool mayCheckGallery = !validation.ok() && manifest.ok() && item
+                    && (record.state == SstvManagedTransferState::Accepted
+                        || record.state == SstvManagedTransferState::Acknowledging)
+                    && !QFileInfo::exists(record.destinationPath)
+                    && !QFileInfo(record.destinationPath).isSymLink()
+                    && m_impl->store.config().verifiedGalleryImport;
+                if (mayCheckGallery)
+                    imported = m_impl->store.config().verifiedGalleryImport(record, *manifest.manifest);
+                if (mayCheckGallery && !imported.has_value()) {
+                    record.lastErrorRedacted = QStringLiteral("Gallery verification temporarily unavailable");
+                    if (!m_impl->updateRecord(record, error)) return false;
+                    m_impl->pendingGalleryRecovery.insert(record.transferId, m_impl->now().addSecs(5));
+                    continue;
+                }
+                if ((validation.ok() || imported.value_or(false))
+                    && record.lastErrorRedacted == QStringLiteral("Gallery verification temporarily unavailable")) {
+                    record.lastErrorRedacted.clear();
+                    if (!m_impl->updateRecord(record, error)) return false;
+                }
+                if (!validation.ok() && !imported.value_or(false)) {
                     record.state = SstvManagedTransferState::Failed;
                     record.lastFailure = validation.failure;
                     record.lastErrorRedacted =
@@ -4079,7 +4277,8 @@ QString SstvShareQueueManager::queueDownload(
     const QString& incomingId,
     const QString& destinationRelativePath,
     QString* error,
-    bool requireEndToEnd)
+    bool requireEndToEnd,
+    bool requireSenderAuthentication)
 {
     if (!m_impl->ownerThread(error) || !m_impl->initialized) {
         fail(error, QStringLiteral("share queue manager is not initialized"));
@@ -4104,6 +4303,12 @@ QString SstvShareQueueManager::queueDownload(
     if (requireEndToEnd
         && parsed.manifest->encryption.mode != SstvShareEncryptionMode::EndToEnd) {
         fail(error, QStringLiteral("this download requires end-to-end encryption"));
+        return {};
+    }
+    if (requireSenderAuthentication
+        && (parsed.manifest->encryption.mode != SstvShareEncryptionMode::EndToEnd
+            || parsed.manifest->encryption.senderAuthAlgorithm.isEmpty())) {
+        fail(error, QStringLiteral("this download requires an authenticated sender"));
         return {};
     }
     const auto destination = secureDestinationPath(
@@ -4159,10 +4364,16 @@ bool SstvShareQueueManager::acceptDownload(const QString& transferId,
         return fail(error, QStringLiteral("share queue manager is not initialized"));
     }
     auto record = m_impl->store.transfer(transferId, error);
+    if (m_impl->pendingGalleryRecovery.contains(transferId))
+        return fail(error, QStringLiteral("Gallery verification is pending"));
     if (!record || record->direction != SstvManagedTransferDirection::Download
         || (record->state != SstvManagedTransferState::AwaitingAcceptance
             && record->state != SstvManagedTransferState::Accepted)) {
         return fail(error, QStringLiteral("download is not awaiting acceptance"));
+    }
+    if (record->state == SstvManagedTransferState::AwaitingAcceptance
+        && m_impl->expireIncomingDownload(*record)) {
+        return fail(error, QStringLiteral("incoming transfer expired"));
     }
     const auto handoff = validatedIncomingHandoff(transferId, error);
     if (!handoff) {
@@ -4172,6 +4383,10 @@ bool SstvShareQueueManager::acceptDownload(const QString& transferId,
     if (m_impl->fault && m_impl->fault->shouldFail(
             SstvShareFaultPoint::BeforeDownloadAtomicCommit, transferId)) {
         return fail(error, QStringLiteral("atomic acceptance boundary failed"));
+    }
+    if (record->state == SstvManagedTransferState::AwaitingAcceptance
+        && m_impl->expireIncomingDownload(*record)) {
+        return fail(error, QStringLiteral("incoming transfer expired"));
     }
     record->state = SstvManagedTransferState::Accepted;
     record->lastFailure = SstvShareProviderFailure::None;
@@ -4184,9 +4399,7 @@ bool SstvShareQueueManager::acceptDownload(const QString& transferId,
     // The raw remote bytes are quarantined only until explicit acceptance.
     // The metadata-free PNG named by the validated handoff remains private;
     // Gallery publication is intentionally owned by a later integration.
-    if (QFileInfo::exists(record->stagingPath)) {
-        QFile::remove(record->stagingPath);
-    }
+    m_impl->cleanupAcceptedDownload(*record);
     return true;
 }
 
@@ -4205,7 +4418,7 @@ SstvShareOperationId SstvShareQueueManager::acknowledgeDownloadAsync(
     QString error;
     auto record = m_impl->store.transfer(transferId, &error);
     const auto shareProvider = record ? m_impl->provider(record->providerId) : nullptr;
-    if (!record || !shareProvider
+    if (!record || !shareProvider || m_impl->pendingGalleryRecovery.contains(transferId)
         || record->direction != SstvManagedTransferDirection::Download
         || record->state != SstvManagedTransferState::Accepted) {
         if (completion) {
@@ -4921,15 +5134,77 @@ qsizetype SstvShareQueueManager::processDue(QString* error)
     }
     m_impl->pumping = true;
     qsizetype started = 0;
+    int galleryChecks = 0;
     const auto records = m_impl->store.queryTransfers(
         SstvShareTransferView::Active,
         m_impl->store.config().limits.maximumRecords, error);
     for (SstvManagedTransferRecord record : records) {
-        if (m_impl->active.size()
-            >= m_impl->store.config().limits.maximumConcurrentTransfers) {
-            break;
+        // An unaccepted image can expire before a deferred verification retry
+        // is due. Persist expiry atomically with the inbox before cleanup.
+        if (m_impl->pendingGalleryRecovery.contains(record.transferId)
+            && record.direction == SstvManagedTransferDirection::Download
+            && record.state == SstvManagedTransferState::AwaitingAcceptance
+            && !record.cancelRequested
+            && m_impl->expireIncomingDownload(record)) {
+            const auto persisted = m_impl->store.transfer(record.transferId);
+            if (persisted && persisted->state == SstvManagedTransferState::Expired)
+                m_impl->pendingGalleryRecovery.remove(record.transferId);
+            continue;
+        }
+        if (m_impl->pendingGalleryRecovery.contains(record.transferId)) {
+            if (galleryChecks >= 2 || m_impl->now() < m_impl->pendingGalleryRecovery.value(record.transferId))
+                continue;
+            ++galleryChecks;
+            const auto manifest = parseSstvShareManifestV1(record.canonicalManifestJson);
+            QString inboxError;
+            const auto item = m_impl->store.inboxItem(record.providerId, record.incomingId, &inboxError);
+            if (!inboxError.isEmpty()) {
+                m_impl->pendingGalleryRecovery[record.transferId] = m_impl->now().addSecs(5);
+                continue;
+            }
+            std::optional<bool> verified {false};
+            if (manifest.ok() && item) {
+                const QString validatedRoot = QDir(m_impl->store.config().downloadRoot)
+                    .absoluteFilePath(QStringLiteral("validated"));
+                const auto staged = inspectStagedIncomingMedia(record.destinationPath, validatedRoot,
+                    record.transferId, record.incomingId, *manifest.manifest, item->receivedUtc, item->expiresUtc);
+                if (staged.ok()) verified = true;
+                else if (!QFileInfo::exists(record.destinationPath)
+                         && !QFileInfo(record.destinationPath).isSymLink()
+                         && m_impl->store.config().verifiedGalleryImport)
+                    verified = m_impl->store.config().verifiedGalleryImport(record, *manifest.manifest);
+            }
+            if (!verified.has_value()) {
+                m_impl->pendingGalleryRecovery[record.transferId] = m_impl->now().addSecs(5);
+                continue;
+            }
+            if (*verified) {
+                if (record.lastErrorRedacted == QStringLiteral("Gallery verification temporarily unavailable"))
+                    record.lastErrorRedacted.clear();
+                m_impl->cleanupAcceptedDownload(record);
+            } else {
+                record.state = SstvManagedTransferState::Failed;
+                record.lastFailure = SstvShareProviderFailure::Integrity;
+                record.lastErrorRedacted = QStringLiteral("Gallery recovery integrity verification failed");
+            }
+            if (!m_impl->updateRecord(record, error)) continue;
+            m_impl->pendingGalleryRecovery.remove(record.transferId);
+            if (!*verified) continue;
         }
         if (m_impl->active.contains(record.transferId)) {
+            continue;
+        }
+        if (record.direction == SstvManagedTransferDirection::Download
+            && !record.cancelRequested
+            && record.state != SstvManagedTransferState::Accepted
+            && record.state != SstvManagedTransferState::Acknowledging
+            && record.state != SstvManagedTransferState::Rejecting
+            && !record.canonicalManifestJson.isEmpty()
+            && m_impl->expireIncomingDownload(record)) {
+            continue;
+        }
+        if (m_impl->active.size()
+            >= m_impl->store.config().limits.maximumConcurrentTransfers) {
             continue;
         }
         const auto shareProvider = m_impl->provider(record.providerId);
@@ -4965,21 +5240,6 @@ qsizetype SstvShareQueueManager::processDue(QString* error)
                 ++started;
             }
             continue;
-        }
-        if (record.state != SstvManagedTransferState::Accepted
-            && record.state != SstvManagedTransferState::Acknowledging
-            && record.state != SstvManagedTransferState::Rejecting
-            && record.state != SstvManagedTransferState::AwaitingAcceptance
-            && record.canonicalManifestJson.size() > 0) {
-            const auto manifest = parseSstvShareManifestV1(
-                record.canonicalManifestJson);
-            if (manifest.ok() && manifest.manifest->expiresUtc <= m_impl->now()) {
-                record.state = SstvManagedTransferState::Expired;
-                record.lastErrorRedacted = QStringLiteral("incoming transfer expired");
-                m_impl->updateRecordAndInbox(
-                    record, SstvInboxDisposition::Expired);
-                continue;
-            }
         }
         bool operationStarted = false;
         if (record.state == SstvManagedTransferState::DownloadQueued
@@ -5075,6 +5335,17 @@ SstvShareQueueManager::validatedIncomingHandoff(
         fail(error, QStringLiteral("validated handoff metadata is unavailable"));
         return {};
     }
+    if (record->state == SstvManagedTransferState::AwaitingAcceptance
+        && m_impl->store.config().incomingPolicyAllows
+        && !m_impl->store.config().incomingPolicyAllows(*manifest.manifest)) {
+        fail(error, QStringLiteral("incoming item violates current sender policy"));
+        return {};
+    }
+    if (record->state == SstvManagedTransferState::AwaitingAcceptance
+        && manifest.manifest->expiresUtc <= m_impl->now()) {
+        fail(error, QStringLiteral("incoming transfer expired"));
+        return {};
+    }
     const QString validatedRoot = QDir(m_impl->store.config().downloadRoot)
         .absoluteFilePath(QStringLiteral("validated"));
     const auto validation = inspectStagedIncomingMedia(
@@ -5083,6 +5354,11 @@ SstvShareQueueManager::validatedIncomingHandoff(
         item->expiresUtc);
     if (!validation.ok()) {
         fail(error, validation.redactedDiagnostic);
+        return {};
+    }
+    if (record->state == SstvManagedTransferState::AwaitingAcceptance
+        && manifest.manifest->expiresUtc <= m_impl->now()) {
+        fail(error, QStringLiteral("incoming transfer expired"));
         return {};
     }
     return validation.handoff;

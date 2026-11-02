@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SstvShareKeyStore.h"
 #include "SstvShareKeyAgreement.h"
+#include "SstvShareP256.h"
 #include "SstvShareRecipientEncryption.h"
 #include "SstvShareSecurity.h"
 #include <QCryptographicHash>
@@ -37,7 +38,16 @@ QString SstvShareKeyStore::recipientAccount(const QString& provider, const QStri
     if (!isSafeShareIdentifier(provider) || !isSafeShareIdentifier(recipient)) return {};
     return QStringLiteral("peer-") + hash(provider.toUtf8() + '\0' + recipient.toUtf8());
 }
+QString SstvShareKeyStore::senderSigningAccount(const QString& provider, const QString& sender) const
+{
+    if (!isSafeShareIdentifier(provider) || !isSafeShareIdentifier(sender)) return {};
+    return QStringLiteral("sender-p256-") + hash(provider.toUtf8() + '\0' + sender.toUtf8());
+}
 SstvShareStoredKeyResult SstvShareKeyStore::load(const QString& account) const
+{
+    return loadBounded(account, 32, 32);
+}
+SstvShareStoredKeyResult SstvShareKeyStore::loadBounded(const QString& account, qsizetype minimum, qsizetype maximum) const
 {
     if (service_.isEmpty() || account.isEmpty()) return {{}, SstvShareKeyStoreError::InvalidInput};
     if (!backend_.available()) return {{}, SstvShareKeyStoreError::Unavailable};
@@ -54,8 +64,13 @@ SstvShareStoredKeyResult SstvShareKeyStore::load(const QString& account) const
     }
     QByteArray encoded = result.value.toLatin1();
     result.value.fill(QChar('\0'));
+    if (minimum <= 0 || maximum < minimum || maximum > 512
+        || encoded.size() > 4 * ((maximum + 2) / 3)) {
+        wipe(encoded);
+        return {{}, SstvShareKeyStoreError::Corrupt};
+    }
     QByteArray key = QByteArray::fromBase64(encoded, QByteArray::AbortOnBase64DecodingErrors);
-    const bool valid = key.size() == 32 && key.toBase64() == encoded;
+    const bool valid = key.size() >= minimum && key.size() <= maximum && key.toBase64() == encoded;
     wipe(encoded);
     if (!valid) { wipe(key); return {{}, SstvShareKeyStoreError::Corrupt}; }
     return {std::move(key), SstvShareKeyStoreError::None};
@@ -99,6 +114,68 @@ SstvShareStoredKeyResult SstvShareKeyStore::createOrLoadPublicKey() const
                        && *publicKey != generated->publicKey))
         return {{}, SstvShareKeyStoreError::Conflict};
     return {std::move(publicKey), SstvShareKeyStoreError::None};
+}
+SstvShareStoredKeyResult SstvShareKeyStore::loadSigningPrivateKey() const
+{
+    if (!backend_.supports_private_key_storage()) return {{}, SstvShareKeyStoreError::Unavailable};
+    auto result = loadBounded(QStringLiteral("identity-p256-v1"), 1, 512);
+    if (result.ok() && !sstvShareP256PublicKey(*result.key)) {
+        wipe(*result.key);
+        return {{}, SstvShareKeyStoreError::Corrupt};
+    }
+    return result;
+}
+SstvShareStoredKeyResult SstvShareKeyStore::createOrLoadSigningPublicKey() const
+{
+    auto existing = loadSigningPrivateKey();
+    if (existing.ok()) {
+        auto publicKey = sstvShareP256PublicKey(*existing.key);
+        wipe(*existing.key);
+        return publicKey ? SstvShareStoredKeyResult {std::move(publicKey), SstvShareKeyStoreError::None}
+                         : SstvShareStoredKeyResult {{}, SstvShareKeyStoreError::Corrupt};
+    }
+    if (existing.error != SstvShareKeyStoreError::Missing) return {{}, existing.error};
+    auto generated = sstvShareGenerateP256KeyPair();
+    if (!generated) return {{}, SstvShareKeyStoreError::StorageFailure};
+    QByteArray encodedBytes = generated->privateDer.toBase64();
+    QString encoded = QString::fromLatin1(encodedBytes);
+    wipe(encodedBytes);
+    const auto stored = backend_.store_if_absent(service_, QStringLiteral("identity-p256-v1"), encoded);
+    encoded.fill(QChar('\0'));
+    wipe(generated->privateDer);
+    if (stored != secure_settings::InsertResult::Created
+        && stored != secure_settings::InsertResult::AlreadyExists)
+        return {{}, SstvShareKeyStoreError::StorageFailure};
+    auto check = loadSigningPrivateKey();
+    if (!check.ok()) return {{}, check.error};
+    auto publicKey = sstvShareP256PublicKey(*check.key);
+    wipe(*check.key);
+    if (!publicKey || (stored == secure_settings::InsertResult::Created && *publicKey != generated->publicDer))
+        return {{}, SstvShareKeyStoreError::Conflict};
+    return {std::move(publicKey), SstvShareKeyStoreError::None};
+}
+SstvShareKeyStoreError SstvShareKeyStore::pinSenderSigningKey(const QString& provider, const QString& sender,
+    const QByteArray& publicDer, const QString& verifiedFingerprint) const
+{
+    const auto account = senderSigningAccount(provider, sender);
+    if (service_.isEmpty() || account.isEmpty() || verifiedFingerprint.isEmpty()
+        || sstvShareP256Fingerprint(publicDer) != verifiedFingerprint)
+        return SstvShareKeyStoreError::InvalidInput;
+    auto existing = loadBounded(account, 91, 91);
+    if (existing.ok()) return *existing.key == publicDer ? SstvShareKeyStoreError::None : SstvShareKeyStoreError::Conflict;
+    if (existing.error != SstvShareKeyStoreError::Missing) return existing.error;
+    const auto stored = backend_.store_if_absent(service_, account, QString::fromLatin1(publicDer.toBase64()));
+    if (stored != secure_settings::InsertResult::Created && stored != secure_settings::InsertResult::AlreadyExists)
+        return SstvShareKeyStoreError::StorageFailure;
+    const auto check = loadBounded(account, 91, 91);
+    if (!check.ok()) return check.error;
+    return *check.key == publicDer ? SstvShareKeyStoreError::None : SstvShareKeyStoreError::Conflict;
+}
+SstvShareStoredKeyResult SstvShareKeyStore::pinnedSenderSigningKey(const QString& provider, const QString& sender) const
+{
+    auto result = loadBounded(senderSigningAccount(provider, sender), 91, 91);
+    if (result.ok() && !sstvShareP256PublicKeyValid(*result.key)) return {{}, SstvShareKeyStoreError::Corrupt};
+    return result;
 }
 SstvShareKeyStoreError SstvShareKeyStore::pinRecipient(const QString& provider, const QString& recipient,
     const QByteArray& publicKey, const QString& verifiedFingerprint) const

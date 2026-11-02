@@ -45,7 +45,7 @@ class DecodiumUpdater : public QObject
     Q_PROPERTY(bool    appImageRuntime READ appImageRuntime CONSTANT)
 
 public:
-    explicit DecodiumUpdater(QObject* parent = nullptr);
+    explicit DecodiumUpdater(QObject* parent = nullptr, QNetworkAccessManager* network = nullptr);
 
     bool    available()      const { return m_available; }
     QString currentVersion() const { return m_currentVersion; }
@@ -112,7 +112,8 @@ private:
     QString m_assetName;
     QString m_releasePageUrl;
     QString m_bestCheckedVersion;
-    bool    m_anyRepositoryCheckedSuccessfully {false};
+    bool    m_allRepositoryChecksSucceeded {true};
+    QString m_lastCheckFailure;
     bool    m_available {false};
     bool    m_busy {false};
     int     m_progress {0};

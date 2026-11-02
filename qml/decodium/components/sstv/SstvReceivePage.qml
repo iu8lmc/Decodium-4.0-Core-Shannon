@@ -389,9 +389,9 @@ SstvPage {
                             objectName: "sstvRadiofaxApply"
                             text: qsTr("Apply")
                             onClicked: {
-                                const ok = root.engine.configureSstvRadiofaxRxAligned(
+                                const ok = root.engine.configureSstvRadiofaxRxProfile(
                                     faxEnabled.checked, Number(faxIoc.currentText),
-                                    faxWidth.value, faxHeight.value, faxFldigiAlignment.checked)
+                                    faxWidth.value, faxHeight.value, faxFldigiAlignment.checked, faxWmoDeadSector.checked)
                                 root.feedback = ok ? qsTr("Receiver profile applied")
                                                    : qsTr("Radiofax profile rejected; check settings or disable FAX480")
                             }
@@ -403,10 +403,19 @@ SstvPage {
                         enabled: faxEnabled.checked && root.engine && !root.engine.sstvRxActive && !root.replayActive
                         checked: !!root.controls.radiofaxCenteredPhasing
                         text: qsTr("FLdigi phasing: centered stripe and white end line")
+                        onToggled: if (checked) faxWmoDeadSector.checked = false
+                    }
+                    CheckBox {
+                        id: faxWmoDeadSector
+                        objectName: "sstvRadiofaxWmoDeadSector"
+                        enabled: faxEnabled.checked && root.engine && !root.engine.sstvRxActive && !root.replayActive
+                        checked: !!root.controls.radiofaxWmoDeadSector
+                        text: qsTr("WMO 4.5% white dead sector (width is active image)")
+                        onToggled: if (checked) faxFldigiAlignment.checked = false
                     }
                     Label {
                         Layout.fillWidth: true
-                        text: qsTr("Set IOC and maximum image size before monitoring. Start and stop detection are approximate. Reset to receive another image.")
+                        text: qsTr("Set IOC and maximum image size before monitoring. Start and stop detection are approximate. The receiver automatically searches for the next image.")
                         color: root.secondaryTextColor
                         font.pixelSize: 10
                         wrapMode: Text.Wrap

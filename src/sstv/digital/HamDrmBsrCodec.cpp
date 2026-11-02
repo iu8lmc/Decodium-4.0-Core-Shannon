@@ -57,7 +57,7 @@ std::vector<std::string_view> lines(const std::uint8_t* data, std::size_t size)
             while (lineEnd > lineBegin && data[lineEnd - 1U] == '\r') {
                 --lineEnd;
             }
-            output.emplace_back(begin + lineBegin, lineEnd - lineBegin);
+            if (lineEnd > lineBegin) output.emplace_back(begin + lineBegin, lineEnd - lineBegin);
             lineBegin = index + 1U;
         }
     }
@@ -72,14 +72,15 @@ std::vector<std::string_view> lines(const std::uint8_t* data, std::size_t size)
 
 HamDrmStatus validateBsr(const HamDrmBsrRequest& request,
                          const HamDrmLimits& limits,
-                         bool requireMissing)
+                         bool requireMissing,
+                         bool allowUnknownSegmentSize = false)
 {
     if (!request.headerReceived) {
         return HamDrmStatus::failure(
             HamDrmErrorCode::UnsupportedFeature,
             "only HAMDRM BSR requests with a valid MOT header are supported");
     }
-    if (request.segmentSize == 0U
+    if ((!allowUnknownSegmentSize && request.segmentSize == 0U)
         || request.segmentSize > limits.maximumSegmentBytes) {
         return HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument,
                                      "BSR segment size is invalid");
@@ -128,6 +129,12 @@ HamDrmValueResult<std::vector<std::uint8_t>> encodeHamDrmBsr(
     HamDrmBsrDialect dialect,
     const HamDrmLimits& limits)
 {
+    if (dialect != HamDrmBsrDialect::EasyPalCompatible
+        && dialect != HamDrmBsrDialect::QsstvExtended) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument,
+                                      "unsupported BSR dialect")};
+    }
     if (const auto status = validateBsr(request, limits, true); !status.ok()) {
         return {std::nullopt, status};
     }
@@ -194,7 +201,8 @@ HamDrmValueResult<std::vector<std::uint8_t>> encodeHamDrmBsr(
 HamDrmValueResult<HamDrmBsrRequest> parseHamDrmBsr(
     const std::uint8_t* data,
     std::size_t size,
-    const HamDrmLimits& limits)
+    const HamDrmLimits& limits,
+    bool allowUnknownSegmentSize)
 {
     if (data == nullptr || size == 0U) {
         return {std::nullopt,
@@ -214,7 +222,13 @@ HamDrmValueResult<HamDrmBsrRequest> parseHamDrmBsr(
                                           "BSR contains non-text bytes")};
         }
     }
-    const auto parsedLines = lines(data, size);
+    // QSSTV removes CR before splitting and ignores empty lines. Normalize
+    // only these separators after validating and bounding the original input.
+    std::string normalized;
+    normalized.reserve(size);
+    for (std::size_t index = 0U; index < size; ++index)
+        if (data[index] != '\r') normalized.push_back(static_cast<char>(data[index]));
+    const auto parsedLines = lines(reinterpret_cast<const std::uint8_t*>(normalized.data()), normalized.size());
     if (parsedLines.size() < 5U || parsedLines[1] != "H_OK") {
         return {std::nullopt,
                 HamDrmStatus::failure(HamDrmErrorCode::Malformed,
@@ -311,7 +325,7 @@ HamDrmValueResult<HamDrmBsrRequest> parseHamDrmBsr(
         }
         request.qsstvCompatibilityCode = mode;
     }
-    if (const auto status = validateBsr(request, limits, true); !status.ok()) {
+    if (const auto status = validateBsr(request, limits, true, allowUnknownSegmentSize); !status.ok()) {
         return {std::nullopt, status};
     }
     return {std::move(request), HamDrmStatus::success()};

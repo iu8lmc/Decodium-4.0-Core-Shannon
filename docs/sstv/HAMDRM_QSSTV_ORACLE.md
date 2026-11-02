@@ -4,8 +4,8 @@
 
 The Digital SSTV page now exposes an explicitly experimental adaptive RX
 option. It is off at startup, may only be changed while HAMDRM is idle, and
-uses strict pilot thresholds with adaptive equalization and two timing
-candidates. It can require more processing; this is not a claim of complete
+uses strict pilot thresholds with adaptive equalization, three timing
+candidates and CRC-gated flat/multistage packet retries. It can require more processing; this is not a claim of complete
 EasyPal compatibility. The normal receiver remains the default. Backend
 capability is checked before enabling it, and the UI disables the control
 when the backend does not support it or an operation is active.
@@ -45,6 +45,95 @@ and `.../decodium-hamdrm-two-app-b-6ik_iovz`). The helper now requires those
 continuity counters for any operator-selected timing test as well as long
 transfers. These are local macOS virtual-audio results, not a CPU benchmark or
 proof for other operating systems, live external applications or RF.
+
+The selected adaptive option now also enables the previously laboratory-only
+fractional candidate and CRC-gated retries. An initial noisy A/short test
+with the fractional candidate alone added to the old operator selection
+did not reconstruct an image; its relay reported no audio error and Decodium
+reported no rejected chunks or queue overflow (`.../decodium-hamdrm-two-app-a-a65190t1`).
+Enabling strict-pilot CRC-gated retries as well recovered the selected test.
+After wiring those options into the operator selection, A/short and B/long
+were sent between two Decodium sessions over BlackHole with 1 ms echo at
+gain 0.27 and deterministic noise and 1700 Hz tone each at peak 0.01. Both
+225-byte JPEGs matched exactly, with no reported discontinuity, dropped or
+rejected chunks, queue overflows or processing failures, and the legacy
+monitor and fresh PCM resumed after cancellation. The normal path, without
+the option selected, also passed clean A/B exact-byte transfers and legacy
+restoration. The test hook selects the same controller property used by the
+UI; the live tests do not click the page control. Fractional-candidate group
+counts were one and three, but can duplicate primary results and do not show
+that candidate was independently necessary for these particular runs.
+
+The pinned unmodified QSSTV-Experimental 10.0 batch receiver decoded both
+recorded relayed signals byte-for-byte. This validates these selected
+Decodium-to-QSSTV recordings, not live two-way EasyPal/QSSTV compatibility,
+RF operation or sustained CPU headroom. Selected-mode Decodium artifacts are
+`decodium-hamdrm-two-app-a-gtvg9o2m` and `decodium-hamdrm-two-app-b-jnnme3dl`,
+relay recordings `decodium-hamdrm-two-app-echo-pumceuat` and
+`decodium-hamdrm-two-app-echo-a_sgrhgg`, and QSSTV outputs
+`decodium-qsstv-drm-decode-qlivsd0s` and `decodium-qsstv-drm-decode-4l00elf9`.
+The clean default-mode controls are `decodium-hamdrm-two-app-a-9lqc4xw4`
+and `decodium-hamdrm-two-app-b-d3msqmtz`.
+
+The expanded operator-selected receiver was also checked with two larger
+320×240 JPEGs, 7,624 and 9,976 bytes, using profile
+`hamdrm-B-2500-high-16-QAM-long` and two local Decodium processes on clean
+BlackHole audio. Both reconstructed the input byte-for-byte, retained zero
+reported discontinuities, dropped/rejected chunks, queue overflows and
+processing failures, and restored legacy monitoring and fresh PCM after
+cancellation. The sessions accepted up to 1,888 and 2,287 audio chunks;
+maximum group counters were 48 and 54 and may include duplicates. Artifacts
+are `decodium-hamdrm-two-app-a-o5znek0g` and
+`decodium-hamdrm-two-app-b-x_1duqsy`. This is a clean selected-profile A/B,
+not a general performance benchmark or evidence for live EasyPal.
+
+The same larger source images were then transferred A/B with operator-selected
+adaptive reception through a BlackHole relay adding a 1 ms echo at gain 0.27,
+deterministic noise at peak 0.01 and a 1700 Hz tone at peak 0.01. Decodium
+reconstructed all 7,624 and 9,976 bytes exactly, with zero reported audio
+discontinuities, dropped or rejected chunks, queue overflows and processing
+failures; legacy monitoring and fresh PCM resumed after cancellation. The
+fractional candidate reported 16 and 18 groups, which may duplicate groups
+delivered by the other candidates. The unmodified QSSTV-Experimental 10.0
+batch receiver decoded the two saved relayed signals to the same exact
+objects. Decodium artifacts are `decodium-hamdrm-two-app-a-4flfzj50` and
+`decodium-hamdrm-two-app-b-moiulncw`, relay captures
+`decodium-hamdrm-two-app-echo-nhlnojtw` and
+`decodium-hamdrm-two-app-echo-rmwhtj12`, and QSSTV results
+`decodium-qsstv-drm-decode-n0m0yxhe` and
+`decodium-qsstv-drm-decode-o0713kb8`. These are selected simulated channels
+and a one-way recorded QSSTV check, not a live two-way interoperability or RF
+claim. The relay harness derives its timeout from the explicitly configured
+session duration for longer transfers.
+
+After enabling the additional candidates and retries in the operator-selected
+path, both previously recorded EasyPal-labelled signals were replayed again
+through BlackHole. The first reconstructed 21,191 bytes exactly equal to the
+previously QSSTV-checked reference (`decodium-qsstv-drm-app-_96w0mx_`); the
+second reconstructed the same 10,546-byte Decodium object as before
+(`decodium-qsstv-drm-app-ug7ry91v`), retaining the separately documented
+199-byte QSSTV padding difference. Both had zero reported source changes,
+discontinuities, dropped or rejected chunks, queue overflows and processing
+failures. Their maximum delivered group counts were 472 and 1170, including
+possible duplicates across candidates. These are replayed recordings and do
+not establish live EasyPal interoperability or original transmitter identity.
+The replay helper accepts already-converted 48 kHz stereo float captures and
+checks the selected candidate/retry logs and continuity diagnostics.
+
+Two application-level negative controls exercised the same selected path
+through BlackHole with 12 seconds of deterministic white noise, peak amplitude
+0.18, seeds 305419896 and 2596069104, on A/2.5/normal/16-QAM/short and
+B/2.5/high/16-QAM/long respectively. Neither produced a decoded group or
+saved image; source/continuity diagnostics reported no dropped or rejected
+chunks, queue overflows, discontinuities or processing failures. Artifacts
+are `decodium-qsstv-drm-app-b54bbbg_` and
+`decodium-qsstv-drm-app-gfc6lvbn`; the generated WAVs are in
+`decodium-hamdrm-random-ab-oof9w4k_`. The application harness uses the same
+test-only property hook as the positive tests and checks the candidate/retry
+logs. These controls do not quantify false-positive rates or prove rejection
+of every malformed waveform. Use `DECODIUM_LAB_EXPECT_NO_IMAGE=1` with
+`DECODIUM_LAB_HAMDRM_USER_TIMING=1` and an explicit profile to reproduce the
+negative check with a generated noise WAV.
 
 ## A/2.5/high/64-QAM with a synthetic echo
 
@@ -232,6 +321,92 @@ origin. The pages label the recordings EasyPal; the exact transmit versions,
 radio path and whether these are complete unedited transmissions are unknown.
 They are not redistributed as Decodium fixtures.
 
+After the later standard acquisition changes, both original MP3 files were
+retrieved again and matched the SHA-256 values above. The pinned unmodified
+QSSTV-Experimental 10.0 receiver regenerated a 21,191-byte A object
+(SHA-256 `28b0ceec19c4f068c6363fa34dbd896e16f830dbf52a51932d808ed7f03b51e6`)
+and a 10,745-byte B object
+(`33897a8f1903c14327eafdd775314da5901eb167ac78b2884b01f387da48b705`).
+Its log reported 278/278 and 394/394 good MSC CRCs respectively, but Jasper
+reported a component mismatch when rendering each JP2. On B, the last 199
+bytes were zero; removing only those bytes yielded 10,546 bytes
+(`da0e069f3ae3d11a95fe64cce8aa528c87c8b82f1b8b7dfea8d343ada8c8b667`),
+and FFmpeg decoded both padded and unpadded files to the same frame MD5
+`5668157c77eece42195b4c780dfc3ecf`.
+
+The current ordinary Decodium receiver replayed both recordings through
+BlackHole. A did not produce an image and delivered zero groups; B delivered
+390 groups and reconstructed the unpadded 10,546-byte object exactly. Both
+reported zero discontinuities, dropped or rejected chunks, queue overflows
+and processing failures. Artifacts are
+`.../decodium-qsstv-drm-app-6wgjq2s6` and
+`.../decodium-qsstv-drm-app-d3aqtd8j`. The A result is a negative test, not
+an audio continuity failure; B is not byte-identical to QSSTV's padded file.
+These specific public recordings do not authenticate the original EasyPal
+versions or establish a live peer exchange. QSSTV's duplicate Qt-framework
+warnings in this setup are also retained as a limitation of the regenerated
+reference.
+
+An offline isolation using the restored PCM and strict 0.12/0.30 pilot
+limits compared flat, flat with multistage retry, flat with a second timing
+candidate, adaptive, and adaptive with a second timing candidate. On A, all
+three flat variants delivered zero groups. The single adaptive candidate
+received 152 of 245 body segments and did not reconstruct the object; the
+two-candidate adaptive run received 198 segments and RS2 reconstructed the
+exact 21,191-byte reference. On B, flat, adaptive, and two-candidate adaptive
+each recovered all 350 segments and the exact 10,546-byte unpadded reference.
+Swapping the two expected references caused both two-candidate comparisons to
+fail as intended. These are offline comparisons of the same two recordings,
+not new signals or an application-level A/B. They isolate a difference in
+these conditions but do not establish sufficient CPU headroom or false-lock
+behaviour to enable experimental adaptive reception by default.
+
+Two 60-second deterministic offline negative controls were then fed to the
+two-candidate adaptive analyzer: seed 103234 with uniform noise at peak 0.20
+on B/2.5/high/16-QAM/long, and seed 534292 with the same noise plus a 1900 Hz
+tone at peak 0.10 on E/2.3/high/4-QAM/long. Neither produced a validated group
+or an object. These two controlled cases do not quantify a general false-lock
+rate or establish RF performance.
+
+The automated waveform suite now also exercises six A/B/E profiles covering
+both bandwidths, 4/16/64-QAM and short/long interleaving. Each profile is fed
+two deterministic eight-frame inputs: noise at peak 0.20, and independent
+noise at peak 0.20 with a 1900 Hz tone at peak 0.10. The strict-pilot
+adaptive receiver with CRC-gated retries emitted no data groups in any of the
+12 cases; the full waveform suite passed. This is a bounded synthetic
+single-candidate test, not an estimate of false-positive probability, a
+two-candidate application measurement, or live RF evidence.
+
+The two 60-second noise inputs described above were also replayed through
+BlackHole into full Decodium applications using the operator-selected
+adaptive path (including the independent timing candidates). A/B emitted no
+groups and saved no images, with no reported discontinuities, dropped or
+rejected chunks, queue overflows or processing failures. Artifacts are
+`.../decodium-qsstv-drm-app-7fkjmpoo` and
+`.../decodium-qsstv-drm-app-fm1uyy5h`. The inputs were converted from 12 kHz
+mono s16 to 48 kHz stereo WAV for replay. These controls strengthen the
+selected application-path evidence but do not estimate a general false-lock
+rate or establish behaviour under arbitrary RF interference.
+
+For a rough same-machine cost comparison, the same 115.45-second recording A
+was replayed in real time into Decodium twice on macOS ARM64, once with the
+default receiver and once with the operator-selected adaptive option. A
+two-second `ps` sampling interval observed 73 samples for each whole process,
+including startup and shutdown. Standard reception failed to recover the
+reference and had median/max CPU 37.4%/99.1%, maximum RSS 524,736 KiB;
+adaptive reception reconstructed all 21,191 reference bytes with zero reported
+audio errors and had 39.1%/98.7%, maximum RSS 531,408 KiB. Percent is relative
+to one CPU core. These are single, sequential process-level measurements on
+one Mac, affected by UI, other tasks, startup and shutdown; they are not a
+worst-case or slower-machine CPU benchmark and do not justify enabling the
+experimental path by default. The measurements and samples are
+`.../decodium-hamdrm-measure-standard-uy2p2290` and
+`.../decodium-hamdrm-measure-adaptive-3qj6ltol`; RX artifacts are
+`.../decodium-qsstv-drm-app-2ven0sh8` and
+`.../decodium-qsstv-drm-app-3wujsb5z`. The sampling wrapper is
+`tests/sstv/tools/measure_hamdrm_replay.py` and preserves the replay harness's
+exact-byte and continuity checks.
+
 After conversion to 48 kHz stereo PCM, the pinned unmodified QSSTV batch
 receiver extracted a 21 KB JP2 from the first and a 10 KB JP2 from the second,
 reporting B/2.5/high/16-QAM/long and E/2.3/high/4-QAM/long respectively.
@@ -298,6 +473,16 @@ the same 320x480 pixel-frame MD5 `5668157c77eece42195b4c780dfc3ecf`.
 The diagnostic now decodes RS containers before comparing and reports this
 case separately as `reference_zero_padding=199`; it still returns nonzero
 unless the output is byte-for-byte equal to the reference.
+
+A subsequent synthetic A/B experiment executed the pinned QSSTV RS1 decoder
+on Decodium-encoded objects of 10,546 and 10,547 bytes. On this macOS ARM64
+build QSSTV returned 10,745 bytes for each: the original bytes followed by 199
+and 198 zero bytes respectively. Decodium recovered both exact inputs. The
+result matches the observed 199-byte difference and demonstrates that the
+signed-char length calculation can produce it, but the synthetic experiment
+alone does not establish the original recording's RS level or prove that it
+caused that recording's discrepancy. Reproduce with
+`bash tests/sstv/tools/run_qsstv_rs_oracle.sh` against the pinned reference.
 Replay of the full second recording through BlackHole 2ch into Decodium's
 macOS application then produced the same 10,546-byte image, with 390 groups
 delivered and no dropped audio samples. Artifacts are in
@@ -1301,7 +1486,7 @@ outer CRC failures. Its `pkt_bad` values were 82 and 107; these include
 ordinary incomplete fragments as explained above and cannot be interpreted
 as that many invalid packets. Transmissions lasted 46.034 and 56.248 seconds.
 The source image SHA-256 values are
-`5966159f4d284dd99227b8bf5bb097dc07ae303c7e67643bc46944ff0586b20` and
+`5966159f4d284dd99227b8bf5bb097dc07ae303c7e67643fa57c7f147201fffc` and
 `5b33229631c2c56c9456926163e00057cd8ba48c3264f2f7aca6fee44676ccfb`.
 Source images, converted WAVs, independent output images and logs are under
 `/tmp/decodium-qsstv-experimental/decodium-image-{a,b}.jpg` and
@@ -1853,8 +2038,8 @@ comparisons discarded either two or three 48 kHz samples before conversion.
 The two-candidate receiver failed A/2, A/3 and B/2 and passed B/3; adding the
 fractional candidate passed all four. Conversion and real-time capture can
 produce different sample alignments, so this does not by itself prove the
-fractional candidate was necessary in each app run. The app path remains
-explicitly lab-only, without RF or Windows/Linux validation. Fractional-delay
+fractional candidate was necessary in each app run. At that point the app path
+was explicitly lab-only; the operator-selected path is described above. Fractional-delay
 chunking and reset A/B checks, clean reference and wrong-reference tests,
 and deterministic noise rejection passed; the analyzer and waveform suites
 also passed on macOS ARM64 with ASan/UBSan (leak checking disabled).
@@ -1994,3 +2179,74 @@ checks also passed with exact bytes: extended A
 `.../decodium-hamdrm-two-app-a-mezcl6z1` and compact B
 `.../decodium-hamdrm-two-app-b-21ezmdap`. These application checks use normal
 short requests and do not exercise oversized custom limits over audio.
+
+### BSR separator compatibility
+
+QSSTV's pinned `processFIX` strips carriage returns throughout the input and
+skips empty lines. Decodium's parser previously rejected otherwise equivalent
+requests containing empty lines or a carriage return within a field. It now
+normalizes these separators after validating the original bounded text. Core
+A/B cases cover compact CRLF/blank-line input with embedded CR and extended
+input with empty lines; they failed before the change and now pass. Negative
+controls still reject a missing segment, an unfinished range, and an invalid
+control byte. The QSSTV method oracle compares the two formatted requests'
+transport IDs and requested segments with Decodium, in addition to its 1,554
+existing cases. The core and controller CTests pass.
+
+On macOS ARM64, two-Decodium BlackHole A/B checks transmitted the formatted
+extended A and compact B requests as actual HAMDRM BSR objects and verified
+the requested segments and metadata. The test-mode-only formatting injection
+is enabled with `DECODIUM_LAB_BSR_SEPARATORS=1`; it does not alter normal TX.
+Artifacts are `.../decodium-hamdrm-two-app-a-4sxwrlnq` and
+`.../decodium-hamdrm-two-app-b-g6zr2isb`.
+
+Two further local A/B application checks seeded a partial object, sent the
+formatted BSR over BlackHole, sent the requested repair over BlackHole, and
+reconstructed each 2,725-byte image exactly. They did not simulate the
+initial image loss over the audio channel. Artifacts are
+`.../decodium-hamdrm-repair-a-09bmg_iz` and
+`.../decodium-hamdrm-repair-b-ndg1mygy`. Reproduce with the same environment
+variable and `python3 tests/sstv/tools/run_hamdrm_repair_two_app_lab.py a air`
+then `b air`. These tests establish this local separator and repair behavior;
+the QSSTV reference comparison is method-level, not a new live QSSTV or
+EasyPal exchange, and does not establish RF behavior or broad interoperability.
+
+### E/2.5/normal/64-QAM/short reverse-direction A/B
+
+The CLI/profile discrepancy above was traced in the pinned QSSTV source:
+`src/main.cpp` maps `--drm-interleave short` and `long` to indices 0 and 1,
+matching the displayed combo-box order, while `src/drmtx/drmtransmitter.cpp`
+selects `SI_LONG` for index 0 and `SI_SHORT` for index 1. Thus, in this
+specific source revision, the CLI and actual transmitter interleaver are
+inverted. This explains the earlier observed requests and reported FAC
+profiles; it is not a change to Decodium or a claim about all QSSTV versions.
+
+For an A/B reverse test, the signed-PCM-patched build of that QSSTV source
+was invoked with `--drm-interleave long`, E/2.5 kHz/low protection/64-QAM
+and two different 320×240 images. The unmodified QSSTV-Experimental 10.0
+receiver independently identified both resulting captures as
+`E/2.5/Lo/64/Short`, decoded each JP2 and reported 73 good MSC CRCs and no
+bad CRCs or bad packets. These are 35.608-second, file-generated signals;
+the transmitter build has the signed-PCM patch and is not the unmodified
+release transmitter.
+
+Each capture was then replayed through BlackHole into a full Decodium RX
+configured for `hamdrm-E-2500-normal-64-QAM-short`. The 5,025- and
+5,005-byte outputs matched the respective QSSTV-decoded objects exactly.
+All 12 recorded diagnostic snapshots per run had zero discontinuities,
+dropped chunks, processing failures, rejected HAMDRM chunks and queue
+overflows; each run reported up to 76 delivered groups. The RX artifacts
+are `.../decodium-qsstv-drm-app-anaozlmp` and
+`.../decodium-qsstv-drm-app-cpda3rom`. QSSTV receiver images and logs are
+`/tmp/decodium-qsstv-e64-short-logged-a` and
+`/tmp/decodium-qsstv-e64-short-logged-b`. WAV SHA-256 values A/B are
+`8377dbdaf7bea7d1ec98974372bf96e3d7ebbe1c1e267a0c2bfb17869593aed3` and
+`1ce31ab4268062a36653cf13f18c06870020814252b33a7943e45b1be6f20898`.
+
+Separate full Decodium TX/RX application A/B tests on the same short profile
+transferred 7,624- and 9,976-byte JPEGs exactly. All 18 recorded diagnostics
+per run had zero of the same audio/error counters. Artifacts are
+`.../decodium-hamdrm-two-app-a-j2rg_2ch` and
+`.../decodium-hamdrm-two-app-b-wlyakorl`. These results extend the earlier
+short-profile Decodium-to-QSSTV small-image evidence in the reverse direction;
+they do not establish live QSSTV/EasyPal exchange or RF performance.

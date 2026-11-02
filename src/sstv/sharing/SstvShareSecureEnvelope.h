@@ -11,14 +11,19 @@ namespace decodium::sstv::sharing {
 std::function<std::optional<QByteArray>(const SstvShareManifestV1&, const QByteArray&)>
 sstvShareMakeStoredEnvelopeOpener(std::shared_ptr<const secure_settings::Backend> backend,
                                  QString profile, QString expectedProvider,
-                                 QString expectedRecipient);
+                                 QString expectedRecipient, bool requireSenderAuthentication = false);
 // Worker-only adapter. A recipient key must have been independently verified
 // and pinned before sending. Neither operation falls back to plaintext.
 std::optional<SstvShareEncryptedPayload> sstvShareSealPinnedEnvelope(
     const SstvShareKeyStore& keys, SstvShareManifestV1 manifest,
     const QByteArray& plaintext);
+// Experimental signed variant. The receiver must independently pin the
+// sender's signing key and explicitly require authentication when needed.
+std::optional<SstvShareEncryptedPayload> sstvShareSealSignedEnvelope(
+    const SstvShareKeyStore& keys, SstvShareManifestV1 manifest,
+    const QByteArray& plaintext, const SstvShareKeyStore* signingKeys = nullptr);
 std::optional<QByteArray> sstvShareOpenStoredEnvelope(
     const SstvShareKeyStore& keys, const QString& expectedProvider,
     const QString& expectedRecipient, const SstvShareManifestV1& manifest,
-    const QByteArray& payload);
+    const QByteArray& payload, bool requireSenderAuthentication = false);
 } // namespace decodium::sstv::sharing

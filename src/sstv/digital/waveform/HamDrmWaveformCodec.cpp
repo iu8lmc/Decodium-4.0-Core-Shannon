@@ -992,10 +992,24 @@ public:
         }
         statistics.lastCyclicPrefixMetric = prefixMetricCache[bestCandidate];
         statistics.lastFrameStartSample = bestCandidate;
-        const auto estimated = estimateFrequencyOffset(bestCandidate);
+        auto estimated = estimateFrequencyOffset(bestCandidate);
+        // The nominal pilot minimum may lie one sample past the stable
+        // frequency-estimation window. Retry only an out-of-range estimate;
+        // the selected frame still has to pass pilot, FAC and packet checks.
+        if (!estimated.ok()
+            && estimated.status.code == HamDrmErrorCode::UnsupportedProfile
+            && !limits.experimentalEarlyTiming && bestCandidate > 0U) {
+            const auto earlier = estimateFrequencyOffset(bestCandidate - 1U);
+            if (earlier.ok()) {
+                --bestCandidate;
+                estimated = earlier;
+            }
+        }
         if (!estimated.ok()) {
             return {std::nullopt, estimated.status};
         }
+        statistics.lastCyclicPrefixMetric = prefixMetricCache[bestCandidate];
+        statistics.lastFrameStartSample = bestCandidate;
         statistics.estimatedFrequencyOffsetHz = *estimated.value;
         try {
             demodulator = std::make_unique<RealToneLeastSquares>(

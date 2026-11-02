@@ -144,6 +144,14 @@ public:
         Q_EMIT rxChanged();
         return true;
     }
+    Q_INVOKABLE bool configureSstvRadiofaxRxProfile(bool enabled, int ioc, int width, int height, bool centered, bool dead)
+    {
+        if (centered && dead) return false;
+        if (!configureSstvRadiofaxRxAligned(enabled, ioc, width, height, centered)) return false;
+        m_controls.insert(QStringLiteral("radiofaxWmoDeadSector"), dead);
+        Q_EMIT rxChanged();
+        return true;
+    }
     Q_INVOKABLE bool configureSstvFax480Rx(bool enabled, const QString& profile)
     {
         if (m_rxActive || m_replayActive) return false;
@@ -373,6 +381,13 @@ private slots:
         QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxWidth")).toInt(), 512);
         QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxHeight")).toInt(), 400);
         QCOMPARE(fixture.sstvRxControls().value(QStringLiteral("radiofaxCenteredPhasing")).toBool(), true);
+        auto* faxDead = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxWmoDeadSector"));
+        QVERIFY(faxDead);
+        QVERIFY(faxAlignment->setProperty("checked", false));
+        QVERIFY(faxDead->setProperty("checked", true));
+        QVERIFY(QMetaObject::invokeMethod(faxApply, "clicked"));
+        QVERIFY(fixture.sstvRxControls().value(QStringLiteral("radiofaxWmoDeadSector")).toBool());
+        QVERIFY(!fixture.sstvRxControls().value(QStringLiteral("radiofaxCenteredPhasing")).toBool());
         auto* fax480Enabled=page->findChild<QObject*>(QStringLiteral("sstvFax480RxEnabled"));
         auto* fax480Profile=page->findChild<QObject*>(QStringLiteral("sstvFax480RxProfile"));
         auto* fax480Apply=page->findChild<QObject*>(QStringLiteral("sstvFax480RxApply"));

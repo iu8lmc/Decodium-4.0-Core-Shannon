@@ -99,6 +99,8 @@ struct SstvShareQueueLimits final
     SstvShareValidationError validate() const;
 };
 
+struct SstvManagedTransferRecord;
+
 struct SstvShareQueueConfig final
 {
     QString databasePath;
@@ -114,6 +116,12 @@ struct SstvShareQueueConfig final
     // Returning nullopt rejects it; absence never falls back to plaintext.
     std::function<std::optional<QByteArray>(const SstvShareManifestV1&,
                                             const QByteArray&)> openEncryptedPayload;
+    // Re-evaluated when staging and before accepting an incoming item.
+    std::function<bool(const SstvShareManifestV1&)> incomingPolicyAllows;
+    // true: verified; false: invalid/missing; nullopt: temporarily unavailable.
+    // A temporarily unavailable check must not authorise acceptance or receipt.
+    std::function<std::optional<bool>(const SstvManagedTransferRecord&,
+                                     const SstvShareManifestV1&)> verifiedGalleryImport;
 
 };
 
@@ -121,7 +129,9 @@ enum class SstvShareFaultPoint
 {
     BeforeDatabaseCommit,
     AfterDownloadWriteBeforeCheckpoint,
+    AfterExpiryCommitBeforeCleanup,
     BeforeDownloadAtomicCommit,
+    BeforeInboxLookup,
 };
 
 class SstvShareFaultInjector
@@ -211,7 +221,8 @@ class SstvShareQueueStore final
 public:
     explicit SstvShareQueueStore(
         SstvShareQueueConfig config,
-        std::shared_ptr<SstvShareFaultInjector> faultInjector = {});
+        std::shared_ptr<SstvShareFaultInjector> faultInjector = {},
+        std::function<QDateTime()> clock = {});
     ~SstvShareQueueStore();
 
     SstvShareQueueStore(const SstvShareQueueStore&) = delete;
@@ -301,7 +312,8 @@ public:
                           const QString& incomingId,
                           const QString& destinationRelativePath,
                           QString* error = nullptr,
-                          bool requireEndToEnd = false);
+                          bool requireEndToEnd = false,
+                          bool requireSenderAuthentication = false);
 
     bool acceptDownload(const QString& transferId,
                         QString* error = nullptr);

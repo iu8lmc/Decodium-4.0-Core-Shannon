@@ -1,0 +1,57 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -54,6 +54,8 @@
+ #include <QFile>
+ #include "sound/soundbase.h"
+ #include <QSettings>
++#include <QMediaDevices>
++#include <QAudioDevice>
+ #include "sstv/sstvparam.h"
+ #include <QImageReader>
+ #include <QRegularExpression>
+@@ -201,6 +203,21 @@
+   QGuiApplication::setDesktopFileName(qEnvironmentVariableIsSet("FLATPAK_ID") ? qEnvironmentVariable("FLATPAK_ID")
+                                                                               : QStringLiteral("qsstv-experimental"));
+   QApplication app( argc, argv );
++  if(qEnvironmentVariableIntValue("QSSTV_BSR_TX_LIVE")==1)
++    {
++      bool hasInput=false,hasOutput=false;
++      for(const auto &dev : QMediaDevices::audioInputs()) if(dev.description()=="BlackHole 2ch") hasInput=true;
++      for(const auto &dev : QMediaDevices::audioOutputs()) if(dev.description()=="BlackHole 2ch") hasOutput=true;
++      if(!hasInput || !hasOutput) {fprintf(stderr,"LAB BlackHole input/output missing\n"); return 9;}
++      QSettings qs;
++      qs.setValue("SOUND/inputAudioDevice","BlackHole 2ch");
++      qs.setValue("SOUND/outputAudioDevice","BlackHole 2ch");
++      qs.setValue("radio0/enableCAT",false);
++      qs.setValue("radio0/enableSerialPTT",false);
++      qs.sync();
++      if(qs.status()!=QSettings::NoError) {fprintf(stderr,"LAB settings failed\n"); return 9;}
++      fprintf(stderr,"LAB live BlackHole 2ch requested, CAT and serial PTT disabled\n");
++    }
+   applySchemeAwareFusionPalette();
+   if(qEnvironmentVariableIsSet("QSSTV_LOG_FORMATS"))
+     {
+@@ -401,7 +418,8 @@
+       mainWindowPtr->switchMode(TRXDRM);   // the window's own switch, so the tabs and both widgets follow
+       drmTxParams prm=drmParams;
+       for(const auto &s : drmSet) prm.*(s.first)=s.second;
+-      soundBase::txFileName=parser.isSet(wavOutOpt) ? parser.value(wavOutOpt) : parser.value(encodeOpt)+".wav";
++      soundBase::txFileName=qEnvironmentVariableIntValue("QSSTV_BSR_TX_LIVE")==1
++          ? QString() : (parser.isSet(wavOutOpt) ? parser.value(wavOutOpt) : parser.value(encodeOpt)+".wav");
+       QObject::connect(txWidgetPtr,bsrPath.isEmpty() ? &txWidget::calibrationTxFinished : &txWidget::txStopped,&app,[&app]()
+       {
+         app.exit(0);
+--- a/src/sound/soundqtmultimedia.cpp
++++ b/src/sound/soundqtmultimedia.cpp
+@@ -68,6 +68,11 @@
+                                       QMediaDevices::defaultAudioInput());
+   QAudioDevice outDev=findAudioDevice(outputAudioDevice,QMediaDevices::audioOutputs(),
+                                        QMediaDevices::defaultAudioOutput());
++  if(qEnvironmentVariableIntValue("QSSTV_BSR_TX_LIVE")==1)
++    {
++      fprintf(stderr,"LAB live audio input=%s output=%s\n",qPrintable(inDev.description()),qPrintable(outDev.description()));
++      if(inDev.description()!="BlackHole 2ch" || outDev.description()!="BlackHole 2ch") return false;
++    }
+ 
+   // Capture mono, same as soundPulse (PulseAudio does the downmix if the hardware is
+   // stereo) rather than soundAlsa's "open stereo and downmix ourselves" fallback -- one

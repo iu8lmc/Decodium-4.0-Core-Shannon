@@ -20,13 +20,22 @@ public:
     SstvShareStoredKeyResult loadPrivateKey() const;
     // Creates only if absent; never replaces an existing or corrupt identity.
     SstvShareStoredKeyResult createOrLoadPublicKey() const;
+    // Separate signing identity and sender pins; not yet used by envelopes.
+    SstvShareStoredKeyResult loadSigningPrivateKey() const;
+    SstvShareStoredKeyResult createOrLoadSigningPublicKey() const;
+    // The fingerprint must be confirmed independently of the provider.
+    SstvShareKeyStoreError pinSenderSigningKey(const QString& provider, const QString& sender,
+                                              const QByteArray& publicDer, const QString& verifiedFingerprint) const;
+    SstvShareStoredKeyResult pinnedSenderSigningKey(const QString& provider, const QString& sender) const;
     // Confirmation must be obtained out-of-band, independently of provider data.
     SstvShareKeyStoreError pinRecipient(const QString& provider, const QString& recipient,
                                        const QByteArray& publicKey, const QString& verifiedFingerprint) const;
     SstvShareStoredKeyResult pinnedRecipient(const QString& provider, const QString& recipient) const;
 private:
     QString recipientAccount(const QString& provider, const QString& recipient) const;
+    QString senderSigningAccount(const QString& provider, const QString& sender) const;
     SstvShareStoredKeyResult load(const QString& account) const;
+    SstvShareStoredKeyResult loadBounded(const QString& account, qsizetype minimum, qsizetype maximum) const;
     const secure_settings::Backend& backend_;
     QString service_;
 };

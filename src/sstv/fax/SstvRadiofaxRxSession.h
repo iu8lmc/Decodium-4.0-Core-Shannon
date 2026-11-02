@@ -42,6 +42,7 @@ private:
     std::uint64_t imageEnd_;
     std::uint64_t lineSamples_;
     std::uint64_t lineCount_;
+    bool wmoDeadSector_;
     double frequencyOffset_;
     SstvRadiofaxLevels levels_;
     std::vector<double> sums_;

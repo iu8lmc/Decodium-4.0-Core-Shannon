@@ -115,6 +115,15 @@ try:
     if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
         and '[HAMDRM] operator selected experimental adaptive dual timing' not in rx):
         raise RuntimeError('operator-selected experimental timing was not active; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
+        and '[HAMDRM] operator selected fractional timing candidate' not in rx):
+        raise RuntimeError('operator-selected fractional timing was not active; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
+        and '[HAMDRM] operator selected CRC-gated packet retries' not in rx):
+        raise RuntimeError('operator-selected packet retries were not active; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') != '1'
+        and '[HAMDRM] operator selected fractional timing candidate' in rx):
+        raise RuntimeError('operator-selected timing unexpectedly active; artifacts '+str(root))
     if image_override or os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1':
         diagnostics = [json.loads(line.split('[LAB][SSTV] RX diagnostics ', 1)[1])
                        for line in rx.splitlines() if '[LAB][SSTV] RX diagnostics ' in line]
@@ -182,7 +191,12 @@ try:
     if '[LAB][HAMDRM] RX started true "'+profile+'"' not in rx or not received.exists():
         raise RuntimeError('HAMDRM RX did not complete; artifacts '+str(root))
     if bsr:
-        lines=received.read_text(encoding='ascii').splitlines()
+        payload=received.read_bytes()
+        separator_check = os.environ.get('DECODIUM_LAB_BSR_SEPARATORS') == '1'
+        if separator_check and (b'\r\n\r\n' not in payload
+                                or '[LAB][HAMDRM] BSR separator compatibility control enabled' not in tx):
+            raise RuntimeError('BSR separator control was not transmitted; artifacts '+str(root))
+        lines=[line for line in payload.decode('ascii').splitlines() if line]
         expected_id=0x2451 if variant=='a' else 0x5372
         missing = (['2','3'] if variant=='a' else ['2','-1','3']) if repeat else (['1','2','3'] if variant=='a' else ['1','-1','3'])
         expected=[str(expected_id),'H_OK','64'] + missing + ['-99']
@@ -197,6 +211,8 @@ try:
         if repeat and (rx.count('[LAB][HAMDRM] RX BSR saved') != 2
                        or '[LAB][HAMDRM] repeated BSR TX started true' not in tx):
             raise RuntimeError('two BSR requests were not received in one session; artifacts '+str(root))
+    elif os.environ.get('DECODIUM_LAB_HAMDRM_PNG_AS_JP2') == '1' and '[LAB][HAMDRM] PNG declared as JP2 for interoperability test' not in tx:
+        raise RuntimeError('mislabelled PNG was not transmitted; artifacts '+str(root))
     elif received.read_bytes()!=fixture.read_bytes():
         raise RuntimeError('HAMDRM object bytes differ; artifacts '+str(root))
     if os.environ.get('DECODIUM_LAB_CHECK_COMPLETED_INBOX') == '1':

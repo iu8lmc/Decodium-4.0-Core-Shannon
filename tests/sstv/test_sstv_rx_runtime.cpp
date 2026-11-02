@@ -1071,6 +1071,58 @@ private slots:
         QVERIFY(runtime.stop());
     }
 
+    void radiofaxConsecutiveImagesRearmAB()
+    {
+        for (const std::size_t block : {4093U, 8191U}) {
+            for (const bool fullCanvas : {false, true}) {
+                SstvFaxConfig tx;
+                tx.width = 32U; tx.height = 4U; tx.linesPerMinute = 240U;
+                auto rx = tx; rx.height = fullCanvas ? 4U : 8U;
+                std::vector<std::int16_t> pcm;
+                for (const std::uint8_t value : {std::uint8_t {60}, std::uint8_t {180}}) {
+                    SstvRadiofaxEncoder encoder(tx, std::vector<std::uint8_t>(tx.width * tx.height, value));
+                    std::vector<std::int16_t> part(static_cast<std::size_t>(encoder.totalSamples()));
+                    std::size_t done = 0U;
+                    while (!encoder.complete()) {
+                        const auto n = encoder.pullPcm16(part.data() + done,
+                            std::min<std::size_t>(8192U, part.size() - done));
+                        QVERIFY(n > 0U);
+                        done += n;
+                    }
+                    pcm.insert(pcm.end(), part.begin(), part.end());
+                }
+                auto config = smallConfig();
+                config.ingress.maximumQueuedSamples = 65'536U;
+                config.ingress.maximumSamplesPerCall = 16'384U;
+                config.radiofax = rx;
+                SstvRxRuntime runtime(config);
+                QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 56U));
+                std::uint64_t chunks = 0U, firstId = 0U;
+                for (std::size_t offset = 0; offset < pcm.size(); offset += block) {
+                    const auto count = std::min(block, pcm.size() - offset);
+                    QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), kRate,
+                        runtime.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+                    ++chunks;
+                    QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+                    const auto image = runtime.snapshot().image;
+                    if ((fullCanvas ? image.complete : (image.partial && image.radiofaxStopDetected)) && firstId == 0U)
+                        firstId = image.acquisitionId;
+                }
+                const auto result = runtime.snapshot();
+                QVERIFY(firstId > 0U);
+                QVERIFY(result.image.available);
+                QVERIFY(fullCanvas ? result.image.complete : (result.image.partial && result.image.radiofaxStopDetected));
+                QVERIFY2(result.image.acquisitionId > firstId, "second Radiofax image was not acquired");
+                const auto image = runtime.latestImageSnapshot();
+                QVERIFY(image);
+                QVERIFY(std::abs(int(image->pixel(10U, 2U).red) - 180) < 25);
+                QCOMPARE(result.processingFailures, std::uint64_t {0U});
+                QCOMPARE(result.discontinuities, std::uint64_t {0U});
+                QVERIFY(runtime.stop());
+            }
+        }
+    }
+
     void fax480AutomaticRuntimeProfilesAB()
     {
         for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::Qsstv500, SstvFax480Profile::LibsstvVis480}) {
@@ -1103,14 +1155,101 @@ private slots:
             }
             const auto result=runtime.snapshot();
             QVERIFY2(result.image.available,"FAX480 runtime did not publish image");
-            QVERIFY(result.image.complete);
             QCOMPARE(result.image.width,512U);
             QCOMPARE(result.image.height,mapper.height());
             QVERIFY(result.image.coverage>0.90);
             const auto image=runtime.latestImageSnapshot();
             QVERIFY(image);
+            QCOMPARE(result.image.complete, image->isComplete());
+            QCOMPARE(result.image.partial, !image->isComplete());
             QVERIFY(std::abs(int(image->pixel(256U,100U).red)-int(value))<12);
             QCOMPARE(result.processingFailures,std::uint64_t(0));
+            QVERIFY(runtime.stop());
+        }
+    }
+
+    void fax480ConsecutiveImagesRearmAB()
+    {
+        for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::LibsstvVis480}) {
+            const SstvFax480Mapper mapper(profile,kRate);
+            const auto frameSamples=mapper.totalSamples();
+            std::vector<std::int16_t> pcm(frameSamples*2U+kRate,0);
+            for (std::size_t frame=0;frame<2U;++frame) {
+                SstvFax480Encoder encoder(profile,kRate,
+                    std::vector<std::uint8_t>(std::size_t(mapper.height())*512U,frame ? 192U : 64U));
+                std::size_t made=0;
+                while (!encoder.complete()) {
+                    const auto n=encoder.pull(pcm.data()+frame*frameSamples+made,
+                        std::min<std::size_t>(8192U,frameSamples-made));
+                    QVERIFY(n>0); made+=n;
+                }
+            }
+            auto config=smallConfig();
+            config.ingress.maximumQueuedSamples=65'536U;
+            config.ingress.maximumSamplesPerCall=16'384U;
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.setFax480Config(profile));
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay,46U));
+            std::uint64_t chunks=0,firstId=0;
+            bool sawFirst=false,sawSecond=false;
+            for (std::size_t offset=0;offset<pcm.size();offset+=8191U) {
+                const auto count=std::min<std::size_t>(8191U,pcm.size()-offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm,offset,count),kRate,runtime.routeToken(),
+                    static_cast<qint64>(offset*1'000'000'000ULL/kRate)));
+                ++chunks;
+                QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed,chunks,4'000);
+                const auto summary=runtime.snapshot().image;
+                if (!summary.available || summary.coverage<0.9) continue;
+                const auto image=runtime.latestImageSnapshot();
+                if (!image) continue;
+                const int pixel=image->pixel(256U,100U).red;
+                if (std::abs(pixel-64)<12) { sawFirst=true; firstId=summary.acquisitionId; }
+                if (std::abs(pixel-192)<12 && firstId && summary.acquisitionId!=firstId) sawSecond=true;
+            }
+            QVERIFY(sawFirst);
+            QVERIFY(sawSecond);
+            QCOMPARE(runtime.snapshot().processingFailures,std::uint64_t(0));
+            QVERIFY(runtime.stop());
+        }
+    }
+
+    void fax480MissingSignalEndsPartialAB()
+    {
+        for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::Qsstv500}) {
+            const SstvFax480Mapper mapper(profile, kRate);
+            SstvFax480Encoder encoder(profile, kRate,
+                std::vector<std::uint8_t>(std::size_t(mapper.height()) * 512U, 128U));
+            std::vector<std::int16_t> pcm(mapper.totalSamples() + kRate, 0);
+            std::size_t made = 0;
+            while (!encoder.complete()) {
+                const auto n = encoder.pull(pcm.data() + made,
+                    std::min<std::size_t>(8192U, mapper.totalSamples() - made));
+                QVERIFY(n > 0); made += n;
+            }
+            // Preserve acquisition and the first image portion, then replace
+            // the rest with silence while keeping the audio clock continuous.
+            std::fill(pcm.begin() + std::ptrdiff_t(mapper.totalSamples() / 2U), pcm.end(), 0);
+            auto config = smallConfig();
+            config.ingress.maximumQueuedSamples = 65'536U;
+            config.ingress.maximumSamplesPerCall = 16'384U;
+            SstvRxRuntime runtime(config);
+            QVERIFY(runtime.setFax480Config(profile));
+            QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 47U));
+            std::uint64_t chunks = 0;
+            constexpr std::size_t block = 8191U;
+            for (std::size_t offset = 0; offset < pcm.size(); offset += block) {
+                const auto count = std::min(block, pcm.size() - offset);
+                QVERIFY(runtime.enqueuePcm16At(pcmChunk(pcm, offset, count), kRate,
+                    runtime.routeToken(), static_cast<qint64>(offset * 1'000'000'000ULL / kRate)));
+                ++chunks;
+                QTRY_COMPARE_WITH_TIMEOUT(runtime.snapshot().chunksProcessed, chunks, 4'000);
+            }
+            const auto result = runtime.snapshot();
+            QVERIFY(result.image.available);
+            QVERIFY(result.image.partial);
+            QVERIFY(!result.image.complete);
+            QVERIFY(result.image.coverage > 0.1 && result.image.coverage < 0.75);
+            QCOMPARE(result.processingFailures, std::uint64_t(0));
             QVERIFY(runtime.stop());
         }
     }

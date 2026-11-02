@@ -16,6 +16,22 @@ enum class ReleaseCheckDecision
     NoUpdate
 };
 
+inline bool validReleaseVersion(const QString& version)
+{
+    const auto tokens = version.split(QLatin1Char('.'));
+    if (tokens.size() != 3)
+        return false;
+    for (const auto& token : tokens) {
+        bool ok = false;
+        if (token.isEmpty()) return false;
+        for (const QChar ch : token)
+            if (ch < QLatin1Char('0') || ch > QLatin1Char('9')) return false;
+        token.toInt(&ok);
+        if (!ok) return false;
+    }
+    return true;
+}
+
 inline QList<int> versionParts(const QString& version)
 {
     QList<int> parts;

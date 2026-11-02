@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SstvRadiofaxStop.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -9,14 +10,22 @@ SstvRadiofaxStopDetector::SstvRadiofaxStopDetector(std::uint32_t sampleRate, dou
 {
     if (rate_ < 8'000U || rate_ > 384'000U || !std::isfinite(offset_) || std::abs(offset_) > 400.0)
         throw std::invalid_argument("invalid radiofax stop detector configuration");
+    cosTable_.resize(2U * rate_);
+    sinTable_.resize(2U * rate_);
+    for (std::uint32_t i = 0U; i < 2U * rate_; ++i) {
+        const double phase = 2.0 * std::acos(-1.0) * static_cast<double>(i) / (2U * rate_);
+        cosTable_[i] = std::cos(phase);
+        sinTable_[i] = std::sin(phase);
+    }
 }
 void SstvRadiofaxStopDetector::clearWindow(std::uint64_t start) noexcept
 {
-    start_ = start; total_ = valid_ = 0U; real_ = imag_ = absolute_ = mean_ = 0.0;
+    start_ = start; total_ = valid_ = 0U; real_.fill(0.0); imag_.fill(0.0); absolute_ = mean_ = 0.0;
 }
 void SstvRadiofaxStopDetector::reset() noexcept
 {
-    clearWindow(0); last_ = firstMatch_ = 0; matches_ = 0; active_ = hasLast_ = false; detection_.reset();
+    clearWindow(0); last_ = 0; matches_.fill(0U); firstMatches_.fill(0U);
+    active_ = hasLast_ = false; detection_.reset();
 }
 std::optional<std::uint64_t> SstvRadiofaxStopDetector::consume(
     const SstvFrequencyObservation* observations, std::size_t count)
@@ -34,26 +43,30 @@ std::optional<std::uint64_t> SstvRadiofaxStopDetector::consume(
         const auto& obs = observations[i];
         if (hasLast_ && obs.centreSample == last_) continue;
         if (!active_ || (hasLast_ && obs.centreSample - last_ > rate_ / 100U)) {
-            matches_ = 0U; clearWindow(obs.centreSample); active_ = true;
+            matches_.fill(0U); clearWindow(obs.centreSample); active_ = true;
         }
         if (obs.centreSample - start_ >= rate_) {
-            const bool match = total_ >= 100U && valid_ * 5U >= total_ * 3U
+            const bool validWindow = total_ >= 100U && valid_ * 5U >= total_ * 3U
                 && absolute_ >= 100.0 * static_cast<double>(valid_)
-                && std::abs(mean_) <= 100.0 * static_cast<double>(valid_)
-                && 2.0 * std::hypot(real_, imag_) >= 0.85 * absolute_;
-            if (match) {
-                if (matches_ == 0U) firstMatch_ = start_;
-                if (++matches_ >= 2U) { detection_ = firstMatch_; return detection_; }
-            } else matches_ = 0U;
+                && std::abs(mean_) <= 100.0 * static_cast<double>(valid_);
+            for (std::size_t bin = 0U; bin < kModulationBins; ++bin) {
+                const bool match = validWindow && 2.0 * std::hypot(real_[bin], imag_[bin]) >= 0.85 * absolute_;
+                if (match) {
+                    if (matches_[bin] == 0U) firstMatches_[bin] = start_;
+                    if (++matches_[bin] >= 2U) { detection_ = firstMatches_[bin]; return detection_; }
+                } else matches_[bin] = 0U;
+            }
             clearWindow(obs.centreSample);
         }
         ++total_;
         if (obs.valid() && std::isfinite(obs.correctedFrequencyHz)
             && std::isfinite(obs.confidence) && obs.confidence >= 0.2) {
             const double value = obs.correctedFrequencyHz - offset_ - 1900.0;
-            const auto phaseIndex = (obs.centreSample % rate_) * 450U % rate_;
-            const double phase = 2.0 * std::acos(-1.0) * static_cast<double>(phaseIndex) / rate_;
-            real_ += value * std::cos(phase); imag_ += value * std::sin(phase);
+            for (std::size_t bin = 0U; bin < kModulationBins; ++bin) {
+                const auto phaseIndex = (obs.centreSample % (2U * rate_)) * (880U + bin) % (2U * rate_);
+                real_[bin] += value * cosTable_[phaseIndex];
+                imag_[bin] += value * sinTable_[phaseIndex];
+            }
             absolute_ += std::abs(value); mean_ += value; ++valid_;
         }
         last_ = obs.centreSample; hasLast_ = true;
@@ -77,6 +90,11 @@ SstvRadiofaxAudioStopDetector::SstvRadiofaxAudioStopDetector(std::uint32_t sampl
 void SstvRadiofaxAudioStopDetector::reset() noexcept
 {
     nextSample_ = 0U;
+    minimumSample_ = 0U;
+    clearAnalysis();
+}
+void SstvRadiofaxAudioStopDetector::clearAnalysis() noexcept
+{
     count_ = 0U;
     matches_.fill(0U);
     real_.fill(0.0);
@@ -87,20 +105,29 @@ void SstvRadiofaxAudioStopDetector::reset() noexcept
     detection_.reset();
 }
 std::optional<std::uint64_t> SstvRadiofaxAudioStopDetector::consume(
-    const float* samples, std::size_t count, bool enabled)
+    const float* samples, std::size_t count, bool enabled, std::uint64_t minimumSample)
 {
     if (count && !samples) throw std::invalid_argument("null radiofax PCM");
-    if (detection_) return detection_;
     if (!enabled) {
         nextSample_ += count;
-        count_ = 0U;
-        matches_.fill(0U);
-        real_.fill(0.0);
-        imag_.fill(0.0);
-        cosPhase_.fill(1.0);
-        sinPhase_.fill(0.0);
-        energy_ = 0.0;
+        clearAnalysis();
         return std::nullopt;
+    }
+    if (minimumSample != minimumSample_) {
+        clearAnalysis();
+        minimumSample_ = minimumSample;
+    }
+    if (detection_) {
+        nextSample_ += count;
+        return detection_;
+    }
+    if (nextSample_ < minimumSample) {
+        const auto skip = static_cast<std::size_t>(std::min<std::uint64_t>(
+            minimumSample - nextSample_, static_cast<std::uint64_t>(count)));
+        nextSample_ += skip;
+        if (skip != 0U) samples += skip;
+        count -= skip;
+        clearAnalysis();
     }
     const std::size_t window = rate_ / 10U;
     for (std::size_t i = 0; i < count; ++i, ++nextSample_) {
@@ -123,7 +150,10 @@ std::optional<std::uint64_t> SstvRadiofaxAudioStopDetector::consume(
             matches_[bin] = match ? matches_[bin] + 1U : 0U;
             if (matches_[bin] >= 10U) {
                 detection_ = nextSample_ + 1U - 10U * window;
-                ++nextSample_;
+                // The caller handed us the entire block, including samples
+                // after the detection. Keep the absolute stream clock aligned
+                // if the detector is later disabled and rearmed.
+                nextSample_ += count - i;
                 return detection_;
             }
         }

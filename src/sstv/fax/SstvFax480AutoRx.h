@@ -12,7 +12,9 @@ namespace decodium::sstv {
 class SstvFax480AutoRx final {
 public:
     SstvFax480AutoRx(SstvFax480Profile profile, std::uint32_t sampleRate);
-    void consume(const SstvFrequencyObservation* observations, std::size_t count);
+    // Returns the consumed prefix, ending at the first completed frame. The
+    // caller can pass any remaining observations to a fresh receiver.
+    std::size_t consume(const SstvFrequencyObservation* observations, std::size_t count);
     bool acquired() const noexcept { return bool(receiver_); }
     bool complete() const noexcept { return complete_; }
     std::optional<std::uint64_t> anchor() const noexcept { return anchor_; }

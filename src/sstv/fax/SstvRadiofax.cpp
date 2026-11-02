@@ -18,13 +18,16 @@ SstvRadiofaxMapper::SstvRadiofaxMapper(SstvFaxConfig config) : config_(config)
         || config.height < 1U || config.height > 8'192U
         || (config.centeredPhasingWithWhiteEndLine
             && config.phasing != SstvFaxPhasePattern::WhiteFivePercent)
+        || (config.centeredPhasingWithWhiteEndLine && config.wmoDeadSector)
         || (config.phasing != SstvFaxPhasePattern::Symmetric
             && config.phasing != SstvFaxPhasePattern::WhiteFivePercent)) {
         throw std::invalid_argument("invalid radiofax profile");
     }
     // Require at least one sample per display pixel, preventing ambiguous
     // or zero-length sample segments at low rates / high line speeds.
-    if (lineBoundary(1U) < config.width) {
+    const auto shortestLine = lineBoundary(1U);
+    const auto dead = config.wmoDeadSector ? sstvRadiofaxDeadSectorSamples(shortestLine) : 0U;
+    if (shortestLine - dead < config.width) {
         throw std::invalid_argument("radiofax raster exceeds sampling resolution");
     }
     imageStart_ = static_cast<std::uint64_t>(config.sampleRate) * 35U
@@ -81,7 +84,11 @@ SstvFaxPosition SstvRadiofaxMapper::positionAtSample(std::uint64_t sample) const
         const std::uint64_t line = lineForOffset(offset);
         const std::uint64_t start = lineBoundary(line);
         const std::uint64_t length = lineBoundary(line + 1U) - start;
-        const std::uint64_t pixel = (offset - start) * config_.width / length;
+        const std::uint64_t dead = config_.wmoDeadSector ? sstvRadiofaxDeadSectorSamples(length) : 0U;
+        const std::uint64_t within = offset - start;
+        if (within < dead)
+            return {SstvFaxRegion::DeadSector, static_cast<std::uint32_t>(line), 0U, true};
+        const std::uint64_t pixel = (within - dead) * config_.width / (length - dead);
         return {SstvFaxRegion::Image, static_cast<std::uint32_t>(line),
                 static_cast<std::uint32_t>(pixel), false};
     }

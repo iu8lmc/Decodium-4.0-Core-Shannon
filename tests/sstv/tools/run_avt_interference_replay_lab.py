@@ -14,11 +14,13 @@ import tempfile
 import time
 
 partial_expected = sys.argv[-1:] == ['--expect-partial']
-argv = sys.argv[:-1] if partial_expected else sys.argv
+no_image_expected = sys.argv[-1:] == ['--expect-no-image']
+argv = sys.argv[:-1] if partial_expected or no_image_expected else sys.argv
 if len(argv) not in (6, 7):
     raise SystemExit('expected MODE capture.f32 reference.png tone_hz tone_peak [output_gain] [--expect-partial]')
 mode, source, reference = argv[1], Path(argv[2]).resolve(strict=True), Path(argv[3]).resolve(strict=True)
-if mode not in ('avt-24-qrm', 'avt-24-narrow-qrm'):
+if mode not in {'avt-24', *(f'avt-{duration}-{variant}' for duration in ('24','90','94')
+                             for variant in ('qrm','narrow-qrm'))}:
     raise SystemExit('unsupported test mode')
 frequency, amplitude = float(argv[4]), float(argv[5])
 gain = float(argv[6]) if len(argv) == 7 else 0.8
@@ -26,8 +28,15 @@ if not math.isfinite(frequency) or not 100 <= frequency <= 4000 or not math.isfi
     raise SystemExit('invalid interference parameters')
 if not math.isfinite(gain) or not 0.1 <= gain <= 1.0: raise SystemExit('invalid output gain')
 size = source.stat().st_size
-if not size or size % 8 or size > 90 * 48000 * 8:
+if not size or size % 8 or size > 180 * 48000 * 8:
     raise SystemExit('invalid 48 kHz stereo float capture')
+tone_start = float(os.environ.get('DECODIUM_LAB_AVT_TONE_START_S', '0'))
+tone_duration_text = os.environ.get('DECODIUM_LAB_AVT_TONE_DURATION_S')
+tone_duration = float(tone_duration_text) if tone_duration_text is not None else None
+if (not math.isfinite(tone_start) or tone_start < 0 or tone_start >= size / 8 / 48000
+    or (tone_duration is not None and (not math.isfinite(tone_duration) or tone_duration <= 0
+        or tone_start + tone_duration > size / 8 / 48000))):
+    raise SystemExit('invalid interference interval')
 repo = Path.cwd()
 binary = (repo / 'build/decodium').resolve(strict=True)
 root = Path(tempfile.mkdtemp(prefix='decodium-avt-interference-'))
@@ -88,7 +97,9 @@ try:
                 if abs(samples[i]) > 0.005:
                     active_power += samples[i] * samples[i]
                     active_count += 1
-                tone = amplitude * math.sin(2.0 * math.pi * frequency * sample_index / 48000.0)
+                t = sample_index / 48000.0
+                active_tone = t >= tone_start and (tone_duration is None or t < tone_start + tone_duration)
+                tone = amplitude * math.sin(2.0 * math.pi * frequency * t) if active_tone else 0.0
                 sample_index += 1
                 for channel in (0, 1):
                     value = gain * (samples[i + channel] + tone)
@@ -119,6 +130,13 @@ try:
         print('PASS AVT partial replay', mode, 'coverage', last['imageCoverage'],
               'completed pixels', last.get('imageCompletedPixels'), 'artifacts', root, flush=True)
         sys.exit(0)
+    if no_image_expected:
+        if any(item.get('imageAvailable') or item.get('imageComplete') for item in lines):
+            raise RuntimeError('unexpected image during no-image control; artifacts ' + str(root))
+        if not any(item.get('visAvailable') and item.get('visMappedMode') == mode for item in lines):
+            raise RuntimeError('expected VIS was not detected in no-image control; artifacts ' + str(root))
+        print('PASS AVT no-image control', mode, 'no processing or audio errors; artifacts', root, flush=True)
+        sys.exit(0)
     if not lines[-1].get('imageComplete') or lines[-1].get('imageMode') != mode:
         raise RuntimeError('receiver did not produce a complete image; artifacts ' + str(root))
     received = root / 'received.png'
@@ -126,6 +144,7 @@ try:
     active_rms = math.sqrt(active_power / active_count) if active_count else 0.0
     ratio_db = 20 * math.log10(active_rms / (amplitude / math.sqrt(2))) if amplitude and active_rms else None
     print('AVT replay', mode, 'tone_hz', frequency, 'tone_peak', amplitude,
+          'tone_start_s', tone_start, 'tone_duration_s', tone_duration,
           'active_signal_rms', active_rms, 'nominal_sir_db', ratio_db,
           'output_gain', gain, 'mixture_peak', peak, 'discontinuities', lines[-1].get('discontinuities'),
           'artifacts', root, flush=True)

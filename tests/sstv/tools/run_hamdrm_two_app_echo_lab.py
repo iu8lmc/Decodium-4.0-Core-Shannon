@@ -127,8 +127,12 @@ def main():
             env['DECODIUM_LAB_HAMDRM_SELECTIVE'] = '1'
         if fallback_enabled:
             env['DECODIUM_LAB_HAMDRM_FLAT_FALLBACK'] = '1'
+        duration_ms = int(env.get('DECODIUM_LAB_HAMDRM_DURATION_MS', '0'))
+        if duration_ms and not 35000 <= duration_ms <= 600000:
+            raise RuntimeError('invalid laboratory session duration')
+        timeout = max(70.0, duration_ms / 1000.0 + 30.0)
         run = subprocess.run([sys.executable, 'tests/sstv/tools/run_hamdrm_two_app_lab.py', variant],
-                             env=env, capture_output=True, text=True, timeout=70)
+                             env=env, capture_output=True, text=True, timeout=timeout)
         (root / 'two-app.log').write_text(run.stdout + run.stderr)
         stop.set(); worker.join(timeout=5)
         if worker.is_alive(): raise RuntimeError('audio relay did not stop; artifacts ' + str(root))
@@ -207,7 +211,7 @@ def main():
             raise RuntimeError('no packets recovered by multistage retry; artifacts ' + str(root))
         if env.get('DECODIUM_LAB_EXPECT_EARLY') == '1' and max(early, default=0) == 0:
             raise RuntimeError('no groups recovered by early timing; artifacts ' + str(root))
-        print('PASS two-app echo', variant, depth, 'fallback enabled', fallback_enabled, 'active frames', stats['active_frames'],
+        print('PASS two-app echo', variant, depth, 'lab fallback switch', fallback_enabled, 'active frames', stats['active_frames'],
               'peak', stats['peak'], 'fallback packets', max(counts, default=0),
               'multistage packets', max(staged, default=0),
               'early groups', max(early, default=0),

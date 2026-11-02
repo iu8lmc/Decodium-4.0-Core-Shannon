@@ -319,6 +319,26 @@ The four macOS temporary artifacts, in table order, are
 
 ### Controlled in-band interference replay
 
+#### AVT90 Narrow-QRM: two-application notch comparison
+
+Two full Decodium pairs on macOS ARM64 transmitted the detailed A/B images
+above using AVT90 Narrow-QRM. A BlackHole relay added a continuous 1900 Hz
+tone at peak 0.10 and applied gain 0.8. With the manual Q=300 notch enabled,
+both images completed with full coverage and passed MAE 5 / p95 15: A
+3.076/10/max 139, B 2.959/8/max 74. With the notch disabled, both images
+completed but failed the MAE limit: A 6.742/14/max 139, B 5.728/14/max 80.
+All four cases reported the expected mode, zero RX drops, discontinuities and
+processing failures, with no relay overflow, underflow or clipping. Enabled
+application artifacts are `.../decodium-avt-two-app-avt-90-narrow-qrm-id145vd4`
+and `.../decodium-avt-two-app-avt-90-narrow-qrm-875_mc5i`. The enabled relay
+recordings are `.../decodium-avt-live-interference-_idnn0vz` and
+`.../decodium-avt-live-interference-aja3r4v1`; disabled controls are
+`.../decodium-avt-live-interference-iiigw2td` and
+`.../decodium-avt-live-interference-s9vu26e3`. The helper now accepts AVT90
+and AVT94 QRM variants as well as AVT24 and extends its timeout accordingly.
+These selected synthetic-tone results do not prove RF, automatic notch
+selection, arbitrary images or Windows/Linux behaviour.
+
 The captured 48 kHz stereo audio from those four two-app transfers was
 subsequently replayed to Decodium through BlackHole with a continuous 1900 Hz
 tone added at peak amplitude 0.10. Both signal and tone were then scaled by
@@ -624,3 +644,452 @@ All six AVT24/90/94 QRM and Narrow-QRM identities now have at least one
 successful local A/B image comparison, but the prior failed acquisition,
 independent cross-application testing, realistic interference and RF
 validation remain relevant limits.
+
+### AVT24 QRM and Narrow-QRM with detailed colour rasters
+
+Two additional distinct 128×120 RGB patterns with gradients and blocks were
+sent by two isolated Decodium processes over BlackHole for each mode. All
+four receivers reported complete images, 100% coverage, zero discontinuities,
+dropped chunks and processing failures; all transmitters completed. Against
+the TX-prepared raster, without alignment, QRM A/B MAE was 1.440/1.700,
+p95 8/10 and maximum component error 69/70. Narrow-QRM A/B MAE was
+1.486/1.738, p95 8/11 and maximum 105/144. All met the existing MAE 5 and
+p95 15 limits, although the maximum errors show individual pixels can differ
+substantially. These are clean local macOS ARM64 audio tests, not RF or
+independent-application interoperability evidence.
+
+The deterministic inputs are reproducible with the `pattern` argument:
+`python3 tests/sstv/tools/run_avt_two_app_lab.py avt-24-qrm a pattern` and
+the same command with `b`, or with `avt-24-narrow-qrm` as the mode. Input
+SHA-256 values are `4ac13fa7a9c4c419d57a146ac849e28b204b5e79c306b65fe09d481cb5e3f2ab`
+and `9afd7b7b575e0ff6ecd2d41588ad0798f220930d8c2da576d129e5faaa7b6176`.
+QRM artifacts are `.../decodium-avt-two-app-avt-24-qrm-6zxc0f7j` and
+`.../decodium-avt-two-app-avt-24-qrm-oenxggwb`; Narrow-QRM artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-5ajz1xqi` and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-aaqei1sb` in the macOS temporary
+directory. The QRM runs used separate files byte-identical to the generated
+patterns, as checked by SHA-256.
+
+The AVT receive session previously closed as soon as an observation's span
+reached the image end. If another observation whose centre was still inside
+the image arrived in the next chunk, it was discarded; the same observations
+in one chunk produced a different last pixel. The session now waits for an
+observation centre at or beyond the image end, or an explicit finish or
+discontinuity. A deterministic regression uses QRM and Narrow-QRM, with the
+same two final observations combined and split across calls; it failed before
+this change and passes afterwards. The AVT session test and full RX runtime
+suite passed on macOS ARM64. Two subsequent Narrow-QRM application transfers
+with the detailed patterns completed with full coverage and zero reported
+discontinuities, dropped chunks and processing failures; A/B MAE was
+1.487/1.879, p95 8/11, and maxima 105/144. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-ivjj9dc7` and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-5dk50rv4`. The application
+results do not prove that the chunk-boundary defect caused the larger errors
+at colour transitions, and do not cover RF or other platforms.
+
+The detailed-pattern comparisons showed many large errors next to sharp
+component transitions. The AVT decoder now prefers observations away from
+the first and last sample of a pixel for dense one-sample-hop streams when
+the pixel spans at least four samples. It retains the boundary observations
+as a fallback if no interior observation is valid; sparse streams preserve
+the former weighting. QRM/Narrow-QRM A/B tests check both interior preference
+and edge-only fallback without interpolation. The prior chunk-boundary test,
+AVT codec/session suites, focused runtime tests and all twelve Studio AVT
+loopbacks also passed on macOS ARM64.
+
+Two new full Decodium process-pair transfers of the detailed AVT24 Narrow-QRM
+patterns over BlackHole produced complete images with no reported audio or
+processing errors. A/B MAE was 1.226/1.493 and p95 5/7, versus 1.487/1.879
+and 8/11 in the preceding local runs; maximum errors were 111/67 versus
+105/144. They are separate real-time runs rather than a sample-identical
+replay, so the comparison is evidence for these inputs and conditions, not a
+guarantee of improved performance in noise, other modes or RF. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-o8zm7goy` and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-usb5p8up`. Windows and Linux
+execution remain unverified for this change.
+
+### Detailed colour rasters for the longer QRM modes
+
+Three additional local macOS ARM64 A/B comparisons used two Decodium
+processes and deterministic colour gradients and blocks over BlackHole 2ch.
+The input patterns are 128×120; the comparison is against the prepared
+320×240 AVT90 or 320×200 AVT94 TX raster. All six images had full coverage,
+no reported discontinuities, dropped chunks or processing failures, and met
+the pre-existing MAE 5 / p95 15 limits:
+
+| Mode | Input | MAE | p95 | Maximum |
+|---|---|---:|---:|---:|
+| AVT90 QRM | A | 0.631 | 1 | 125 |
+| AVT90 QRM | B | 0.725 | 3 | 83 |
+| AVT94 Narrow-QRM | A | 0.455 | 1 | 56 |
+| AVT94 Narrow-QRM | B | 0.551 | 1 | 50 |
+| AVT94 QRM | A | 0.700 | 1 | 50 |
+| AVT94 QRM | B | 0.534 | 1 | 48 |
+
+The respective application artifacts are
+`.../decodium-avt-two-app-avt-90-qrm-vhv_fqh8`,
+`.../decodium-avt-two-app-avt-90-qrm-q0ftrvwg`,
+`.../decodium-avt-two-app-avt-94-narrow-qrm-_hyh2del`,
+`.../decodium-avt-two-app-avt-94-narrow-qrm-cfhp3_62`,
+`.../decodium-avt-two-app-avt-94-qrm-ujajquet`, and
+`.../decodium-avt-two-app-avt-94-qrm-r_35w87c`. Raw loopback PCM was retained
+for the first four; the final pair drained the monitored audio without saving
+PCM because the disk was nearly full. These clean-audio tests do not establish
+independent-application interoperability, interference resilience, RF or
+Windows/Linux behaviour. Reproduce with
+`python3 tests/sstv/tools/run_avt_two_app_lab.py <mode> <a|b> pattern`;
+`DECODIUM_LAB_AVT_NO_CAPTURE=1` disables only raw PCM retention.
+
+### AVT24 normal independent receiver attempt
+
+Two Decodium sessions on macOS ARM64 exchanged normal AVT24 with fixtures A
+and B. Both images reached full coverage with no reported dropped chunks,
+processing failures or discontinuities. Component MAE was 0.35434 for each,
+p95 was zero and maximum error was 136, against limits MAE 5/p95 15. The
+captured audio and prepared images are in
+`.../decodium-avt-two-app-avt-24-00yeywou` and
+`.../decodium-avt-two-app-avt-24-e4joy_o_` under the macOS temporary directory.
+
+The pinned unmodified QSSTV-Experimental 10.0 ARM64 release was asked to
+decode those captures in batch mode with AVT24 selected. Neither run produced
+an image within 120 seconds; a further A run ended at QSSTV's own 96-second
+timeout without an image. The receiver logs report duplicate Qt framework
+classes. A sample of the B process first showed it in the filesystem watcher,
+then in its SSTV receive code; that does not identify the cause. As an
+independent control, the same QSSTV binary generated AVT24 WAVs for both images,
+but its batch receiver reported no image for either its own WAV or copies with
+eight seconds of appended silence. Both self-generated WAVs had nonzero
+audio, with peak -2.5 dBFS; this does not establish that the transmitted PCM is
+correct. Thus these controls do not prove a Decodium/QSSTV wire mismatch and
+do not establish interoperability. QSSTV logs and WAVs are
+`/tmp/decodium-qsstv-self-avt24-{a,b}*`; the independent Decodium capture
+attempts are `decodium-qsstv-avt24-decode-o4i1jotz`,
+`decodium-qsstv-avt24-decode-dog_9v5e` and
+`decodium-qsstv-avt24-decode-k1e36o5l` in the macOS temporary directory.
+
+The Decodium A/B captures can be reproduced with
+`python3 tests/sstv/tools/run_avt_two_app_lab.py avt-24 a` and the same
+command with `b`; `tests/sstv/tools/run_qsstv_exp_avt_decode_lab.py` attempts
+the QSSTV comparison using a captured float PCM file and prepared image.
+This test covers the normal mode, not QRM variants, RF or other platforms.
+
+Further controls identified the duplicate Qt warning's source: loading the
+bundled `imageformats/libqpdf.dylib` pulls Homebrew QtPdf and its separate Qt
+Core/Gui frameworks into the release process. A disposable copy of the bundle
+was made at `/tmp/decodium-qsstv-isolated.vQpVBu`, and only that copy's PDF
+plugin was moved out of the bundle. The executable SHA-256 remained
+`b2de73b06d2308e8363864555336f70eb0ba7603e7d3734c091da3da1a0cf1fa`;
+the original bundle was not modified. The duplicate-class warnings disappeared,
+but its receiver still reported no image for both release-generated AVT24
+controls padded with silence. The captured Decodium A/B signals were also
+replayed after removing only external silence: both 41-second files reached
+QSSTV's 71-second internal timeout without images, without duplicate-class
+warnings. Their output directories are `decodium-qsstv-avt24-decode-uii4mowz`
+and `decodium-qsstv-avt24-decode-8rsnzasg` in the macOS temporary directory.
+
+The official release's A/B self-generated WAVs had nonnegative samples only
+in the first second, with approximately 51.4% zero samples. A separate build
+of QSSTV source revision `a84584248d3307bfa081362031ff20f365337633`, carrying
+only `tests/sstv/fixtures/qsstv-experimental-10.0-signed-pcm.patch`, generated
+new AVT24 A/B WAVs whose first second had both polarities (approximately 2.8%
+zero samples). After repairing the stale RIFF size in copies without changing
+PCM, the original receiver binary in the isolated bundle reached its own
+60-second timeout without an image for both. Logs and files are
+`/tmp/decodium-qsstv-pcmfix-avt24-{a,b}*`. The PCM correction and Qt isolation
+are diagnostic controls, not a proof of why AVT24 decoding fails in this
+environment. They do not establish incompatibility with Decodium or a general
+QSSTV defect; independent AVT/QRM exchange remains unresolved.
+
+Inspection of the same pinned QSSTV source found that its `sstvTx::sendImage`
+uses the generic preamble and one VIS before `transmitImage`, while its
+`modeAVT::txSetupLine` sends G/B/R lines with gaps and sync; its AVT receiver's
+`modeAVT::process` searches for the protected countdown. A bounded audio
+diagnostic examined the first 15 seconds of the two actual Decodium captures
+and the two PCM-corrected QSSTV transmissions. A first 4 ms sampling grid
+found 16 increasing AVT24 countdown words per Decodium capture. A finer 1 ms
+grid found all 32 values, 0 through 31, in both; neither grid found matching
+protected words in either QSSTV WAV. The diagnostic's thresholds and first
+15-second search bound mean that a zero count is not general proof that any
+arbitrary recording lacks a countdown. Synthetic A/B, invalid-inverse,
+silence and steady-tone negative controls pass in
+`test_sstv_avt_countdown_audio_diagnostic`.
+
+The two PCM-corrected QSSTV WAVs were also replayed through BlackHole into
+full Decodium RX instances. Both recognized the AVT24 VIS, published no image,
+and reported zero processing failures, dropped chunks and discontinuities.
+Artifacts are `.../decodium-avt-interference-q82axwsy` and
+`.../decodium-avt-interference-jj3eci5n`. The transmitter was a modified
+QSSTV build and the files were replayed, not a live application-to-application
+exchange. This is evidence of a difference in these tested transmit paths,
+not proof of every QSSTV version or of RF performance.
+
+As a further controlled diagnostic, the two Decodium AVT24 captures were
+cut to retain the third complete VIS and countdown, with approximately 100 ms
+of the preceding VIS tail, the complete image and trailing silence. The
+countdown analyzer found all 32 words in each cut. With AVT24 explicitly
+selected, the original QSSTV-Experimental 10.0 binary decoded both recordings:
+A/B component MAE was 3.624/3.644, p95 1/1 and maximum 255/255, within
+the pre-existing MAE 5/p95 15 limits but with large individual pixel errors.
+The same results were obtained in the PDF-plugin-isolated copy. Original
+release artifacts are `decodium-qsstv-avt24-decode-khd6fa92` and
+`decodium-qsstv-avt24-decode-0a1ui4ek`; isolated-bundle artifacts are
+`decodium-qsstv-avt24-decode-gz93c9sf` and
+`decodium-qsstv-avt24-decode-k2nxfbse` in the macOS temporary directory.
+
+The isolated QSSTV binary with automatic mode detection reported no image for
+either cut. Replacing the initial 100 ms VIS tail with one second of silence
+also yielded no image in automatic mode; logs are
+`/tmp/decodium-qsstv-avt24-{singlevis,cleanvis}-auto-{a,b}.log`. These are
+post-capture diagnostic edits and a manually selected receiver mode, not a
+successful exchange of the original full signal. They show the selected-mode
+receiver can decode the retained countdown and image; they do not establish
+why automatic detection or the original triple-VIS capture failed.
+
+The pinned QSSTV source places AVT24/90/94 after `FAX480` in the mode enum,
+while its automatic wide-mode range ends at `FAX480`. To test that finding,
+a separate build from source revision `a84584248d3307bfa081362031ff20f365337633`
+changed only that upper bound to `AVT94`, in addition to the existing signed-PCM
+TX patch. Its binary SHA-256 is
+`1e0b1674a14d1a5ea35d9cf7d8bccceaea8d635f045dd79559dc4eafa8ab0f2c`.
+The upper-bound change is preserved as
+`tests/sstv/fixtures/qsstv-experimental-10.0-avt-auto-diagnostic.patch` and
+was applied only to a temporary source copy. Against the same two recordings
+with the 100 ms preceding-VIS tail, this modified build automatically selected
+AVT24 and decoded A/B at MAE/p95 3.624/1 and 3.644/1, respectively. The
+original isolated QSSTV binary reported no image for the same automatic tests.
+Both modified-build tests with one second of initial silence reached the
+60-second internal timeout, as did both uncut triple-VIS captures; one of those
+processes remained active after reporting timeout and was terminated by the
+harness operator. The modified build also timed out on the silence-prefixed
+inputs when AVT24 was selected manually, while manually selected tests on the
+100 ms tail succeeded. Thus widening the range helps this specific automatic
+case but does not resolve acquisition in general or establish interoperability
+of unmodified QSSTV with the original signal. Logs, source and images are in
+`/tmp/decodium-qsstv-avt-auto.1HtFgo`.
+
+`tests/sstv/tools/prepare_avt_single_vis_lab.py` reproduces the exact PCM cuts
+from the externally measured countdown times 4.620 s and 4.492 s in the
+previously trimmed captures. Its A/B sample-exact copy, overwrite rejection
+and invalid-time controls pass in CTest. The resulting SHA-256 values were
+`36774bed02ab95cf7aa6c8f061a66aae49c0c9bc078c6a0f1afeafe14339d7a9`
+and `04b7403462d3277ff44b16fdf7d6985295347b327bae193b1bcf035c3087662c`.
+These tests do not validate QRM interoperability, RF, or other platforms.
+
+### Acquisition after a damaged first countdown word
+
+A focused decoder A/B regression now feeds two consecutive AVT24 countdown
+words for QRM and Narrow-QRM, corrupts one symbol in the first protected
+word, and checks that the immediately following word is accepted with the
+correct counter and image anchor. Feeding one observation at a time and in
+193-observation chunks gives the same result. The AVT unit suite passes.
+
+A separate local macOS ARM64 application experiment connected two Decodium
+sessions through a BlackHole relay. The relay muted 110 ms inside the first
+countdown word, without adding an interference tone. A separate offline tone
+analyzer checked each saved pair of source and relayed recordings: the source
+contained counter 0, the first valid relayed word was counter 1, and at least
+five following words formed a chain. The analyzer also has synthetic A/B
+controls for the narrow 1700/2100 Hz tones. All four received images had
+complete coverage and no reported discontinuities, dropped chunks, processing
+failures, relay clipping, overruns or underruns:
+
+| Mode | Image | MAE | p95 | Maximum |
+|---|---|---:|---:|---:|
+| AVT24 QRM | A | 1.311 | 9 | 44 |
+| AVT24 QRM | B | 0.724 | 5 | 27 |
+| AVT24 Narrow-QRM | A | 1.361 | 9 | 65 |
+| AVT24 Narrow-QRM | B | 0.735 | 5 | 28 |
+
+Application artifacts in table order are
+`.../decodium-avt-two-app-avt-24-qrm-o8mrsjxk`,
+`.../decodium-avt-two-app-avt-24-qrm-2gda1ni9`,
+`.../decodium-avt-two-app-avt-24-narrow-qrm-d3lvu794`, and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-tdfv27fr`; relay artifacts are
+`.../decodium-avt-live-interference-sfxhudpu`,
+`.../decodium-avt-live-interference-jj_zl9t5`,
+`.../decodium-avt-live-interference-6l66jsms`, and
+`.../decodium-avt-live-interference-wuo8b9hb`. Run the existing two-app
+interference lab with `DECODIUM_LAB_AVT_FIRST_FRAME_MUTE=1`, notch `0`, and
+one of these modes and images; in this mode no continuous tone is added.
+The application logs do not record which valid word was used for acquisition;
+the immediate-successor assertion is made by the component test, while the
+application test establishes complete reception after this controlled loss.
+These laboratory cases do not establish independent application, general QRM,
+RF or arbitrary longer-burst performance.
+
+### Single-VIS prefix sensitivity in the QSSTV batch receiver
+
+The exact A/B single-VIS recordings above were copied with only their first
+100 ms replaced. A generated 1100 Hz or 1500 Hz tone at amplitude 0.3 replaced
+the retained tail of the preceding VIS; a zero-sample prefix served as control.
+Everything from 100 ms onward, including the complete last VIS, countdown,
+image and tail, remained byte-identical to the respective input. The original
+unmodified QSSTV-Experimental 10.0 release, with AVT24 selected manually,
+decoded A and B for both tones at component MAE/p95 3.624/1 and 3.644/1;
+maximum component error was 255 in both. Both silent-prefix controls reported
+an internal timeout and produced no image. These outcomes show sensitivity to
+the initial audio in this batch-receiver setup; they do not determine the
+internal cause, establish live reception, or establish that the original
+triple-VIS signal is interoperable. No production waveform was changed.
+
+The 1100 Hz receiver artifacts are `.../decodium-qsstv-avt24-decode-avo5nk5m`
+and `.../decodium-qsstv-avt24-decode-x3mklk8q`; 1500 Hz artifacts are
+`.../decodium-qsstv-avt24-decode-k2zv8v_9` and
+`.../decodium-qsstv-avt24-decode-px01z0d4`. Silent controls are
+`.../decodium-qsstv-avt24-decode-pqgeewqe` and
+`.../decodium-qsstv-avt24-decode-xgkqs0qd`. All are under the macOS temporary
+directory. `tests/sstv/tools/prepare_avt_qsstv_prefix_probe.py` reproduces
+the replacement; its synthetic silence/tone controls verify stereo samples,
+byte-exact preservation after the prefix and refusal to overwrite. Generated
+1100 Hz A/B copies matched the original probes byte-for-byte. The diagnostic
+CTest passes; these artificial prefixes are not a standards-conformance test.
+
+### Two consecutively damaged initial countdown words
+
+The local BlackHole relay can now mute approximately 276 ms, damaging both
+initial AVT24 countdown words. Independent analysis of the source and relayed
+recordings found counter 0 in the original and counter 2 as the first valid
+word in the relayed signal, with at least five consecutive later words. Two
+Decodium processes transmitted and received each of two 128x120 images for
+both QRM variants. QRM A/B MAE was 1.075/1.229, p95 11/13 and maximum
+41/48; Narrow-QRM A/B MAE was 1.324/1.536, p95 6/8 and maximum 67/68.
+All four completed with full coverage and no reported discontinuity, relay
+clipping, overflow or underflow. These observations do not prove which word
+the application used for acquisition, independent implementation
+interoperability, RF behaviour, or arbitrary burst resilience.
+
+Application artifacts are `.../decodium-avt-two-app-avt-24-qrm-6o_5xf_f`,
+`.../decodium-avt-two-app-avt-24-qrm-lsb8o_92`,
+`.../decodium-avt-two-app-avt-24-narrow-qrm-8v2o7py6`, and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-nzh7vvlx`. Corresponding relay
+artifacts are `.../decodium-avt-live-interference-zo596lz0`,
+`.../decodium-avt-live-interference-0nu_l4b3`,
+`.../decodium-avt-live-interference-20r4rway`, and
+`.../decodium-avt-live-interference-g5qp4ikx`, under the macOS temporary
+directory. Set `DECODIUM_LAB_AVT_FIRST_FRAME_MUTE=2` in the existing relay
+helper to repeat this controlled loss; `1` retains the earlier one-word case.
+
+### AVT90 QRM with a continuous 1900 Hz tone
+
+Two full Decodium process pairs transmitted different 320x240 images in
+AVT90 QRM through the BlackHole relay, with a continuous 1900 Hz peak-0.10
+tone, gain 0.8 and the receiver's manual 1900 Hz notch enabled. A/B completed
+with full coverage, MAE 0.346/0.352, p95 1/1 and maximum component error
+64/64. The relays reported no overflow, underflow or clipping; RX diagnostics
+reported no processing failures, dropped chunks or discontinuities. These
+fixtures are simple images and do not establish general interference or RF
+performance, other variants or independent interoperability. Artifacts are
+`.../decodium-avt-two-app-avt-90-qrm-5y2fo_oi` and
+`.../decodium-avt-two-app-avt-90-qrm-ngtkh5uf`, with relays
+`.../decodium-avt-live-interference-6jh9ef_0` and
+`.../decodium-avt-live-interference-1mv6bzmb` in the macOS temporary directory.
+
+An earlier A attempt completed TX and RX but timed out while awaiting process
+shutdown; two subsequent attempts failed with audio capture/relay overflow
+under heavy machine load. None was counted as a successful run. The helper
+now waits for actual TX completion and a complete received image before its
+existing lab-process cleanup, rather than relying on application exit. When
+the interference relay already records its mixed signal, it skips an extra
+BlackHole capture and uses a larger relay buffering allowance; any PortAudio
+error still fails the run. It does not test normal application shutdown.
+The AVT core and RX session tests also passed after the helper changes.
+
+### AVT94 Narrow-QRM: terminal-pixel discrepancy
+
+Two local Decodium process pairs transmitted A/B images using AVT94
+Narrow-QRM through the 1900 Hz peak-0.10 interference relay and receiver
+notch. Both had full reported coverage, no relay errors, and MAE/p95
+0.452/2 and 0.447/2, within the existing 5/15 limits. The maximum errors,
+however, were 222/221. Comparing all 192,000 RGB components showed exactly
+one component above 64 in each: blue at pixel (319,199), expected 0 and
+received 222/221. The same two images were then transmitted by two Decodium
+processes without the tone or notch. Those direct audio tests had MAE/p95
+0.129/0 and 0.129/0, but again exactly one component above 64 at the same
+location, expected 0 and received 224 in both. Thus the issue is not specific
+to the interference setup. The mechanism remains unconfirmed; no blind pixel
+replacement or protocol change is justified by the current evidence.
+
+Interfered application artifacts are
+`.../decodium-avt-two-app-avt-94-narrow-qrm-xy2qnowy` and
+`.../decodium-avt-two-app-avt-94-narrow-qrm-q6ucbkq0`, with relays
+`.../decodium-avt-live-interference-l9vsl60n` and
+`.../decodium-avt-live-interference-dye53unp`. Clean application artifacts are
+`.../decodium-avt-two-app-avt-94-narrow-qrm-uh0s0mpt` and
+`.../decodium-avt-two-app-avt-94-narrow-qrm-og_61puh`, all under the macOS
+temporary directory. These controlled local tests are not independent
+interoperability or RF evidence.
+
+To test one possible boundary cause, diagnostic copies of the two interfered
+relay recordings were made with an additional 10 ms 1700 Hz tone after the
+last sample above 0.1 amplitude. The threshold identifies an estimated end
+of the stronger TX signal, not a verified protocol boundary; the existing
+1900 Hz interferer was already present in the recordings. On replay into
+Decodium with its 1900 Hz notch, the final blue values were still 222/221
+against zero, respectively. Both replays had complete reported coverage,
+MAE/p95 0.451/2 and 0.442/2 and no reported RX discontinuities. This does not
+exclude a different timing error or prove that the added tone covered the
+actual final pixel; it only shows that this particular estimated extension did
+not resolve the defect. No production waveform was changed.
+
+The copies were made by `tests/sstv/tools/prepare_avt_terminal_tone_probe.py`;
+its synthetic A/B test checks that the only modified interval is the selected
+tail and that existing files cannot be overwritten. That test, the AVT core
+suite and RX session suite passed. Modified audio is
+`/tmp/decodium-avt94-terminal-probe-{a,b}.f32`; replay artifacts are
+`.../decodium-avt-interference-indyz0av` and
+`.../decodium-avt-interference-cuu6r2xn` under the macOS temporary directory.
+
+Subsequent inspection located the actual transition at the start of the
+500 ms VOX hang. In diagnostic copies, replacing its first 10 ms with the
+preceding 1700 Hz image tone changed the final blue component from 222/221
+to 0/2 in the two interfered replays. The diagnostic is implemented in
+`prepare_avt_vox_boundary_probe.py`; its synthetic A/B test checks the changed
+interval and refuses to overwrite an existing output.
+
+The TX coordinator now appends 10 ms of the actual last component's tone to
+AVT QRM and Narrow-QRM audio before any following VOX hang or FSK ID. The core
+encoder defaults to no hold. Encoder tests compare the protocol samples with
+and without the hold, check black and white terminal tones, and verify that
+the coordinator only adds this duration to QRM variants.
+
+Two fresh AVT94 Narrow-QRM Decodium TX/RX process pairs used 1900 Hz
+peak-0.10 interference and the RX notch. In A, the last blue component was 0
+with a preceding blue of 255; RX gave 4 and 193. In B, the values were 255
+and 0; RX gave 254 and 63. Both images had full reported coverage, zero
+reported discontinuities and no relay errors; MAE/p95 were 1.473/9 and
+1.187/7 respectively. Application artifacts are
+`.../decodium-avt-two-app-avt-94-narrow-qrm-e9al6gug` and
+`.../decodium-avt-two-app-avt-94-narrow-qrm-0aqybfkc`; relay artifacts are
+`.../decodium-avt-live-interference-ag4qp5s5` and
+`.../decodium-avt-live-interference-c8wq0c7f` in the macOS temporary
+directory. The preceding pixel and other components still show demodulation
+error at abrupt colour transitions. These tests establish local application
+behaviour under the stated conditions, not RF performance or independent
+receiver interoperability of the extended tail.
+
+The two-app harness can enforce this individual component using
+`DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR=10`. The image comparator reports the
+reference, received value and error, and fails independently of the overall
+MAE/p95 limits. `test_sstv_lab_image_terminal_comparison` exercises near and
+opposite terminal values for both black and white, including invalid limits.
+With this guard active, fresh A/B two-application interference tests passed:
+last blue was 4/0 and 254/255 received/reference, with full reported
+coverage and zero discontinuities. MAE/p95 were 1.449/9 and 1.180/7.
+Application artifacts are `.../decodium-avt-two-app-avt-94-narrow-qrm-3lcve56r`
+and `.../decodium-avt-two-app-avt-94-narrow-qrm-nb8ezyks`; relays are
+`.../decodium-avt-live-interference-6ey_m719` and
+`.../decodium-avt-live-interference-ggqay3zg` in the macOS temporary directory.
+
+Two further local Decodium TX/RX pairs checked the terminal-tone hold on
+AVT24 QRM, using 1900 Hz peak-0.10 interference and the RX notch. The last
+blue component was 0 with preceding blue 255 for A, and 255 with preceding
+blue 0 for B. The last component received was 13 and 255 respectively; both
+passed the individually configured maximum error of 20. A/B image MAE/p95
+were 1.863/11 and 1.641/10, coverage was complete, and no discontinuities or
+relay errors were reported. Application artifacts are
+`.../decodium-avt-two-app-avt-24-qrm-3gfmj2va` and
+`.../decodium-avt-two-app-avt-24-qrm-j8hl60kv`; relay captures are
+`.../decodium-avt-live-interference-erpxcjnf` and
+`.../decodium-avt-live-interference-v9jnauzv` in the macOS temporary directory.
+This checks the selected local QRM mode and signal, not independent receiver
+or RF interoperability.

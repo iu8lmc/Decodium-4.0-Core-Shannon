@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay a QSSTV-Experimental DRM WAV into Decodium over BlackHole."""
+"""Replay a QSSTV-Experimental DRM image or BSR WAV into Decodium over BlackHole."""
 import ctypes as c
 import ctypes.util
 import json
@@ -18,7 +18,8 @@ source=Path(sys.argv[1]).resolve(strict=True)
 expected=Path(sys.argv[2]).resolve(strict=True)
 root=Path(tempfile.mkdtemp(prefix='decodium-qsstv-drm-app-'))
 repo=Path.cwd()
-subprocess.run(['ffmpeg','-v','error','-i',str(source),
+input_options=['-f','f32le','-ar','48000','-ac','2'] if source.suffix == '.f32' else []
+subprocess.run(['ffmpeg','-v','error',*input_options,'-i',str(source),
                 '-f','f32le','-ar','48000','-ac','2',str(root/'source.f32')],check=True)
 env=os.environ.copy()
 env.update(QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',DECODIUM_LAB_SETTINGS_DIR=str(root/'settings'))
@@ -66,6 +67,17 @@ try:
     if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
         and '[HAMDRM] operator selected experimental adaptive dual timing' not in log):
         raise RuntimeError('operator-selected timing was not active; artifacts '+str(root))
+    if os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1':
+        if ('[HAMDRM] operator selected fractional timing candidate' not in log
+            or '[HAMDRM] operator selected CRC-gated packet retries' not in log):
+            raise RuntimeError('operator-selected receiver candidates missing; artifacts '+str(root))
+        diagnostics = [json.loads(line.split(' RX diagnostics ', 1)[1])
+                       for line in log.splitlines() if '[LAB][SSTV] RX diagnostics ' in line]
+        if not diagnostics or any(row.get('sourceDevice') != 'BlackHole 2ch'
+                                  or any(row.get(key) != 0 for key in ('discontinuities', 'droppedChunks',
+                                     'hamdrmRejectedChunks', 'hamdrmQueueOverflows', 'processingFailures'))
+                                  for row in diagnostics):
+            raise RuntimeError('operator-selected RX audio diagnostics failed; artifacts '+str(root))
     if '[LAB][HAMDRM] RX started true "'+profile+'"' not in log:
         raise RuntimeError('HAMDRM RX did not start; artifacts '+str(root))
     if (os.environ.get('DECODIUM_LAB_HAMDRM_STRICT_ADAPTIVE') == '1'
@@ -102,8 +114,26 @@ try:
         print('PASS application received two synthetic body groups; fallback required',expect_fallback,'artifacts',root,flush=True)
         sys.exit(0)
     received=root/'received.jp2'
+    if os.environ.get('DECODIUM_LAB_EXPECT_NO_IMAGE') == '1':
+        diagnostics = [json.loads(line.split(' RX diagnostics ', 1)[1])
+                       for line in log.splitlines() if '[LAB][SSTV] RX diagnostics ' in line]
+        if (received.exists() or not diagnostics
+            or any(row.get('hamdrmDeliveredGroups', 0) != 0 for row in diagnostics)):
+            raise RuntimeError('noise control produced decoded data; artifacts '+str(root))
+        print('PASS DRM application noise rejection; artifacts',root,flush=True)
+        sys.exit(0)
     if not received.exists() or received.read_bytes()!=expected.read_bytes():
-        raise RuntimeError('QSSTV image was not reconstructed byte-exactly; artifacts '+str(root))
+        raise RuntimeError('QSSTV payload was not reconstructed byte-exactly; artifacts '+str(root))
+    if os.environ.get('DECODIUM_LAB_EXPECT_BSR') == '1':
+        if '[LAB][HAMDRM] RX BSR saved' not in log:
+            raise RuntimeError('received payload was not identified as a BSR; artifacts '+str(root))
+        diagnostics = [json.loads(line.split(' RX diagnostics ', 1)[1])
+                       for line in log.splitlines() if '[LAB][SSTV] RX diagnostics ' in line]
+        if not diagnostics or any(row.get('sourceDevice') != 'BlackHole 2ch'
+                                  or any(row.get(key) != 0 for key in ('discontinuities', 'droppedChunks',
+                                     'hamdrmRejectedChunks', 'hamdrmQueueOverflows', 'processingFailures'))
+                                  for row in diagnostics):
+            raise RuntimeError('BSR receive audio diagnostics failed; artifacts '+str(root))
     print('PASS DRM WAV replay to Decodium RX, exact bytes',len(received.read_bytes()),'artifacts',root,flush=True)
 
 finally:

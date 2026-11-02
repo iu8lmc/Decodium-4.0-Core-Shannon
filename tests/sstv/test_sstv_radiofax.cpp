@@ -206,6 +206,75 @@ private slots:
         }
     }
 
+    void autoReceiverTracksWmoDeadSectorClockAB()
+    {
+        SstvFaxConfig config;
+        config.width = 128U;
+        config.height = 150U;
+        config.wmoDeadSector = true;
+        for (const std::uint64_t numerator : {596'400U, 603'600U}) {
+            for (const double stopHz : {440.0, 445.0, 447.3, 450.0, 452.7, 455.0, 460.0}) {
+                constexpr std::uint64_t denominator = 100U;
+                const auto boundary = [=](std::uint64_t line) { return line * numerator / denominator; };
+                const auto imageStart = boundary(20U);
+                const auto imageEnd = imageStart + boundary(120U);
+                SstvRadiofaxAutoRx receiver(config);
+                std::vector<SstvFrequencyObservation> batch;
+                for (std::uint64_t sample = 0U; sample < imageEnd + 48'000U; sample += 6U) {
+                    SstvFrequencyObservation obs;
+                    obs.centreSample = sample;
+                    obs.status = SstvFrequencyStatus::Valid;
+                    obs.confidence = 1.0;
+                    if (sample < imageStart) {
+                        const auto line = ((sample + 1U) * denominator - 1U) / numerator;
+                        const auto within = sample - boundary(line);
+                        const auto length = boundary(line + 1U) - boundary(line);
+                        obs.correctedFrequencyHz = within * 20U < length ? 2300.0 : 1500.0;
+                    } else if (sample >= imageEnd) {
+                        obs.correctedFrequencyHz = std::fmod(double(sample - imageEnd) * stopHz * 2.0
+                                                             / config.sampleRate, 2.0) >= 1.0 ? 2300.0 : 1500.0;
+                    } else {
+                        const auto offset = sample - imageStart;
+                        const auto line = ((offset + 1U) * denominator - 1U) / numerator;
+                        const auto within = offset - boundary(line);
+                        const auto length = boundary(line + 1U) - boundary(line);
+                        const auto dead = sstvRadiofaxDeadSectorSamples(length);
+                        if (within < dead) obs.correctedFrequencyHz = 2300.0;
+                        else if (line < 10U) obs.correctedFrequencyHz = 1900.0;
+                        else {
+                            const auto pixel = (within - dead) * config.width / (length - dead);
+                            obs.correctedFrequencyHz = (pixel + line) % 2U ? 2300.0 : 1500.0;
+                        }
+                    }
+                    batch.push_back(obs);
+                    if (batch.size() == 4096U) {
+                        receiver.consume(batch);
+                        batch.clear();
+                    }
+                }
+                receiver.consume(batch);
+                QVERIFY(receiver.imageStartSample());
+                QVERIFY(std::llabs(static_cast<long long>(*receiver.imageStartSample())
+                                   - static_cast<long long>(imageStart)) < 10LL);
+                QVERIFY(receiver.imageClock());
+                QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines
+                                 - double(numerator) / denominator) < 0.2);
+                QVERIFY(receiver.stopSample());
+                QVERIFY2(std::llabs(static_cast<long long>(*receiver.stopSample())
+                                   - static_cast<long long>(imageEnd)) < 10LL,
+                         qPrintable(QStringLiteral("stopHz=%1 delta=%2").arg(stopHz)
+                             .arg(qint64(*receiver.stopSample()) - qint64(imageEnd))));
+                QVERIFY(!receiver.stopWasAudioTone());
+                const auto image = receiver.snapshot();
+                QVERIFY(image);
+                QCOMPARE(image->completedPixels, std::size_t(120U * config.width));
+                for (std::uint32_t y = 10U; y < 120U; ++y)
+                    for (std::uint32_t x = 0U; x < config.width; ++x)
+                        QCOMPARE(image->pixel(x, y).red, std::uint8_t((x + y) % 2U ? 255U : 0U));
+            }
+        }
+    }
+
     void autoReceiverTracksLongPhasingAB()
     {
         SstvFaxConfig config;
@@ -298,6 +367,132 @@ private slots:
             }
         }
     }
+    void wmoDeadSectorMapsActiveRasterAB()
+    {
+        for (const unsigned rpm : {120U, 240U}) {
+            SstvFaxConfig cfg;
+            cfg.linesPerMinute = static_cast<std::uint16_t>(rpm);
+            cfg.sampleRate = rpm == 120U ? 11'025U : 12'000U;
+            cfg.width = 8U; cfg.height = 2U; cfg.wmoDeadSector = true;
+            SstvRadiofaxMapper mapper(cfg);
+            for (std::uint32_t line = 0; line < cfg.height; ++line) {
+                const auto start = mapper.lineStartSample(line);
+                const auto lineSamples = mapper.lineStartSample(line + 1U) - start;
+                const auto dead = lineSamples * 45U / 1000U;
+                QCOMPARE(mapper.positionAtSample(start).region, SstvFaxRegion::DeadSector);
+                QVERIFY(mapper.positionAtSample(start).white);
+                QCOMPARE(mapper.positionAtSample(start + dead - 1U).region, SstvFaxRegion::DeadSector);
+                QCOMPARE(mapper.positionAtSample(start + dead).region, SstvFaxRegion::Image);
+                QCOMPARE(mapper.positionAtSample(start + dead).pixel, std::uint32_t(0));
+                QCOMPARE(mapper.positionAtSample(start + lineSamples - 1U).pixel, cfg.width - 1U);
+            }
+            SstvRadiofaxRxSession onlyDead(cfg, mapper.imageStartSample());
+            for (std::uint32_t line = 0; line < cfg.height; ++line) {
+                const auto start = mapper.lineStartSample(line);
+                const auto length = mapper.lineStartSample(line + 1U) - start;
+                const auto dead = length * 45U / 1000U;
+                for (std::uint64_t i = 0; i < dead; ++i) {
+                    SstvFrequencyObservation obs;
+                    obs.status = SstvFrequencyStatus::Valid;
+                    obs.confidence = 1.0;
+                    obs.centreSample = start + i;
+                    obs.correctedFrequencyHz = 2300.0;
+                    onlyDead.consume(&obs, 1U);
+                }
+            }
+            QCOMPARE(onlyDead.finish(), SstvRadiofaxRxState::Partial);
+            QCOMPARE(onlyDead.snapshot().completedPixels, std::size_t(0));
+            SstvRadiofaxRxSession rx(cfg, mapper.imageStartSample());
+            for (std::uint32_t line = 0; line < cfg.height; ++line) {
+                const auto start = mapper.lineStartSample(line);
+                const auto lineSamples = mapper.lineStartSample(line + 1U) - start;
+                const auto dead = lineSamples * 45U / 1000U;
+                for (std::uint64_t i = 0; i < lineSamples; ++i) {
+                    SstvFrequencyObservation obs;
+                    obs.status = SstvFrequencyStatus::Valid;
+                    obs.confidence = 1.0;
+                    obs.centreSample = start + i;
+                    const auto x = i < dead ? 0U : (i - dead) * cfg.width / (lineSamples - dead);
+                    obs.correctedFrequencyHz = i < dead ? (line == 0U ? 2300.0 : 1500.0)
+                                                        : (x < 4U ? 1500.0 : 2300.0);
+                    rx.consume(&obs, 1U);
+                }
+            }
+            auto invalid = cfg;
+            invalid.centeredPhasingWithWhiteEndLine = true;
+            bool rejected = false;
+            try { static_cast<void>(SstvRadiofaxMapper(invalid)); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            QVERIFY(rejected);
+            invalid = cfg;
+            const auto shortestLine = cfg.sampleRate * 60U / rpm;
+            invalid.width = shortestLine - shortestLine * 45U / 1000U + 1U;
+            rejected = false;
+            try { static_cast<void>(SstvRadiofaxMapper(invalid)); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            QVERIFY(rejected);
+            QCOMPARE(rx.finish(), SstvRadiofaxRxState::Complete);
+            const auto image = rx.snapshot();
+            for (std::uint32_t y = 0; y < cfg.height; ++y) {
+                for (std::uint32_t x = 0; x < cfg.width; ++x)
+                    QCOMPARE(image.pixels[y * cfg.width + x].red, std::uint8_t(x < 4U ? 0 : 255));
+            }
+        }
+    }
+
+    void measuredClockWithWmoDeadSectorAB()
+    {
+        SstvFaxConfig cfg;
+        cfg.width = 128U;
+        cfg.height = 120U;
+        cfg.wmoDeadSector = true;
+        for (const auto clock : {SstvRadiofaxClockEstimate {596'400U, 100U},
+                                 SstvRadiofaxClockEstimate {603'600U, 100U}}) {
+            SstvRadiofaxRxSession corrected(cfg, 0U, 0.0, clock);
+            SstvRadiofaxRxSession nominal(cfg, 0U);
+            std::vector<SstvFrequencyObservation> batch;
+            const auto end = cfg.height * clock.samples / clock.lines;
+            for (std::uint64_t sample = 0U; sample < end; sample += 6U) {
+                const auto line = ((sample + 1U) * clock.lines - 1U) / clock.samples;
+                const auto start = line * clock.samples / clock.lines;
+                const auto next = (line + 1U) * clock.samples / clock.lines;
+                const auto dead = sstvRadiofaxDeadSectorSamples(next - start);
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                if (sample - start < dead) {
+                    obs.correctedFrequencyHz = 2300.0;
+                } else {
+                    const auto pixel = (sample - start - dead) * cfg.width / (next - start - dead);
+                    obs.correctedFrequencyHz = ((pixel + line) % 2U) ? 2300.0 : 1500.0;
+                }
+                batch.push_back(obs);
+                if (batch.size() == SstvRadiofaxRxSession::MaximumObservationsPerConsume) {
+                    corrected.consume(batch);
+                    nominal.consume(batch);
+                    batch.clear();
+                }
+            }
+            corrected.consume(batch);
+            nominal.consume(batch);
+            QCOMPARE(corrected.finish(), SstvRadiofaxRxState::Complete);
+            nominal.finish();
+            const auto actual = corrected.snapshot();
+            const auto uncorrected = nominal.snapshot();
+            QCOMPARE(actual.completedPixels, std::size_t(cfg.width * cfg.height));
+            std::size_t wrongNominal = 0U;
+            for (std::uint32_t y = 0; y < cfg.height; ++y) {
+                for (std::uint32_t x = 0; x < cfg.width; ++x) {
+                    const auto expected = std::uint8_t((x + y) % 2U ? 255U : 0U);
+                    QCOMPARE(actual.pixel(x, y).red, expected);
+                    if (uncorrected.pixel(x, y).red != expected) ++wrongNominal;
+                }
+            }
+            QVERIFY(wrongNominal > cfg.width);
+        }
+    }
+
     void pcmLoopbackIsChunkInvariantAndPreservesRaster()
     {
         for (const auto ioc : {SstvFaxIoc::Ioc288, SstvFaxIoc::Ioc576}) {
@@ -469,15 +664,16 @@ private slots:
     void stopDetectorRecognises450HzAndRejectsOtherPatterns()
     {
         constexpr std::uint32_t rate = 12'000U;
-        for (const unsigned frequency : {0U, 300U, 450U, 675U}) {
+        for (const double frequency : {0.0, 300.0, 438.0, 439.0, 440.0, 440.5,
+                                       447.3, 450.0, 452.7, 459.5, 460.0, 461.0, 462.0, 675.0}) {
             std::vector<SstvFrequencyObservation> observations;
             for (std::uint64_t sample = 0; sample < 3U * rate; sample += 3U) {
                 SstvFrequencyObservation obs;
                 obs.status = SstvFrequencyStatus::Valid;
                 obs.confidence = 1.0;
                 obs.centreSample = sample;
-                obs.correctedFrequencyHz = frequency == 0U ? 1900.0
-                    : ((sample * frequency * 2U / rate) % 2U ? 2300.0 : 1500.0);
+                obs.correctedFrequencyHz = frequency == 0.0 ? 1900.0
+                    : (std::fmod(double(sample) * frequency * 2.0 / rate, 2.0) >= 1.0 ? 2300.0 : 1500.0);
                 observations.push_back(obs);
             }
             SstvRadiofaxStopDetector a(rate), b(rate);
@@ -491,8 +687,24 @@ private slots:
                 const auto result = b.consume(&obs, 1U);
                 if (result) db = result;
             }
-            QCOMPARE(da.has_value(), frequency == 450U);
+            QVERIFY2(da.has_value() == (frequency >= 440.0 && frequency <= 460.0),
+                     qPrintable(QStringLiteral("frequency=%1 detection=%2")
+                                    .arg(frequency).arg(da.has_value())));
             QCOMPARE(da, db);
+        }
+
+        // One-second windows at different frequencies must not count as a
+        // sustained match in the same frequency bin.
+        SstvRadiofaxStopDetector changing(rate);
+        for (std::uint64_t sample = 0U; sample < 4U * rate; sample += 3U) {
+            const double frequency = (sample / rate) % 2U == 0U ? 444.0 : 456.0;
+            SstvFrequencyObservation obs;
+            obs.status = SstvFrequencyStatus::Valid;
+            obs.confidence = 1.0;
+            obs.centreSample = sample;
+            obs.correctedFrequencyHz = std::fmod(double(sample) * frequency * 2.0 / rate, 2.0) >= 1.0
+                ? 2300.0 : 1500.0;
+            QVERIFY(!changing.consume(&obs, 1U));
         }
 
         SstvFaxConfig config;
@@ -515,6 +727,42 @@ private slots:
         QVERIFY2(detected.has_value(), "PCM stop signal was not detected");
         QVERIFY(*detected >= encoder.mapper().imageEndSample() - config.sampleRate);
         QVERIFY(*detected <= encoder.mapper().imageEndSample() + config.sampleRate);
+    }
+
+    void frequencyStopWithDropoutsAndNoiseAB()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        for (const unsigned variant : {0U, 1U}) {
+            const double frequency = variant == 0U ? 447.3 : 452.7;
+            const double offset = variant == 0U ? -75.0 : 75.0;
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0U; sample <= 3U * rate; sample += 6U) {
+                const auto i = sample / 6U;
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = i % 5U == variant ? SstvFrequencyStatus::LowSignal : SstvFrequencyStatus::Valid;
+                obs.confidence = obs.valid() ? 0.8 : 0.0;
+                const auto high = std::fmod(double(sample) * frequency * 2.0 / rate, 2.0) >= 1.0;
+                const double noise = double(int((i * 37U + variant * 11U) % 61U) - 30);
+                obs.correctedFrequencyHz = (high ? 2300.0 : 1500.0) + offset + noise;
+                observations.push_back(obs);
+            }
+            SstvRadiofaxStopDetector whole(rate, offset), fragmented(rate, offset), insufficient(rate, offset);
+            std::optional<std::uint64_t> a, b, negative;
+            for (std::size_t i = 0U; i < observations.size(); i += 997U) {
+                const auto n = std::min(std::size_t {997U}, observations.size() - i);
+                if (auto found = whole.consume(observations.data() + i, n)) a = found;
+            }
+            for (std::size_t i = 0U; i < observations.size(); ++i) {
+                if (auto found = fragmented.consume(&observations[i], 1U)) b = found;
+                auto weak = observations[i];
+                if (i % 2U == 0U) weak.confidence = 0.0;
+                if (auto found = insufficient.consume(&weak, 1U)) negative = found;
+            }
+            QVERIFY(a);
+            QCOMPARE(a, b);
+            QVERIFY(!negative);
+        }
     }
 
     void directAudioStopIsChunkInvariantAndRejectsOtherTones()
@@ -563,6 +811,65 @@ private slots:
         QVERIFY(!detector.consume(samples.data(), 1U, false));
         QVERIFY(!detector.consume(samples.data(), rate / 2U));
         QVERIFY(detector.consume(samples.data() + rate / 2U, rate).has_value());
+    }
+
+    void directAudioStopIgnoresPreImageToneAcrossChunkSizes()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        constexpr std::uint64_t imageStart = rate * 8U / 5U;
+        constexpr std::uint64_t trueStop = rate * 2U;
+        std::vector<float> samples(rate * 7U / 2U, 0.0F);
+        for (std::uint64_t i = rate / 5U; i < rate * 7U / 5U; ++i)
+            samples[i] = 0.25F * std::sin(2.0 * std::acos(-1.0) * 450.0 * double(i) / rate);
+        for (std::uint64_t i = trueStop; i < samples.size(); ++i)
+            samples[i] = 0.25F * std::sin(2.0 * std::acos(-1.0) * 450.0 * double(i) / rate);
+        for (const std::size_t block : {193U, 16000U}) {
+            SstvRadiofaxAudioStopDetector detector(rate);
+            std::optional<std::uint64_t> detection;
+            for (std::size_t i = 0; i < samples.size(); i += block) {
+                const auto count = std::min(block, samples.size() - i);
+                if (const auto result = detector.consume(samples.data() + i, count, true, imageStart))
+                    detection = result;
+            }
+            QVERIFY(detection.has_value());
+            QCOMPARE(*detection, trueStop);
+        }
+        // If the image boundary becomes known after partial tone windows,
+        // those earlier windows must not contribute to the new detection.
+        SstvRadiofaxAudioStopDetector detector(rate);
+        std::vector<float> tone(rate * 2U);
+        for (std::size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.25F * std::sin(2.0 * std::acos(-1.0) * 450.0 * double(i) / rate);
+        QVERIFY(!detector.consume(tone.data(), rate / 2U));
+        const auto updatedBoundary = detector.consume(tone.data() + rate / 2U,
+                                                        rate, true, rate / 4U);
+        QVERIFY(updatedBoundary.has_value());
+        QCOMPARE(*updatedBoundary, std::uint64_t(rate / 2U));
+    }
+
+    void directAudioStopRearmsAfterDetectionWhenDisabled()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        std::vector<float> tone(2U * rate), silence(rate / 2U, 0.0F);
+        for (std::size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.25F * std::sin(2.0 * std::acos(-1.0) * 450.0 * double(i) / rate);
+        for (const std::size_t chunk : {193U, 16000U}) {
+            SstvRadiofaxAudioStopDetector detector(rate);
+            auto feed = [&](const std::vector<float>& pcm, bool enabled) {
+                std::optional<std::uint64_t> result;
+                for (std::size_t i = 0; i < pcm.size(); i += chunk) {
+                    const auto count = std::min(chunk, pcm.size() - i);
+                    if (auto found = detector.consume(pcm.data() + i, count, enabled)) result = found;
+                }
+                return result;
+            };
+            const auto first = feed(tone, true);
+            QVERIFY(first.has_value());
+            QVERIFY(!feed(silence, false).has_value());
+            const auto second = feed(tone, true);
+            QVERIFY(second.has_value());
+            QCOMPARE(*second, std::uint64_t(tone.size() + silence.size()));
+        }
     }
 
     void centeredPhasingUsesExplicitRasterAlignment()

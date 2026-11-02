@@ -1813,7 +1813,18 @@ int main(int argc, char* argv[])
                 && QFileInfo(cert).isAbsolute() && cert.open(QIODevice::ReadOnly) && cert.size() <= 64 * 1024
                 && QDir::isAbsolutePath(field("identity")) && QDir::isAbsolutePath(field("result"))
                 && (role == QStringLiteral("sender") || role == QStringLiteral("receiver"));
+            if (qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1) {
+                const QFileInfo identity(field("identity"));
+                for (const auto* name : {"signingIdentity", "signingReady"}) {
+                    const QFileInfo path(field(name));
+                    valid = valid && path.isAbsolute() && !path.isSymLink()
+                        && path.absolutePath() == identity.absolutePath();
+                }
+            }
             if (valid && role == QStringLiteral("sender")) {
+                valid = field("expiryMarker").isEmpty() && field("expiryTarget").isEmpty()
+                    && field("replayTarget").isEmpty() && field("acceptTarget").isEmpty()
+                    && field("policyTarget").isEmpty();
                 for (const auto* name : {"imageA", "imageB"}) {
                     const QFileInfo image(field(name));
                     valid = valid && image.isAbsolute() && image.isFile();
@@ -1822,6 +1833,23 @@ int main(int argc, char* argv[])
             } else if (valid) {
                 const QFileInfo output(field("outputDir"));
                 valid = output.isAbsolute() && output.isDir();
+                valid = valid && (field("replayTarget").isEmpty()
+                    || field("replayTarget") == QStringLiteral("a")
+                    || field("replayTarget") == QStringLiteral("b"));
+                valid = valid && (field("acceptTarget").isEmpty()
+                    || field("acceptTarget") == QStringLiteral("a")
+                    || field("acceptTarget") == QStringLiteral("b"));
+                valid = valid && (field("policyTarget").isEmpty()
+                    || field("policyTarget") == QStringLiteral("a")
+                    || field("policyTarget") == QStringLiteral("b"));
+                if (!field("expiryMarker").isEmpty()) {
+                    const QFileInfo marker(field("expiryMarker"));
+                    const QString target = field("expiryTarget");
+                    valid = valid && marker.isAbsolute() && !marker.exists()
+                        && !marker.isSymLink()
+                        && marker.dir().canonicalPath() == output.dir().canonicalPath()
+                        && (target == QStringLiteral("a") || target == QStringLiteral("b"));
+                } else valid = valid && field("expiryTarget").isEmpty();
             }
             if (valid) earlyLabShareCa = cert.readAll();
             if (!valid || QSslCertificate(earlyLabShareCa).isNull()) {
@@ -2420,7 +2448,7 @@ int main(int argc, char* argv[])
         QStringLiteral("path"));
     QCommandLineOption const labSstvRxImageFileOption(
         QStringList {} << "lab-sstv-rx-image-file",
-        QStringLiteral("Test-only absolute PNG destination for a completed or stop-terminated SSTV RX image."),
+        QStringLiteral("Test-only absolute PNG destination for a terminal SSTV RX image."),
         QStringLiteral("path"));
     QCommandLineOption const labSstvTxImageFileOption(
         QStringList {} << "lab-sstv-tx-image-file",
@@ -2428,10 +2456,10 @@ int main(int argc, char* argv[])
         QStringLiteral("path"));
     QCommandLineOption const labSstvFaxRxOption(
         QStringList {} << "lab-sstv-fax-rx",
-        QStringLiteral("Test-only Radiofax RX profile: IOC,width,height[,centered-phasing-0-or-1]."), QStringLiteral("profile"));
+        QStringLiteral("Test-only Radiofax RX profile: IOC,width,height[,centered-phasing-0-or-1[,wmo-dead-sector-0-or-1]]."), QStringLiteral("profile"));
     QCommandLineOption const labSstvFaxTxOption(
         QStringList {} << "lab-sstv-fax-tx",
-        QStringLiteral("Test-only Radiofax TX profile: IOC,lines-per-minute[,centered-phasing-0-or-1]."), QStringLiteral("profile"));
+        QStringLiteral("Test-only Radiofax TX profile: IOC,lines-per-minute[,centered-phasing-0-or-1[,wmo-dead-sector-0-or-1]]."), QStringLiteral("profile"));
     QCommandLineOption const labSstvFax480RxOption(
         QStringList {} << "lab-sstv-fax480-rx",
         QStringLiteral("Test-only FAX480 RX profile: dayton-480 or qsstv-500."), QStringLiteral("profile"));
@@ -2935,6 +2963,8 @@ int main(int argc, char* argv[])
         app.setProperty("decodiumLabShareKeychain", keychain.canonicalFilePath());
         if (labShareSession) {
             labShareConfig = earlyLabShareConfig;
+            if (!labShareConfig.value(QStringLiteral("expiryMarker")).toString().isEmpty())
+                app.setProperty("decodiumLabShareExpiryMarker", labShareConfig.value(QStringLiteral("expiryMarker")).toString());
             const QSslCertificate testCa(earlyLabShareCa);
             auto ssl = QSslConfiguration::defaultConfiguration();
             ssl.addCaCertificate(testCa);
@@ -2978,9 +3008,11 @@ int main(int argc, char* argv[])
         return true;
     };
     if ((!labFaxRx.isEmpty() && !(numericProfile(labFaxRx, 3)
-          || (numericProfile(labFaxRx, 4) && (labFaxRx[3] == "0" || labFaxRx[3] == "1"))))
+          || (numericProfile(labFaxRx, 4) && (labFaxRx[3] == "0" || labFaxRx[3] == "1"))
+          || (numericProfile(labFaxRx, 5) && labFaxRx[3] == "0" && (labFaxRx[4] == "0" || labFaxRx[4] == "1"))))
         || (!labFaxTx.isEmpty() && !(numericProfile(labFaxTx, 2)
-          || (numericProfile(labFaxTx, 3) && (labFaxTx[2] == "0" || labFaxTx[2] == "1"))))) {
+          || (numericProfile(labFaxTx, 3) && (labFaxTx[2] == "0" || labFaxTx[2] == "1"))
+          || (numericProfile(labFaxTx, 4) && labFaxTx[2] == "0" && (labFaxTx[3] == "0" || labFaxTx[3] == "1"))))) {
         qCritical() << "Invalid Radiofax lab profile";
         return -1;
     }
@@ -3726,9 +3758,10 @@ int main(int argc, char* argv[])
                 if (!configured) return;
             }
             if (!labFaxRx.isEmpty()) {
-                const bool configured = bridge.configureSstvRadiofaxRxAligned(
+                const bool configured = bridge.configureSstvRadiofaxRxProfile(
                     true, labFaxRx[0].toInt(), labFaxRx[1].toInt(), labFaxRx[2].toInt(),
-                    labFaxRx.size() == 4 && labFaxRx[3] == "1");
+                    labFaxRx.size() >= 4 && labFaxRx[3] == "1",
+                    labFaxRx.size() == 5 && labFaxRx[4] == "1");
                 qInfo() << "[LAB][SSTV] Radiofax RX configured" << configured;
                 if (!configured) return;
             }
@@ -3954,17 +3987,31 @@ int main(int argc, char* argv[])
                     QObject::connect(timer, &QTimer::timeout, &bridge, [digital, timer, initial, liveRepair, &bridge]() {
                         if (!QFile::exists(initial) || !digital->canBuildBsr()) return;
                         const QVariantList missing = digital->missingSegments();
-                        if (missing.size() != 1 || missing.front().toInt() != 1) {
+                        const bool audioLoss = qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AUDIO_LOSS") == 1;
+                        const bool missingFinal = qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_MOT_FINAL") == 1;
+                        if (missing.isEmpty() || (!audioLoss && (missing.size() != 1
+                            || (!missingFinal && missing.front().toInt() != 1)))) {
                             qWarning() << "[LAB][REPAIR] unexpected live missing segments" << missing;
                             timer->stop(); timer->deleteLater(); return;
                         }
                         const int id = digital->selectedTransportId();
                         qInfo() << "[LAB][REPAIR] live partial received" << id << missing;
                         timer->stop(); timer->deleteLater();
+                        if (qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_EXTERNAL_BSR") == 1) {
+                            QVariantMap d = bridge.sstvRxDiagnostics();
+                            d.insert(QStringLiteral("sourceDevice"), bridge.audioInputDevice());
+                            QSaveFile file(qEnvironmentVariable("DECODIUM_LAB_REPAIR_READY"));
+                            const QByteArray json = QJsonDocument::fromVariant(d).toJson(QJsonDocument::Compact);
+                            if (!file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit())
+                                qWarning() << "[LAB][REPAIR] external BSR ready marker failed";
+                            else qInfo() << "[LAB][REPAIR] waiting for external BSR waveform";
+                            return;
+                        }
                         if (!digital->cancelRx()) { qWarning() << "[LAB][REPAIR] live RX stop failed"; return; }
                         bridge.stopSstvRx();
                         const bool sent = digital->startBsrTx(id, liveRepair == QStringLiteral("a"));
                         qInfo() << "[LAB][REPAIR] over-audio BSR TX started" << sent << digital->error();
+                        if (audioLoss) qInfo().noquote() << "[LAB][REPAIR] generated BSR" << digital->bsrText();
                     });
                     timer->start();
                 }
@@ -4021,12 +4068,19 @@ int main(int argc, char* argv[])
         auto* sstvRxTraceTimer = new QTimer(&bridge);
         sstvRxTraceTimer->setInterval(5'000);
         const auto labRxImageSaved = std::make_shared<bool>(false);
+        const auto labRxSavedAcquisition = std::make_shared<qulonglong>(0);
+        const bool labRxImageSequence = QStandardPaths::isTestModeEnabled()
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_RX_IMAGE_SEQUENCE") == 1;
         QObject::connect(sstvRxTraceTimer, &QTimer::timeout, &bridge,
-                         [&bridge, labSstvRxImageFile, labRxImageSaved, labHamDrm]() {
+                         [&bridge, labSstvRxImageFile, labRxImageSaved, labRxSavedAcquisition, labRxImageSequence, labHamDrm]() {
             const QVariantMap diagnostics = bridge.sstvRxDiagnostics();
-            if (!labHamDrm && !*labRxImageSaved && !labSstvRxImageFile.isEmpty()
+            const qulonglong acquisition = diagnostics.value(QStringLiteral("imageAcquisitionId")).toULongLong();
+            if (!labHamDrm && (!*labRxImageSaved || (labRxImageSequence && acquisition != 0
+                                 && acquisition != *labRxSavedAcquisition)) && !labSstvRxImageFile.isEmpty()
                 && (diagnostics.value(QStringLiteral("imageComplete")).toBool()
-                    || diagnostics.value(QStringLiteral("imageRadiofaxStopDetected")).toBool())) {
+                    || diagnostics.value(QStringLiteral("imageRadiofaxStopDetected")).toBool()
+                    || (diagnostics.value(QStringLiteral("imageMode")).toString() == QStringLiteral("fax480-experimental")
+                        && diagnostics.value(QStringLiteral("imagePartial")).toBool()))) {
                 DecodiumSstvImageProvider provider(&bridge);
                 const QImage image = provider.requestImage(QStringLiteral("rx"), nullptr, {});
                 // Keep the laboratory evidence honest: a visually plausible
@@ -4047,11 +4101,15 @@ int main(int argc, char* argv[])
                         ++reportedRows;
                     }
                 }
-                QSaveFile file(labSstvRxImageFile);
+                const QString destination = labRxImageSequence
+                    ? labSstvRxImageFile + QStringLiteral(".%1.png").arg(acquisition)
+                    : labSstvRxImageFile;
+                QSaveFile file(destination);
                 if (!image.isNull() && file.open(QIODevice::WriteOnly)
                     && image.save(&file, "PNG") && file.commit()) {
                     *labRxImageSaved = true;
-                    qInfo().noquote() << "[LAB][SSTV] terminal RX PNG saved" << labSstvRxImageFile;
+                    *labRxSavedAcquisition = acquisition;
+                    qInfo().noquote() << "[LAB][SSTV] terminal RX PNG saved" << destination;
                 } else {
                     qWarning().noquote() << "[LAB][SSTV] RX PNG save failed" << labSstvRxImageFile;
                 }
@@ -4119,6 +4177,21 @@ int main(int argc, char* argv[])
                 return;
             }
             if (labSstvVox) {
+                if (QStandardPaths::isTestModeEnabled()
+                    && qEnvironmentVariableIsSet("DECODIUM_LAB_SSTV_VOX_PREKEY_MS")) {
+                    bool ok = false;
+                    const int value = qEnvironmentVariable("DECODIUM_LAB_SSTV_VOX_PREKEY_MS").toInt(&ok);
+                    if (!ok || value < 100 || value > 4000) {
+                        qWarning() << "[LAB][SSTV] invalid VOX pre-key duration";
+                        return;
+                    }
+                    bridge.setSstvVoxPreKeyMs(value);
+                    if (bridge.sstvVoxPreKeyMs() != value) {
+                        qWarning() << "[LAB][SSTV] VOX pre-key duration rejected";
+                        return;
+                    }
+                    qInfo() << "[LAB][SSTV] VOX pre-key milliseconds" << value;
+                }
                 if (QObject* cat = bridge.catManagerObj()) {
                     cat->setProperty("pttMethod",
                                      QStringLiteral("VOX"));
@@ -4129,6 +4202,14 @@ int main(int argc, char* argv[])
             if (labHamDrm) {
                 auto* digital = qobject_cast<decodium::sstv::hamdrm::HamDrmController*>(bridge.sstvDigital());
                 if (!digital || labSstvImage.isEmpty()) { qWarning() << "[LAB][HAMDRM] TX requires controller and image"; return; }
+                if (QStandardPaths::isTestModeEnabled()
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_USER_TIMING") == 1) {
+                    digital->setExperimentalTiming(true);
+                    if (!digital->experimentalTiming()) {
+                        qWarning() << "[LAB][HAMDRM] sender timing selection rejected";
+                        return;
+                    }
+                }
                 if (!labHamDrmProfile.isEmpty()) {
                     digital->setSelectedProfileId(labHamDrmProfile);
                     if (digital->selectedProfileId() != labHamDrmProfile) {
@@ -4203,12 +4284,17 @@ int main(int argc, char* argv[])
                             QObject::connect(digital, &HamDrmController::bsrReceived, &bridge,
                                 [digital, ready, &bridge](quint16, quint16 requested) {
                                 qInfo() << "[LAB][REPAIR] over-audio BSR received" << requested;
+                                if (qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AUDIO_LOSS") == 1
+                                    || qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_MOT_FINAL") == 1)
+                                    qInfo().noquote() << "[LAB][REPAIR] received BSR" << digital->receivedBsrText();
                                 if (!digital->cancelRx()) { qWarning() << "[LAB][REPAIR] sender RX stop failed"; return; }
                                 bridge.stopSstvRx();
                                 auto* timer = new QTimer(&bridge);
                                 timer->setInterval(200);
                                 QObject::connect(timer, &QTimer::timeout, &bridge, [digital, timer, ready, &bridge]() {
                                     if (!QFile::exists(ready)) return;
+                                    const QString playbackDone = qEnvironmentVariable("DECODIUM_LAB_REPAIR_EXTERNAL_DONE");
+                                    if (!playbackDone.isEmpty() && !QFile::exists(playbackDone)) return;
                                     timer->stop(); timer->deleteLater();
                                     QTimer::singleShot(3000, &bridge, [digital]() {
                                         const bool started = digital->startBsrRepair();
@@ -4327,8 +4413,9 @@ int main(int argc, char* argv[])
                         << "output=" << bridge.audioOutputDevice();
                     const bool accepted = !labFax480Tx.isEmpty() ? bridge.startSstvFax480Tx(labFax480Tx)
                         : (labFaxTx.isEmpty() ? bridge.startSstvTx()
-                        : bridge.startSstvRadiofaxTxAligned(labFaxTx[0].toInt(), labFaxTx[1].toInt(),
-                                                          labFaxTx.size() == 3 && labFaxTx[2] == "1"));
+                        : bridge.startSstvRadiofaxTxProfile(labFaxTx[0].toInt(), labFaxTx[1].toInt(),
+                                                          labFaxTx.size() >= 3 && labFaxTx[2] == "1",
+                                                          labFaxTx.size() == 4 && labFaxTx[3] == "1"));
                     qInfo().noquote()
                         << "[LAB][SSTV] TX requested accepted=" << accepted
                         << "mode=" << studio->modeId()

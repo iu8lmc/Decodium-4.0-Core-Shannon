@@ -524,13 +524,17 @@ SstvAvtEncoder::SstvAvtEncoder(const SstvRgbPixel* pixels,
         || config.level < 0.0 || config.level > MaximumLevel) {
         throw std::invalid_argument("AVT TX level is out of range");
     }
+    if (config.terminalHoldMs > 100U) {
+        throw std::invalid_argument("AVT terminal tone hold exceeds 100 ms");
+    }
     for (const SstvAvtToneSegment& segment : header_) {
         generator_.validateTone(segment.frequencyHz, config.level);
     }
     generator_.validateTone(SstvAvtProtocol::WhiteFrequencyHz,
                             config.level);
-    totalSamples_ = checkedAdd(headerBoundaries_.back(),
-                               mapper_.imageSampleCount());
+    totalSamples_ = checkedAdd(checkedAdd(headerBoundaries_.back(),
+                                        mapper_.imageSampleCount()),
+        static_cast<std::uint64_t>(config.sampleRate) * config.terminalHoldMs / 1000U);
     metrics_.residentImageBytes = pixels_.size() * sizeof(SstvRgbPixel);
     metrics_.residentHeaderBytes =
         header_.size() * sizeof(SstvAvtToneSegment)
@@ -612,6 +616,12 @@ SstvAvtEncoderPosition SstvAvtEncoder::position() const
         result.frequencyHz = header_[result.headerSegment].frequencyHz;
         return result;
     }
+    if (producedSamples_ - headerBoundaries_.back() >= mapper_.imageSampleCount()) {
+        result.stage = SstvAvtEncoderStage::TerminalHold;
+        result.image = mapper_.positionAtSample(mapper_.imageSampleCount() - 1U);
+        result.frequencyHz = imageFrequency(result.image);
+        return result;
+    }
     result.stage = SstvAvtEncoderStage::Image;
     result.image = mapper_.positionAtSample(
         producedSamples_ - headerBoundaries_.back());
@@ -682,6 +692,8 @@ std::size_t SstvAvtEncoder::pull(Sample* output, std::size_t capacity)
         } else if (current.stage == SstvAvtEncoderStage::Image) {
             segmentEnd = checkedAdd(headerBoundaries_.back(),
                                     current.image.segmentEndSample);
+        } else if (current.stage == SstvAvtEncoderStage::TerminalHold) {
+            segmentEnd = totalSamples_;
         } else {
             break;
         }
@@ -878,7 +890,8 @@ bool SstvAvtDecoder::beginLine(std::uint32_t line)
 
 void SstvAvtDecoder::accumulate(const SstvAvtPosition& position,
                                 double frequencyHz,
-                                double confidence) noexcept
+                                double confidence,
+                                bool edge) noexcept
 {
     const std::size_t index = componentIndex(position.component) * spec_.width
         + position.pixel;
@@ -890,8 +903,13 @@ void SstvAvtDecoder::accumulate(const SstvAvtPosition& position,
     if (accumulator.count != std::numeric_limits<std::uint32_t>::max()) {
         ++accumulator.count;
     }
-    accumulator.weightedFrequencyHz += frequencyHz * confidence;
-    accumulator.confidenceWeight += confidence;
+    if (edge) {
+        accumulator.edgeWeightedFrequencyHz += frequencyHz * confidence;
+        accumulator.edgeConfidenceWeight += confidence;
+    } else {
+        accumulator.weightedFrequencyHz += frequencyHz * confidence;
+        accumulator.confidenceWeight += confidence;
+    }
 }
 
 bool SstvAvtDecoder::reconstructComponent(
@@ -906,6 +924,9 @@ bool SstvAvtDecoder::reconstructComponent(
         if (accumulator.count > 0U && accumulator.confidenceWeight > 0.0) {
             frequencies[pixel] = accumulator.weightedFrequencyHz
                 / accumulator.confidenceWeight;
+        } else if (accumulator.edgeConfidenceWeight > 0.0) {
+            frequencies[pixel] = accumulator.edgeWeightedFrequencyHz
+                / accumulator.edgeConfidenceWeight;
         }
     }
 
@@ -1058,9 +1079,17 @@ std::size_t SstvAvtDecoder::consume(
             saturatingAdd(metrics_.invalidObservations);
             continue;
         }
+        const auto relativeSample = observation.centreSample - config_.imageStartSample;
+        const auto pixelLength = position.segmentEndSample - position.segmentStartSample;
+        // Dense observations at pixel boundaries mix adjacent tones in the
+        // demodulator. Prefer interior observations, but retain edge-only
+        // pixels as a fallback; sparse streams keep their original weighting.
+        const bool edge = config_.observationSpanSamples == 1U && pixelLength >= 4U
+            && (relativeSample == position.segmentStartSample
+                || relativeSample + 1U == position.segmentEndSample);
         accumulate(position,
                    observation.correctedFrequencyHz,
-                   observation.confidence);
+                   observation.confidence, edge);
         saturatingAdd(metrics_.acceptedObservations);
         ++accepted;
     }

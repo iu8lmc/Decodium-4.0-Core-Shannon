@@ -440,6 +440,16 @@ void testBsr()
     request.segmentSize = 82U;
     request.missingSegments = {1U, 2U, 3U, 7U, 10U, 11U};
 
+    // Unknown wire dialects must never silently fall through to a different
+    // format. Check values on both sides of the supported byte range.
+    for (const auto invalid : {2U, 255U}) {
+        const auto result = hamdrm::encodeHamDrmBsr(
+            request, static_cast<hamdrm::HamDrmBsrDialect>(invalid));
+        CHECK(!result.ok());
+        CHECK(!result.value.has_value());
+        CHECK(result.status.code == hamdrm::HamDrmErrorCode::InvalidArgument);
+    }
+
     const auto compatible = hamdrm::encodeHamDrmBsr(
         request, hamdrm::HamDrmBsrDialect::EasyPalCompatible);
     CHECK(compatible.ok());
@@ -478,7 +488,40 @@ void testBsr()
                     == request.qsstvCompatibilityCode);
     }
 
+    // QSSTV processFIX removes CR anywhere and skips empty lines.
+    for (const std::string& wire : {
+             std::string("\n90\r29\r\n\r\nH_\rOK\r\n82\r\n1\r\n\r\n-1\r\n3\r\n-99\r\n"),
+             std::string("\r\n9029\nH_OK\n\n82\n1\n\n3\n-99\nimage.jpg\n00000\n")}) {
+        const auto parsed = hamdrm::parseHamDrmBsr(
+            reinterpret_cast<const std::uint8_t*>(wire.data()), wire.size());
+        CHECK(parsed.ok());
+        CHECK(parsed.ok() && parsed.value->transportId == 9029U);
+        CHECK(parsed.ok() && parsed.value->missingSegments.front() == 1U);
+        CHECK(parsed.ok() && parsed.value->missingSegments.back() == 3U);
+    }
+
+    for (const std::string& wire : {
+             std::string("9029\r\nH_OK\r\n82\r\n\r\n-99\r\n"),
+             std::string("9029\nH_OK\n82\n1\n\n-1\n-99\n"),
+             std::string("9029\nH_OK\n82\n1\n\x01\n-99\n")}) {
+        const auto parsed = hamdrm::parseHamDrmBsr(
+            reinterpret_cast<const std::uint8_t*>(wire.data()), wire.size());
+        CHECK(!parsed.ok());
+    }
+
     const std::string badRange = "9029\nH_OK\n82\n3\n-1\n2\n-99\n";
+    for (const std::string& request : {
+             std::string("31746\nH_OK\n0\n0\n1\n-99\nrepair-a.jpg\n21010"),
+             std::string("29441\nH_OK\n0\n0\n-1\n1\n-99\n")}) {
+        const auto* data = reinterpret_cast<const std::uint8_t*>(request.data());
+        CHECK(!hamdrm::parseHamDrmBsr(data, request.size()).ok());
+        const auto parsed = hamdrm::parseHamDrmBsr(data, request.size(), {}, true);
+        CHECK(parsed.ok());
+        if (parsed.ok()) {
+            CHECK(parsed.value->segmentSize == 0U);
+            CHECK(parsed.value->missingSegments == std::vector<std::uint16_t>({0U, 1U}));
+        }
+    }
     const auto badRangeResult = hamdrm::parseHamDrmBsr(
         reinterpret_cast<const std::uint8_t*>(badRange.data()),
         badRange.size());

@@ -89,9 +89,9 @@ QFileDevice::Permissions executableAppImagePermissions()
 
 }  // namespace
 
-DecodiumUpdater::DecodiumUpdater(QObject* parent)
+DecodiumUpdater::DecodiumUpdater(QObject* parent, QNetworkAccessManager* network)
     : QObject(parent)
-    , m_nam(new QNetworkAccessManager(this))
+    , m_nam(network ? network : new QNetworkAccessManager(this))
     , m_currentVersion(QStringLiteral(FORK_RELEASE_VERSION))
     , m_releaseRepository(QString::fromLatin1(kPrimaryRepository))
     , m_releasePageUrl(QString::fromLatin1(kPrimaryReleasesPage))
@@ -193,7 +193,8 @@ void DecodiumUpdater::check(bool silent)
     setStatus(tr("Checking for updates..."));
 
     m_bestCheckedVersion.clear();
-    m_anyRepositoryCheckedSuccessfully = false;
+    m_allRepositoryChecksSucceeded = true;
+    m_lastCheckFailure.clear();
     requestReleaseCheck(silent, /*secondary=*/false);
 }
 
@@ -207,6 +208,7 @@ void DecodiumUpdater::requestReleaseCheck(bool silent, bool secondary)
     QNetworkRequest req{QUrl(QString::fromLatin1(releasesApi(secondary)))};
     req.setRawHeader("Accept", "application/vnd.github+json");
     req.setRawHeader("User-Agent", "Decodium/4.0");
+    req.setTransferTimeout(15000);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
 
@@ -269,17 +271,20 @@ void DecodiumUpdater::onCheckFinished(QNetworkReply* reply, bool silent, bool se
                     version.remove(0, 1);
             }
         }
-        if (version.isEmpty())
+        if (!decodium::update::validReleaseVersion(version)) {
+            version.clear();
             failure = tr("Could not read the release information.");
+        }
     }
 
     if (!version.isEmpty()) {
-        m_anyRepositoryCheckedSuccessfully = true;
         if (m_bestCheckedVersion.isEmpty()
             || decodium::update::isVersionNewer(version, m_bestCheckedVersion)) {
             m_bestCheckedVersion = version;
         }
     } else {
+        m_allRepositoryChecksSucceeded = false;
+        m_lastCheckFailure = failure;
         qWarning().noquote()
             << "[UPDATE] GitHub release check failed"
             << "repository=" << repositoryName(secondary)
@@ -298,11 +303,14 @@ void DecodiumUpdater::onCheckFinished(QNetworkReply* reply, bool silent, bool se
     }
 
     if (decision == decodium::update::ReleaseCheckDecision::NoUpdate) {
-        if (m_anyRepositoryCheckedSuccessfully) {
+        if (m_allRepositoryChecksSucceeded) {
             finishCheckWithoutUpdate(silent);
         } else {
-            recordCheckCompleted();
-            setStatus(tr("Could not check for updates: %1").arg(failure));
+            // A failed repository check is not proof that the app is current.
+            // Do not delay the next automatic attempt for a full day either.
+            setBusy(false);
+            setProgress(0);
+            setStatus(tr("Could not check all update sources: %1").arg(m_lastCheckFailure));
             // All'avvio un problema di rete non e' affar dell'utente: e' rumore.
             if (!silent)
                 emit errorOccurred(m_statusText);

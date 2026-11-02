@@ -73,6 +73,72 @@ private slots:
             QCOMPARE(receiver.acquired(),scenario==0);
         }
     }
+    void vis85ReacquiresAfterCarrierAndSilenceAB() {
+        constexpr std::uint32_t rate=12'000U;
+        const SstvFax480Mapper mapper(SstvFax480Profile::LibsstvVis480,rate);
+        for (const auto leadMs : {300U, 600U}) {
+            SstvFax480AutoRx receiver(SstvFax480Profile::LibsstvVis480,rate);
+            const std::uint64_t gapStart=std::uint64_t(rate)*leadMs/1000U;
+            const std::uint64_t headerStart=gapStart+rate/10U;
+            for (std::uint64_t sample=0;sample<headerStart+rate*2U;sample+=6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample=sample; obs.status=SstvFrequencyStatus::Valid; obs.confidence=1.0;
+                if (sample<gapStart) obs.correctedFrequencyHz=1900.0;
+                else if (sample<headerStart) obs.status=SstvFrequencyStatus::LowConfidence;
+                else {
+                    const auto pos=mapper.position(sample-headerStart);
+                    obs.correctedFrequencyHz=pos.region==SstvFax480Region::Pixel ? 1700.0 : pos.frequencyHz;
+                }
+                receiver.consume(&obs,1);
+            }
+            QVERIFY(receiver.acquired());
+        }
+    }
+    void vis85AcceptsLongContiguousVoxAB() {
+        constexpr std::uint32_t rate=12'000U;
+        const SstvFax480Mapper mapper(SstvFax480Profile::LibsstvVis480,rate);
+        for (const auto leadMs : {750U, 4000U}) {
+            SstvFax480AutoRx receiver(SstvFax480Profile::LibsstvVis480,rate);
+            const std::uint64_t headerStart=std::uint64_t(rate)*leadMs/1000U;
+            for (std::uint64_t sample=0;sample<headerStart+rate*2U;sample+=6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample=sample; obs.status=SstvFrequencyStatus::Valid; obs.confidence=1.0;
+                if (sample<headerStart) obs.correctedFrequencyHz=1900.0;
+                else {
+                    const auto pos=mapper.position(sample-headerStart);
+                    obs.correctedFrequencyHz=pos.region==SstvFax480Region::Pixel ? 1700.0 : pos.frequencyHz;
+                }
+                receiver.consume(&obs,1);
+            }
+            QVERIFY2(receiver.acquired(), qPrintable(QStringLiteral("VOX %1 ms").arg(leadMs)));
+        }
+    }
+    void vis85LeaderDropoutAndRecoveryAB() {
+        constexpr std::uint32_t rate=12'000U;
+        const SstvFax480Mapper mapper(SstvFax480Profile::LibsstvVis480,rate);
+        for (const auto dropoutMs : {1U, 8U}) {
+            SstvFax480AutoRx receiver(SstvFax480Profile::LibsstvVis480,rate);
+            const auto secondHeader=std::uint64_t(rate)*3U;
+            bool firstAcquired=false;
+            for (std::uint64_t sample=0;sample<secondHeader+rate*2U;sample+=6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample=sample; obs.status=SstvFrequencyStatus::Valid; obs.confidence=1.0;
+                if (sample>=rate*2U && sample<secondHeader) {
+                    obs.status=SstvFrequencyStatus::LowConfidence;
+                } else {
+                    const auto relative=sample>=secondHeader ? sample-secondHeader : sample;
+                    const auto pos=mapper.position(relative);
+                    obs.correctedFrequencyHz=pos.region==SstvFax480Region::Pixel ? 1700.0 : pos.frequencyHz;
+                    if (sample>=rate*2U/5U && sample<rate*2U/5U+rate*dropoutMs/1000U)
+                        obs.status=SstvFrequencyStatus::LowConfidence;
+                }
+                receiver.consume(&obs,1);
+                if (sample<secondHeader && receiver.acquired()) firstAcquired=true;
+            }
+            QCOMPARE(firstAcquired, dropoutMs==1U);
+            QVERIFY(receiver.acquired());
+        }
+    }
     void autoAcquisitionRejectsBrokenSyncAndSteadyTone() {
         constexpr std::uint32_t rate=12'000U;
         for (auto profile : {SstvFax480Profile::Dayton480,SstvFax480Profile::Qsstv500}) {

@@ -735,20 +735,14 @@ SstvPage {
                     model: ["120", "60", "90", "240"]
                     enabled: !!(root.engine && !root.engine.sstvTxActive)
                 }
-                CheckBox {
-                    id: faxTxFldigi
-                    objectName: "sstvRadiofaxTxCenteredPhasing"
-                    text: qsTr("Centered phasing (experimental)")
-                    enabled: !!(root.engine && !root.engine.sstvTxActive)
-                }
                 Button {
                     objectName: "sstvRadiofaxTransmitButton"
                     text: qsTr("Transmit Radiofax")
                     enabled: !!(root.engine && root.engine.sstvTxCanStart
                                  && !root.engine.sstvTxActive && !fskIdEnabled.checked)
-                    onClicked: root.engine.startSstvRadiofaxTxAligned(
+                    onClicked: root.engine.startSstvRadiofaxTxProfile(
                                    Number(faxTxIoc.currentText), Number(faxTxRate.currentText),
-                                   faxTxFldigi.checked)
+                                   faxTxFldigi.checked, faxTxWmoDeadSector.checked)
                 }
                 Label {
                     Layout.fillWidth: true
@@ -756,6 +750,25 @@ SstvPage {
                     color: root.secondaryTextColor
                     wrapMode: Text.Wrap
                 }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                CheckBox {
+                    id: faxTxFldigi
+                    objectName: "sstvRadiofaxTxCenteredPhasing"
+                    text: qsTr("Centered phasing (experimental)")
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                    onToggled: if (checked) faxTxWmoDeadSector.checked = false
+                }
+                CheckBox {
+                    id: faxTxWmoDeadSector
+                    objectName: "sstvRadiofaxTxWmoDeadSector"
+                    text: qsTr("WMO 4.5% dead sector")
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                    onToggled: if (checked) faxTxFldigi.checked = false
+                }
+                Item { Layout.fillWidth: true }
             }
 
             RowLayout {

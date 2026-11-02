@@ -56,9 +56,27 @@ find_program (_fax_alignment_python NAMES python3)
 find_program (_fax_alignment_ffmpeg NAMES ffmpeg)
 find_program (_fax_alignment_ffprobe NAMES ffprobe)
 if (_fax_alignment_python)
+  add_test (NAME test_sstv_avt_terminal_tone_probe
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_terminal_tone_probe.py")
+  set_tests_properties (test_sstv_avt_terminal_tone_probe PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_vox_boundary_probe
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_vox_boundary_probe.py")
+  set_tests_properties (test_sstv_avt_vox_boundary_probe PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_qsstv_prefix_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_qsstv_prefix_probe.py")
+  set_tests_properties (test_sstv_avt_qsstv_prefix_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_single_vis_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_single_vis_lab.py")
+  set_tests_properties (test_sstv_avt_single_vis_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
   add_test (NAME test_sstv_riff_repair_diagnostic
     COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_repair_qsstv_riff_length.py")
   set_tests_properties (test_sstv_riff_repair_diagnostic PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_phasing_variant
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_radiofax_phasing_variant.py")
+  set_tests_properties (test_sstv_radiofax_phasing_variant PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_fldigi_radiofax_metadata
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fldigi_radiofax_metadata.py")
+  set_tests_properties (test_sstv_fldigi_radiofax_metadata PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
   add_test (NAME test_sstv_radiofax_tone_analyzer
     COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_tones.py")
   set_tests_properties (test_sstv_radiofax_tone_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
@@ -70,6 +88,12 @@ if (_fax_alignment_python)
   set_tests_properties (test_sstv_radiofax_phasing_clock_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
 endif ()
 if (_fax_alignment_python AND _fax_alignment_ffmpeg AND _fax_alignment_ffprobe)
+  add_test (NAME test_sstv_lab_image_terminal_comparison
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_compare_sstv_lab_images.py")
+  set_tests_properties (test_sstv_lab_image_terminal_comparison PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_fldigi_phasing_anchor
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fldigi_phasing_anchor.py")
+  set_tests_properties (test_sstv_fldigi_phasing_anchor PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
   add_test (NAME test_sstv_radiofax_row_shifts
     COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_row_shifts.py")
   set_tests_properties (test_sstv_radiofax_row_shifts PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
@@ -78,6 +102,9 @@ if (_fax_alignment_python AND _fax_alignment_ffmpeg AND _fax_alignment_ffprobe)
   set_tests_properties (test_sstv_radiofax_alignment_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
 endif ()
 if (_fax_alignment_python AND _fax_alignment_ffmpeg)
+  add_test (NAME test_sstv_avt_countdown_audio_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_avt_countdown_audio.py")
+  set_tests_properties (test_sstv_avt_countdown_audio_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
   add_test (NAME test_sstv_avt_notch_diagnostic
     COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_notch_lab.py")
   set_tests_properties (test_sstv_avt_notch_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
@@ -258,8 +285,20 @@ if (WIN32 AND TARGET decodium_sstv_share_aead)
     add_test (NAME test_sstv_share_windows_tamper
       COMMAND "${_share_windows_python}" "${_share_windows_script}" --tamper ${_share_windows_common})
     foreach (_share_variant IN ITEMS a b)
+      add_test (NAME test_sstv_share_windows_expiry_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-download ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_expiry_awaiting_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-awaiting ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_expiry_partial_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-download ${_share_variant} --expiry-after-first-chunk ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_expiry_restart_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-download ${_share_variant} --expiry-after-first-chunk --expiry-restart-cleanup ${_share_windows_common})
       add_test (NAME test_sstv_share_windows_payload_tamper_${_share_variant}
         COMMAND "${_share_windows_python}" "${_share_windows_script}" --tamper-payload ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_payload_swap_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --swap-payload ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_replay_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --replay-envelope ${_share_variant} ${_share_windows_common})
       add_test (NAME test_sstv_share_windows_manifest_tamper_${_share_variant}
         COMMAND "${_share_windows_python}" "${_share_windows_script}" --tamper-manifest ${_share_variant} ${_share_windows_common})
       add_test (NAME test_sstv_share_windows_downgrade_${_share_variant}
@@ -268,6 +307,12 @@ if (WIN32 AND TARGET decodium_sstv_share_aead)
     set_tests_properties (test_sstv_share_windows_transfer test_sstv_share_windows_tamper
       test_sstv_share_windows_manifest_tamper_a test_sstv_share_windows_manifest_tamper_b
       test_sstv_share_windows_payload_tamper_a test_sstv_share_windows_payload_tamper_b
+      test_sstv_share_windows_payload_swap_a test_sstv_share_windows_payload_swap_b
+      test_sstv_share_windows_replay_a test_sstv_share_windows_replay_b
+      test_sstv_share_windows_expiry_a test_sstv_share_windows_expiry_b
+      test_sstv_share_windows_expiry_awaiting_a test_sstv_share_windows_expiry_awaiting_b
+      test_sstv_share_windows_expiry_partial_a test_sstv_share_windows_expiry_partial_b
+      test_sstv_share_windows_expiry_restart_a test_sstv_share_windows_expiry_restart_b
       test_sstv_share_windows_downgrade_a test_sstv_share_windows_downgrade_b PROPERTIES
       LABELS "sstv;sharing;network;security;application;windows" TIMEOUT 150 RUN_SERIAL TRUE
       ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
@@ -295,8 +340,20 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET decodium_sstv_share_aead)
     add_test (NAME test_sstv_share_linux_tamper
       COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --tamper)
     foreach (_share_variant IN ITEMS a b)
+      add_test (NAME test_sstv_share_linux_expiry_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-download ${_share_variant})
+      add_test (NAME test_sstv_share_linux_expiry_awaiting_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-awaiting ${_share_variant})
+      add_test (NAME test_sstv_share_linux_expiry_partial_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-partial ${_share_variant})
+      add_test (NAME test_sstv_share_linux_expiry_restart_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-restart ${_share_variant})
       add_test (NAME test_sstv_share_linux_payload_tamper_${_share_variant}
         COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --tamper-payload ${_share_variant})
+      add_test (NAME test_sstv_share_linux_payload_swap_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --swap-payload ${_share_variant})
+      add_test (NAME test_sstv_share_linux_replay_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --replay-envelope ${_share_variant})
       add_test (NAME test_sstv_share_linux_manifest_tamper_${_share_variant}
         COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --tamper-manifest ${_share_variant})
       add_test (NAME test_sstv_share_linux_downgrade_${_share_variant}
@@ -305,6 +362,12 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET decodium_sstv_share_aead)
     set_tests_properties (test_sstv_share_linux_transfer test_sstv_share_linux_tamper
       test_sstv_share_linux_manifest_tamper_a test_sstv_share_linux_manifest_tamper_b
       test_sstv_share_linux_payload_tamper_a test_sstv_share_linux_payload_tamper_b
+      test_sstv_share_linux_payload_swap_a test_sstv_share_linux_payload_swap_b
+      test_sstv_share_linux_replay_a test_sstv_share_linux_replay_b
+      test_sstv_share_linux_expiry_a test_sstv_share_linux_expiry_b
+      test_sstv_share_linux_expiry_awaiting_a test_sstv_share_linux_expiry_awaiting_b
+      test_sstv_share_linux_expiry_partial_a test_sstv_share_linux_expiry_partial_b
+      test_sstv_share_linux_expiry_restart_a test_sstv_share_linux_expiry_restart_b
       test_sstv_share_linux_downgrade_a test_sstv_share_linux_downgrade_b PROPERTIES
       LABELS "sstv;sharing;network;security;application;linux" TIMEOUT 150 RUN_SERIAL TRUE)
   endif ()
@@ -1214,6 +1277,10 @@ if (DECODIUM_ENABLE_HAMDRM)
         $<TARGET_FILE:analyze_hamdrm_capture> "${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
         $<TARGET_FILE:export_hamdrm_fallback_fixture>)
     set_tests_properties (test_hamdrm_capture_analyzer PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 60)
+    add_test (NAME test_hamdrm_upstream_bsr_timing
+      COMMAND "${_hamdrm_analyze_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_qsstv_upstream_bsr_timing.py"
+        $<TARGET_FILE:analyze_hamdrm_capture> "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+    set_tests_properties (test_hamdrm_upstream_bsr_timing PROPERTIES LABELS "sstv;hamdrm;bsr;diagnostics" TIMEOUT 60)
   endif ()
   unset (_hamdrm_analyze_python)
 
@@ -1342,6 +1409,18 @@ unset (_decodium_sstv_target)
 unset (_decodium_sstv_directory_targets)
 
 if (TARGET decodium_sstv_share_aead)
+  add_executable (test_sstv_p256_backend_diagnostic tools/probe_p256_backend.cpp)
+  target_link_libraries (test_sstv_p256_backend_diagnostic PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_p256_backend_diagnostic PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_p256_backend_diagnostic COMMAND $<TARGET_FILE:test_sstv_p256_backend_diagnostic>)
+  set_tests_properties (test_sstv_p256_backend_diagnostic PROPERTIES LABELS "sstv;sharing;security;diagnostics" TIMEOUT 30)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_p256_backend_diagnostic)
+  add_executable (test_sstv_ed25519_backend_diagnostic tools/probe_ed25519_backend.cpp)
+  target_link_libraries (test_sstv_ed25519_backend_diagnostic PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_ed25519_backend_diagnostic PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_ed25519_backend_diagnostic COMMAND $<TARGET_FILE:test_sstv_ed25519_backend_diagnostic>)
+  set_tests_properties (test_sstv_ed25519_backend_diagnostic PROPERTIES LABELS "sstv;sharing;security;diagnostics" TIMEOUT 30)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_ed25519_backend_diagnostic)
   add_executable (test_sstv_coordinated_secret_backend test_sstv_coordinated_secret_backend.cpp)
   target_include_directories (test_sstv_coordinated_secret_backend PRIVATE ${CMAKE_SOURCE_DIR})
   target_link_libraries (test_sstv_coordinated_secret_backend PRIVATE decodium_sstv_share_aead Qt6::Core)
@@ -1421,6 +1500,30 @@ if (APPLE AND TARGET decodium_sstv_share_aead)
           "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
           "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
           "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      foreach (_policy_variant a b)
+        add_test (NAME test_sstv_share_app_pending_policy_${_policy_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --policy-awaiting ${_policy_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_pending_policy_${_policy_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      endforeach ()
+      add_test (NAME test_sstv_share_app_signed_transfer
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      set_tests_properties (test_sstv_share_app_signed_transfer PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
       add_test (NAME test_sstv_share_app_tamper
         COMMAND "${_decodium_sstv_test_python}"
           "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper
@@ -1445,10 +1548,146 @@ if (APPLE AND TARGET decodium_sstv_share_aead)
           "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
           "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
           "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      foreach (_share_variant a b)
+        add_test (NAME test_sstv_share_app_expiry_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+            --tamper-manifest ${_share_variant} --tamper-manifest-field expiresUtc
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_ephemeral_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+            --tamper-manifest ${_share_variant} --tamper-manifest-field keyId
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      endforeach ()
       foreach (_share_variant IN ITEMS a b)
+        add_test (NAME test_sstv_share_app_expiry_awaiting_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-awaiting ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_expiry_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-download ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_expiry_partial_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-download ${_share_variant} --expiry-after-first-chunk
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_gallery_unavailable_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant} --gallery-unavailable
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        foreach (_signed_attack IN ITEMS forge-sender tamper-payload)
+          add_test (NAME test_sstv_share_app_signed_${_signed_attack}_${_share_variant}
+            COMMAND "${_decodium_sstv_test_python}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+              --${_signed_attack} ${_share_variant}
+              $<TARGET_FILE:decodium_qml>
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+          set_tests_properties (test_sstv_share_app_signed_${_signed_attack}_${_share_variant} PROPERTIES
+            LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        endforeach ()
+        foreach (_signed_field IN ITEMS senderSignatureBase64 senderId senderAuth)
+          add_test (NAME test_sstv_share_app_signed_${_signed_field}_${_share_variant}
+            COMMAND "${_decodium_sstv_test_python}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+              --tamper-manifest ${_share_variant} --tamper-manifest-field ${_signed_field}
+              $<TARGET_FILE:decodium_qml>
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+          set_tests_properties (test_sstv_share_app_signed_${_signed_field}_${_share_variant} PROPERTIES
+            LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        endforeach ()
+        add_test (NAME test_sstv_share_app_inbox_unavailable_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant} --inbox-unavailable
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_gallery_corrupt_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant} --corrupt-gallery
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_accepted_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_expiry_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-download ${_share_variant} --expiry-after-first-chunk --expiry-restart-cleanup
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
         add_test (NAME test_sstv_share_app_payload_tamper_${_share_variant}
           COMMAND "${_decodium_sstv_test_python}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper-payload ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_payload_swap_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --swap-payload ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_replay_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --replay-envelope ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_replay_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant}
             $<TARGET_FILE:decodium_qml>
             "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
             "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
@@ -1463,11 +1702,63 @@ if (APPLE AND TARGET decodium_sstv_share_aead)
             "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
             "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
       endforeach ()
+      set_tests_properties (test_sstv_share_app_expiry_awaiting_a test_sstv_share_app_expiry_awaiting_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_a test_sstv_share_app_expiry_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_partial_a test_sstv_share_app_expiry_partial_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_inbox_unavailable_a test_sstv_share_app_inbox_unavailable_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_gallery_unavailable_a test_sstv_share_app_gallery_unavailable_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_gallery_corrupt_a test_sstv_share_app_gallery_corrupt_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_accepted_restart_a test_sstv_share_app_accepted_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_restart_a test_sstv_share_app_expiry_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
       set_tests_properties (test_sstv_share_app_manifest_tamper_a test_sstv_share_app_manifest_tamper_b PROPERTIES
         LABELS "sstv;sharing;network;security;keychain;application"
         TIMEOUT 150 RUN_SERIAL TRUE
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_tamper_a test_sstv_share_app_expiry_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_ephemeral_tamper_a test_sstv_share_app_ephemeral_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
       set_tests_properties (test_sstv_share_app_payload_tamper_a test_sstv_share_app_payload_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_payload_swap_a test_sstv_share_app_payload_swap_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_replay_a test_sstv_share_app_replay_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_replay_a test_sstv_share_app_signed_replay_b PROPERTIES
         LABELS "sstv;sharing;network;security;keychain;application"
         TIMEOUT 150 RUN_SERIAL TRUE
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")

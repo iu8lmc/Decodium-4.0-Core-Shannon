@@ -7,6 +7,7 @@
 #include <QAbstractItemModel>
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -14,6 +15,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QSet>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 
@@ -28,13 +30,36 @@ public:
         connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
         connect(share_, &decodium::sstv::SstvShareController::operationFinished,
                 this, [this](const QString& op, bool ok, const QString& detail) {
+            if (!ok && op == QStringLiteral("accept") && policyStage_ == 2) {
+                if (!detail.contains(QStringLiteral("validation"))) {
+                    fail(QStringLiteral("unexpected policy rejection: ") + detail); return;
+                }
+                qInfo() << "[LAB][SHARE SESSION] pending unsigned acceptance rejected by sender policy";
+                policyStage_ = 3;
+                if (!share_->setRequireIncomingSenderAuthentication(false)) fail(QStringLiteral("policy disable queue failed"));
+                return;
+            }
+            if (!ok && op == QStringLiteral("download") && !path("replayTarget").isEmpty()
+                && detail == QStringLiteral("incoming envelope already queued or accepted")) {
+                replayRejected_ = true;
+                qInfo() << "[LAB][SHARE SESSION] duplicate encrypted envelope rejected";
+                return;
+            }
             if (!ok) { fail(op + QStringLiteral(": ") + detail); return; }
             if (op == QStringLiteral("configure") && phase_ == Configuring) phase_ = Enable;
             else if (op == QStringLiteral("enable") && phase_ == Enabling) phase_ = WaitCapability;
             else if (op == QStringLiteral("sharing-pin") && phase_ == Pinning) phase_ = UploadFirst;
+            else if (op == QStringLiteral("sender-signing-pin") && phase_ == PinningSender) {
+                QSaveFile ready(path("signingReady"));
+                if (!ready.open(QIODevice::WriteOnly) || ready.write("ready\n") != 6 || !ready.commit()) {
+                    fail(QStringLiteral("cannot publish signing readiness")); return;
+                }
+                phase_ = Receive;
+            }
             else if (op == QStringLiteral("upload") && phase_ == UploadingFirst) phase_ = UploadSecond;
             else if (op == QStringLiteral("upload") && phase_ == UploadingSecond) phase_ = WaitUploads;
             else if (op == QStringLiteral("refresh-inbox")) refreshing_ = false;
+            else if (op == QStringLiteral("accept") && acceptedQueued_) acceptedDone_ = true;
         });
         connect(share_, &decodium::sstv::SstvShareController::sharingIdentityReady,
                 this, [this](const QString& key, const QString& fingerprint) {
@@ -45,7 +70,18 @@ public:
             if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
                 fail(QStringLiteral("cannot publish identity")); return;
             }
-            phase_ = Receive;
+            phase_ = signedLab() ? WaitSigningPeer : Receive;
+        });
+        connect(share_, &decodium::sstv::SstvShareController::signingIdentityReady,
+                this, [this](const QString& key, const QString& fingerprint) {
+            if (phase_ != SigningIdentityPending) return;
+            QSaveFile file(path("signingIdentity"));
+            const QByteArray data = QJsonDocument(QJsonObject {{"publicKey", key},
+                {"fingerprint", fingerprint}}).toJson(QJsonDocument::Compact);
+            if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+                fail(QStringLiteral("cannot publish signing identity")); return;
+            }
+            phase_ = WaitPeer;
         });
         elapsed_.start();
         timer_.start();
@@ -53,10 +89,13 @@ public:
 
 private:
     enum Phase { WaitReady, Configure, Configuring, Enable, Enabling,
-                 WaitCapability, IdentityPending, WaitPeer, Pinning,
+                 WaitCapability, IdentityPending, SigningIdentityPending, WaitSigningPeer, PinningSender, WaitPeer, Pinning,
                  UploadFirst, UploadingFirst, UploadSecond, UploadingSecond,
                  WaitUploads, Receive, Finished };
     QString path(const char* name) const { return config_.value(QLatin1String(name)).toString(); }
+    bool signedLab() const {
+        return QStandardPaths::isTestModeEnabled() && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+    }
     void fail(const QString& error) {
         if (phase_ == Finished) return;
         phase_ = Finished; timer_.stop();
@@ -66,7 +105,11 @@ private:
     void success() {
         if (phase_ == Finished) return;
         QSaveFile file(path("result"));
-        const QByteArray data = QByteArrayLiteral("ok\n");
+        const QString resultId = expiredId_.isEmpty() ? acceptedId_ : expiredId_;
+        const QByteArray data = resultId.isEmpty() ? QByteArrayLiteral("ok\n")
+            : QJsonDocument(QJsonObject {{"transferId", resultId},
+                                         {"storageFolder", share_->storageFolder()}})
+                  .toJson(QJsonDocument::Compact);
         if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
             fail(QStringLiteral("cannot write session result")); return;
         }
@@ -87,8 +130,11 @@ private:
         const QVariantMap options {{"expiryHours", 24}, {"includeCallsign", false},
             {"callsign", QString {}}, {"includeGrid", false}, {"grid", QString {}},
             {"meteredNetworkAllowed", true}};
-        return share_->uploadEncryptedWithOptions(QUrl::fromLocalFile(localImage),
-            path("recipient"), QStringLiteral("lab"), QString {}, true, options);
+        return signedLab()
+            ? share_->uploadSignedEncryptedWithOptions(QUrl::fromLocalFile(localImage),
+                path("recipient"), QStringLiteral("lab"), QString {}, true, options)
+            : share_->uploadEncryptedWithOptions(QUrl::fromLocalFile(localImage),
+                path("recipient"), QStringLiteral("lab"), QString {}, true, options);
     }
     void tick() {
         if (elapsed_.elapsed() > 90'000) { fail(QStringLiteral("session timeout")); return; }
@@ -112,10 +158,26 @@ private:
                 if (!share_->setRequireIncomingEncryption(true)) {
                     fail(QStringLiteral("encryption policy queue failed")); return;
                 }
+                if (signedLab() && !share_->setRequireIncomingSenderAuthentication(true)) {
+                    fail(QStringLiteral("sender authentication policy queue failed")); return;
+                }
                 phase_ = IdentityPending;
                 if (!share_->createSharingIdentity()) fail(QStringLiteral("identity queue failed"));
+            } else if (signedLab()) {
+                phase_ = SigningIdentityPending;
+                if (!share_->createSigningIdentity()) fail(QStringLiteral("signing identity queue failed"));
             } else phase_ = WaitPeer;
+        } else if (phase_ == WaitSigningPeer) {
+            QFile file(path("signingIdentity"));
+            if (!file.exists()) return;
+            if (!file.open(QIODevice::ReadOnly) || file.size() > 4096) { fail(QStringLiteral("invalid signing identity")); return; }
+            const QJsonObject identity = QJsonDocument::fromJson(file.readAll()).object();
+            phase_ = PinningSender;
+            if (!share_->pinSenderSigningIdentity(QStringLiteral("labtx"), identity.value("publicKey").toString(),
+                                                  identity.value("fingerprint").toString(), true))
+                fail(QStringLiteral("sender pin queue failed"));
         } else if (phase_ == WaitPeer) {
+            if (signedLab() && !QFileInfo::exists(path("signingReady"))) return;
             QFile file(path("identity"));
             if (!file.exists()) return;
             if (!file.open(QIODevice::ReadOnly) || file.size() > 4096) { fail(QStringLiteral("invalid peer identity")); return; }
@@ -141,6 +203,34 @@ private:
         } else if (phase_ == Receive) {
             auto* history = share_->transferHistory();
             for (int i = 0; i < history->rowCount(); ++i) {
+                if (!path("expiryTarget").isEmpty()
+                    && field(history, i, "fileName").toString()
+                        == QStringLiteral("image-") + path("expiryTarget") + QStringLiteral(".png")
+                    && field(history, i, "transferState").toString() == QStringLiteral("Expired")) {
+                    if (path("expiryTarget") == QStringLiteral("b") && copied_.size() != 1) {
+                        fail(QStringLiteral("image A was not received before B expired")); return;
+                    }
+                    if (config_.value(QStringLiteral("expiryWhileAwaiting")).toBool()) {
+                        const QString id = field(history, i, "transferId").toString();
+                        const QDir downloads(QDir(share_->storageFolder()).filePath(QStringLiteral("sharing/downloads")));
+                        if (id.isEmpty() || QFileInfo::exists(downloads.filePath(QStringLiteral("validated/") + id + QStringLiteral(".png")))
+                            || QFileInfo::exists(downloads.filePath(QStringLiteral(".partial/") + id + QStringLiteral(".part")))) {
+                            fail(QStringLiteral("expired awaiting files were not removed")); return;
+                        }
+                    }
+                    if (config_.value(QStringLiteral("expiryAfterFirstChunk")).toBool()) {
+                        const QString id = field(history, i, "transferId").toString();
+                        const QString partial = QDir(share_->storageFolder()).filePath(
+                            QStringLiteral("sharing/downloads/.partial/") + id + QStringLiteral(".part"));
+                        if (id.isEmpty() || field(history, i, "byteOffset").toULongLong() == 0U
+                            || QFileInfo::exists(partial)) {
+                            fail(QStringLiteral("expired partial download was not removed")); return;
+                        }
+                    }
+                    qInfo() << "[LAB][SHARE SESSION] download expired" << path("expiryTarget");
+                    expiredId_ = field(history, i, "transferId").toString();
+                    success(); return;
+                }
                 if (field(history, i, "transferState").toString() == QStringLiteral("Failed")) {
                     fail(QStringLiteral("download failed: ") + field(history, i, "error").toString());
                     return;
@@ -152,21 +242,70 @@ private:
                 const QString filename = field(inbox, i, "fileName").toString();
                 if (field(inbox, i, "canDownload").toBool() && !queued_.contains(id)) {
                     queued_.insert(id);
-                    if (!share_->requireIncomingEncryption() || !share_->download(id, filename)) {
+                    if (!share_->requireIncomingEncryption()
+                        || (signedLab() && !share_->requireIncomingSenderAuthentication())
+                        || !share_->download(id, filename)) {
                         fail(QStringLiteral("encrypted download policy or queue failed")); return;
                     }
                 }
+                const bool policyTarget = !path("policyTarget").isEmpty()
+                    && filename == QStringLiteral("image-") + path("policyTarget") + QStringLiteral(".png");
+                if (policyTarget && policyStage_ == 1 && share_->requireIncomingSenderAuthentication()) {
+                    policyStage_ = 2;
+                    if (!share_->accept(policyTransferId_)) fail(QStringLiteral("policy acceptance queue failed"));
+                    return;
+                }
+                if (policyTarget && policyStage_ == 3 && !share_->requireIncomingSenderAuthentication()) policyStage_ = 4;
+                if (policyTarget && policyStage_ > 0 && policyStage_ < 4) continue;
                 if (field(inbox, i, "canAccept").toBool() && !copied_.contains(id)) {
+                    if (policyTarget && policyStage_ == 0) {
+                        policyTransferId_ = field(inbox, i, "transferId").toString();
+                        if (policyTransferId_.isEmpty()) { fail(QStringLiteral("policy target missing transfer ID")); return; }
+                        policyStage_ = 1;
+                        if (!share_->setRequireIncomingSenderAuthentication(true)) fail(QStringLiteral("policy enable queue failed"));
+                        return;
+                    }
                     const auto handoff = field(inbox, i, "validatedHandoff").toMap();
                     const QString source = handoff.value(QStringLiteral("stagedCanonicalPath")).toString();
                     if (filename != QStringLiteral("image-a.png") && filename != QStringLiteral("image-b.png"))
                         { fail(QStringLiteral("unexpected incoming filename")); return; }
+                    if (config_.value(QStringLiteral("expiryWhileAwaiting")).toBool()
+                        && path("expiryTarget") == QStringLiteral("a")
+                        && filename == QStringLiteral("image-b.png")) continue;
+                    if (config_.value(QStringLiteral("expiryWhileAwaiting")).toBool()
+                        && filename == QStringLiteral("image-") + path("expiryTarget") + QStringLiteral(".png")) {
+                        if (source.isEmpty() || !QFileInfo::exists(source)) {
+                            fail(QStringLiteral("no validated image before expiry")); return;
+                        }
+                        if (path("expiryTarget") == QStringLiteral("b") && copied_.size() != 1) return;
+                        QFile marker(path("expiryMarker"));
+                        if (!marker.exists() && (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+                                                 || marker.write("expired\n") != 8)) {
+                            fail(QStringLiteral("cannot trigger awaiting expiry")); return;
+                        }
+                        continue;
+                    }
                     const QString dest = QDir(path("outputDir")).filePath(filename);
                     if (source.isEmpty() || !QFile::copy(source, dest)) { fail(QStringLiteral("cannot copy received image")); return; }
                     copied_.insert(id);
+                    if (filename == QStringLiteral("image-") + path("acceptTarget") + QStringLiteral(".png")) {
+                        acceptedId_ = field(inbox, i, "transferId").toString();
+                        if (acceptedId_.isEmpty() || acceptedQueued_ || !share_->accept(acceptedId_)) {
+                            fail(QStringLiteral("acceptance queue failed")); return;
+                        }
+                        acceptedQueued_ = true;
+                    }
                 }
             }
-            if (copied_.size() >= 2) { success(); return; }
+            bool galleryImported = path("acceptTarget").isEmpty();
+            if (acceptedDone_ && !acceptedId_.isEmpty()) {
+                const QString galleryRoot = QDir(share_->storageFolder()).filePath(QStringLiteral("images/imported"));
+                QDirIterator entries(galleryRoot, {QStringLiteral("*") + acceptedId_ + QStringLiteral(".png")},
+                                     QDir::Files, QDirIterator::Subdirectories);
+                galleryImported = entries.hasNext();
+            }
+            if (copied_.size() >= 2 && (path("replayTarget").isEmpty() || replayRejected_)
+                && galleryImported && (path("policyTarget").isEmpty() || policyStage_ == 4)) { success(); return; }
             if (!refreshing_ && elapsed_.elapsed() - lastRefresh_ >= 1500) {
                 refreshing_ = true; lastRefresh_ = elapsed_.elapsed();
                 if (!share_->refreshInbox()) fail(QStringLiteral("inbox queue failed"));
@@ -179,6 +318,10 @@ private:
     QElapsedTimer elapsed_;
     Phase phase_ {WaitReady};
     bool refreshing_ {false};
+    bool replayRejected_ {false};
+    bool acceptedQueued_ {false}, acceptedDone_ {false};
     qint64 lastRefresh_ {-1500};
     QSet<QString> queued_, copied_;
+    QString expiredId_, acceptedId_, policyTransferId_;
+    int policyStage_ {0};
 };

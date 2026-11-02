@@ -899,6 +899,44 @@ void testSelectiveNoiseFailClosed()
     }
 }
 
+void testAdaptiveNoiseProfileCoverageAB()
+{
+    const struct {
+        HamDrmRobustness mode;
+        HamDrmOccupiedBandwidth bandwidth;
+        HamDrmConstellation constellation;
+        HamDrmInterleaver depth;
+    } profiles[] {
+        {HamDrmRobustness::A, HamDrmOccupiedBandwidth::Hz2300, HamDrmConstellation::Qam4, HamDrmInterleaver::Short},
+        {HamDrmRobustness::A, HamDrmOccupiedBandwidth::Hz2500, HamDrmConstellation::Qam64, HamDrmInterleaver::Long},
+        {HamDrmRobustness::B, HamDrmOccupiedBandwidth::Hz2300, HamDrmConstellation::Qam16, HamDrmInterleaver::Short},
+        {HamDrmRobustness::B, HamDrmOccupiedBandwidth::Hz2500, HamDrmConstellation::Qam64, HamDrmInterleaver::Long},
+        {HamDrmRobustness::E, HamDrmOccupiedBandwidth::Hz2300, HamDrmConstellation::Qam4, HamDrmInterleaver::Long},
+        {HamDrmRobustness::E, HamDrmOccupiedBandwidth::Hz2500, HamDrmConstellation::Qam16, HamDrmInterleaver::Short},
+    };
+    for (const auto& profile : profiles) {
+        HamDrmWaveformConfig config;
+        config.robustness=profile.mode; config.occupiedBandwidth=profile.bandwidth;
+        config.constellation=profile.constellation; config.interleaver=profile.depth;
+        for (unsigned seed : {0x19342U, 0x82714U}) {
+            std::mt19937 random(seed);
+            std::uniform_real_distribution<double> noise(-0.2,0.2);
+            std::vector<double> input(8U*kHamDrmPcmSamplesPerFrame);
+            constexpr double pi=3.14159265358979323846;
+            for (std::size_t i=0;i<input.size();++i)
+                input[i]=noise(random)+(seed==0x82714U ? 0.1*std::sin(2*pi*1900.0*i/12000.0) : 0.0);
+            HamDrmWaveformLimits limits;
+            limits.experimentalFrequencySelective=true;
+            limits.experimentalAdaptiveEqualizer=true;
+            limits.experimentalFlatPacketFallback=true;
+            limits.experimentalMultistagePacketRetry=true;
+            HamDrmWaveformReceiver receiver(config,limits);
+            const auto result=receiver.pushPcm(input.data(),input.size(),true);
+            require(result.dataGroups.empty(),"adaptive receiver emitted a group from noise for a profile");
+        }
+    }
+}
+
 void testDamagedMscDoesNotDiscardFollowingInterleaverFrames()
 {
     HamDrmWaveformConfig config;
@@ -1044,7 +1082,7 @@ void testCancelResetAndBounds()
 
 int main()
 {
-    const std::array<std::pair<const char*, void (*)()>, 22U> tests {{
+    const std::array<std::pair<const char*, void (*)()>, 23U> tests {{
         {"fractional delay chunking A/B", testFractionalDelayChunkingAB},
         {"packet framing", testPacketFraming},
         {"capacity and scheduling", testCapacityAndExactScheduling},
@@ -1064,6 +1102,7 @@ int main()
         {"CFO offset AWGN", testCfoOffsetAndAwgnLoopback},
         {"corruption/drop fail closed", testCorruptionDropAndFailClosed},
         {"selective noise fail closed A/B", testSelectiveNoiseFailClosed},
+        {"adaptive noise profile coverage A/B", testAdaptiveNoiseProfileCoverageAB},
         {"MSC packet rejection preserves later frames A/B", testDamagedMscDoesNotDiscardFollowingInterleaverFrames},
         {"cancel/reset/bounds", testCancelResetAndBounds},
         {"repeat clean loopback", testCleanLongInterleaverLoopback}

@@ -17,8 +17,8 @@
 
 namespace decodium::sstv {
 
-// Normal modes are integrated. Variant-aware core encoding and decoding are
-// experimental; the runtime, acquisition and UI do not yet expose variants.
+// Normal and variant-aware modes are wired through the runtime and UI;
+// independent interoperability and RF coverage remain limited.
 struct SstvAvtModeSpec final
 {
     SstvAvtMode mode {SstvAvtMode::Avt24};
@@ -144,12 +144,15 @@ struct SstvAvtEncoderConfig final
     double level {1.0};
     double headroom {kDefaultSstvTxHeadroom};
     SstvAvtVariant variant {SstvAvtVariant::Normal};
+    // Optional post-image hold of the actual final component tone, in ms.
+    std::uint32_t terminalHoldMs {0U};
 };
 
 enum class SstvAvtEncoderStage : std::uint8_t
 {
     Header,
     Image,
+    TerminalHold,
     Complete,
     Cancelled,
 };
@@ -307,6 +310,8 @@ private:
     {
         double weightedFrequencyHz {0.0};
         double confidenceWeight {0.0};
+        double edgeWeightedFrequencyHz {0.0};
+        double edgeConfidenceWeight {0.0};
         std::uint32_t count {0U};
     };
 
@@ -318,7 +323,8 @@ private:
     bool beginLine(std::uint32_t line);
     void accumulate(const SstvAvtPosition& position,
                     double frequencyHz,
-                    double confidence) noexcept;
+                    double confidence,
+                    bool edge) noexcept;
     bool reconstructComponent(std::size_t base,
                               std::vector<std::uint8_t>& values);
     void publishCurrentLine();

@@ -20,6 +20,8 @@ std::optional<QByteArray> associatedData(const SstvShareManifestV1& manifest)
     object.remove(QStringLiteral("sha256"));
     auto encryption = object.value(QStringLiteral("encryption")).toObject();
     encryption.remove(QStringLiteral("nonceBase64"));
+    // Signatures are produced after sealing; the signer identity remains in AAD.
+    encryption.remove(QStringLiteral("senderSignatureBase64"));
     object.insert(QStringLiteral("encryption"), encryption);
     SstvShareValidationError error;
     const auto canonical = canonicalJson(object, &error);

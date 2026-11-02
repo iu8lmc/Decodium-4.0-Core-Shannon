@@ -35,6 +35,7 @@ HamDrmValueResult<std::vector<std::uint8_t>> encodeHamDrmBsr(
 HamDrmValueResult<HamDrmBsrRequest> parseHamDrmBsr(
     const std::uint8_t* data,
     std::size_t size,
-    const HamDrmLimits& limits = {});
+    const HamDrmLimits& limits = {},
+    bool allowUnknownSegmentSize = false);
 
 } // namespace decodium::sstv::hamdrm

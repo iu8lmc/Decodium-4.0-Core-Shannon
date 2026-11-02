@@ -81,7 +81,8 @@ void SstvRadiofaxAutoRx::beginImage(std::uint64_t sample)
     clock_ = clockTracker_ ? clockTracker_->estimate() : std::nullopt;
     if (clock_) {
         const double nominal = double(config_.sampleRate) * 60.0 / config_.linesPerMinute;
-        if (!clock_->lines || clock_->samples / clock_->lines < config_.width
+        if (!clock_->lines || clock_->samples / clock_->lines
+                - (config_.wmoDeadSector ? sstvRadiofaxDeadSectorSamples(clock_->samples / clock_->lines) : 0U) < config_.width
             || std::abs(double(clock_->samples) / clock_->lines - nominal) > nominal * kRadiofaxMaximumClockDeviation)
             clock_.reset();
     }
@@ -139,28 +140,47 @@ std::uint64_t SstvRadiofaxAutoRx::refineStopBoundary(std::uint64_t candidate) co
     // align to the nearest raster boundary. Radiofax ends on a full line;
     // this prevents an otherwise up-to-one-second stop stripe in the image.
     const std::uint64_t window = std::max<std::uint64_t>(1U, config_.sampleRate / 20U);
-    std::uint64_t boundary = candidate;
-    const std::uint64_t lower = candidate > config_.sampleRate
-        ? std::max(*imageStart_, candidate - config_.sampleRate) : *imageStart_;
-    for (unsigned i = 0; i < 20U && boundary >= lower + window; ++i) {
-        const auto begin = boundary - window;
-        double re = 0.0, im = 0.0, amplitude = 0.0, mean = 0.0;
+    const auto isStopWindow = [&](std::uint64_t begin) {
+        const auto end = begin + window;
+        std::array<double, 3> re {}, im {};
+        double amplitude = 0.0, mean = 0.0;
         std::size_t total = 0U, valid = 0U;
         for (const auto& obs : pendingImage_) {
             if (obs.centreSample < begin) continue;
-            if (obs.centreSample >= boundary) break;
+            if (obs.centreSample >= end) break;
             ++total;
             if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz)
                 || !std::isfinite(obs.confidence) || obs.confidence < 0.2) continue;
             const double value = obs.correctedFrequencyHz - offset_ - 1900.0;
-            const auto phaseIndex = (obs.centreSample % config_.sampleRate) * 450U % config_.sampleRate;
-            const double phase = 2.0 * std::acos(-1.0) * double(phaseIndex) / config_.sampleRate;
-            re += value * std::cos(phase); im += value * std::sin(phase);
+            // The main stop detector accepts 440-460 Hz. Use a small bank
+            // across that same range so a valid off-centre stop can also be
+            // backtracked to the image boundary.
+            for (std::size_t bin = 0; bin < re.size(); ++bin) {
+                const auto frequency = 440U + 10U * bin;
+                const auto phaseIndex = (obs.centreSample % config_.sampleRate) * frequency % config_.sampleRate;
+                const double phase = 2.0 * std::acos(-1.0) * double(phaseIndex) / config_.sampleRate;
+                re[bin] += value * std::cos(phase);
+                im[bin] += value * std::sin(phase);
+            }
             amplitude += std::abs(value); mean += value; ++valid;
         }
         if (total < 10U || valid * 5U < total * 3U
-            || amplitude < 100.0 * double(valid) || std::abs(mean) > 100.0 * double(valid)
-            || 2.0 * std::hypot(re, im) < 0.85 * amplitude) break;
+            || amplitude < 100.0 * double(valid) || std::abs(mean) > 100.0 * double(valid))
+            return false;
+        for (std::size_t bin = 0; bin < re.size(); ++bin)
+            if (2.0 * std::hypot(re[bin], im[bin]) >= 0.85 * amplitude) return true;
+        return false;
+    };
+    // A matching one-second window can begin before the stop itself. Find
+    // the first short matching window within it before backtracking.
+    std::uint64_t boundary = candidate;
+    for (unsigned i = 0U; i < 20U && !isStopWindow(boundary); ++i)
+        boundary += window;
+    const std::uint64_t lower = candidate > config_.sampleRate
+        ? std::max(*imageStart_, candidate - config_.sampleRate) : *imageStart_;
+    for (unsigned i = 0; i < 20U && boundary >= lower + window; ++i) {
+        const auto begin = boundary - window;
+        if (!isStopWindow(begin)) break;
         boundary = begin;
     }
     const std::uint64_t lineCount = clock_ ? clock_->lines : config_.linesPerMinute;
@@ -201,7 +221,7 @@ void SstvRadiofaxAutoRx::consumeImageObservation(const SstvFrequencyObservation&
     }
 }
 
-void SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, std::size_t count)
+std::size_t SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, std::size_t count)
 {
     if (count > SstvRadiofaxRxSession::MaximumObservationsPerConsume)
         throw std::length_error("radiofax automatic RX observation bound");
@@ -214,9 +234,11 @@ void SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, std::size
         last = data[i].centreSample;
         have = true;
     }
+    std::size_t consumed = 0U;
     for (std::size_t i = 0; i < count; ++i) {
         if (state_ == SstvRadiofaxAutoRxState::Complete || state_ == SstvRadiofaxAutoRxState::Partial
             || state_ == SstvRadiofaxAutoRxState::Cancelled || state_ == SstvRadiofaxAutoRxState::Failed) break;
+        ++consumed;
         const auto& obs = data[i];
         lastSample_ = obs.centreSample;
         hasLast_ = true;
@@ -247,11 +269,12 @@ void SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, std::size
             consumeImageObservation(obs);
         }
     }
+    return consumed;
 }
 
-void SstvRadiofaxAutoRx::consume(const std::vector<SstvFrequencyObservation>& data)
+std::size_t SstvRadiofaxAutoRx::consume(const std::vector<SstvFrequencyObservation>& data)
 {
-    consume(data.data(), data.size());
+    return consume(data.data(), data.size());
 }
 
 bool SstvRadiofaxAutoRx::stopAtAudioSample(std::uint64_t sample)

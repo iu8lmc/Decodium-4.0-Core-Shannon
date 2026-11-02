@@ -29,7 +29,10 @@ def main():
     parser.add_argument("received")
     parser.add_argument("--max-mae", type=float, required=True)
     parser.add_argument("--max-p95", type=int, required=True)
+    parser.add_argument("--max-last-blue-error", type=int)
     args = parser.parse_args()
+    if args.max_last_blue_error is not None and not 0 <= args.max_last_blue_error <= 255:
+        parser.error("--max-last-blue-error must be between 0 and 255")
     first_shape, first = read_rgb(args.reference)
     second_shape, second = read_rgb(args.received)
     if first_shape != second_shape:
@@ -41,8 +44,14 @@ def main():
               "mean_absolute_error": mae, "median_error": errors[len(errors) // 2],
               "p95_error": p95, "maximum_error": errors[-1],
               "max_mae": args.max_mae, "max_p95": args.max_p95}
+    if args.max_last_blue_error is not None:
+        result.update(last_blue_reference=first[-1], last_blue_received=second[-1],
+                      last_blue_error=abs(first[-1] - second[-1]),
+                      max_last_blue_error=args.max_last_blue_error)
     print(json.dumps(result, sort_keys=True))
-    return 0 if mae <= args.max_mae and p95 <= args.max_p95 else 1
+    return 0 if (mae <= args.max_mae and p95 <= args.max_p95
+                 and (args.max_last_blue_error is None
+                      or result["last_blue_error"] <= args.max_last_blue_error)) else 1
 
 
 if __name__ == "__main__":

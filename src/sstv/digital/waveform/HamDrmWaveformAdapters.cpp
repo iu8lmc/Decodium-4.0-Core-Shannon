@@ -612,8 +612,13 @@ public:
         if (selectedExperimentalTiming) {
             requestedWaveformLimits.experimentalFrequencySelective = true;
             requestedWaveformLimits.experimentalAdaptiveEqualizer = true;
+            requestedWaveformLimits.experimentalFlatPacketFallback = true;
+            requestedWaveformLimits.experimentalMultistagePacketRetry = true;
             requestedDualTiming = true;
+            requestedFractionalTiming = true;
             qInfo() << "[HAMDRM] operator selected experimental adaptive dual timing";
+            qInfo() << "[HAMDRM] operator selected fractional timing candidate";
+            qInfo() << "[HAMDRM] operator selected CRC-gated packet retries";
         }
         // Diagnostic-only replay of difficult recorded channels. Never select
         // the relaxed limits in a normal session, even if the environment is set.
@@ -658,6 +663,7 @@ public:
             qInfo() << "[LAB][HAMDRM] experimental independent dual timing";
             if (qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_EARLY_ONLY") == 1) {
                 requestedEarlyOnly = true;
+                requestedFractionalTiming = false;
                 qInfo() << "[LAB][HAMDRM] only early timing groups delivered";
             }
             if (!requestedEarlyOnly && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_FRACTIONAL_TIMING") == 1) {

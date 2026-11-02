@@ -247,6 +247,8 @@ SstvPage {
                             checked: root.controller ? root.controller.experimentalTiming : false
                             onClicked: if (root.controller)
                                            root.controller.experimentalTiming = !root.controller.experimentalTiming
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("For difficult incoming signals, including some QSSTV repair requests, enable this before starting transmission or reception.")
                         }
                         Label {
                             Layout.fillWidth: true
@@ -581,6 +583,14 @@ SstvPage {
                         readOnly: true
                         wrapMode: TextEdit.NoWrap
                         text: root.controller ? root.controller.receivedBsrText : ""
+                    }
+                    Label {
+                        objectName: "hamdrmBsrUnknownSizeNotice"
+                        Layout.fillWidth: true
+                        visible: root.controller && root.controller.receivedBsrSegmentSizeUnknown
+                        text: qsTr("The request does not specify a segment size. Repair uses the segment layout of your last transmission.")
+                        color: root.secondaryTextColor
+                        wrapMode: Text.WordWrap
                     }
                     Button {
                         objectName: "hamdrmRepairBsr"

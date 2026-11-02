@@ -21,6 +21,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data,
 
     (void) parseHamDrmMotDataGroup(data, size);
     (void) parseHamDrmBsr(data, size);
+    (void) parseHamDrmBsr(data, size, {}, true);
     if (size % 255U == 0U) {
         const std::vector<std::uint8_t> container(data, data + size);
         (void) decodeHamDrmRs(container, size == 0U ? 1U : (data[0] % 4U) + 1U);

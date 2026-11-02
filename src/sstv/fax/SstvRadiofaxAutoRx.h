@@ -21,8 +21,9 @@ enum class SstvRadiofaxAutoRxState : std::uint8_t {
 class SstvRadiofaxAutoRx final {
 public:
     explicit SstvRadiofaxAutoRx(SstvFaxConfig config, double frequencyOffsetHz = 0.0);
-    void consume(const SstvFrequencyObservation* data, std::size_t count);
-    void consume(const std::vector<SstvFrequencyObservation>& data);
+    // Returns the observations consumed before reaching a terminal state.
+    std::size_t consume(const SstvFrequencyObservation* data, std::size_t count);
+    std::size_t consume(const std::vector<SstvFrequencyObservation>& data);
     bool stopAtAudioSample(std::uint64_t sample);
     SstvRadiofaxAutoRxState finish();
     SstvRadiofaxAutoRxState notifyDiscontinuity();

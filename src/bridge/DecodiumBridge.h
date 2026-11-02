@@ -870,6 +870,8 @@ public:
     Q_INVOKABLE bool configureSstvRadiofaxRx(bool enabled, int ioc, int width, int height);
     Q_INVOKABLE bool configureSstvRadiofaxRxAligned(bool enabled, int ioc, int width, int height,
                                                     bool centeredPhasingWithWhiteEndLine);
+    Q_INVOKABLE bool configureSstvRadiofaxRxProfile(bool enabled, int ioc, int width, int height,
+                                                    bool centeredPhasingWithWhiteEndLine, bool wmoDeadSector);
     Q_INVOKABLE void resetSstvRxAfc();
     Q_INVOKABLE void resetSstvRxSlant();
     Q_INVOKABLE bool redecodeRecentSstv(
@@ -894,6 +896,7 @@ public:
     Q_INVOKABLE bool startSstvTx(const QString& fskId = QString());
     Q_INVOKABLE bool startSstvRadiofaxTx(int ioc, int linesPerMinute);
     Q_INVOKABLE bool startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, bool centeredPhasing);
+    Q_INVOKABLE bool startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, bool centeredPhasing, bool wmoDeadSector);
     Q_INVOKABLE bool startSstvFax480Tx(const QString& profile);
     Q_INVOKABLE bool startSstvCalibrationTone(const QString& toneId);
     Q_INVOKABLE void cancelSstvTx();

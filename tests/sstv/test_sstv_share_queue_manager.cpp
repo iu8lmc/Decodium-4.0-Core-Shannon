@@ -302,6 +302,7 @@ struct FakeBackend final
     QHash<QString, QByteArray> downloads;
     QVector<SstvShareIncomingItem> incoming;
     QVector<quint64> requestedDownloadOffsets;
+    std::function<void(quint64)> beforeDownloadResponse;
     bool encryptedEnvelopes {false};
     bool failNextUploadChunk {false};
     bool chunkedUpload {true};
@@ -504,6 +505,7 @@ public:
         const auto backend = m_backend;
         return schedule([backend, opaqueIncomingId, offset, maximumBytes,
                          completion = std::move(completion)]() mutable {
+            if (backend->beforeDownloadResponse) backend->beforeDownloadResponse(offset);
             const auto found = backend->downloads.constFind(opaqueIncomingId);
             if (found == backend->downloads.constEnd()
                 || offset >= static_cast<quint64>(found->size())) {
@@ -840,6 +842,584 @@ bool uploadRetryRestartResumeIsDurableAndRedacted()
     return true;
 }
 
+bool duplicateIncomingEnvelopeIsNotDownloadedTwiceAB()
+{
+    for (const bool encrypted : {false, true}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        const QByteArray image = pngPayload(8, 8, encrypted ? 'e' : 'p');
+        CHECK(!image.isEmpty());
+        auto manifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.width = 8; manifest.height = 8;
+        if (encrypted) {
+            backend->encryptedEnvelopes = true;
+            manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+            manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+            manifest.encryption.keyId = QStringLiteral("test-key");
+            manifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+            manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+            manifest.encryption.manifestBoundAsAuthenticatedData = true;
+            manifest.transport.providerCanReadContent = false;
+            fixture.config.openEncryptedPayload = [image](const SstvShareManifestV1&, const QByteArray& bytes)
+                -> std::optional<QByteArray> { return bytes == image ? std::optional<QByteArray>(image) : std::nullopt; };
+        }
+        auto distinct = manifest;
+        distinct.transferId = QUuid::createUuid();
+        auto stageManifest = manifest;
+        stageManifest.transferId = QUuid::createUuid();
+        const QString stageIncoming = QStringLiteral("incoming:stage-policy");
+        const QString first = QStringLiteral("incoming:first");
+        const QString replay = QStringLiteral("incoming:replay");
+        const QString fresh = QStringLiteral("incoming:fresh");
+        const QString retry = QStringLiteral("incoming:retry");
+        backend->incoming = {incomingFor(stageIncoming, stageManifest, fixture.clock),
+                             incomingFor(first, manifest, fixture.clock),
+                             incomingFor(replay, manifest, fixture.clock),
+                             incomingFor(fresh, distinct, fixture.clock),
+                             incomingFor(retry, distinct, fixture.clock)};
+        backend->downloads.insert(stageIncoming, image);
+        backend->downloads.insert(first, image);
+        backend->downloads.insert(replay, image);
+        backend->downloads.insert(fresh, image);
+        const auto strictSender = std::make_shared<bool>(false);
+        fixture.config.incomingPolicyAllows = [strictSender](const SstvShareManifestV1& candidate) {
+            return !*strictSender || (candidate.encryption.mode == SstvShareEncryptionMode::EndToEnd
+                && !candidate.encryption.senderAuthAlgorithm.isEmpty());
+        };
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool refreshed = false;
+        CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+              [&](SstvShareProviderResult result) { refreshed = result.ok(); }) != 0U);
+        CHECK(spinUntil([&] { return refreshed; }));
+        QString error;
+        const auto stageId = manager->queueDownload(QStringLiteral("queue-test"), stageIncoming,
+                                                     QStringLiteral("stage.png"), &error, encrypted);
+        CHECK(!stageId.isEmpty());
+        *strictSender = true;
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(stageId);
+            return r && r->state == SstvManagedTransferState::Failed; }));
+        CHECK(!manager->validatedIncomingHandoff(stageId).has_value());
+        *strictSender = false;
+        const auto id = manager->queueDownload(QStringLiteral("queue-test"), first,
+                                               QStringLiteral("first.png"), &error, encrypted);
+        CHECK(!id.isEmpty());
+        CHECK(manager->queueDownload(QStringLiteral("queue-test"), replay,
+                                     QStringLiteral("replay.png"), &error, encrypted).isEmpty());
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(id);
+            return r && r->state == SstvManagedTransferState::AwaitingAcceptance; }));
+        CHECK(manager->validatedIncomingHandoff(id).has_value());
+        *strictSender = true;
+        CHECK(!manager->validatedIncomingHandoff(id).has_value());
+        CHECK(!manager->acceptDownload(id, &error));
+        *strictSender = false;
+        CHECK(manager->validatedIncomingHandoff(id).has_value());
+        CHECK(manager->acceptDownload(id, &error));
+        manager.reset();
+        manager = fixture.manager(backend);
+        CHECK(manager);
+        CHECK(manager->queueDownload(QStringLiteral("queue-test"), replay,
+                                     QStringLiteral("replay.png"), &error, encrypted).isEmpty());
+        const auto freshId = manager->queueDownload(QStringLiteral("queue-test"), fresh,
+                                                    QStringLiteral("fresh.png"), &error, encrypted);
+        CHECK(!freshId.isEmpty());
+        CHECK(manager->cancelTransfer(freshId, &error));
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(freshId);
+            return r && r->state == SstvManagedTransferState::Cancelled; }));
+        CHECK(!manager->queueDownload(QStringLiteral("queue-test"), retry,
+                                      QStringLiteral("retry.png"), &error, encrypted).isEmpty());
+    }
+    return true;
+}
+
+bool unexpiredEncryptedReplayEvidenceSurvivesReclamationAB()
+{
+    for (const bool inboxPressure : {false, true}) {
+        Fixture fixture;
+        fixture.config.limits.maximumRecords = inboxPressure ? 2 : 1;
+        fixture.config.limits.maximumInboxItems = inboxPressure ? 1 : 2;
+        const QByteArray image = pngPayload(8, 8, inboxPressure ? 'b' : 'a');
+        auto firstManifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                         QStringLiteral("station:local"));
+        firstManifest.expiresUtc = fixture.clock.utc.addSecs(60);
+        firstManifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+        firstManifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+        firstManifest.encryption.keyId = QStringLiteral("test-key");
+        firstManifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+        firstManifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+        firstManifest.encryption.manifestBoundAsAuthenticatedData = true;
+        firstManifest.transport.providerCanReadContent = false;
+        auto nextManifest = firstManifest;
+        nextManifest.transferId = QUuid::createUuid();
+        nextManifest.expiresUtc = fixture.clock.utc.addDays(1);
+        const auto firstIncoming = incomingFor(QStringLiteral("ack:first"), firstManifest, fixture.clock);
+        const auto nextIncoming = incomingFor(QStringLiteral("ack:next"), nextManifest, fixture.clock);
+        auto first = acknowledgedDownloadFor(firstManifest, firstIncoming,
+            QUuid::createUuid().toString(QUuid::WithoutBraces), {}, fixture.clock.utc);
+        auto next = acknowledgedDownloadFor(nextManifest, nextIncoming,
+            QUuid::createUuid().toString(QUuid::WithoutBraces), {}, fixture.clock.utc);
+        QString error;
+        SstvShareQueueStore store(fixture.config, {}, [&fixture] { return fixture.clock.utc; });
+        CHECK(store.open(&error));
+        CHECK(store.upsertInboxItem(first.inbox, &error));
+        CHECK(store.insertDownloadTransferAndInbox(first.transfer, first.inbox, &error));
+        if (inboxPressure) {
+            CHECK(!store.upsertInboxItem(next.inbox, &error));
+        } else {
+            CHECK(store.upsertInboxItem(next.inbox, &error));
+            CHECK(!store.insertDownloadTransferAndInbox(next.transfer, next.inbox, &error));
+        }
+        CHECK(store.transfer(first.transfer.transferId));
+        CHECK(store.inboxItem(first.inbox.providerId, first.inbox.incomingId));
+        store.close();
+        CHECK(store.open(&error));
+        CHECK(store.transfer(first.transfer.transferId));
+        fixture.clock.utc = firstManifest.expiresUtc;
+        if (inboxPressure) CHECK(store.upsertInboxItem(next.inbox, &error));
+        CHECK(store.insertDownloadTransferAndInbox(next.transfer, next.inbox, &error));
+        CHECK(!store.transfer(first.transfer.transferId));
+    }
+    return true;
+}
+
+bool downloadExpiresWhileProviderRespondsAB()
+{
+    for (const bool multiChunk : {false, true}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        const QByteArray bytes = multiChunk ? pngPayload(48, 36, 'b')
+                                            : pngPayload(2, 2, 'a');
+        CHECK(!bytes.isEmpty());
+        CHECK((bytes.size() > 1024) == multiChunk);
+        auto manifest = manifestFor(bytes, fixture.clock,
+                                    QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.expiresUtc = fixture.clock.utc.addSecs(1);
+        const QString incomingId = QStringLiteral("incoming:expiry");
+        backend->incoming = {incomingFor(incomingId, manifest, fixture.clock)};
+        backend->downloads.insert(incomingId, bytes);
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool refreshed = false;
+        bool refreshOk = false;
+        CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+              [&](SstvShareProviderResult result) {
+                  refreshOk = result.ok(); refreshed = true;
+              }) != 0U);
+        CHECK(spinUntil([&] { return refreshed; }));
+        CHECK(refreshOk);
+        QString error;
+        const QString id = manager->queueDownload(QStringLiteral("queue-test"),
+                                                   incomingId,
+                                                   QStringLiteral("expiry.png"), &error);
+        CHECK(!id.isEmpty());
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(backend->downloadCalls == 1);
+        fixture.clock.utc = manifest.expiresUtc;
+        CHECK(spinUntil([&] { return manager->activeOperationCount() == 0; }));
+        const auto record = manager->store().transfer(id);
+        CHECK(record);
+        CHECK(record->state == SstvManagedTransferState::Expired);
+        CHECK(record->byteOffset == 0U);
+        CHECK(!QFileInfo::exists(record->stagingPath));
+        CHECK(!QFileInfo::exists(record->destinationPath));
+        const auto item = manager->store().inboxItem(QStringLiteral("queue-test"), incomingId);
+        CHECK(item && item->disposition == SstvInboxDisposition::Expired);
+        CHECK(!manager->acceptDownload(id, &error));
+    }
+    return true;
+}
+
+bool awaitingAcceptanceExpiryAB()
+{
+    for (const bool encrypted : {false, true}) {
+        for (int scenario = 0; scenario < 7; ++scenario) {
+            Fixture fixture;
+            const auto backend = std::make_shared<FakeBackend>();
+            const QByteArray image = pngPayload(16, 12, encrypted ? 'b' : 'a');
+            const QByteArray wire = encrypted ? QByteArray("encrypted fixture") : image;
+            auto manifest = manifestFor(wire, fixture.clock,
+                QStringLiteral("station:remote"), QStringLiteral("station:local"));
+            manifest.width = 16; manifest.height = 12;
+            manifest.expiresUtc = fixture.clock.utc.addSecs(10);
+            if (encrypted) {
+                backend->encryptedEnvelopes = true;
+                manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+                manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+                manifest.encryption.keyId = QStringLiteral("test-key");
+                manifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+                manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+                manifest.encryption.manifestBoundAsAuthenticatedData = true;
+                manifest.transport.providerCanReadContent = false;
+                fixture.config.openEncryptedPayload = [=](const SstvShareManifestV1&, const QByteArray& input)
+                    -> std::optional<QByteArray> { return input == wire ? std::optional<QByteArray>(image) : std::nullopt; };
+            }
+            const QString incoming = QStringLiteral("incoming:awaiting-expiry");
+            backend->incoming = {incomingFor(incoming, manifest, fixture.clock)};
+            backend->downloads.insert(incoming, wire);
+            auto manager = fixture.manager(backend);
+            CHECK(manager);
+            bool refreshed = false;
+            manager->refreshInboxAsync(QStringLiteral("queue-test"),
+                [&](SstvShareProviderResult result) { refreshed = result.ok(); });
+            CHECK(spinUntil([&] { return refreshed; }));
+            QString error;
+            const QString id = manager->queueDownload(QStringLiteral("queue-test"), incoming,
+                                                       QStringLiteral("image.png"), &error, encrypted);
+            CHECK(!id.isEmpty());
+            CHECK(manager->processDue(&error) == 1);
+            CHECK(spinUntil([&] {
+                auto r = manager->store().transfer(id);
+                return r && r->state == SstvManagedTransferState::AwaitingAcceptance;
+            }));
+            auto record = manager->store().transfer(id);
+            CHECK(record && QFileInfo::exists(record->destinationPath));
+            CHECK(manager->validatedIncomingHandoff(id, &error));
+            if (scenario == 3) CHECK(manager->acceptDownload(id, &error));
+            std::shared_ptr<TestFaultInjector> pendingFault;
+            if (scenario == 4 || scenario == 5 || scenario == 6) {
+                manager.reset();
+                fixture.clock.utc = manifest.expiresUtc.addSecs(-1);
+                pendingFault = std::make_shared<TestFaultInjector>();
+                pendingFault->arm(SstvShareFaultPoint::BeforeInboxLookup);
+                manager = fixture.manager(backend, pendingFault);
+                CHECK(manager && pendingFault->remaining() == 0);
+                const auto pending = manager->store().transfer(id);
+                CHECK(pending && pending->state == SstvManagedTransferState::AwaitingAcceptance);
+                CHECK(pending->lastErrorRedacted == QStringLiteral("Gallery verification temporarily unavailable"));
+            }
+            fixture.clock.utc = manifest.expiresUtc;
+            if (scenario == 2) {
+                manager.reset();
+                manager = fixture.manager(backend);
+                CHECK(manager);
+            }
+            if (scenario == 5 || scenario == 6) {
+                pendingFault->arm(scenario == 5 ? SstvShareFaultPoint::BeforeDatabaseCommit
+                                                : SstvShareFaultPoint::BeforeInboxLookup);
+                manager->processDue(&error);
+                CHECK(pendingFault->remaining() == 0);
+                const auto beforeRetry = manager->store().transfer(id);
+                CHECK(beforeRetry && beforeRetry->state == SstvManagedTransferState::AwaitingAcceptance);
+                CHECK(QFileInfo::exists(record->destinationPath));
+                CHECK(!manager->acceptDownload(id, &error));
+                CHECK(error == QStringLiteral("Gallery verification is pending"));
+            }
+            if (scenario == 1 || scenario == 2 || scenario == 4 || scenario == 5 || scenario == 6) manager->processDue(&error);
+            if (scenario == 3) {
+                CHECK(manager->validatedIncomingHandoff(id, &error));
+                CHECK(QFileInfo::exists(record->destinationPath));
+            } else {
+                CHECK(!manager->validatedIncomingHandoff(id, &error));
+                CHECK(!manager->acceptDownload(id, &error));
+                record = manager->store().transfer(id);
+                CHECK(record && record->state == SstvManagedTransferState::Expired);
+                CHECK(!QFileInfo::exists(record->stagingPath));
+                CHECK(!QFileInfo::exists(record->destinationPath));
+                const auto item = manager->store().inboxItem(QStringLiteral("queue-test"), incoming);
+                CHECK(item && item->disposition == SstvInboxDisposition::Expired);
+            }
+        }
+    }
+    return true;
+}
+
+bool expiryRemovesPreviouslyDownloadedChunksAB()
+{
+    for (const bool encrypted : {false, true}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        const QByteArray image = pngPayload(48, 36, encrypted ? 'e' : 'p');
+        CHECK(image.size() > 1024);
+        auto manifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.expiresUtc = fixture.clock.utc.addSecs(1);
+        if (encrypted) {
+            backend->encryptedEnvelopes = true;
+            manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+            manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+            manifest.encryption.keyId = QStringLiteral("test-key");
+            manifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+            manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+            manifest.encryption.manifestBoundAsAuthenticatedData = true;
+            manifest.transport.providerCanReadContent = false;
+        }
+        const QString incomingId = QStringLiteral("incoming:partial-expiry");
+        backend->incoming = {incomingFor(incomingId, manifest, fixture.clock)};
+        backend->downloads.insert(incomingId, image);
+        backend->beforeDownloadResponse = [&](quint64 offset) {
+            if (offset > 0U) fixture.clock.utc = manifest.expiresUtc;
+        };
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool refreshed = false;
+        CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+              [&](SstvShareProviderResult result) { refreshed = result.ok(); }) != 0U);
+        CHECK(spinUntil([&] { return refreshed; }));
+        QString error;
+        const QString id = manager->queueDownload(QStringLiteral("queue-test"), incomingId,
+                                                   QStringLiteral("expired.png"), &error);
+        CHECK(!id.isEmpty());
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(id);
+            return r && r->state == SstvManagedTransferState::Expired; }));
+        const auto record = manager->store().transfer(id);
+        CHECK(record && record->byteOffset == 1024U);
+        CHECK(backend->downloadCalls == 2);
+        CHECK(!QFileInfo::exists(record->stagingPath));
+        CHECK(!QFileInfo::exists(record->destinationPath));
+        CHECK(!manager->acceptDownload(id, &error));
+    }
+    return true;
+}
+
+bool acceptedCleanupRecoversAfterRestartAB()
+{
+    for (const bool encrypted : {false, true}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        const QByteArray image = pngPayload(16, 12, encrypted ? 'b' : 'a');
+        const QByteArray wire = encrypted ? QByteArray("encrypted fixture") : image;
+        auto manifest = manifestFor(wire, fixture.clock,
+            QStringLiteral("station:remote"), QStringLiteral("station:local"));
+        manifest.width = 16; manifest.height = 12;
+        if (encrypted) {
+            backend->encryptedEnvelopes = true;
+            manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+            manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+            manifest.encryption.keyId = QStringLiteral("test-key");
+            manifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+            manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+            manifest.encryption.manifestBoundAsAuthenticatedData = true;
+            manifest.transport.providerCanReadContent = false;
+            fixture.config.openEncryptedPayload = [=](const SstvShareManifestV1&, const QByteArray& input)
+                -> std::optional<QByteArray> { return input == wire ? std::optional<QByteArray>(image) : std::nullopt; };
+        }
+        const QString incoming = QStringLiteral("incoming:accepted-cleanup");
+        backend->incoming = {incomingFor(incoming, manifest, fixture.clock)};
+        backend->downloads.insert(incoming, wire);
+        QString id, staging, destination, sentinel;
+        QByteArray validated;
+        {
+            auto manager = fixture.manager(backend);
+            CHECK(manager);
+            bool refreshed = false;
+            manager->refreshInboxAsync(QStringLiteral("queue-test"),
+                [&](SstvShareProviderResult result) { refreshed = result.ok(); });
+            CHECK(spinUntil([&] { return refreshed; }));
+            QString error;
+            id = manager->queueDownload(QStringLiteral("queue-test"), incoming,
+                                        QStringLiteral("image.png"), &error, encrypted);
+            CHECK(!id.isEmpty());
+            CHECK(manager->processDue(&error) == 1);
+            CHECK(spinUntil([&] { const auto r = manager->store().transfer(id);
+                return r && r->state == SstvManagedTransferState::AwaitingAcceptance; }));
+            const auto record = manager->store().transfer(id);
+            CHECK(record);
+            staging = record->stagingPath;
+            destination = record->destinationPath;
+            validated = readFile(destination);
+            CHECK(!validated.isEmpty());
+            CHECK(manager->acceptDownload(id, &error));
+            CHECK(!QFileInfo::exists(staging));
+            // Recreate the exact crash residue after the accepted-state commit.
+            CHECK(writeFile(staging, wire));
+            sentinel = QFileInfo(staging).dir().filePath(QStringLiteral("preserve-user-file.part"));
+            CHECK(writeFile(sentinel, QByteArrayLiteral("preserve")));
+        }
+        for (int restart = 0; restart < 2; ++restart) {
+            SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+            QString error;
+            CHECK(manager.initialize(&error));
+            CHECK(!QFileInfo::exists(staging));
+            CHECK(readFile(sentinel) == QByteArrayLiteral("preserve"));
+            CHECK(readFile(destination) == validated);
+            const auto record = manager.store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Accepted);
+            CHECK(manager.validatedIncomingHandoff(id, &error));
+        }
+        // A directory at the managed file name must not be removed; report
+        // the failure and retry once a regular residual file is present.
+        CHECK(QDir().mkdir(staging));
+        {
+            SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+            CHECK(manager.initialize());
+            CHECK(QFileInfo(staging).isDir());
+            const auto record = manager.store().transfer(id);
+            CHECK(record && record->lastErrorRedacted
+                  == QStringLiteral("accepted download temporary file removal failed"));
+            CHECK(readFile(destination) == validated);
+            CHECK(readFile(sentinel) == QByteArrayLiteral("preserve"));
+        }
+        CHECK(QDir().rmdir(staging));
+        CHECK(writeFile(staging, wire));
+        {
+            SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+            CHECK(manager.initialize());
+            CHECK(!QFileInfo::exists(staging));
+            const auto record = manager.store().transfer(id);
+            CHECK(record && record->lastErrorRedacted.isEmpty());
+            CHECK(readFile(destination) == validated);
+            CHECK(readFile(sentinel) == QByteArrayLiteral("preserve"));
+        }
+        // A temporarily unavailable Gallery must stay pending, fail closed
+        // for actions, and be retried without waiting for another restart.
+        CHECK(QFile::remove(destination));
+        std::optional<bool> galleryResult;
+        int galleryChecks = 0;
+        fixture.config.verifiedGalleryImport = [&](const SstvManagedTransferRecord&,
+                                                    const SstvShareManifestV1&) -> std::optional<bool> {
+            ++galleryChecks;
+            return galleryResult;
+        };
+        {
+            auto manager = fixture.manager(backend);
+            CHECK(manager);
+            auto record = manager->store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Accepted);
+            CHECK(record->lastErrorRedacted == QStringLiteral("Gallery verification temporarily unavailable"));
+            CHECK(galleryChecks == 1);
+            QString error;
+            CHECK(!manager->acceptDownload(id, &error));
+            CHECK(error == QStringLiteral("Gallery verification is pending"));
+            bool ackRejected = false;
+            CHECK(manager->acknowledgeDownloadAsync(id, [&](SstvShareProviderResult result) {
+                ackRejected = !result.ok();
+            }) == 0U);
+            CHECK(ackRejected);
+            // A temporary inbox query failure must not convert a pending
+            // Gallery check into a permanent integrity failure.
+            const QString connectionName = QStringLiteral("inbox-recovery-test");
+            {
+                QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+                database.setDatabaseName(fixture.config.databasePath);
+                CHECK(database.open());
+                QSqlQuery query(database);
+                CHECK(query.exec(QStringLiteral("ALTER TABLE sstv_share_inbox RENAME TO sstv_share_inbox_temporarily_unavailable")));
+                fixture.clock.utc = fixture.clock.utc.addSecs(5);
+                manager->processDue();
+                CHECK(query.exec(QStringLiteral("ALTER TABLE sstv_share_inbox_temporarily_unavailable RENAME TO sstv_share_inbox")));
+                query.finish();
+                database.close();
+            }
+            QSqlDatabase::removeDatabase(connectionName);
+            record = manager->store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Accepted);
+            CHECK(!manager->acceptDownload(id, &error));
+            CHECK(error == QStringLiteral("Gallery verification is pending"));
+            manager->processDue();
+            CHECK(galleryChecks == 1);
+            fixture.clock.utc = fixture.clock.utc.addSecs(5);
+            galleryResult = true;
+            manager->processDue();
+            CHECK(galleryChecks == 2);
+            record = manager->store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Accepted);
+            CHECK(record->lastErrorRedacted.isEmpty());
+        }
+        galleryResult.reset();
+        {
+            auto manager = fixture.manager(backend);
+            CHECK(manager);
+            CHECK(manager->store().transfer(id)->state == SstvManagedTransferState::Accepted);
+            galleryResult = false;
+            fixture.clock.utc = fixture.clock.utc.addSecs(5);
+            manager->processDue();
+            auto record = manager->store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Failed);
+            CHECK(record->lastFailure == SstvShareProviderFailure::Integrity);
+            CHECK(record->lastErrorRedacted == QStringLiteral("Gallery recovery integrity verification failed"));
+            // Restore an accepted fixture for the separate corrupt-staging control.
+            CHECK(writeFile(destination, validated));
+            record->state = SstvManagedTransferState::Accepted;
+            record->lastFailure = SstvShareProviderFailure::None;
+            record->lastErrorRedacted.clear();
+            SstvShareQueueStore fixtureStore(fixture.config);
+            CHECK(fixtureStore.open());
+            CHECK(fixtureStore.updateTransfer(*record));
+        }
+        // A present but corrupt staged image must never be excused by a
+        // Gallery recovery callback, even when that callback would say yes.
+        CHECK(writeFile(destination, QByteArrayLiteral("not a valid image")));
+        bool galleryConsulted = false;
+        fixture.config.verifiedGalleryImport = [&](const SstvManagedTransferRecord&,
+                                                    const SstvShareManifestV1&) {
+            galleryConsulted = true;
+            return true;
+        };
+        {
+            SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+            CHECK(manager.initialize());
+            const auto record = manager.store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Failed);
+            CHECK(!galleryConsulted);
+            CHECK(readFile(sentinel) == QByteArrayLiteral("preserve"));
+        }
+    }
+    return true;
+}
+
+bool expiredCleanupRecoversAfterCommitAB()
+{
+    for (const char seed : {'a', 'b'}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        const auto fault = std::make_shared<TestFaultInjector>();
+        const QByteArray image = pngPayload(48, 36, seed);
+        CHECK(image.size() > 1024);
+        auto manifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.expiresUtc = fixture.clock.utc.addSecs(1);
+        const QString incoming = QStringLiteral("incoming:cleanup-recovery");
+        backend->incoming = {incomingFor(incoming, manifest, fixture.clock)};
+        backend->downloads.insert(incoming, image);
+        backend->beforeDownloadResponse = [&](quint64 offset) {
+            if (offset > 0U) fixture.clock.utc = manifest.expiresUtc;
+        };
+        QString id, staging, sentinel;
+        {
+            auto manager = fixture.manager(backend, fault);
+            CHECK(manager);
+            bool refreshed = false;
+            CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+                  [&](SstvShareProviderResult result) { refreshed = result.ok(); }) != 0U);
+            CHECK(spinUntil([&] { return refreshed; }));
+            QString error;
+            id = manager->queueDownload(QStringLiteral("queue-test"), incoming,
+                                         QStringLiteral("expired.png"), &error);
+            CHECK(!id.isEmpty());
+            staging = manager->store().transfer(id)->stagingPath;
+            sentinel = QFileInfo(staging).dir().filePath(QStringLiteral("preserve-user-file.part"));
+            CHECK(writeFile(sentinel, QByteArrayLiteral("preserve")));
+            fault->arm(SstvShareFaultPoint::AfterExpiryCommitBeforeCleanup);
+            CHECK(manager->processDue(&error) == 1);
+            CHECK(spinUntil([&] { const auto r = manager->store().transfer(id);
+                return r && r->state == SstvManagedTransferState::Expired; }));
+            CHECK(fault->remaining() == 0);
+            CHECK(QFileInfo(staging).size() == 1024);
+        }
+        {
+            SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+            QString error;
+            CHECK(manager.initialize(&error));
+            CHECK(!QFileInfo::exists(staging));
+            CHECK(readFile(sentinel) == QByteArrayLiteral("preserve"));
+            const auto record = manager.store().transfer(id);
+            CHECK(record && record->state == SstvManagedTransferState::Expired);
+        }
+        {
+            SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+            CHECK(manager.initialize());
+            CHECK(!QFileInfo::exists(staging));
+            CHECK(readFile(sentinel) == QByteArrayLiteral("preserve"));
+        }
+    }
+    return true;
+}
+
 bool inboxDownloadAcceptanceAckAndRejectAreExplicit()
 {
     Fixture fixture;
@@ -1137,12 +1717,16 @@ bool encryptedQueueRoundTripWithRealCrypto()
 
 bool encryptedDownloadRequiresAuthenticatedOpen()
 {
-    for (bool allow : {false, true}) {
+    for (int scenario = 0; scenario < 6; ++scenario) {
+        const bool allow = scenario != 0;
+        const bool expireDuringOpen = scenario >= 2;
+        const bool interruptedCleanup = scenario >= 4;
         Fixture fixture;
         const auto backend = std::make_shared<FakeBackend>();
+        const auto fault = std::make_shared<TestFaultInjector>();
         backend->encryptedEnvelopes = true;
         const QByteArray ciphertext("test encrypted payload");
-        const QByteArray image = pngPayload(52, 40, 'q');
+        const QByteArray image = pngPayload(52, 40, static_cast<char>('q' + scenario));
         auto manifest = manifestFor(ciphertext, fixture.clock,
             QStringLiteral("station:remote"), QStringLiteral("station:local"));
         manifest.width = 52; manifest.height = 40;
@@ -1153,6 +1737,7 @@ bool encryptedDownloadRequiresAuthenticatedOpen()
         manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
         manifest.encryption.manifestBoundAsAuthenticatedData = true;
         manifest.transport.providerCanReadContent = false;
+        if (expireDuringOpen) manifest.expiresUtc = fixture.clock.utc.addSecs(1);
         CHECK(manifest.validate(false).ok());
         backend->incoming = {incomingFor(QStringLiteral("incoming:encrypted"), manifest, fixture.clock)};
         backend->downloads.insert(QStringLiteral("incoming:encrypted"), ciphertext);
@@ -1161,9 +1746,10 @@ bool encryptedDownloadRequiresAuthenticatedOpen()
             -> std::optional<QByteArray> {
             ++calls;
             if (!allow || bytes != ciphertext || supplied.transferId != manifest.transferId) return std::nullopt;
+            if (expireDuringOpen) fixture.clock.utc = manifest.expiresUtc;
             return image;
         };
-        auto manager = fixture.manager(backend);
+        auto manager = fixture.manager(backend, fault);
         CHECK(manager);
         bool refreshed = false;
         manager->refreshInboxAsync(QStringLiteral("queue-test"),
@@ -1173,22 +1759,37 @@ bool encryptedDownloadRequiresAuthenticatedOpen()
         const auto id = manager->queueDownload(QStringLiteral("queue-test"),
             QStringLiteral("incoming:encrypted"), QStringLiteral("encrypted/image.png"), &error, true);
         CHECK(!id.isEmpty());
+        if (interruptedCleanup) fault->arm(SstvShareFaultPoint::AfterExpiryCommitBeforeCleanup);
         CHECK(manager->processDue(&error) == 1);
         CHECK(spinUntil([&] {
             const auto record = manager->store().transfer(id);
             return record && (record->state == SstvManagedTransferState::AwaitingAcceptance
-                           || record->state == SstvManagedTransferState::Failed);
+                           || record->state == SstvManagedTransferState::Failed
+                           || record->state == SstvManagedTransferState::Expired);
         }));
         const auto record = manager->store().transfer(id);
         CHECK(calls == 1);
-        CHECK(record->state == (allow ? SstvManagedTransferState::AwaitingAcceptance
+        CHECK(record->state == (expireDuringOpen ? SstvManagedTransferState::Expired
+                              : allow ? SstvManagedTransferState::AwaitingAcceptance
                                       : SstvManagedTransferState::Failed));
-        CHECK(readFile(record->stagingPath) == ciphertext);
-        if (allow) {
+        if (expireDuringOpen) {
+            if (interruptedCleanup) {
+                CHECK(fault->remaining() == 0);
+                CHECK(QFileInfo::exists(record->stagingPath));
+                CHECK(QFileInfo::exists(record->destinationPath));
+                manager.reset();
+                SstvShareQueueManager recovered(fixture.config, {}, [&] { return fixture.clock.utc; });
+                CHECK(recovered.initialize(&error));
+            }
+            CHECK(!QFileInfo::exists(record->stagingPath));
+            CHECK(!QFileInfo::exists(record->destinationPath));
+            if (manager) CHECK(!manager->acceptDownload(id, &error));
+        } else if (allow) {
+            CHECK(readFile(record->stagingPath) == ciphertext);
             CHECK(manager->acceptDownload(id, &error));
             const auto handoff = manager->validatedIncomingHandoff(id, &error);
             CHECK(handoff && handoff->sourceSha256 == manifest.sha256);
-        }
+        } else CHECK(readFile(record->stagingPath) == ciphertext);
     }
     return true;
 }
@@ -1226,6 +1827,51 @@ bool encryptionRequiredRejectsTlsOnlyAB()
                 return record && record->state == SstvManagedTransferState::AwaitingAcceptance;
             }));
         }
+    }
+    return true;
+}
+
+bool expiredDownloadAfterRestartNeedsNoProviderAB()
+{
+    for (const char seed : {'a', 'b'}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        const auto fault = std::make_shared<TestFaultInjector>();
+        const QByteArray bytes = pngPayload(52, 40, seed);
+        CHECK(bytes.size() > 1024);
+        auto manifest = manifestFor(bytes, fixture.clock, QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.expiresUtc = fixture.clock.utc.addSecs(1);
+        const QString incoming = QStringLiteral("incoming:expired-restart");
+        backend->incoming = {incomingFor(incoming, manifest, fixture.clock)};
+        backend->downloads.insert(incoming, bytes);
+        QString id, staging;
+        {
+            auto manager = fixture.manager(backend, fault);
+            CHECK(manager);
+            bool refreshed = false;
+            CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+                  [&](SstvShareProviderResult result) { refreshed = result.ok(); }) != 0U);
+            CHECK(spinUntil([&] { return refreshed; }));
+            QString error;
+            id = manager->queueDownload(QStringLiteral("queue-test"), incoming,
+                                         QStringLiteral("restarted.png"), &error);
+            CHECK(!id.isEmpty());
+            staging = manager->store().transfer(id)->stagingPath;
+            fault->arm(SstvShareFaultPoint::AfterDownloadWriteBeforeCheckpoint);
+            CHECK(manager->processDue(&error) == 1);
+            CHECK(spinUntil([&] { return fault->remaining() == 0
+                                      && QFileInfo(staging).size() == 1024; }));
+        }
+        fixture.clock.utc = manifest.expiresUtc;
+        SstvShareQueueManager manager(fixture.config, {}, [&] { return fixture.clock.utc; });
+        QString error;
+        CHECK(manager.initialize(&error));
+        CHECK(manager.processDue(&error) == 0);
+        const auto record = manager.store().transfer(id);
+        CHECK(record && record->state == SstvManagedTransferState::Expired);
+        CHECK(!QFileInfo::exists(staging));
+        CHECK(backend->downloadCalls == 1);
     }
     return true;
 }
@@ -2432,6 +3078,16 @@ int main(int argc, char** argv)
          uploadRetryRestartResumeIsDurableAndRedacted},
         {"inboxDownloadAcceptanceAckAndRejectAreExplicit",
          inboxDownloadAcceptanceAckAndRejectAreExplicit},
+        {"duplicateIncomingEnvelopeIsNotDownloadedTwiceAB", duplicateIncomingEnvelopeIsNotDownloadedTwiceAB},
+        {"unexpiredEncryptedReplayEvidenceSurvivesReclamationAB", unexpiredEncryptedReplayEvidenceSurvivesReclamationAB},
+        {"downloadExpiresWhileProviderRespondsAB",
+         downloadExpiresWhileProviderRespondsAB},
+        {"awaitingAcceptanceExpiryAB", awaitingAcceptanceExpiryAB},
+        {"expiryRemovesPreviouslyDownloadedChunksAB",
+         expiryRemovesPreviouslyDownloadedChunksAB},
+        {"acceptedCleanupRecoversAfterRestartAB", acceptedCleanupRecoversAfterRestartAB},
+        {"expiredCleanupRecoversAfterCommitAB",
+         expiredCleanupRecoversAfterCommitAB},
         {"singleShotUploadRehydratesAndReplaysAfterRestart",
          singleShotUploadRehydratesAndReplaysAfterRestart},
 #ifdef DECODIUM_TEST_SHARE_CRYPTO
@@ -2441,6 +3097,8 @@ int main(int argc, char** argv)
         {"encryptionRequiredRejectsTlsOnlyAB", encryptionRequiredRejectsTlsOnlyAB},
         {"downloadCrashBoundaryResumesFromDurableFileOffset",
          downloadCrashBoundaryResumesFromDurableFileOffset},
+        {"expiredDownloadAfterRestartNeedsNoProviderAB",
+         expiredDownloadAfterRestartNeedsNoProviderAB},
         {"completedRemoteCopyRemovalIsCapabilityGatedDurableAndCancellable",
          completedRemoteCopyRemovalIsCapabilityGatedDurableAndCancellable},
         {"cancellationAndDatabaseFaultsAreIdempotentAndNonDestructive",

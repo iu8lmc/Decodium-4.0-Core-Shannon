@@ -209,6 +209,47 @@ class TestSstvAvt final : public QObject
     Q_OBJECT
 
 private slots:
+    void terminalHoldPreservesFinalBlueTone()
+    {
+        for (const auto blue : {std::uint8_t {0}, std::uint8_t {255}}) {
+            auto pixels = pixelsFor(SstvAvtMode::Avt94);
+            pixels.back().blue = blue;
+            SstvAvtEncoderConfig config;
+            config.mode = SstvAvtMode::Avt94;
+            config.variant = SstvAvtVariant::NarrowQrm;
+            config.sampleRate = kSampleRate;
+            SstvAvtEncoder reference(pixels, config);
+            config.terminalHoldMs = 10U;
+            SstvAvtEncoder held(pixels, config);
+            QCOMPARE(held.totalSamples(), reference.totalSamples() + 120U);
+            std::array<std::int16_t, 4096> normal {}, extended {};
+            std::uint64_t remaining = reference.totalSamples();
+            while (remaining) {
+                const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(remaining, normal.size()));
+                QCOMPARE(reference.pullPcm16(normal.data(), count), count);
+                QCOMPARE(held.pullPcm16(extended.data(), count), count);
+                QVERIFY(std::equal(normal.begin(), normal.begin() + count, extended.begin()));
+                remaining -= count;
+            }
+            const auto tail = held.position();
+            QCOMPARE(tail.stage, SstvAvtEncoderStage::TerminalHold);
+            QCOMPARE(tail.image.component, ColourComponent::Blue);
+            QCOMPARE(tail.frequencyHz, blue == 0U ? 1700.0 : 2100.0);
+            QCOMPARE(held.pullPcm16(extended.data(), 120U), std::size_t {120U});
+            QVERIFY(held.complete());
+            double re = 0, im = 0;
+            for (std::size_t i = 0; i < 120U; ++i) {
+                const double phase = 2.0 * std::acos(-1.0) * tail.frequencyHz * double(i) / kSampleRate;
+                re += extended[i] * std::cos(phase);
+                im += extended[i] * std::sin(phase);
+            }
+            QVERIFY(std::hypot(re, im) > 100000.0);
+        }
+        auto pixels = pixelsFor(SstvAvtMode::Avt24);
+        SstvAvtEncoderConfig invalid;
+        invalid.terminalHoldMs = 101U;
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, SstvAvtEncoder(pixels, invalid));
+    }
     void countdownAcquiresNarrowAndNormalVariants()
     {
         constexpr std::uint64_t frameStart = 400'000U;
@@ -620,6 +661,59 @@ private slots:
                      - elapsedTiming.totalSamples());
         QVERIFY(detector.metrics().peakBufferedObservations
                 <= SstvAvtSyncCodec::TonesPerFrame);
+    }
+
+    void countdownRecoversImmediatelyAfterCorruptFrameAB()
+    {
+        constexpr std::uint64_t firstStart = 100'000U;
+        SstvTimingAccumulator timing(kSampleRate);
+        static_cast<void>(timing.samplesFor(SstvAvtSyncCodec::FrameDuration));
+        const std::uint64_t secondStart = firstStart + timing.totalSamples();
+        for (const auto variant : {SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+            const bool narrow = SstvAvtSyncCodec::isNarrow(variant);
+            std::uint64_t sequence = 1U;
+            auto first = countdownFrameObservations(SstvAvtMode::Avt24, 0U,
+                                                     firstStart, sequence, 6U, kSampleRate, narrow);
+            auto second = countdownFrameObservations(SstvAvtMode::Avt24, 1U,
+                                                      secondStart, sequence, 6U, kSampleRate, narrow);
+            first.pop_back();
+            second.erase(second.begin());
+            // Damage one complete data symbol, retaining a valid start and
+            // its unmodified inverse so the first frame must be rejected.
+            const auto symbolStart = firstStart + 118U;
+            const auto symbolEnd = firstStart + 234U;
+            for (auto& item : first) {
+                if (item.centreSample >= symbolStart && item.centreSample < symbolEnd) {
+                    const double zero = narrow ? 1700.0 : 1600.0;
+                    const double one = narrow ? 2100.0 : 2200.0;
+                    const double frequency = item.correctedFrequencyHz - kOffsetHz;
+                    item.correctedFrequencyHz = (frequency == zero ? one : zero) + kOffsetHz;
+                }
+            }
+            first.insert(first.end(), second.begin(), second.end());
+            for (const std::size_t batch : {std::size_t {1U}, std::size_t {193U}}) {
+                SstvAvtCountdownDetectorConfig config;
+                config.expectedMode = SstvAvtMode::Avt24;
+                config.variant = variant;
+                config.searchStartSample = firstStart - 20U;
+                config.observationSpanSamples = 6U;
+                config.frequencyOffsetHz = kOffsetHz;
+                SstvAvtCountdownDetector detector(config);
+                std::optional<SstvAvtCountdownDetection> result;
+                for (std::size_t i = 0; i < first.size() && !result; i += batch)
+                    result = detector.consume(first.data() + i, std::min(batch, first.size() - i));
+                QVERIFY2(result.has_value(), qPrintable(QStringLiteral("variant=%1 batch=%2 rejected=%3")
+                    .arg(static_cast<int>(variant)).arg(batch).arg(detector.metrics().framesRejected)));
+                QCOMPARE(result->counter, std::uint8_t {1U});
+                QCOMPARE(result->variant, variant);
+                QCOMPARE(result->frameStartSample, secondStart);
+                SstvTimingAccumulator full(kSampleRate);
+                static_cast<void>(full.samplesFor(SstvAvtSyncCodec::CountdownDuration));
+                QCOMPARE(result->imageStartSample,
+                         secondStart + full.totalSamples() - timing.totalSamples());
+                QVERIFY(detector.metrics().framesRejected >= 1U);
+            }
+        }
     }
 
     void cumulativeCountdownAnchorMatchesEveryCounterAtCommonRates()

@@ -173,9 +173,32 @@ SstvShareValidationError parseEncryption(const QJsonObject& object,
         QStringLiteral("nonceBase64"),
         QStringLiteral("recipientKeyFingerprint"),
     };
-    if (const auto error = exactKeys(object, keys, QStringLiteral("encryption."));
+    QSet<QString> expected = keys;
+    const bool anySenderAuth = object.contains(QStringLiteral("senderAuthAlgorithm"))
+        || object.contains(QStringLiteral("senderKeyFingerprint"))
+        || object.contains(QStringLiteral("senderSignatureBase64"));
+    if (anySenderAuth) {
+        expected.insert(QStringLiteral("senderAuthAlgorithm"));
+        expected.insert(QStringLiteral("senderKeyFingerprint"));
+        expected.insert(QStringLiteral("senderSignatureBase64"));
+    }
+    if (const auto error = exactKeys(object, expected, QStringLiteral("encryption."));
         !error.ok()) {
         return error;
+    }
+    if (anySenderAuth) {
+        for (const QString& key : {QStringLiteral("senderAuthAlgorithm"), QStringLiteral("senderKeyFingerprint"),
+                                   QStringLiteral("senderSignatureBase64")}) {
+            if (const auto error = requireType(object, key, QJsonValue::String, QStringLiteral("encryption."));
+                !error.ok()) return error;
+        }
+        output.senderAuthAlgorithm = object.value(QStringLiteral("senderAuthAlgorithm")).toString();
+        output.senderKeyFingerprint = object.value(QStringLiteral("senderKeyFingerprint")).toString();
+        output.senderSignatureBase64 = object.value(QStringLiteral("senderSignatureBase64")).toString();
+        if (output.senderAuthAlgorithm.isEmpty() || output.senderKeyFingerprint.isEmpty()
+            || output.senderSignatureBase64.isEmpty())
+            return SstvShareValidationError::failure(SstvShareValidationCode::InvalidEncryption,
+                                                     QStringLiteral("encryption.senderAuthentication"));
     }
     for (const QString& key : {QStringLiteral("algorithm"),
                                QStringLiteral("keyId"),
@@ -478,6 +501,19 @@ SstvShareValidationError SstvShareManifestV1::validate(bool forTransmission,
             SstvShareValidationCode::InvalidEncryption,
             QStringLiteral("encryption.downgradeProtected"));
     }
+    const bool anySenderAuth = !encryption.senderAuthAlgorithm.isEmpty()
+        || !encryption.senderKeyFingerprint.isEmpty() || !encryption.senderSignatureBase64.isEmpty();
+    if (anySenderAuth) {
+        const QByteArray encoded = encryption.senderSignatureBase64.toLatin1();
+        const QByteArray signature = QByteArray::fromBase64(encoded, QByteArray::AbortOnBase64DecodingErrors);
+        if (encryption.mode != SstvShareEncryptionMode::EndToEnd
+            || encryption.algorithm != QStringLiteral("aes-256-gcm")
+            || encryption.senderAuthAlgorithm != QStringLiteral("ecdsa-p256-sha256-v1")
+            || !isLowercaseSha256(encryption.senderKeyFingerprint)
+            || signature.size() < 8 || signature.size() > 72 || signature.toBase64() != encoded)
+            return SstvShareValidationError::failure(SstvShareValidationCode::InvalidEncryption,
+                                                     QStringLiteral("encryption.senderAuthentication"));
+    }
     if (encryption.mode == SstvShareEncryptionMode::TransportTls) {
         if (encryption.algorithm != QStringLiteral("none")
             || !encryption.keyId.isEmpty()
@@ -518,7 +554,7 @@ QJsonObject SstvShareManifestV1::toJsonObject() const
         {QStringLiteral("remoteCallsign"), callsign.remoteCallsign},
         {QStringLiteral("senderCallsign"), callsign.senderCallsign},
     };
-    const QJsonObject encryptionObject {
+    QJsonObject encryptionObject {
         {QStringLiteral("algorithm"), encryption.algorithm},
         {QStringLiteral("downgradeProtected"), encryption.downgradeProtected},
         {QStringLiteral("keyId"), encryption.keyId},
@@ -529,6 +565,12 @@ QJsonObject SstvShareManifestV1::toJsonObject() const
         {QStringLiteral("recipientKeyFingerprint"),
          encryption.recipientKeyFingerprint},
     };
+    if (!encryption.senderAuthAlgorithm.isEmpty() || !encryption.senderKeyFingerprint.isEmpty()
+        || !encryption.senderSignatureBase64.isEmpty()) {
+        encryptionObject.insert(QStringLiteral("senderAuthAlgorithm"), encryption.senderAuthAlgorithm);
+        encryptionObject.insert(QStringLiteral("senderKeyFingerprint"), encryption.senderKeyFingerprint);
+        encryptionObject.insert(QStringLiteral("senderSignatureBase64"), encryption.senderSignatureBase64);
+    }
     const QJsonObject privacyObject {
         {QStringLiteral("automaticIncomingDownloadAllowed"),
          privacy.automaticIncomingDownloadAllowed},

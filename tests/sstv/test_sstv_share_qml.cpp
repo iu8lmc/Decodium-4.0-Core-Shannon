@@ -21,6 +21,7 @@
 #include <QSet>
 #include <QTemporaryDir>
 #include <QUrl>
+#include <functional>
 
 namespace {
 
@@ -108,6 +109,13 @@ private slots:
         QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
         QScopedPointer<QObject> page(component.createWithInitialProperties({{"engine", QVariant::fromValue(static_cast<QObject*>(&fixture))}}));
         QVERIFY2(page, qPrintable(qmlErrors(component.errors())));
+        QQuickWindow window;
+        window.resize(1040, 900);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1040, 900));
+        window.show();
         auto child = [&](const char* name) { return page->findChild<QObject*>(QString::fromLatin1(name)); };
         QObject* create = child("sstvShareCreateIdentity");
         QObject* recipient = child("sstvShareRecipient");
@@ -123,6 +131,49 @@ private slots:
         QObject* policy = child("sstvShareRequireIncomingEncryption");
         QVERIFY(create && recipient && key && fingerprint && verified && pin && encrypt && uploadPrivacy && confirmed && metered && upload);
         QVERIFY(policy);
+        QObject* senderPolicy = child("sstvShareRequireSenderAuthentication");
+        QObject* queueTabs = child("sstvShareQueueTabs");
+        QObject* inboxIdentity = child("sstvShareInboxIdentity");
+        QObject* inboxCreate = child("sstvShareInboxCreateIdentity");
+        QObject* inboxKey = child("sstvShareInboxPublicKey");
+        QObject* inboxFingerprint = child("sstvShareInboxFingerprint");
+        QObject* inboxLocalId = child("sstvShareInboxLocalId");
+        QObject* signUpload = child("sstvShareSignUpload");
+        QObject* signingCreate = child("sstvShareCreateSigningIdentity");
+        QObject* localId = child("sstvShareLocalId");
+        QObject* senderId = child("sstvShareSenderId");
+        QObject* senderKey = child("sstvShareSenderSigningKey");
+        QObject* senderFingerprint = child("sstvShareSenderSigningFingerprint");
+        QObject* senderConfirmed = child("sstvShareSenderFingerprintConfirmed");
+        QObject* senderPin = child("sstvSharePinSenderSigningKey");
+        QVERIFY(senderPolicy && queueTabs && inboxIdentity && inboxCreate && inboxKey && inboxFingerprint && inboxLocalId);
+        QVERIFY(signUpload && signingCreate && localId && senderId && senderKey && senderFingerprint && senderConfirmed && senderPin);
+        QVERIFY(!page->property("configurationExpanded").toBool());
+        QVERIFY(!inboxIdentity->property("visible").toBool());
+        queueTabs->setProperty("currentIndex", 1);
+        QTRY_VERIFY(inboxIdentity->property("visible").toBool());
+        QVERIFY(inboxCreate->property("visible").toBool());
+        QCOMPARE(inboxLocalId->property("text").toString(), QStringLiteral("station-local"));
+        QVERIFY(QMetaObject::invokeMethod(inboxCreate, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(!inboxKey->property("text").toString().isEmpty(), 5000);
+        QCOMPARE(inboxKey->property("text"), page->property("sharingPublicKey"));
+        QCOMPARE(inboxFingerprint->property("text"), page->property("sharingFingerprint"));
+        queueTabs->setProperty("currentIndex", 0);
+        encrypt->setProperty("checked", true);
+        QTRY_VERIFY(signUpload->property("visible").toBool());
+        signUpload->setProperty("checked", true);
+        QTRY_VERIFY(signingCreate->property("visible").toBool());
+        QCOMPARE(localId->property("text").toString(), QStringLiteral("station-local"));
+        QVERIFY(QMetaObject::invokeMethod(signingCreate, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(!page->property("signingPublicKey").toString().isEmpty(), 5000);
+        senderId->setProperty("text", QStringLiteral("station-local"));
+        senderKey->setProperty("text", page->property("signingPublicKey"));
+        senderFingerprint->setProperty("text", page->property("signingFingerprint"));
+        senderConfirmed->setProperty("checked", true);
+        operations.clear();
+        QVERIFY(QMetaObject::invokeMethod(senderPin, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QVERIFY(operations.last().at(1).toBool());
         QVERIFY(QMetaObject::invokeMethod(create, "clicked"));
         QTRY_VERIFY_WITH_TIMEOUT(!page->property("sharingPublicKey").toString().isEmpty(), 5000);
         recipient->setProperty("text", QStringLiteral("station-local"));
@@ -140,6 +191,7 @@ private slots:
         page->setProperty("selectedUpload", QUrl::fromLocalFile(imagePath));
         confirmed->setProperty("checked", true); metered->setProperty("checked", true);
         encrypt->setProperty("checked", true);
+        signUpload->setProperty("checked", false);
         QVERIFY(uploadPrivacy->property("text").toString().contains("Sender identity is not authenticated"));
         QVERIFY(!uploadPrivacy->property("text").toString().contains("provider can read content"));
         QVERIFY(upload->property("enabled").toBool());
@@ -219,6 +271,34 @@ private slots:
         QVERIFY(modes.contains(SstvShareEncryptionMode::TransportTls));
         QVERIFY(controller.refreshInbox());
         QTRY_COMPARE_WITH_TIMEOUT(controller.inbox()->rowCount(), 2, 5000);
+        queueTabs->setProperty("currentIndex", 1);
+        auto hasPrivacyRow = [&](const QString& needle) {
+            std::function<bool(QQuickItem*)> visit = [&](QQuickItem* parent) {
+                if (parent->objectName() == QStringLiteral("sstvShareTransferPrivacy")) {
+                    const auto text = parent->property("text").toString();
+                    if (text.contains(QStringLiteral("declared recipient-only")) && text.contains(needle))
+                        return true;
+                }
+                for (auto* childItem : parent->childItems())
+                    if (visit(childItem)) return true;
+                return false;
+            };
+            return visit(item);
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(hasPrivacyRow(QStringLiteral("declared end-to-end encrypted")), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(hasPrivacyRow(QStringLiteral("provider can read content")), 5000);
+        senderPolicy->setProperty("checked", true);
+        QVERIFY(QMetaObject::invokeMethod(senderPolicy, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.requireIncomingSenderAuthentication(), 5000);
+        for (const auto& unsignedId : {tlsId, encryptedId}) {
+            operations.clear();
+            QVERIFY(controller.download(unsignedId, QStringLiteral("unsigned-rejected.png")));
+            QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+            QCOMPARE(operations.last().at(0).toString(), QStringLiteral("download"));
+            QVERIFY(!operations.last().at(1).toBool());
+        }
+        QVERIFY(controller.setRequireIncomingSenderAuthentication(false));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.requireIncomingSenderAuthentication(), 5000);
         policy->setProperty("checked", true);
         QVERIFY(QMetaObject::invokeMethod(policy, "clicked"));
         QTRY_VERIFY_WITH_TIMEOUT(controller.requireIncomingEncryption(), 5000);
@@ -241,11 +321,40 @@ private slots:
         QVERIFY(operations.last().at(1).toBool());
         QVERIFY(controller.setRequireIncomingEncryption(true));
         QTRY_VERIFY_WITH_TIMEOUT(controller.requireIncomingEncryption(), 5000);
+        encrypt->setProperty("checked", true);
+        signUpload->setProperty("checked", true);
+        QVERIFY(uploadPrivacy->property("text").toString().contains("encrypted and signed"));
+        operations.clear();
+        QVERIFY(QMetaObject::invokeMethod(upload, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("upload"));
+        QVERIFY(operations.last().at(1).toBool());
+        bool sawSigned = false;
+        for (int attempt = 0; attempt < 30 && !sawSigned; ++attempt) {
+            listed = false;
+            provider->listIncomingAsync(10, [&](SstvShareProviderResult result, QVector<SstvShareIncomingItem> rows) {
+                if (result.ok()) {
+                    for (const auto& item : rows) {
+                        const auto parsed = parseSstvShareManifestV1(item.canonicalManifestJson);
+                        if (parsed.ok() && !parsed.manifest->encryption.senderAuthAlgorithm.isEmpty()) sawSigned = true;
+                    }
+                }
+                listed = true;
+            });
+            QTRY_VERIFY_WITH_TIMEOUT(listed, 2000);
+            if (!sawSigned) QTest::qWait(100);
+        }
+        QVERIFY(sawSigned);
+        QVERIFY(controller.setRequireIncomingSenderAuthentication(true));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.requireIncomingSenderAuthentication(), 5000);
         controller.shutdown();
         decodium::sstv::SstvShareController restored(&backend, provider);
         restored.setStorageRoot(storage.path(), QStringLiteral("station-local"));
         QTRY_VERIFY_WITH_TIMEOUT(restored.ready(), 5000);
         QVERIFY(restored.requireIncomingEncryption());
+        QVERIFY(restored.requireIncomingSenderAuthentication());
+        QVERIFY(restored.setRequireIncomingSenderAuthentication(false));
+        QTRY_VERIFY_WITH_TIMEOUT(!restored.requireIncomingSenderAuthentication(), 5000);
         QVERIFY(restored.setRequireIncomingEncryption(false));
         QTRY_VERIFY_WITH_TIMEOUT(!restored.requireIncomingEncryption(), 5000);
         restored.shutdown();
@@ -292,6 +401,37 @@ private slots:
         QVERIFY2(object, qPrintable(qmlErrors(component.errors())));
         auto* page = qobject_cast<QQuickItem*>(object.data());
         QVERIFY(page);
+
+        // A claimed signature in untrusted manifest metadata is not itself
+        // proof that the sender was verified. Both encrypted presentations
+        // retain the same conditional authentication wording.
+        for (bool signedClaim : {false, true}) {
+            QVariant text;
+            const QVariant privacy = QVariantMap {{QStringLiteral("endToEndEncrypted"), true},
+                {QStringLiteral("senderSigned"), signedClaim}};
+            QVERIFY(QMetaObject::invokeMethod(page, "transferProtectionLabel",
+                Q_RETURN_ARG(QVariant, text), Q_ARG(QVariant, privacy)));
+            QVERIFY(text.toString().startsWith(QStringLiteral("declared end-to-end encrypted")));
+            QVERIFY(text.toString().contains(QStringLiteral("requires a verified signature")));
+        }
+        QVariant transportText;
+        const QVariant transport = QVariantMap {{QStringLiteral("providerCanReadContent"), true}};
+        QVERIFY(QMetaObject::invokeMethod(page, "transferProtectionLabel",
+            Q_RETURN_ARG(QVariant, transportText), Q_ARG(QVariant, transport)));
+        QVERIFY(transportText.toString().contains(QStringLiteral("provider can read content")));
+        for (bool publicShare : {false, true}) {
+            QVariant audience;
+            const QVariant privacy = QVariantMap {{QStringLiteral("publicShare"), publicShare}};
+            QVERIFY(QMetaObject::invokeMethod(page, "transferAudienceLabel",
+                Q_RETURN_ARG(QVariant, audience), Q_ARG(QVariant, privacy)));
+            QCOMPARE(audience.toString(), publicShare ? QStringLiteral("declared public")
+                                                    : QStringLiteral("declared recipient-only"));
+        }
+        QVariant unknownAudience;
+        const QVariant missingAudience = QVariantMap {};
+        QVERIFY(QMetaObject::invokeMethod(page, "transferAudienceLabel",
+            Q_RETURN_ARG(QVariant, unknownAudience), Q_ARG(QVariant, missingAudience)));
+        QCOMPARE(unknownAudience.toString(), QStringLiteral("audience unknown"));
 
         QObject* optIn = page->findChild<QObject*>(
             QStringLiteral("sstvSharingOptIn"));

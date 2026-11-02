@@ -11,6 +11,8 @@
 
 using namespace decodium::sstv::hamdrm;
 
+QString rxDRMImagesPath = QStringLiteral("/tmp");
+
 int main()
 {
     constexpr std::array<int, 4> sizes {224, 192, 160, 128};
@@ -70,6 +72,40 @@ int main()
                 || corrected.value->repairedContainer != *encoded.value) return 7;
         }
     }
-    std::cout << "QSSTV parity and erasure A/B checks passed for rs1-rs4\n";
+    // Compare the observed 10,546/10,745-byte discrepancy with synthetic
+    // RS1 objects of that length and an adjacent control. This does not
+    // establish the original recording's RS level or container contents.
+    for (const std::size_t length : {10546U, 10547U}) {
+        std::vector<std::uint8_t> image(length);
+        for (std::size_t i = 0; i < length; ++i)
+            image[i] = static_cast<std::uint8_t>((i * 41U + 19U) & 255U);
+        auto encoded = encodeHamDrmRs(image, "jpg", 1U);
+        if (!encoded.ok()) return 10;
+        const auto own = decodeHamDrmRs(*encoded.value, 1U);
+        if (!own.ok() || own.value->bytes != image) return 11;
+        QByteArray wire(reinterpret_cast<const char*>(encoded.value->data()),
+                        static_cast<qsizetype>(encoded.value->size()));
+        QList<int> erasures {1, static_cast<int>(wire.size())};
+        QString filename;
+        QByteArray recovered;
+        reedSolomonCoder decoder;
+        if (!decoder.decode(wire, QStringLiteral("fixture.rs1"), filename,
+                            recovered, QStringLiteral("rs1"), erasures)) return 12;
+        const std::size_t surplus = 224U - length % 224U;
+        const int signedSurplus = static_cast<signed char>(surplus);
+        const auto rows = encoded.value->size() / 255U;
+        const auto qsstvSize = std::min(rows * 224U - 7U,
+            static_cast<std::size_t>(static_cast<int>(rows * 224U)
+                - (static_cast<char>(-1) < 0 ? signedSurplus : static_cast<int>(surplus))));
+        if (recovered.size() != static_cast<qsizetype>(qsstvSize)
+            || qsstvSize < length
+            || !std::equal(image.begin(), image.end(),
+                           reinterpret_cast<const std::uint8_t*>(recovered.constData()))
+            || !std::all_of(recovered.constData() + length, recovered.constData() + qsstvSize,
+                            [](char byte) { return byte == 0; })) return 13;
+        std::cout << "RS1 length " << length << ": QSSTV " << qsstvSize
+                  << ", trailing zeros " << qsstvSize - length << '\n';
+    }
+    std::cout << "QSSTV parity, erasure and RS1 decoder A/B checks passed\n";
     return 0;
 }

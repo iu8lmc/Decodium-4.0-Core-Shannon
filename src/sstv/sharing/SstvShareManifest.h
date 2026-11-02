@@ -54,6 +54,11 @@ struct SstvShareEncryptionInfo final
     QString keyId;
     QString recipientKeyFingerprint;
     QString nonceBase64;
+    // Optional experimental sender authentication; all three fields are
+    // absent for legacy unsigned envelopes.
+    QString senderAuthAlgorithm;
+    QString senderKeyFingerprint;
+    QString senderSignatureBase64;
     bool manifestBoundAsAuthenticatedData {false};
     bool downgradeProtected {true};
 };

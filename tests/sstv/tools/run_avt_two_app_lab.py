@@ -15,16 +15,31 @@ import time
 mode=sys.argv[1]
 allowed={f'avt-{duration}-{variant}' for duration in ('24','90','94')
          for variant in ('qrm','narrow-qrm')}
+allowed.add('avt-24')
 allowed.add('robot-c12')
-if mode not in allowed: raise SystemExit('expected robot-c12 or an AVT 24/90/94 QRM or narrow-QRM mode')
+if mode not in allowed: raise SystemExit('expected robot-c12, avt-24 or an AVT 24/90/94 QRM or narrow-QRM mode')
 root=Path(tempfile.mkdtemp(prefix='decodium-avt-two-app-'+mode+'-'))
 binary=Path('build/decodium').resolve(strict=True)
 if len(sys.argv) > 4: raise SystemExit('expected mode, optional variant, and optional image path')
 variant=sys.argv[2] if len(sys.argv)>2 else 'a'
 if variant not in ('a','b'): raise SystemExit('image variant must be a or b')
-fixture=(Path(sys.argv[3]) if len(sys.argv)==4 else Path('tests/sstv/fixtures/qsstv-image-'+variant+'.jpg')).resolve(strict=True)
+if len(sys.argv)==4 and sys.argv[3]=='pattern':
+    fixture=root/'input.ppm'
+    pixels=bytearray()
+    for y in range(120):
+        for x in range(128):
+            if variant=='a':
+                rgb=((x*2+y//3)%256, (y*2+x//2)%256,
+                     ((x//16+y//12)%2)*160+(x+y)%96)
+            else:
+                rgb=((255-2*x+y)%256, ((x//12+y//15)%2)*150+y%106,
+                     (255-2*y+x)%256)
+            pixels.extend(rgb)
+    fixture.write_bytes(b'P6\n128 120\n255\n'+pixels)
+else:
+    fixture=(Path(sys.argv[3]) if len(sys.argv)==4 else Path('tests/sstv/fixtures/qsstv-image-'+variant+'.jpg')).resolve(strict=True)
 if not fixture.is_file(): raise SystemExit('image path must be a file')
-duration_ms=35000 if mode == 'robot-c12' else (60000 if mode.startswith('avt-24-') else 130000)
+duration_ms=35000 if mode == 'robot-c12' else (60000 if mode.startswith('avt-24') else 130000)
 common=['--test-mode','--lab-no-cat','--lab-audio-input','BlackHole 2ch',
         '--lab-reapply-ms','500']
 tx_output=os.environ.get('DECODIUM_LAB_AVT_TX_OUTPUT','BlackHole 2ch')
@@ -37,29 +52,34 @@ class Info(c.Structure):
 class Params(c.Structure):
     _fields_=[('device',c.c_int),('channels',c.c_int),('format',c.c_ulong),
               ('latency',c.c_double),('hostinfo',c.c_void_p)]
-pa=c.CDLL(ctypes.util.find_library('portaudio') or '/opt/homebrew/lib/libportaudio.dylib')
-pa.Pa_GetDeviceInfo.restype=c.POINTER(Info)
-pa.Pa_OpenStream.argtypes=[c.POINTER(c.c_void_p),c.POINTER(Params),c.c_void_p,
-                           c.c_double,c.c_ulong,c.c_ulong,c.c_void_p,c.c_void_p]
-pa.Pa_ReadStream.argtypes=[c.c_void_p,c.c_void_p,c.c_ulong]
-if pa.Pa_Initialize(): raise RuntimeError('PortAudio initialization failed')
-device=next(i for i in range(pa.Pa_GetDeviceCount())
-            if pa.Pa_GetDeviceInfo(i).contents.name==b'BlackHole 2ch')
-params=Params(device,2,1,.05,None);stream=c.c_void_p()
-if pa.Pa_OpenStream(c.byref(stream),c.byref(params),None,48000,1024,0,None,None):
-    raise RuntimeError('cannot open BlackHole capture')
-if pa.Pa_StartStream(stream): raise RuntimeError('cannot start BlackHole capture')
+capture_enabled=os.environ.get('DECODIUM_LAB_AVT_NO_CAPTURE')!='1'
+pa=None; stream=c.c_void_p(); thread=None
+if capture_enabled:
+    pa=c.CDLL(ctypes.util.find_library('portaudio') or '/opt/homebrew/lib/libportaudio.dylib')
+    pa.Pa_GetDeviceInfo.restype=c.POINTER(Info)
+    pa.Pa_OpenStream.argtypes=[c.POINTER(c.c_void_p),c.POINTER(Params),c.c_void_p,
+                               c.c_double,c.c_ulong,c.c_ulong,c.c_void_p,c.c_void_p]
+    pa.Pa_ReadStream.argtypes=[c.c_void_p,c.c_void_p,c.c_ulong]
+    if pa.Pa_Initialize(): raise RuntimeError('PortAudio initialization failed')
+    device=next(i for i in range(pa.Pa_GetDeviceCount())
+                if pa.Pa_GetDeviceInfo(i).contents.name==b'BlackHole 2ch')
+    params=Params(device,2,1,.05,None)
+    if pa.Pa_OpenStream(c.byref(stream),c.byref(params),None,48000,1024,0,None,None):
+        raise RuntimeError('cannot open BlackHole capture')
+    if pa.Pa_StartStream(stream): raise RuntimeError('cannot start BlackHole capture')
 stop=threading.Event();capture_errors=[]
+capture_path=root/'capture.f32'
 def capture():
     buffer=(c.c_float*2048)()
-    with (root/'capture.f32').open('wb') as out:
+    with capture_path.open('wb') as out:
         while not stop.is_set():
             result=pa.Pa_ReadStream(stream,buffer,1024)
             if result:
                 capture_errors.append(result);break
             out.write(bytes(buffer))
-thread=threading.Thread(target=capture)
-thread.start()
+if capture_enabled:
+    thread=threading.Thread(target=capture)
+    thread.start()
 try:
     for role in ('rx','tx'):
         env=os.environ.copy()
@@ -89,9 +109,28 @@ try:
             if ready.get('sourceDevice')!='BlackHole 2ch':
                 raise RuntimeError('wrong RX audio device: '+str(ready.get('sourceDevice')))
     deadline=time.monotonic()+duration_ms/1000+15
-    while any(p.poll() is None for p in processes):
+    while True:
         if capture_errors: raise RuntimeError('capture error '+str(capture_errors))
         if any(p.poll() not in (None,0) for p in processes): raise RuntimeError('application failed')
+        tx_text=(root/'tx.log').read_text(errors='replace')
+        rx_text=(root/'rx.log').read_text(errors='replace')
+        tx_done=False
+        for line in tx_text.splitlines():
+            if 'tx.completed {' not in line: continue
+            try: report=json.loads(line.split('tx.completed ',1)[1])
+            except json.JSONDecodeError: continue  # Writer may still be appending the line.
+            tx_done |= report.get('success') and report.get('modeId')==mode
+        diagnostics=[]
+        for line in rx_text.splitlines():
+            if '[LAB][SSTV] RX diagnostics ' not in line: continue
+            try: diagnostics.append(json.loads(line.split(' RX diagnostics ',1)[1]))
+            except json.JSONDecodeError: continue
+        rx_done=(diagnostics and diagnostics[-1].get('imageComplete')
+                 and diagnostics[-1].get('imageMode')==mode and (root/'received.png').is_file())
+        if tx_done and rx_done:
+            break
+        if all(p.poll() is not None for p in processes):
+            raise RuntimeError('applications exited before TX and RX completed; artifacts '+str(root))
         if time.monotonic()>deadline: raise RuntimeError('applications timed out')
         time.sleep(.5)
     tx=(root/'tx.log').read_text(errors='replace')
@@ -110,9 +149,13 @@ try:
     if notch and ('[LAB][SSTV] manual interference notch '+notch+' Q 300') not in rx:
         raise RuntimeError('requested notch was not active; artifacts '+str(root))
     if not (root/'received.png').exists(): raise RuntimeError('RX did not save image; artifacts '+str(root))
-    subprocess.run([sys.executable,'tests/sstv/tools/compare_sstv_lab_images.py',
-                    str(root/'reference.png'),str(root/'received.png'),
-                    '--max-mae','5','--max-p95','15'],check=True,timeout=30)
+    compare=[sys.executable,'tests/sstv/tools/compare_sstv_lab_images.py',
+             str(root/'reference.png'),str(root/'received.png'),
+             '--max-mae','5','--max-p95','15']
+    last_blue_limit=env.get('DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR')
+    if last_blue_limit is not None:
+        compare += ['--max-last-blue-error',last_blue_limit]
+    subprocess.run(compare,check=True,timeout=30)
     print('PASS two Decodium apps:',mode,'coverage',lines[-1]['imageCoverage'],
           'discontinuities',lines[-1]['discontinuities'],'artifacts',root,flush=True)
 finally:
@@ -120,5 +163,7 @@ finally:
         if process.poll() is None:
             process.kill()
             process.wait()
-    stop.set();thread.join(timeout=5)
-    pa.Pa_StopStream(stream);pa.Pa_CloseStream(stream);pa.Pa_Terminate()
+    stop.set()
+    if thread: thread.join(timeout=5)
+    if pa:
+        pa.Pa_StopStream(stream);pa.Pa_CloseStream(stream);pa.Pa_Terminate()

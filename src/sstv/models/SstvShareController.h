@@ -97,6 +97,8 @@ class SstvShareController final : public QObject
                NOTIFY stateChanged)
     Q_PROPERTY(bool encryptedSharingAvailable READ encryptedSharingAvailable NOTIFY stateChanged)
     Q_PROPERTY(bool requireIncomingEncryption READ requireIncomingEncryption NOTIFY stateChanged)
+    Q_PROPERTY(bool requireIncomingSenderAuthentication READ requireIncomingSenderAuthentication NOTIFY stateChanged)
+    Q_PROPERTY(QString localSharingId READ localSharingId NOTIFY stateChanged)
     Q_PROPERTY(bool providerSupportsInbox READ providerSupportsInbox
                NOTIFY stateChanged)
     Q_PROPERTY(bool providerSupportsIncomingDelete
@@ -146,6 +148,8 @@ public:
     }
     bool encryptedSharingAvailable() const noexcept { return m_encryptedSharingAvailable; }
     bool requireIncomingEncryption() const noexcept { return m_requireIncomingEncryption; }
+    bool requireIncomingSenderAuthentication() const noexcept { return m_requireIncomingSenderAuthentication; }
+    QString localSharingId() const { return m_localSharingId; }
     bool providerSupportsInbox() const noexcept
     {
         return m_providerSupportsInbox;
@@ -183,6 +187,7 @@ public:
 
     Q_INVOKABLE bool setEnabled(bool enabled);
     Q_INVOKABLE bool setRequireIncomingEncryption(bool enabled);
+    Q_INVOKABLE bool setRequireIncomingSenderAuthentication(bool enabled);
     Q_INVOKABLE bool configureProvider(const QVariantMap& configuration);
     Q_INVOKABLE bool clearCredentials();
     Q_INVOKABLE bool upload(const QUrl& source,
@@ -203,9 +208,14 @@ public:
                                                 const QString& message,
                                                 bool recipientConfirmed,
                                                 const QVariantMap& options);
+    Q_INVOKABLE bool uploadSignedEncryptedWithOptions(const QUrl& source, const QString& recipientId,
+        const QString& mode, const QString& message, bool recipientConfirmed, const QVariantMap& options);
     // Public keys are exchanged out of band; the caller confirms a fingerprint
     // independently before pinning. Existing pins are never replaced silently.
     Q_INVOKABLE bool createSharingIdentity();
+    Q_INVOKABLE bool createSigningIdentity();
+    Q_INVOKABLE bool pinSenderSigningIdentity(const QString& senderId, const QString& publicKeyHex,
+                                              const QString& verifiedFingerprint, bool independentlyConfirmed);
     Q_INVOKABLE bool pinSharingRecipient(const QString& recipientId,
                                           const QString& publicKeyHex,
                                           const QString& verifiedFingerprint,
@@ -242,6 +252,7 @@ signals:
     void configurationChanged();
     void operationFinished(QString operation, bool ok, QString message);
     void sharingIdentityReady(QString publicKeyHex, QString fingerprint);
+    void signingIdentityReady(QString publicKeyHex, QString fingerprint);
     // Emitted after explicit user acceptance and native byte/image validation,
     // and once on restart for a durable accepted handoff that still needs
     // import. The owner-thread Gallery storage slot consumes this map;
@@ -277,6 +288,8 @@ private:
     bool m_secureStorageAvailable {false};
     bool m_encryptedSharingAvailable {false};
     bool m_requireIncomingEncryption {false};
+    bool m_requireIncomingSenderAuthentication {false};
+    QString m_localSharingId;
     bool m_providerSupportsInbox {false};
     bool m_providerSupportsIncomingDelete {false};
     bool m_providerSupportsSenderBlocking {false};

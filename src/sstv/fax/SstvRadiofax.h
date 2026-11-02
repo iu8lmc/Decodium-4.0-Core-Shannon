@@ -13,8 +13,12 @@ namespace decodium::sstv {
 enum class SstvFaxIoc : std::uint16_t { Ioc288 = 288, Ioc576 = 576 };
 enum class SstvFaxPhasePattern : std::uint8_t { Symmetric, WhiteFivePercent };
 enum class SstvFaxRegion : std::uint8_t {
-    Start, Phasing, Image, StopAlternating, StopBlack, Complete
+    Start, Phasing, Image, StopAlternating, StopBlack, Complete, DeadSector
 };
+constexpr std::uint64_t sstvRadiofaxDeadSectorSamples(std::uint64_t lineSamples) noexcept
+{
+    return lineSamples * 45U / 1000U;
+}
 
 struct SstvFaxConfig final {
     SstvFaxIoc ioc {SstvFaxIoc::Ioc576};
@@ -26,6 +30,9 @@ struct SstvFaxConfig final {
     // Explicit TX/RX convention: a 5%-white stripe centred on the line
     // boundary followed by one all-white end-of-phasing line (FLdigi).
     bool centeredPhasingWithWhiteEndLine {false};
+    // When selected, the first 4.5% of each scan line is a white dead
+    // sector; width describes the active image, excluding this sector.
+    bool wmoDeadSector {false};
 };
 
 struct SstvFaxPosition final {

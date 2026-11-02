@@ -2,6 +2,7 @@
 // Runs the pinned QSSTV storeBSR/processFIX method bodies in minimal shims.
 #include "src/sstv/digital/HamDrmBsrCodec.h"
 #include <QByteArray>
+#include <QFile>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -22,9 +23,46 @@ struct sourceDecoder { QList<int> erasureList; bool storeBSR(transportBlock*, bo
 struct drmTx { QList<int> fixBlockList; int processFIX(QByteArray); };
 #include "qsstv_bsr_methods.inc"
 
-int main()
+int main(int argc, char** argv)
 {
     using namespace decodium::sstv::hamdrm;
+    const bool missingFinal = argc > 1 && QByteArray(argv[1]) == "--missing-final";
+    for (int arg = missingFinal ? 2 : 1; arg < argc; ++arg) {
+        QFile log(QString::fromLocal8Bit(argv[arg]));
+        if (!log.open(QIODevice::ReadOnly)) return 9;
+        const QByteArray content = log.readAll();
+        const QByteArray marker("[LAB][REPAIR] received BSR ");
+        const qsizetype start = content.indexOf(marker);
+        if (start < 0 || content.indexOf(marker, start + marker.size()) >= 0) return 10;
+        const qsizetype bodyStart = start + marker.size();
+        const qsizetype bodyEnd = content.indexOf("\n\n", bodyStart);
+        if (bodyEnd < 0) return 11;
+        QByteArray observed = content.mid(bodyStart, bodyEnd - bodyStart) + '\n';
+        const auto decoded = parseHamDrmBsr(
+            reinterpret_cast<const std::uint8_t*>(observed.constData()), std::size_t(observed.size()));
+        const std::vector<std::uint16_t> expected = missingFinal
+            ? std::vector<std::uint16_t>({2}) : std::vector<std::uint16_t>({0, 1});
+        if (!decoded.ok() || decoded.value->segmentSize != 1024U
+            || decoded.value->missingSegments != expected) return 12;
+        drmTx receiver;
+        if (receiver.processFIX(observed) != decoded.value->transportId
+            || receiver.fixBlockList != (missingFinal ? QList<int>({2}) : QList<int>({0, 1}))) return 13;
+        transportBlock block;
+        block.totalSegments = 3;
+        block.defaultSegmentSize = 1024;
+        block.transportID = decoded.value->transportId;
+        block.modeCode = decoded.value->qsstvCompatibilityCode.value_or(0);
+        if (decoded.value->filename) block.fileName = QString::fromStdString(*decoded.value->filename);
+        Segment first {missingFinal}, second {missingFinal}, last {!missingFinal};
+        block.dataSegmentPtrList = {&first, &second, &last};
+        sourceDecoder reference;
+        if (!reference.storeBSR(&block, !decoded.value->filename.has_value())) return 14;
+        if (observed.endsWith('\n')) observed.chop(1);
+        QByteArray generated = block.baBSR;
+        if (generated.endsWith('\n')) generated.chop(1);
+        if (observed != generated) return 15;
+        std::cout << "PASS observed on-audio BSR matched QSSTV methods: " << argv[arg] << '\n';
+    }
     std::vector<std::vector<std::uint16_t>> cases {
         {1, 2, 3, 7, 10, 11}, {0, 4, 5, 9, 10, 11, 15},
         {5}, {2, 3, 4, 5}, {1, 3, 5, 7}, {0, 1, 7, 8, 14, 15}
@@ -105,6 +143,18 @@ int main()
                                cases[c].begin(), cases[c].end())) return 7;
             ++checked;
         }
+    }
+    for (const QByteArray wire : {
+             QByteArray("\n90\r29\r\n\r\nH_\rOK\r\n82\r\n1\r\n\r\n-1\r\n3\r\n-99\r\n"),
+             QByteArray("\r\n9029\nH_OK\n\n82\n1\n\n3\n-99\nimage.jpg\n00000\n")}) {
+        drmTx reference;
+        const int id = reference.processFIX(wire);
+        const auto decoded = parseHamDrmBsr(
+            reinterpret_cast<const std::uint8_t*>(wire.constData()), std::size_t(wire.size()));
+        if (!decoded.ok() || id != decoded.value->transportId
+            || std::size_t(reference.fixBlockList.size()) != decoded.value->missingSegments.size()) return 16;
+        for (qsizetype i = 0; i < reference.fixBlockList.size(); ++i)
+            if (reference.fixBlockList[i] != decoded.value->missingSegments[std::size_t(i)]) return 17;
     }
     for (const QByteArray invalid : {QByteArray("1\nH_OK\n82\n1\n-1\n-99\n"),
                                      QByteArray("1\nH_OK\n82\n1\n-1\n0\n-99\n")}) {

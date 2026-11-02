@@ -1,0 +1,51 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -50,6 +50,8 @@
+ #include "dispatch/filedecoder.h"
+ #include "mainwidgets/rxwidget.h"
+ #include "mainwidgets/txwidget.h"
++#include "mainwidgets/txfunctions.h"
++#include <QFile>
+ #include "sound/soundbase.h"
+ #include <QSettings>
+ #include "sstv/sstvparam.h"
+@@ -387,8 +389,9 @@
+   if(encode && parser.isSet(drmOpt))
+     {
+       // --encode --drm: send the picture through the normal DRM TX path into a wav file
++      const QString bsrPath=qEnvironmentVariable("QSSTV_BSR_TX_FILE");
+       QImage img(parser.value(encodeOpt));
+-      if(img.isNull())
++      if(img.isNull() && bsrPath.isEmpty())
+         {
+           fprintf(stderr,"--encode needs a readable image\n");
+           mainWindowPtr->shutdown(false);
+@@ -399,14 +402,26 @@
+       drmTxParams prm=drmParams;
+       for(const auto &s : drmSet) prm.*(s.first)=s.second;
+       soundBase::txFileName=parser.isSet(wavOutOpt) ? parser.value(wavOutOpt) : parser.value(encodeOpt)+".wav";
+-      QObject::connect(txWidgetPtr,&txWidget::calibrationTxFinished,&app,[&app]()
++      QObject::connect(txWidgetPtr,bsrPath.isEmpty() ? &txWidget::calibrationTxFinished : &txWidget::txStopped,&app,[&app]()
+       {
+         app.exit(0);
+       },Qt::QueuedConnection);
+       QTimer::singleShot(1800000,&app,[&app](){fprintf(stderr,"--encode timed out\n");app.exit(3);});
+       mainWindowPtr->startRunning(false);   // no sound card receiver: the transmitter writes a file
+-      if(!txWidgetPtr->sendDrmTestImage(prm,img,parser.value(drmSizeOpt).toUInt()))
++      bool started=false;
++      if(!bsrPath.isEmpty())
+         {
++          QFile input(bsrPath);
++          if(input.open(QIODevice::ReadOnly) && input.size()>0 && input.size()<=131072)
++            {
++              QByteArray body=input.readAll();
++              txWidgetPtr->functionsPtr()->sendBSR(&body,prm);
++              started=true;
++            }
++        }
++      else started=txWidgetPtr->sendDrmTestImage(prm,img,parser.value(drmSizeOpt).toUInt());
++      if(!started)
++        {
+           fprintf(stderr,"--encode: could not start the transmission\n");
+           mainWindowPtr->shutdown(false);
+           globalEnd();

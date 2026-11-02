@@ -104,6 +104,118 @@ class TestSstvDigitalQml final : public QObject
     Q_OBJECT
 
 private slots:
+    void unknownBsrNotice_data()
+    {
+        QTest::addColumn<QByteArray>("body");
+        QTest::newRow("A-extended-unknown") << QByteArray("31746\nH_OK\n0\n0\n1\n-99\nrepair-a.jpg\n21010\n");
+        QTest::newRow("B-compact-unknown") << QByteArray("29441\nH_OK\n0\n0\n-1\n1\n-99\n");
+        QTest::newRow("C-known-size") << QByteArray("29441\nH_OK\n1024\n0\n-1\n1\n-99\n");
+    }
+
+    void unknownBsrNotice()
+    {
+        QFETCH(QByteArray, body);
+        hamdrm::HamDrmControllerBackends backends;
+        backends.waveformRx = std::make_shared<TimingRxFixture>();
+        hamdrm::HamDrmController controller({}, std::move(backends));
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)), QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QObject* notice = requiredObject(page.data(), "hamdrmBsrUnknownSizeNotice");
+        QVERIFY(notice);
+        QVERIFY(!notice->property("visible").toBool());
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = 0x7131;
+        metadata.filename = "bsr.bin";
+        const std::vector<std::uint8_t> input(body.begin(), body.end());
+        const auto encoded = hamdrm::encodeHamDrmObject(metadata, input, 128);
+        QVERIFY(encoded.ok());
+        const auto asBytes = [](const std::vector<std::uint8_t>& group) {
+            return QByteArray(reinterpret_cast<const char*>(group.data()), static_cast<qsizetype>(group.size()));
+        };
+        for (const auto& group : encoded.value->headerGroups) QVERIFY(controller.ingestMotGroup(asBytes(group)).ok());
+        for (const auto& group : encoded.value->bodyGroups) QVERIFY(controller.ingestMotGroup(asBytes(group)).ok());
+        const bool unknown = body.split('\n')[2] == "0";
+        QCOMPARE(controller.receivedBsrSegmentSizeUnknown(), unknown);
+        QTRY_COMPARE(notice->property("visible").toBool(), unknown);
+        QVERIFY(!controller.canRepairReceivedBsr());
+        QVERIFY(controller.startRx());
+        QTRY_VERIFY(!notice->property("visible").toBool());
+    }
+
+    void bsrCapabilityTracksRealController_data()
+    {
+        QTest::addColumn<int>("segmentSize");
+        QTest::addColumn<int>("dialect");
+        QTest::newRow("A-extended") << 64 << 0;
+        QTest::newRow("B-compact") << 128 << 1;
+    }
+
+    void bsrCapabilityTracksRealController()
+    {
+        QFETCH(int, segmentSize);
+        QFETCH(int, dialect);
+        hamdrm::HamDrmController controller({}, {});
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)), QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QObject* build = requiredObject(page.data(), "hamdrmBuildBsr");
+        QObject* selector = requiredObject(page.data(), "hamdrmBsrDialect");
+        QVERIFY(build && selector);
+        QVERIFY(!build->property("enabled").toBool());
+        QVERIFY(selector->setProperty("currentIndex", dialect));
+
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = 0x2451;
+        metadata.filename = "test.jpg";
+        const std::vector<std::uint8_t> payload(400U, 0x72);
+        const auto source = hamdrm::encodeHamDrmObject(metadata, payload, static_cast<std::size_t>(segmentSize));
+        QVERIFY(source.ok());
+        const auto asBytes = [](const std::vector<std::uint8_t>& group) {
+            return QByteArray(reinterpret_cast<const char*>(group.data()), static_cast<qsizetype>(group.size()));
+        };
+        for (const auto& group : source.value->headerGroups)
+            QVERIFY(controller.ingestMotGroup(asBytes(group)).ok());
+        QVERIFY(controller.ingestMotGroup(asBytes(source.value->bodyGroups.back())).ok());
+        QVERIFY(controller.canBuildBsr());
+        QTRY_VERIFY(build->property("enabled").toBool());
+        QVERIFY(selector->property("enabled").toBool());
+
+        const auto first = hamdrm::parseHamDrmMotDataGroup(source.value->bodyGroups.front().data(),
+                                                           source.value->bodyGroups.front().size());
+        QVERIFY(first.ok());
+        auto shortened = *first.value;
+        shortened.payload.pop_back();
+        const auto malformed = hamdrm::encodeHamDrmMotDataGroup(shortened);
+        QVERIFY(malformed.ok());
+        QVERIFY(controller.ingestMotGroup(asBytes(*malformed.value)).ok());
+        QVERIFY(!controller.canBuildBsr());
+        QTRY_VERIFY(!build->property("enabled").toBool());
+        QVERIFY(!selector->property("enabled").toBool());
+    }
+
     void experimentalTimingToggle()
     {
         auto rx = std::make_shared<TimingRxFixture>();

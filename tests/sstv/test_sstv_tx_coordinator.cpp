@@ -1055,8 +1055,13 @@ void TestSstvTxCoordinator::avtVariantBuildersMatchDirectEncoders()
         directConfig.sampleRate = config.sampleRate;
         directConfig.level = config.level;
         directConfig.headroom = config.headroom;
+        const bool qrm = SstvAvtSyncCodec::isQrm(item.variant);
+        SstvAvtEncoder baseline(SstvTxSourceBuilder::pixelsFromImage(image, *coordinatorMode),
+                                directConfig);
+        directConfig.terminalHoldMs = qrm ? 10U : 0U;
         SstvAvtEncoder direct(SstvTxSourceBuilder::pixelsFromImage(image, *coordinatorMode),
                               directConfig);
+        QCOMPARE(built.totalFrames, baseline.totalSamples() + (qrm ? 120U : 0U));
         std::array<std::int16_t, 4096U> actual {};
         std::array<std::int16_t, 4096U> expected {};
         while (!direct.complete()) {

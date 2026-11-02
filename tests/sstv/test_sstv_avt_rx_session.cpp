@@ -100,6 +100,69 @@ class TestSstvAvtRxSession final : public QObject
     Q_OBJECT
 
 private slots:
+    void pixelEdgeFallbackAndCentrePreferenceAB()
+    {
+        for (const auto variant : {SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+            auto config = configFor(SstvAvtMode::Avt24);
+            config.variant = variant;
+            const SstvAvtMapper mapper({config.mode, kSampleRate, 0, variant});
+            const auto centre = allObservations(config.mode, variant);
+            auto edgeOnly = centre;
+            std::vector<SstvFrequencyObservation> mixed;
+            mixed.reserve(centre.size() * 2U);
+            std::uint64_t sequence = 1U;
+            for (std::size_t i = 0; i < centre.size(); ++i) {
+                const auto position = mapper.positionAtSample(centre[i].centreSample - kImageStart);
+                edgeOnly[i].centreSample = kImageStart + position.segmentStartSample;
+                auto wrongEdge = edgeOnly[i];
+                wrongEdge.sequence = sequence++;
+                wrongEdge.rawFrequencyHz = wrongEdge.correctedFrequencyHz =
+                    SstvAvtProtocol::frequencyForValue(0U, variant);
+                mixed.push_back(wrongEdge);
+                auto middle = centre[i];
+                middle.sequence = sequence++;
+                mixed.push_back(middle);
+            }
+            SstvAvtRxSession normal(config), sparse(config), preferred(config);
+            consumeChunks(normal, centre, 257U);
+            consumeChunks(sparse, edgeOnly, 257U);
+            consumeChunks(preferred, mixed, 257U);
+            QCOMPARE(normal.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(sparse.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(preferred.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(sparse.snapshot().pixels, normal.snapshot().pixels);
+            QCOMPARE(preferred.snapshot().pixels, normal.snapshot().pixels);
+            QCOMPARE(sparse.decoderMetrics().interpolatedPixels, std::uint64_t {0U});
+        }
+    }
+
+    void finalPixelDoesNotDependOnChunkBoundary()
+    {
+        for (const auto variant : {SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+            auto config = configFor(SstvAvtMode::Avt24);
+            config.variant = variant;
+            config.observationSpanSamples = 6U;
+            auto observations = allObservations(config.mode, variant);
+            const auto end = kImageStart + SstvAvtMapper({config.mode, kSampleRate, 0, variant}).imageSampleCount();
+            auto first = observations.back();
+            first.centreSample = end - 3U;
+            first.rawFrequencyHz = first.correctedFrequencyHz = SstvAvtProtocol::frequencyForValue(40U, variant);
+            auto last = first;
+            last.sequence++;
+            last.centreSample = end - 1U;
+            last.rawFrequencyHz = last.correctedFrequencyHz = SstvAvtProtocol::frequencyForValue(200U, variant);
+            observations.back() = first;
+            observations.push_back(last);
+            SstvAvtRxSession contiguous(config), split(config);
+            consumeChunks(contiguous, observations, 257U);
+            consumeChunks(split, {observations.begin(), observations.end() - 1}, 257U);
+            static_cast<void>(split.consume(&observations.back(), 1U));
+            QCOMPARE(contiguous.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(split.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(contiguous.snapshot().pixels, split.snapshot().pixels);
+        }
+    }
+
     void variantsMatchNormalRasterThroughSession()
     {
         const auto mode = SstvAvtMode::Avt24;

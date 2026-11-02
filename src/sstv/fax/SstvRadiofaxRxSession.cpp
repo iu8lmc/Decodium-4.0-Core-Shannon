@@ -15,14 +15,15 @@ SstvRadiofaxRxSession::SstvRadiofaxRxSession(SstvFaxConfig config,
                                              SstvRadiofaxLevels levels)
     : mapper_(config), image_(config.width, config.height), imageStart_(imageStartSample),
       imageEnd_(0U), lineSamples_(std::uint64_t(config.sampleRate) * 60U),
-      lineCount_(config.linesPerMinute), frequencyOffset_(frequencyOffsetHz), levels_(levels), sums_(config.width, 0.0),
+      lineCount_(config.linesPerMinute), wmoDeadSector_(config.wmoDeadSector), frequencyOffset_(frequencyOffsetHz), levels_(levels), sums_(config.width, 0.0),
       weights_(config.width, 0.0)
 {
     if (clock) {
         const double nominal = double(config.sampleRate) * 60.0 / config.linesPerMinute;
         if (!clock->lines || clock->lines > 14'400U || !clock->samples
             || clock->samples > std::uint64_t(config.sampleRate) * 3600U
-            || clock->samples / clock->lines < config.width
+            || clock->samples / clock->lines
+                - (config.wmoDeadSector ? sstvRadiofaxDeadSectorSamples(clock->samples / clock->lines) : 0U) < config.width
             || std::abs(double(clock->samples) / clock->lines - nominal) > nominal * kRadiofaxMaximumClockDeviation)
             throw std::invalid_argument("invalid radiofax receive clock estimate");
         lineSamples_ = clock->samples;
@@ -87,7 +88,9 @@ std::size_t SstvRadiofaxRxSession::consume(const SstvFrequencyObservation* obser
         const auto line = ((offset + 1U) * lineCount_ - 1U) / lineSamples_;
         const auto start = line * lineSamples_ / lineCount_;
         const auto end = (line + 1U) * lineSamples_ / lineCount_;
-        const auto pixel = (offset - start) * sums_.size() / (end - start);
+        const auto dead = wmoDeadSector_ ? sstvRadiofaxDeadSectorSamples(end - start) : 0U;
+        if (offset - start < dead) continue;
+        const auto pixel = (offset - start - dead) * sums_.size() / (end - start - dead);
         if (!hasLine_ || line_ != line) {
             publishLine();
             line_ = static_cast<std::uint32_t>(line);

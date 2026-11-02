@@ -14,6 +14,8 @@ import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--expect-partial', action='store_true')
+parser.add_argument('--wmo-dead-sector', action='store_true',
+                    help='decode the explicit WMO dead-sector profile')
 parser.add_argument('capture', type=Path)
 parser.add_argument('reference', type=Path)
 options = parser.parse_args()
@@ -30,7 +32,8 @@ env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software',
 args = [str(binary), '--test-mode', '--rig-name', 'FLFAX' + secrets.token_hex(4),
         '--lab-no-cat', '--lab-audio-input', 'BlackHole 2ch', '--lab-audio-output', 'BlackHole 2ch',
         '--lab-reapply-ms', '500', '--lab-monitor-ms', '1800', '--lab-sstv-rx-ms', '3500',
-        '--lab-sstv-fax-rx', '576,128,150,1', '--lab-sstv-rx-ready-file', str(root / 'ready'),
+        '--lab-sstv-fax-rx', '576,128,150,0,1' if options.wmo_dead_sector else '576,128,150,1',
+        '--lab-sstv-rx-ready-file', str(root / 'ready'),
         '--lab-sstv-rx-image-file', str(root / 'received.png'), '--lab-quit-ms',
         str(max(115000, source.stat().st_size * 1000 // (48000 * 8) + 20000))]
 env['DECODIUM_LAB_FAX_DIAGNOSTICS'] = '1'

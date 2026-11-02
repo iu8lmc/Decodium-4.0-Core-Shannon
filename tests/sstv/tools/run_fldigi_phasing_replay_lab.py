@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Replay a recorded Radiofax signal into isolated FLdigi and trace its state."""
 import ctypes as c, ctypes.util, os, socket, subprocess, sys, tempfile, threading, time, xmlrpc.client
+import json
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 raw=Path(sys.argv[1]).resolve(strict=True)
 if raw.stat().st_size <= 0 or raw.stat().st_size % 8:
@@ -8,8 +10,35 @@ if raw.stat().st_size <= 0 or raw.stat().st_size % 8:
 duration=int(os.environ.get('DECODIUM_FLDIGI_LAB_SECONDS','50'))
 if duration < 1 or duration > 180:
  raise SystemExit('laboratory playback duration must be between 1 and 180 seconds')
+auto_center=os.environ.get('DECODIUM_FLDIGI_AUTOCENTER','1')
+if auto_center not in ('0','1'):
+ raise SystemExit('DECODIUM_FLDIGI_AUTOCENTER must be 0 or 1')
+shift=os.environ.get('DECODIUM_FLDIGI_SHIFT','800')
+if not shift.isascii() or not shift.isdigit() or not 100 <= int(shift) <= 1000:
+ raise SystemExit('DECODIUM_FLDIGI_SHIFT must be an integer from 100 to 1000 Hz')
+try:
+ skip_start=Decimal(os.environ.get('DECODIUM_FLDIGI_SKIP_FROM_SECONDS','0'))
+ skip_length=Decimal(os.environ.get('DECODIUM_FLDIGI_SKIP_SECONDS','0'))
+ if not skip_start.is_finite() or not skip_length.is_finite(): raise InvalidOperation
+ start_frames=skip_start*48000; length_frames=skip_length*48000
+ if start_frames != int(start_frames) or length_frames != int(length_frames): raise InvalidOperation
+except (InvalidOperation, ValueError, OverflowError):
+ raise SystemExit('skip interval must use whole audio samples')
+if skip_start < 0 or skip_length < 0 or (skip_length and (start_frames + length_frames) * 8 > raw.stat().st_size):
+ raise SystemExit('invalid laboratory skip interval')
 root=Path(tempfile.mkdtemp(prefix='decodium-fldigi-phase-'))
 (root/'config').mkdir();(root/'home').mkdir()
+# FLdigi loads debug preferences only when both status format markers exist.
+# Use a private configuration so these diagnostics do not alter user settings.
+(root/'config'/'fldigi.prefs').write_text('''; FLTK preferences file format 1.0
+; vendor: w1hkj.org
+; application: fldigi
+[.]
+version:4.2.11
+dual_channels:YES
+debug_mask:32767
+debug_level:5
+''')
 (root/'config'/'fldigi_def.xml').write_text('''<FLDIGI_DEFS>
 <AUDIOIO>1</AUDIOIO><PORTINDEVICE>BlackHole 2ch</PORTINDEVICE>
 <PORTOUTDEVICE>BlackHole 2ch</PORTOUTDEVICE><PORTININDEX>-1</PORTININDEX>
@@ -17,7 +46,8 @@ root=Path(tempfile.mkdtemp(prefix='decodium-fldigi-phase-'))
 <CHKUSERIGCATIS>0</CHKUSERIGCATIS><CHKUSEXMLRPCIS>0</CHKUSEXMLRPCIS>
 <TTYPTT>0</TTYPTT><RTSPTT>0</RTSPTT><DTRPTT>0</DTRPTT>
 <CLIENT_TO_FLRIG>0</CLIENT_TO_FLRIG><ENABLE_AUDIO_ALERTS>0</ENABLE_AUDIO_ALERTS>
-</FLDIGI_DEFS>''')
+<WEFAX_AUTOCENTER>{}</WEFAX_AUTOCENTER><WEFAXSHIFT>{}</WEFAXSHIFT>
+</FLDIGI_DEFS>'''.format(auto_center,shift))
 with socket.socket() as listener:
  listener.bind(('127.0.0.1',0)); port=listener.getsockname()[1]
 fldigi=os.environ.get('FLDIGI_BINARY','/Applications/fldigi-4.2.11.app/Contents/MacOS/fldigi')
@@ -40,7 +70,7 @@ try:
  proxy.modem.set_by_name(name);time.sleep(2);proxy.modem.set_carrier(1900);proxy.main.set_afc(False)
  print('mode',proxy.modem.get_name(),'carrier',proxy.modem.get_carrier(),'artifacts',root,flush=True)
  def trace():
-  p=xmlrpc.client.ServerProxy('http://127.0.0.1:%d'%port,allow_none=True); last=None
+  p=xmlrpc.client.ServerProxy('http://127.0.0.1:%d'%port,allow_none=True); last=None; seen=set()
   with (root/'states.txt').open('w') as f:
    while not stop.wait(.1):
     try:
@@ -48,6 +78,12 @@ try:
          p.wefax.state_string(), p.main.get_status1(), p.main.get_status2())
      if current!=last:
       f.write('%.3f %s\n'%(time.monotonic(),current));f.flush();last=current
+     # Record intermediate automatic saves as well as the eventual APT image.
+     # State polling alone can miss a save that leaves the receiver in RXIMAGE.
+     for image in sorted((root/'config'/'images').glob('*.png')):
+      if image.name not in seen:
+       seen.add(image.name)
+       f.write('%.3f image-created=%s\n'%(time.monotonic(),image.name));f.flush()
     except Exception as e: f.write('ERROR %s\n'%e);break
  thread=threading.Thread(target=trace);thread.start()
  class Info(c.Structure):
@@ -61,11 +97,23 @@ try:
  params=Params(dev,2,1,.05,None);stream=c.c_void_p()
  if pa.Pa_OpenStream(c.byref(stream),None,c.byref(params),48000,1024,0,None,None):raise RuntimeError('pa open')
  if pa.Pa_StartStream(stream):raise RuntimeError('pa start')
- (root/'playback-start.txt').write_text('%.6f'%time.monotonic())
+ # Bound clock-conversion uncertainty for correlating FLdigi's wall-clock
+ # debug events with playback positions and monotonic XML-RPC traces.
+ before=time.monotonic_ns(); wall=time.time_ns(); after=time.monotonic_ns()
+ (root/'playback-start.txt').write_text('%.6f'%(after/1e9))
+ (root/'playback-clock.json').write_text(json.dumps({
+  'wall_ns':wall,'monotonic_before_ns':before,'monotonic_after_ns':after,
+ })+'\n')
  with raw.open('rb') as src:
   remaining=duration*48000*8
+  skip_at=int(start_frames)*8
+  skipped=not skip_length
   while remaining:
-   chunk=src.read(min(8192*8,remaining))
+   if not skipped and src.tell() == skip_at:
+    src.seek(int(length_frames)*8,1); skipped=True
+   limit=min(8192*8,remaining)
+   if not skipped: limit=min(limit,skip_at-src.tell())
+   chunk=src.read(limit)
    if not chunk:break
    buf=c.create_string_buffer(chunk)
    if pa.Pa_WriteStream(stream,buf,len(chunk)//8):raise RuntimeError('pa write')

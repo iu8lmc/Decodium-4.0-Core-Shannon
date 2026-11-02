@@ -12,6 +12,8 @@ SstvPage {
     property bool configurationExpanded: false
     property string sharingPublicKey: ""
     property string sharingFingerprint: ""
+    property string signingPublicKey: ""
+    property string signingFingerprint: ""
     property string noticeText: ""
     property bool noticeError: false
     property url selectedUpload: ""
@@ -49,6 +51,22 @@ SstvPage {
         if (bytes < 1024 * 1024)
             return qsTr("%1 KiB").arg((bytes / 1024).toFixed(1))
         return qsTr("%1 MiB").arg((bytes / (1024 * 1024)).toFixed(1))
+    }
+
+    function transferProtectionLabel(privacy) {
+        if (privacy && privacy.endToEndEncrypted)
+            return qsTr("declared end-to-end encrypted; sender authentication requires a verified signature")
+        return privacy && privacy.providerCanReadContent
+                ? qsTr("TLS transport; provider can read content")
+                : qsTr("TLS transport")
+    }
+
+    function transferAudienceLabel(privacy) {
+        if (privacy && privacy.publicShare === true)
+            return qsTr("declared public")
+        if (privacy && privacy.publicShare === false)
+            return qsTr("declared recipient-only")
+        return qsTr("audience unknown")
     }
 
     function directionLabel(direction) {
@@ -137,7 +155,13 @@ SstvPage {
             root.sharingFingerprint = fingerprint
         }
 
+        function onSigningIdentityReady(publicKeyHex, fingerprint) {
+            root.signingPublicKey = publicKeyHex
+            root.signingFingerprint = fingerprint
+        }
+
         function onConfigurationChanged() {
+            senderFingerprintConfirmed.checked = false
             fingerprintConfirmed.checked = false
             root.loadConfiguration()
         }
@@ -469,17 +493,15 @@ SstvPage {
                 wrapMode: Text.WordWrap
             }
             Label {
+                objectName: "sstvShareTransferPrivacy"
                 Layout.fillWidth: true
                 visible: transferRow.privacySummary
                          && Object.keys(transferRow.privacySummary).length > 0
                 text: {
                     const privacy = transferRow.privacySummary || ({})
-                    const protection = privacy.endToEndEncrypted
-                                       ? qsTr("end-to-end encrypted; sender identity is not authenticated")
-                                       : (privacy.providerCanReadContent
-                                          ? qsTr("TLS transport; provider can read content")
-                                          : qsTr("TLS transport"))
-                    return qsTr("Privacy: recipient-only · %1 · callsign %2 · grid %3 · metered %4")
+                    const protection = root.transferProtectionLabel(privacy)
+                    return qsTr("Privacy: %1 · %2 · callsign %3 · grid %4 · metered %5")
+                        .arg(root.transferAudienceLabel(privacy))
                         .arg(protection)
                         .arg(privacy.callsignIncluded ? qsTr("included")
                                                       : qsTr("omitted"))
@@ -1079,7 +1101,7 @@ SstvPage {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             color: root.secondaryTextColor
-                            text: qsTr("Exchange public keys and compare fingerprints through an independent trusted channel. The provider can see message metadata. Sender identity is not authenticated.")
+                            text: qsTr("Exchange public keys and compare fingerprints through an independent trusted channel. The provider can see message metadata. Unsigned messages do not authenticate the sender.")
                         }
                         Button {
                             objectName: "sstvShareCreateIdentity"
@@ -1130,6 +1152,41 @@ SstvPage {
                             onClicked: root.sharing.pinSharingRecipient(recipient.text, peerPublicKey.text,
                                                                       peerFingerprint.text, fingerprintConfirmed.checked)
                         }
+                    }
+                    CheckBox {
+                        id: signUpload
+                        objectName: "sstvShareSignUpload"
+                        visible: encryptUpload.checked
+                        enabled: encryptUpload.checked && encryptUpload.enabled
+                        text: qsTr("Sign the encrypted image (experimental)")
+                        palette.text: root.primaryTextColor
+                    }
+                    ColumnLayout {
+                        visible: encryptUpload.checked && signUpload.checked
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: root.secondaryTextColor
+                            text: qsTr("Create your signing identity and exchange its fingerprint independently. The recipient must save your verified signing key to authenticate the sender.")
+                        }
+                        TextField {
+                            objectName: "sstvShareLocalId"
+                            Layout.fillWidth: true
+                            readOnly: true
+                            selectByMouse: true
+                            text: root.sharing ? root.sharing.localSharingId : ""
+                            placeholderText: qsTr("Your sharing sender ID")
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Give this exact sender ID to the recipient together with your signing key and verified fingerprint.")
+                        }
+                        Button {
+                            objectName: "sstvShareCreateSigningIdentity"
+                            text: qsTr("Create or show my signing key")
+                            onClicked: root.sharing.createSigningIdentity()
+                        }
+                        TextField { Layout.fillWidth: true; readOnly: true; selectByMouse: true; text: root.signingPublicKey; placeholderText: qsTr("Your signing public key") }
+                        TextField { Layout.fillWidth: true; readOnly: true; selectByMouse: true; text: root.signingFingerprint; placeholderText: qsTr("Your signing fingerprint") }
                     }
                     GridLayout {
                         Layout.fillWidth: true
@@ -1202,7 +1259,9 @@ SstvPage {
                         Layout.fillWidth: true
                         text: encryptUpload.checked
                               ? (encryptUpload.enabled
-                                 ? qsTr("The image is encrypted for the verified recipient. The provider can see transfer metadata. Sender identity is not authenticated. EXIF is removed.")
+                                 ? (signUpload.checked
+                                    ? qsTr("The image is encrypted and signed. The recipient must independently verify and save your signing key. The provider can see transfer metadata. EXIF is removed.")
+                                    : qsTr("The image is encrypted for the verified recipient. The provider can see transfer metadata. Sender identity is not authenticated. EXIF is removed."))
                                  : qsTr("Encrypted sharing is unavailable. Upload is blocked until encryption is available or you explicitly turn it off."))
                               : qsTr("Private recipient-only transfer. Public and automatic sharing stay off. EXIF is removed. Protection is TLS transport; this provider can read content because optional E2EE is not enabled.")
                         color: "#f2c14e"
@@ -1258,7 +1317,10 @@ SstvPage {
                                     "grid": uploadGrid.text,
                                     "meteredNetworkAllowed": meteredUpload.checked
                                 }
-                                const queued = encryptUpload.checked
+                                const queued = encryptUpload.checked && signUpload.checked
+                                    ? root.sharing.uploadSignedEncryptedWithOptions(root.selectedUpload, recipient.text,
+                                        uploadMode.text, uploadMessage.text, recipientConfirmed.checked, options)
+                                    : encryptUpload.checked
                                     ? root.sharing.uploadEncryptedWithOptions(root.selectedUpload, recipient.text,
                                         uploadMode.text, uploadMessage.text, recipientConfirmed.checked, options)
                                     : root.sharing.uploadWithOptions(root.selectedUpload, recipient.text,
@@ -1345,6 +1407,7 @@ SstvPage {
                 Layout.fillWidth: true
                 TabBar {
                     id: queueTabs
+                    objectName: "sstvShareQueueTabs"
                     Layout.fillWidth: true
                     TabButton { text: qsTr("Active queue") }
                     TabButton { text: qsTr("Incoming inbox") }
@@ -1372,6 +1435,48 @@ SstvPage {
                 wrapMode: Text.WordWrap
             }
 
+            ColumnLayout {
+                objectName: "sstvShareInboxIdentity"
+                visible: queueTabs.currentIndex === 1
+                Layout.fillWidth: true
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("To receive encrypted images, share your recipient ID and public key; compare the fingerprint through an independent trusted channel.")
+                    color: root.secondaryTextColor
+                    wrapMode: Text.WordWrap
+                }
+                TextField {
+                    objectName: "sstvShareInboxLocalId"
+                    Layout.fillWidth: true
+                    readOnly: true
+                    selectByMouse: true
+                    text: root.sharing ? root.sharing.localSharingId : ""
+                    placeholderText: qsTr("Your recipient ID")
+                }
+                Button {
+                    objectName: "sstvShareInboxCreateIdentity"
+                    text: qsTr("Create or show my recipient key")
+                    enabled: root.sharing && root.sharing.encryptedSharingAvailable
+                    onClicked: root.sharing.createSharingIdentity()
+                }
+                TextField {
+                    objectName: "sstvShareInboxPublicKey"
+                    Layout.fillWidth: true
+                    readOnly: true
+                    selectByMouse: true
+                    text: root.sharingPublicKey
+                    placeholderText: qsTr("Your recipient public key")
+                }
+                TextField {
+                    objectName: "sstvShareInboxFingerprint"
+                    Layout.fillWidth: true
+                    readOnly: true
+                    selectByMouse: true
+                    text: root.sharingFingerprint
+                    placeholderText: qsTr("Your recipient fingerprint")
+                }
+            }
+
             CheckBox {
                 objectName: "sstvShareRequireIncomingEncryption"
                 visible: queueTabs.currentIndex === 1
@@ -1381,7 +1486,38 @@ SstvPage {
                 palette.text: root.primaryTextColor
                 onClicked: root.sharing.setRequireIncomingEncryption(checked)
                 ToolTip.visible: hovered
-                ToolTip.text: qsTr("Applies to newly queued downloads. Sender identity is not authenticated.")
+                ToolTip.text: qsTr("Applies to newly queued downloads. Use the separate sender policy to require authentication.")
+            }
+
+            ColumnLayout {
+                visible: queueTabs.currentIndex === 1
+                Layout.fillWidth: true
+                CheckBox {
+                    objectName: "sstvShareRequireSenderAuthentication"
+                    text: qsTr("Require an encrypted message from a verified sender")
+                    checked: root.sharing ? root.sharing.requireIncomingSenderAuthentication : false
+                    enabled: root.sharing && root.sharing.ready
+                    palette.text: root.primaryTextColor
+                    onClicked: root.sharing.setRequireIncomingSenderAuthentication(checked)
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Downloads must be encrypted and signed. Items awaiting acceptance are checked again against the current policy.")
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Compare the sender's signing fingerprint through an independent trusted channel before saving it. Use the sender ID shown by your sharing provider.")
+                    color: root.secondaryTextColor
+                    wrapMode: Text.WordWrap
+                }
+                TextField { id: senderId; objectName: "sstvShareSenderId"; Layout.fillWidth: true; maximumLength: 128; placeholderText: qsTr("Sender ID"); onTextChanged: senderFingerprintConfirmed.checked = false }
+                TextField { id: senderSigningKey; objectName: "sstvShareSenderSigningKey"; Layout.fillWidth: true; maximumLength: 182; placeholderText: qsTr("Sender signing public key (182 lowercase hex characters)"); onTextChanged: senderFingerprintConfirmed.checked = false }
+                TextField { id: senderSigningFingerprint; objectName: "sstvShareSenderSigningFingerprint"; Layout.fillWidth: true; maximumLength: 64; placeholderText: qsTr("Independently verified fingerprint (64 lowercase hex characters)"); onTextChanged: senderFingerprintConfirmed.checked = false }
+                CheckBox { id: senderFingerprintConfirmed; objectName: "sstvShareSenderFingerprintConfirmed"; text: qsTr("I compared the sender fingerprint through a trusted channel"); palette.text: root.primaryTextColor }
+                Button {
+                    objectName: "sstvSharePinSenderSigningKey"
+                    text: qsTr("Save verified sender signing key")
+                    enabled: root.sharing && root.sharing.ready && senderFingerprintConfirmed.checked && senderId.text.trim().length > 0
+                    onClicked: root.sharing.pinSenderSigningIdentity(senderId.text, senderSigningKey.text, senderSigningFingerprint.text, senderFingerprintConfirmed.checked)
+                }
             }
 
             StackLayout {

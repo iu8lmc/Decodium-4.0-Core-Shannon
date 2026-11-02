@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SstvFax480AutoRx.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 namespace decodium::sstv {
 SstvFax480AutoRx::SstvFax480AutoRx(SstvFax480Profile profile,std::uint32_t rate)
     : profile_(profile),rate_(rate),mapper_(profile,rate) {}
-void SstvFax480AutoRx::consume(const SstvFrequencyObservation* obs,std::size_t count)
+std::size_t SstvFax480AutoRx::consume(const SstvFrequencyObservation* obs,std::size_t count)
 {
     if (count>SstvFax480Receiver::MaximumObservationsPerConsume) throw std::length_error("FAX480 observations too large");
     if (count && !obs) throw std::invalid_argument("FAX480 null observations");
@@ -14,7 +15,9 @@ void SstvFax480AutoRx::consume(const SstvFrequencyObservation* obs,std::size_t c
         if (have && obs[i].centreSample<previous) throw std::invalid_argument("FAX480 timestamp regression");
         previous=obs[i].centreSample;have=true;
     }
-    for (std::size_t i=0;i<count;++i) observe(obs[i]);
+    std::size_t consumed=0;
+    while (consumed<count && !complete_) observe(obs[consumed++]);
+    return consumed;
 }
 void SstvFax480AutoRx::feed(const SstvFrequencyObservation& obs)
 {
@@ -38,6 +41,12 @@ void SstvFax480AutoRx::observe(const SstvFrequencyObservation& obs)
            || obs.centreSample-replay_.front().centreSample>rate_)) replay_.pop_front();
     if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz) || !std::isfinite(obs.confidence) || obs.confidence<0.2) {
         inSync_=false;
+        // A carrier before a silent gap must not extend a later VIS leader.
+        // Brief demodulator dropouts are tolerated as in observeVis().
+        if (profile_==SstvFax480Profile::LibsstvVis480 && visFrequency_
+            && obs.centreSample-visRunEnd_>=rate_/500U) {
+            vis_.reset(); visFrequency_=0.0;
+        }
         return;
     }
     if (profile_==SstvFax480Profile::LibsstvVis480) { observeVis(obs); return; }
@@ -92,10 +101,14 @@ void SstvFax480AutoRx::observeVis(const SstvFrequencyObservation& obs)
         visFrequency_=selected; visRunStart_=visRunEnd_=obs.centreSample;
         return;
     }
-    const SstvVisToneEvent event {visRunStart_*1'000'000U/rate_,
-                                 duration*1'000'000U/rate_,visFrequency_,1.0};
-    const auto results=vis_.consume(&event,1);
     const auto runEnd=visRunEnd_+rate_/2000U;
+    // The shared VIS detector accepts a bounded event, then trims a long VOX
+    // leader to its final canonical window. Bound this adapter's aggregated
+    // 1900 Hz run before submitting it, while preserving its actual end time.
+    const auto eventDuration = visFrequency_==1900.0 ? std::min<std::uint64_t>(duration,rate_) : duration;
+    const SstvVisToneEvent event {(runEnd-eventDuration)*1'000'000U/rate_,
+                                 eventDuration*1'000'000U/rate_,visFrequency_,1.0};
+    const auto results=vis_.consume(&event,1);
     const auto prior=visFrequency_;
     visFrequency_=selected;visRunStart_=visRunEnd_=obs.centreSample;
     for (const auto& result:results) {

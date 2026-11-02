@@ -180,6 +180,7 @@ class HamDrmController final : public QObject,
     Q_PROPERTY(bool canBuildBsr READ canBuildBsr NOTIFY selectedObjectChanged)
     Q_PROPERTY(QString bsrText READ bsrText NOTIFY bsrChanged)
     Q_PROPERTY(QString receivedBsrText READ receivedBsrText NOTIFY receivedBsrChanged)
+    Q_PROPERTY(bool receivedBsrSegmentSizeUnknown READ receivedBsrSegmentSizeUnknown NOTIFY receivedBsrChanged)
     Q_PROPERTY(bool canRepairReceivedBsr READ canRepairReceivedBsr NOTIFY repairStateChanged)
     Q_PROPERTY(QVariantMap lastImageValidation READ lastImageValidation
                NOTIFY imageValidationChanged)
@@ -238,6 +239,7 @@ public:
     bool canBuildBsr() const;
     QString bsrText() const;
     QString receivedBsrText() const;
+    bool receivedBsrSegmentSizeUnknown() const;
     bool canRepairReceivedBsr() const;
     QVariantMap lastImageValidation() const;
 
@@ -332,6 +334,8 @@ private:
     void publishInbox(std::uint16_t preferredTransportId);
     InboxRecord* recordFor(int transportId) noexcept;
     const InboxRecord* recordFor(int transportId) const noexcept;
+    static std::optional<std::size_t> bsrSegmentSize(const InboxRecord& record);
+    std::vector<std::uint16_t> bsrMissingSegments(const InboxRecord& record) const;
     std::vector<std::uint16_t> selectedMissingSegments() const;
 
     void handleRxProgress(std::uint64_t sessionId, double progress);
@@ -366,6 +370,7 @@ private:
     QString error_;
     QString bsrText_;
     QString receivedBsrText_;
+    std::optional<std::uint16_t> receivedBsrObjectId_;
     struct RepairSource final {
         HamDrmEncodedObject object;
         std::size_t segmentBytes {0U};

@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $# -lt 1 || $# -gt 3 ]]; then
-  echo "usage: $0 <decodium-binary> [--tamper | --tamper-payload a|b | --tamper-manifest a|b | --downgrade-manifest a|b]" >&2
+  echo "usage: $0 <decodium-binary> [--tamper | --tamper-payload a|b | --swap-payload a|b | --replay-envelope a|b | --tamper-manifest a|b | --downgrade-manifest a|b | --expire-download a|b | --expire-awaiting a|b | --expire-partial a|b | --expire-restart a|b]" >&2
   exit 2
 fi
 binary="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 mode="${2:-}"
 variant="${3:-}"
-if [[ ( -n "$mode" && "$mode" != --tamper && "$mode" != --tamper-payload && "$mode" != --tamper-manifest && "$mode" != --downgrade-manifest ) \
-   || ( ( "$mode" == --tamper-payload || "$mode" == --tamper-manifest || "$mode" == --downgrade-manifest ) && "$variant" != a && "$variant" != b ) \
-   || ( "$mode" != --tamper-payload && "$mode" != --tamper-manifest && "$mode" != --downgrade-manifest && -n "$variant" ) ]]; then
+extra=""
+restart=""
+if [[ "$mode" == --expire-restart ]]; then
+  mode=--expire-download
+  extra=--expiry-after-first-chunk
+  restart=--expiry-restart-cleanup
+fi
+if [[ "$mode" == --expire-partial ]]; then
+  mode=--expire-download
+  extra=--expiry-after-first-chunk
+fi
+if [[ ( -n "$mode" && "$mode" != --tamper && "$mode" != --tamper-payload && "$mode" != --swap-payload && "$mode" != --replay-envelope && "$mode" != --tamper-manifest && "$mode" != --downgrade-manifest && "$mode" != --expire-download && "$mode" != --expire-awaiting ) \
+   || ( ( "$mode" == --tamper-payload || "$mode" == --swap-payload || "$mode" == --replay-envelope || "$mode" == --tamper-manifest || "$mode" == --downgrade-manifest || "$mode" == --expire-download || "$mode" == --expire-awaiting ) && "$variant" != a && "$variant" != b ) \
+   || ( "$mode" != --tamper-payload && "$mode" != --swap-payload && "$mode" != --replay-envelope && "$mode" != --tamper-manifest && "$mode" != --downgrade-manifest && "$mode" != --expire-download && "$mode" != --expire-awaiting && -n "$variant" ) ]]; then
   echo 'invalid mode' >&2; exit 2
 fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -31,9 +42,11 @@ dbus-run-session -- bash -c '
   args=()
   if [[ -n "$2" ]]; then args+=("$2"); fi
   if [[ -n "$4" ]]; then args+=("$4"); fi
+  if [[ -n "$5" ]]; then args+=("$5"); fi
+  if [[ -n "$6" ]]; then args+=("$6"); fi
   python3 "$3/tests/sstv/tools/run_share_app_transfer_lab.py" "${args[@]}" "$1" \
     "$3/tests/sstv/fixtures/localhost-test-only.crt" \
     "$3/tests/sstv/fixtures/localhost-test-only.key" \
     "$3/tests/sstv/fixtures/qsstv-image-a.jpg" \
     "$3/tests/sstv/fixtures/qsstv-image-b.jpg"
-' _ "$binary" "$mode" "$root" "$variant"
+' _ "$binary" "$mode" "$root" "$variant" "$extra" "$restart"

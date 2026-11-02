@@ -2193,6 +2193,11 @@ bool DecodiumBridge::startSstvRadiofaxTx(int ioc, int linesPerMinute)
 
 bool DecodiumBridge::startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, bool centeredPhasing)
 {
+    return startSstvRadiofaxTxProfile(ioc, linesPerMinute, centeredPhasing, false);
+}
+
+bool DecodiumBridge::startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, bool centeredPhasing, bool wmoDeadSector)
+{
 #if DECODIUM_HAS_SSTV
     Q_ASSERT(QThread::currentThread() == thread());
     if (!m_sstvTxCoordinator) initialiseSstvTx();
@@ -2224,6 +2229,7 @@ bool DecodiumBridge::startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, boo
     config.ioc = ioc == 288 ? decodium::sstv::SstvFaxIoc::Ioc288 : decodium::sstv::SstvFaxIoc::Ioc576;
     config.linesPerMinute = static_cast<std::uint16_t>(linesPerMinute);
     config.centeredPhasingWithWhiteEndLine = centeredPhasing;
+    config.wmoDeadSector = wmoDeadSector;
     config.sampleRate = 48'000U;
     config.width = static_cast<std::uint32_t>(prepared->width());
     config.height = static_cast<std::uint32_t>(prepared->height());
@@ -2276,7 +2282,7 @@ bool DecodiumBridge::startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, boo
     emit statusMessage(tr("Experimental Radiofax TX accepted"));
     return true;
 #else
-    Q_UNUSED(ioc) Q_UNUSED(linesPerMinute) Q_UNUSED(centeredPhasing)
+    Q_UNUSED(ioc) Q_UNUSED(linesPerMinute) Q_UNUSED(centeredPhasing) Q_UNUSED(wmoDeadSector)
     emit errorMessage(tr("This Decodium build has no native SSTV support"));
     return false;
 #endif
@@ -2654,6 +2660,7 @@ QVariantMap DecodiumBridge::sstvRxControls() const
     result.insert(QStringLiteral("radiofaxIoc"), fax ? int(fax->ioc) : 576);
     result.insert(QStringLiteral("radiofaxWidth"), fax ? int(fax->width) : 1809);
     result.insert(QStringLiteral("radiofaxCenteredPhasing"), fax && fax->centeredPhasingWithWhiteEndLine);
+    result.insert(QStringLiteral("radiofaxWmoDeadSector"), fax && fax->wmoDeadSector);
     result.insert(QStringLiteral("radiofaxHeight"), fax ? int(fax->height) : 1000);
     result.insert(QStringLiteral("modeControl"),
                   sstvRxModeControlName(controls.settings.modeControl));
@@ -5639,6 +5646,12 @@ bool DecodiumBridge::configureSstvRadiofaxRx(bool enabled, int ioc, int width, i
 bool DecodiumBridge::configureSstvRadiofaxRxAligned(bool enabled, int ioc, int width, int height,
                                                     bool centeredPhasingWithWhiteEndLine)
 {
+    return configureSstvRadiofaxRxProfile(enabled, ioc, width, height, centeredPhasingWithWhiteEndLine, false);
+}
+
+bool DecodiumBridge::configureSstvRadiofaxRxProfile(bool enabled, int ioc, int width, int height,
+                                                    bool centeredPhasingWithWhiteEndLine, bool wmoDeadSector)
+{
 #if DECODIUM_HAS_SSTV
     initialiseSstvRuntime();
     if (!m_sstvRxRuntime || m_sstvRxRequested || m_sstvRedecodeActive
@@ -5652,12 +5665,13 @@ bool DecodiumBridge::configureSstvRadiofaxRxAligned(bool enabled, int ioc, int w
         config->width = static_cast<std::uint32_t>(width);
         config->height = static_cast<std::uint32_t>(height);
         config->centeredPhasingWithWhiteEndLine = centeredPhasingWithWhiteEndLine;
+        config->wmoDeadSector = wmoDeadSector;
     }
     const bool accepted = m_sstvRxRuntime->setRadiofaxConfig(config);
     if (accepted) emit sstvRxSnapshotChanged();
     return accepted;
 #else
-    Q_UNUSED(enabled) Q_UNUSED(ioc) Q_UNUSED(width) Q_UNUSED(height) Q_UNUSED(centeredPhasingWithWhiteEndLine)
+    Q_UNUSED(enabled) Q_UNUSED(ioc) Q_UNUSED(width) Q_UNUSED(height) Q_UNUSED(centeredPhasingWithWhiteEndLine) Q_UNUSED(wmoDeadSector)
     return false;
 #endif
 }

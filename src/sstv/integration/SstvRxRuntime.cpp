@@ -2030,9 +2030,15 @@ bool SstvRxRuntime::processChunk(WorkerPipeline& pipeline,
         if (pipeline.radiofaxAudioStop) {
             const auto stop = pipeline.radiofaxAudioStop->consume(
                 resampled.data(), resampled.size(),
-                pipeline.radiofax->state() == SstvRadiofaxAutoRxState::Receiving);
-            if (stop && pipeline.radiofax->stopAtAudioSample(*stop))
+                pipeline.radiofax->state() == SstvRadiofaxAutoRxState::Receiving,
+                pipeline.radiofax->imageStartSample().value_or(0U));
+            if (stop && pipeline.radiofax->stopAtAudioSample(*stop)) {
                 publishRadiofaxImage(pipeline, true);
+                if (m_radiofaxConfig) {
+                    pipeline.radiofax = std::make_unique<SstvRadiofaxAutoRx>(*m_radiofaxConfig);
+                    pipeline.radiofaxAcquisitionId = m_nextRadiofaxAcquisitionId++;
+                }
+            }
         }
     } else {
     // Close an image that reaches its exact end in this chunk before looking
@@ -5205,16 +5211,22 @@ void SstvRxRuntime::consumeFax480Observations(
     if (!pipeline.fax480 || observations.empty()) return;
     for (std::size_t offset=0;offset<observations.size();) {
         const auto count=std::min(observations.size()-offset,SstvFax480Receiver::MaximumObservationsPerConsume);
-        pipeline.fax480->consume(observations.data()+offset,count);
-        offset+=count;
-    }
-    const auto end=observations.back().centreSample;
-    if (pipeline.fax480->acquired() && (pipeline.fax480->complete()
-        || end-pipeline.fax480LastPublish>=SstvResampler::kOutputSampleRate)) {
-        const bool done=pipeline.fax480->complete();
-        publishFax480Image(pipeline,false);
-        pipeline.fax480LastPublish=end;
-        if (done) pipeline.fax480.reset();
+        const auto consumed=pipeline.fax480->consume(observations.data()+offset,count);
+        if (!consumed) break;
+        offset+=consumed;
+        const auto end=observations[offset-1U].centreSample;
+        if (pipeline.fax480->acquired() && (pipeline.fax480->complete()
+            || end-pipeline.fax480LastPublish>=SstvResampler::kOutputSampleRate)) {
+            const bool done=pipeline.fax480->complete();
+            publishFax480Image(pipeline,false);
+            pipeline.fax480LastPublish=end;
+            if (done) {
+                pipeline.fax480=std::make_unique<SstvFax480AutoRx>(
+                    *m_fax480Config,SstvResampler::kOutputSampleRate);
+                pipeline.fax480Revision=0U;
+                pipeline.radiofaxAcquisitionId=m_nextRadiofaxAcquisitionId++;
+            }
+        }
     }
 }
 
@@ -5237,8 +5249,10 @@ void SstvRxRuntime::publishFax480Image(WorkerPipeline& pipeline, bool partial)
     }
     image->coveredComponents=image->completedPixels*3U;
     ImageSummary summary;
-    summary.available=true; summary.complete=pipeline.fax480->complete() && !partial;
-    summary.partial=partial || (summary.complete && !image->isComplete());
+    const bool frameEnded=pipeline.fax480->complete();
+    summary.available=true;
+    summary.complete=frameEnded && !partial && image->isComplete();
+    summary.partial=partial || (frameEnded && !image->isComplete());
     summary.acquisitionId=pipeline.radiofaxAcquisitionId; summary.generation=pipeline.generation;
     summary.revision=image->revision; summary.width=image->width; summary.height=image->height;
     summary.coveredComponents=image->coveredComponents; summary.completedPixels=image->completedPixels;
@@ -5258,16 +5272,24 @@ void SstvRxRuntime::consumeRadiofaxObservations(
     WorkerPipeline& pipeline, const std::vector<SstvFrequencyObservation>& observations)
 {
     if (!pipeline.radiofax) return;
-    const auto before = pipeline.radiofax->state();
     for (std::size_t offset = 0U; offset < observations.size();) {
+        const auto before = pipeline.radiofax->state();
         const std::size_t count = std::min(observations.size() - offset,
             SstvRadiofaxRxSession::MaximumObservationsPerConsume);
-        pipeline.radiofax->consume(observations.data() + offset, count);
-        offset += count;
+        const std::size_t consumed = pipeline.radiofax->consume(observations.data() + offset, count);
+        offset += consumed;
+        const auto after = pipeline.radiofax->state();
+        const bool dirty = !pipeline.radiofax->takeDirtyEvents().empty();
+        if (dirty || after != before) publishRadiofaxImage(pipeline, after != before);
+        if ((after == SstvRadiofaxAutoRxState::Complete || after == SstvRadiofaxAutoRxState::Partial)
+            && m_radiofaxConfig) {
+            pipeline.radiofax = std::make_unique<SstvRadiofaxAutoRx>(*m_radiofaxConfig);
+            pipeline.radiofaxAcquisitionId = m_nextRadiofaxAcquisitionId++;
+            continue;
+        }
+        if (consumed == 0U || after == SstvRadiofaxAutoRxState::Failed
+            || after == SstvRadiofaxAutoRxState::Cancelled) break;
     }
-    const bool dirty = !pipeline.radiofax->takeDirtyEvents().empty();
-    if (dirty || pipeline.radiofax->state() != before)
-        publishRadiofaxImage(pipeline, pipeline.radiofax->state() != before);
 }
 
 void SstvRxRuntime::publishRadiofaxImage(WorkerPipeline& pipeline, bool force)
