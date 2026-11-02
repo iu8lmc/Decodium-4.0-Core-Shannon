@@ -38,6 +38,7 @@ KNOWN_SYSTEM = {
     "evr.dll", "propsys.dll", "wlanapi.dll", "bthprops.cpl", "hid.dll", "normaliz.dll",
     "wsock32.dll", "oleacc.dll", "uiautomationcore.dll", "msimg32.dll", "ncrypt.dll",
     "sechost.dll", "cabinet.dll", "winusb.dll", "usp10.dll", "gdiplus.dll", "d3d10.dll",
+    "authz.dll", "cryptsp.dll", "odbc32.dll", "pdh.dll",
 }
 
 

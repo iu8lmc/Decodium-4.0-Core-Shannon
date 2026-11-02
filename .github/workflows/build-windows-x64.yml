@@ -585,6 +585,22 @@ jobs:
 
           Get-ChildItem $outputDir
 
+      - name: Verify installed Windows runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:GITHUB_WORKSPACE "installer-output/$env:INSTALLER_BASENAME.exe"
+          $installed = Join-Path $env:RUNNER_TEMP 'decodium-installed-test'
+          $process = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ("/DIR=`"$installed`"")) -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed with exit code $($process.ExitCode)" }
+          if (-not (Test-Path (Join-Path $installed 'libcrypto-3-x64.dll'))) { throw 'Installed OpenSSL crypto DLL is missing' }
+          if (-not (Test-Path (Join-Path $installed 'decodium.exe'))) { throw 'Installed executable is missing' }
+          python scripts/ci/check-bundle-dlls.py $installed
+          if ($LASTEXITCODE -ne 0) { throw 'Installed application has unresolved DLL imports' }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $probe = Start-Process -FilePath (Join-Path $installed 'decodium.exe') -ArgumentList '--version' -WorkingDirectory $installed -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "Installed application failed to start: $($probe.ExitCode)" }
+
       - name: Upload portable bundle
         uses: actions/upload-artifact@v6
         with:
