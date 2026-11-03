@@ -27,6 +27,7 @@ This release collects the changes made since 1.0.735 to experimental SSTV, digit
 - Improves FT4/FT8 hash-seeding lifecycle on mode changes, allowing obsolete work to be cancelled and the reusable worker to resume safely when returning to a mode.
 - Revises RTL-SDR audio output thread creation and shutdown, protects against stale callbacks and makes the enabled-state cache respect the active settings profile. Adds profile-switch and restart coverage.
 - Adds focused tests, fixtures and reproducible laboratories for SSTV, sharing, HAMDRM and profile handling, and updates native SSTV and test workflow configuration.
+- Fixes a GCC warning treated as an error in the test-mode SDR lifecycle loop, restoring Linux release compilation.
 
 ### Compatibility and known limits
 
@@ -59,6 +60,7 @@ Questa versione raccoglie le modifiche dalla 1.0.735 per SSTV sperimentale, scam
 - Migliora il caricamento degli hash FT4/FT8 durante il cambio modalità, annullando il lavoro superato e consentendo al worker riutilizzabile di riprendere quando si torna alla modalità.
 - Rivede avvio e arresto del thread audio RTL-SDR, protegge dalle callback non più valide e mantiene la cache dell'abilitazione coerente con il profilo attivo. Aggiunge prove di cambio profilo e riavvio.
 - Aggiunge test mirati, fixture e laboratori riproducibili per SSTV, condivisione, HAMDRM e profili, e aggiorna i workflow di test SSTV nativo.
+- Corregge un avviso GCC trattato come errore nel ciclo di diagnostica SDR usato dai test, ripristinando la compilazione Linux per la release.
 
 ### Compatibilità e limiti noti
 

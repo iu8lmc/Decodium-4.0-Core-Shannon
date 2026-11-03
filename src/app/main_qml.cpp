@@ -3451,7 +3451,7 @@ int main(int argc, char* argv[])
     DecodiumBridge bridge;
     if (parser.isSet(testOption)
         && qEnvironmentVariableIntValue("DECODIUM_LAB_SDR_LIFECYCLE") > 0) {
-        for (const auto step : {std::pair<int, bool>{8000, true}, {15000, false},
+        for (const auto& step : {std::pair<int, bool>{8000, true}, {15000, false},
                                 {25000, true}, {35000, false}, {45000, true}}) {
             QTimer::singleShot(step.first, &bridge, [&bridge, enabled = step.second]() {
                 qInfo() << "[SDRLIFE] request enabled=" << enabled;
