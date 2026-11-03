@@ -1,9 +1,54 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SstvRadiofaxPhasing.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
 namespace decodium::sstv {
+
+SstvRadiofaxAptStartDetector::SstvRadiofaxAptStartDetector(
+    std::uint32_t sampleRate, SstvFaxIoc ioc, double frequencyOffsetHz)
+    : rate_(sampleRate), offset_(frequencyOffsetHz),
+      period_(double(sampleRate) / (ioc == SstvFaxIoc::Ioc576 ? 300.0 : 675.0))
+{
+    if (sampleRate < 8000U || sampleRate > 384000U
+        || (ioc != SstvFaxIoc::Ioc288 && ioc != SstvFaxIoc::Ioc576)
+        || !std::isfinite(offset_) || std::abs(offset_) > 400.0)
+        throw std::invalid_argument("invalid radiofax APT start detector configuration");
+}
+
+void SstvRadiofaxAptStartDetector::consume(const SstvFrequencyObservation& obs) noexcept
+{
+    if (haveSample_ && obs.centreSample < lastSample_) {
+        consecutive_ = 0U; haveWhiteEdge_ = false; tone_ = 0;
+        lastAptWhiteEdge_.reset();
+    }
+    if (haveSample_ && obs.centreSample - lastSample_ > rate_ / 100U) {
+        consecutive_ = 0U; haveWhiteEdge_ = false; tone_ = 0;
+    }
+    lastSample_ = obs.centreSample;
+    haveSample_ = true;
+    if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz)
+        || !std::isfinite(obs.confidence) || obs.confidence < 0.2 || obs.confidence > 1.0)
+        return;
+    const double f = obs.correctedFrequencyHz - offset_;
+    const int tone = f >= 1350.0 && f <= 1700.0 ? -1
+        : (f >= 2100.0 && f <= 2450.0 ? 1 : 0);
+    if (!tone || tone == tone_) return;
+    if (tone == 1 && tone_ == -1) {
+        if (haveWhiteEdge_) {
+            const double gap = double(obs.centreSample - lastWhiteEdge_);
+            if (std::abs(gap - period_) <= std::max(3.0, period_ * 0.08)) {
+                if (consecutive_ < 100000U) ++consecutive_;
+                if (double(consecutive_) * period_ >= double(rate_))
+                    lastAptWhiteEdge_ = obs.centreSample;
+            } else consecutive_ = 0U;
+        }
+        lastWhiteEdge_ = obs.centreSample;
+        haveWhiteEdge_ = true;
+    }
+    tone_ = tone;
+}
 
 SstvRadiofaxClockTracker::SstvRadiofaxClockTracker(std::uint32_t sampleRate,
                                                    SstvRadiofaxPhaseLock lock,
@@ -20,6 +65,16 @@ SstvRadiofaxClockTracker::SstvRadiofaxClockTracker(std::uint32_t sampleRate,
         throw std::invalid_argument("invalid radiofax clock tracker configuration");
 }
 
+void SstvRadiofaxClockTracker::setPhaseReference(std::uint64_t edge, SstvRadiofaxClockEstimate clock) noexcept
+{
+    if (!clock.lines || !clock.samples || edge > lastObservation_) return;
+    const double nominal = double(rate_) * 60.0 / lock_.linesPerMinute;
+    const double period = double(clock.samples) / double(clock.lines);
+    if (std::abs(period - nominal) > nominal * kRadiofaxMaximumClockDeviation) return;
+    phaseReference_ = clock;
+    referenceEdge_ = edge;
+}
+
 void SstvRadiofaxClockTracker::consume(const SstvFrequencyObservation& obs) noexcept
 {
     if (!valid_) return;
@@ -29,6 +84,25 @@ void SstvRadiofaxClockTracker::consume(const SstvFrequencyObservation& obs) noex
         return;
     }
     lastObservation_ = obs.centreSample;
+    // An initially confirmed tracker has no phaseReference_, but its
+    // estimate must also expire when subsequent phasing pulses disappear.
+    if (!phaseReference_) {
+        if (const auto confirmed = estimate()) {
+            const double period = double(confirmed->samples) / double(confirmed->lines);
+            if (obs.centreSample > last_ && double(obs.centreSample - last_) > 4.5 * period) {
+                valid_ = false;
+                return;
+            }
+        }
+    }
+    if (phaseReference_) {
+        const double period = double(phaseReference_->samples) / double(phaseReference_->lines);
+        const auto anchor = haveFirst_ ? last_ : referenceEdge_;
+        if (obs.centreSample > anchor && double(obs.centreSample - anchor) > 4.5 * period) {
+            valid_ = false;
+            return;
+        }
+    }
     if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz)
         || !std::isfinite(obs.confidence) || obs.confidence < 0.2 || obs.confidence > 1.0) return;
     const double frequency = obs.correctedFrequencyHz - offset_;
@@ -43,6 +117,16 @@ void SstvRadiofaxClockTracker::consume(const SstvFrequencyObservation& obs) noex
         const double expected = lock_.pattern == SstvFaxPhasePattern::Symmetric ? 0.5 : 0.05;
         const double tolerance = lock_.pattern == SstvFaxPhasePattern::Symmetric ? 0.06 : 0.025;
         if (std::abs(width - expected) <= tolerance) {
+            if (phaseReference_ && edge_ >= referenceEdge_) {
+                const double period = double(phaseReference_->samples) / double(phaseReference_->lines);
+                const double elapsed = double(edge_ - referenceEdge_);
+                const double lines = std::round(elapsed / period);
+                if (std::abs(elapsed - lines * period) > period * 0.08) {
+                    ++ignoredIrregularPulses_;
+                    tone_ = tone;
+                    return;
+                }
+            }
             if (!haveFirst_) {
                 first_ = last_ = edge_;
                 haveFirst_ = true;
@@ -56,9 +140,17 @@ void SstvRadiofaxClockTracker::consume(const SstvFrequencyObservation& obs) noex
                 if (lines == 0U || lines > 4U
                     || std::abs(observed - nominal) > nominal * kRadiofaxMaximumClockDeviation
                     || (lines_ && std::abs(observed - tracked) > nominal * 0.005)) {
-                    valid_ = false;
+                    // A single pulse-shaped interference event is not enough
+                    // to discard an established clock. Do not include it in
+                    // the estimate; a second consecutive irregular pulse
+                    // invalidates the tracker as before for persistent drift.
+                    if (pulses_ < 6U || lines_ < 8U
+                        || ++consecutiveIrregularPulses_ >= 2U) valid_ = false;
+                    else ++ignoredIrregularPulses_;
+                    tone_ = tone;
                     return;
                 }
+                consecutiveIrregularPulses_ = 0U;
                 lines_ += lines;
                 last_ = edge_;
                 ++pulses_;
@@ -72,6 +164,18 @@ std::optional<SstvRadiofaxClockEstimate> SstvRadiofaxClockTracker::estimate() co
 {
     if (!valid_ || pulses_ < 6U || lines_ < 8U || last_ <= first_
         || last_ - first_ < std::uint64_t(rate_) * 2U) return std::nullopt;
+    return SstvRadiofaxClockEstimate {last_ - first_, lines_};
+}
+
+std::optional<SstvRadiofaxClockEstimate> SstvRadiofaxClockTracker::provisionalEstimate() const noexcept
+{
+    // Two consecutive edges are usable only after a previously confirmed
+    // phase reference; otherwise require at least three. Gaps and pending
+    // irregular pulses invalidate this provisional hint in either case.
+    if (!valid_ || consecutiveIrregularPulses_
+        || (pulses_ < 3U && !(phaseReference_ && pulses_ == 2U))
+        || lines_ != pulses_ - 1U || last_ <= first_)
+        return std::nullopt;
     return SstvRadiofaxClockEstimate {last_ - first_, lines_};
 }
 
@@ -126,13 +230,23 @@ std::optional<SstvRadiofaxPhaseLock> SstvRadiofaxPhasingDetector::consume(
                 if (rpm && (symmetric || shortWhite)) {
                     const auto pattern = symmetric ? SstvFaxPhasePattern::Symmetric
                                                    : SstvFaxPhasePattern::WhiteFivePercent;
-                    matches_ = candidateRpm_ == rpm && candidatePattern_ == pattern ? matches_ + 1U : 1U;
+                    if (candidateRpm_ == rpm && candidatePattern_ == pattern) {
+                        candidatePeriods_[matches_++] = period;
+                    } else {
+                        matches_ = 1U;
+                        candidatePeriods_[0] = period;
+                    }
                     candidateRpm_ = rpm;
                     candidatePattern_ = pattern;
-                    if (matches_ >= 3U) lock_ = SstvRadiofaxPhaseLock {rpm, pattern, obs.centreSample, period};
+                    if (matches_ >= 3U) {
+                        auto periods = candidatePeriods_;
+                        std::sort(periods.begin(), periods.end());
+                        lock_ = SstvRadiofaxPhaseLock {rpm, pattern, obs.centreSample, periods[1]};
+                    }
                 } else {
                     matches_ = 0U;
                     candidateRpm_ = 0U;
+                    candidatePeriods_.fill(0U);
                 }
             }
             whiteEdge_ = obs.centreSample;
@@ -157,6 +271,7 @@ void SstvRadiofaxPhasingDetector::reset() noexcept
     tone_ = 0;
     candidateRpm_ = 0U;
     matches_ = 0U;
+    candidatePeriods_.fill(0U);
     lock_.reset();
 }
 
@@ -178,13 +293,12 @@ SstvRadiofaxImageStartDetector::SstvRadiofaxImageStartDetector(
         || lock.latestWhiteEdgeSample > UINT64_MAX - static_cast<std::uint64_t>(sampleRate) * 3601U) {
         throw std::invalid_argument("invalid radiofax image-start detector configuration");
     }
+    // Acquisition supplies the median of three accepted periods. Keep nominal
+    // timing for small edge jitter, but seed earlier for a material offset so
+    // narrow pulses do not drift out of the image-start detector's window.
     const double nominal = double(sampleRate_) * 60.0 / lock_.linesPerMinute;
-    // Retain the nominal anchor for ordinary small offsets: a single measured
-    // period can include demodulator edge jitter. Only seed early tracking
-    // when the offset would otherwise invalidate phasing before the longer
-    // multi-pulse estimate becomes available.
     if (lock.detectedPeriodSamples
-        && std::abs(double(lock.detectedPeriodSamples) - nominal) > nominal * 0.005)
+        && std::abs(double(lock.detectedPeriodSamples) - nominal) > nominal * 0.002)
         setClockEstimate(SstvRadiofaxClockEstimate {lock.detectedPeriodSamples, 1U});
 }
 

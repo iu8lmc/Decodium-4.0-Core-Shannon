@@ -3,6 +3,7 @@
 #pragma once
 
 #include "HamDrmImageValidator.h"
+#include "HamDrmHybridFtp.h"
 #include "HamDrmJpeg2000Codec.h"
 #include "HamDrmMotCodec.h"
 #include "HamDrmObjectAssembler.h"
@@ -135,6 +136,7 @@ struct HamDrmControllerConfig final
     std::size_t maximumCompletedBytes {32U * 1024U * 1024U};
     std::size_t txBodySegmentBytes {1'024U};
     std::size_t maximumErrorCharacters {1'024U};
+    quint16 hybridFtpPort {21}; // protocol default; injectable for local tests
 };
 
 // Owner-thread application facade.  It exposes stable profile IDs and named
@@ -170,9 +172,12 @@ class HamDrmController final : public QObject,
     Q_PROPERTY(double txProgress READ txProgress NOTIFY operationStateChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY operationStateChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(bool hybridDownloadBusy READ hybridDownloadBusy NOTIFY hybridDownloadBusyChanged)
     Q_PROPERTY(QVariantList inbox READ inbox NOTIFY inboxChanged)
     Q_PROPERTY(int selectedTransportId READ selectedTransportId
                NOTIFY selectedObjectChanged)
+    Q_PROPERTY(bool canSaveSelectedImage READ canSaveSelectedImage NOTIFY selectedObjectChanged)
+    Q_PROPERTY(bool selectedImageStructuralOnly READ selectedImageStructuralOnly NOTIFY selectedObjectChanged)
     Q_PROPERTY(QVariantList missingSegments READ missingSegments
                NOTIFY selectedObjectChanged)
     Q_PROPERTY(QString missingSegmentsText READ missingSegmentsText
@@ -231,9 +236,12 @@ public:
     double txProgress() const noexcept;
     bool busy() const noexcept;
     QString error() const;
+    bool hybridDownloadBusy() const noexcept { return hybridDownloadId_ >= 0; }
 
     QVariantList inbox() const;
     int selectedTransportId() const noexcept;
+    bool canSaveSelectedImage() const noexcept;
+    bool selectedImageStructuralOnly() const noexcept;
     QVariantList missingSegments() const;
     QString missingSegmentsText() const;
     bool canBuildBsr() const;
@@ -246,6 +254,9 @@ public:
     Q_INVOKABLE bool startRx();
     Q_INVOKABLE bool startTx(const QUrl& localImage);
     Q_INVOKABLE bool startTxWithRs(const QUrl& localImage, int level);
+    Q_INVOKABLE bool startHybridTx(const QUrl& localImage, const QString& callsign,
+                                   const QString& host, const QString& user,
+                                   const QString& password, const QString& directory);
     Q_INVOKABLE bool tryRsRecovery(int transportId);
     Q_INVOKABLE bool cancelRx();
     Q_INVOKABLE bool cancelTx();
@@ -258,6 +269,11 @@ public:
     Q_INVOKABLE bool startBsrRepair();
     Q_INVOKABLE bool resumePartial(int transportId);
     Q_INVOKABLE bool discardObject(int transportId);
+    Q_INVOKABLE bool downloadHybrid(int transportId, const QUrl& destination);
+    Q_INVOKABLE bool downloadHybridIfUnchanged(int transportId, const QUrl& destination,
+                                              const QString& referenceToken);
+    Q_INVOKABLE bool cancelHybridDownload();
+    Q_INVOKABLE bool saveCompletedImage(int transportId, const QUrl& destination);
     Q_INVOKABLE void clearError();
 
     // Owner-thread handoff for an adapter that already has a complete MOT
@@ -286,7 +302,12 @@ signals:
     void txImageAccepted(QImage image,
                          QString profileId,
                          int occupiedBandwidthHz);
+    void receivedImageReady(QImage image, QString profileId, bool hybrid);
     void objectCompleted(quint16 transportId, const QString& filename);
+    // A radio reference is not an image; file retrieval is a separate step.
+    void hybridReferenceReceived(quint16 transportId, const QString& filename);
+    void hybridDownloadBusyChanged();
+    void hybridDownloadFinished(bool success);
     void operationRejected(const QString& operation, const QString& detail);
 
 private:
@@ -386,6 +407,19 @@ private:
     std::uint64_t sessionSequence_ {0U};
     std::uint64_t rxSessionId_ {0U};
     std::uint64_t txSessionId_ {0U};
+    HamDrmHybridFtp hybridFtp_;
+    HamDrmHybridFtp hybridUploadFtp_;
+    struct HybridUpload final {
+        HamDrmEncodedObject object;
+        QImage image;
+        QString profileId;
+        int occupiedBandwidthHz {0};
+    };
+    std::optional<HybridUpload> hybridUpload_;
+    bool hybridUploadCancelRequested_ {false};
+    int hybridDownloadId_ {-1};
+    QString hybridDownloadToken_;
+    QUrl hybridDownloadDestination_;
 };
 
 } // namespace decodium::sstv::hamdrm

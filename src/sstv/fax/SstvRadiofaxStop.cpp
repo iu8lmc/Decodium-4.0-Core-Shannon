@@ -60,7 +60,7 @@ std::optional<std::uint64_t> SstvRadiofaxStopDetector::consume(
         }
         ++total_;
         if (obs.valid() && std::isfinite(obs.correctedFrequencyHz)
-            && std::isfinite(obs.confidence) && obs.confidence >= 0.2) {
+            && std::isfinite(obs.confidence) && obs.confidence >= 0.2 && obs.confidence <= 1.0) {
             const double value = obs.correctedFrequencyHz - offset_ - 1900.0;
             for (std::size_t bin = 0U; bin < kModulationBins; ++bin) {
                 const auto phaseIndex = (obs.centreSample % (2U * rate_)) * (880U + bin) % (2U * rate_);

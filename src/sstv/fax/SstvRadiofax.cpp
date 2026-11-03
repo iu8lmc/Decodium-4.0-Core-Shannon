@@ -19,6 +19,7 @@ SstvRadiofaxMapper::SstvRadiofaxMapper(SstvFaxConfig config) : config_(config)
         || (config.centeredPhasingWithWhiteEndLine
             && config.phasing != SstvFaxPhasePattern::WhiteFivePercent)
         || (config.centeredPhasingWithWhiteEndLine && config.wmoDeadSector)
+        || (config.centeredPhasingWithWhiteEndLine && config.wmoTimedPhasing)
         || (config.phasing != SstvFaxPhasePattern::Symmetric
             && config.phasing != SstvFaxPhasePattern::WhiteFivePercent)) {
         throw std::invalid_argument("invalid radiofax profile");

@@ -1,0 +1,11 @@
+--- a/core/decode/sstv.cpp
++++ b/core/decode/sstv.cpp
+@@ -631,7 +631,7 @@
+         image.nominal = ms(mode->period_ms());
+         image.offset_hz = offset;
+         image.fit_start = image.start;
+-        image.fit_period = image.nominal * ratio;
++        image.fit_period = image.nominal * (mode->avt_header ? 1.0 : ratio);
+         stats_.last_period_ratio = ratio;
+         image_ = std::move(image);
+         scans_.assign(3, std::vector<std::vector<std::uint8_t>>(

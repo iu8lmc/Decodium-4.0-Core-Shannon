@@ -2,8 +2,10 @@
 
 Status: living security model and implementation ledger, 2026-08-24. Rows below
 remain release requirements unless the current-evidence section explicitly says
-that the native control exists and has focused test coverage. No production
-sharing backend, peer/relay or E2EE implementation is claimed.
+that the native control exists and has focused test coverage. The later
+experimental client-side E2EE implementation and its evidence are recorded
+in [E2EE_IMPLEMENTATION.md](E2EE_IMPLEMENTATION.md); no production sharing
+backend, peer/relay or independent security audit is claimed.
 
 ## Scope and repository evidence
 
@@ -208,10 +210,17 @@ the sharing SQLite tables. The controller's concrete current source calls
 `secure_settings::Backend` availability/lookup/store/remove directly and does
 not use `load_or_import()` or `value_for_write()`, whose fallback can return
 plaintext for ordinary settings. This currently covers configured Bearer/Basic
-provider secrets; future refresh tokens, signed-target leases and E2EE keys must
-obey the same boundary.
+provider secrets and the experimental E2EE key store; future refresh tokens
+and signed-target leases must obey the same boundary.
 
-E2EE is a capability and policy, not a checked box. Until an audited cryptographic library is selected, packaged on all release platforms and tested, E2EE remains **not implemented**. TLS-only sharing may be implemented, but the UI must state that the provider can read content. A user selecting “E2EE required” cannot send through a TLS-only provider.
+The client implements an experimental X25519/HKDF-SHA256 and AES-256-GCM
+envelope using OpenSSL. Optional P-256 signatures authenticate the sender only
+when its key is independently pinned and the signature is verified. Unsigned
+envelopes do not authenticate their sender. TLS-only sharing permits the
+provider to read content; requiring E2EE must fail closed rather than fall
+back to TLS-only. The experimental protocol and its integration have not had an
+independent security audit. See the implementation ledger for the exact local
+tests, provider limitations, key handling and remaining evidence.
 
 ## Required security test evidence
 

@@ -2,6 +2,7 @@ set (DECODIUM_HAMDRM_CORE_SOURCES
   HamDrmBsrCodec.cpp
   HamDrmCrc.cpp
   HamDrmImageValidator.cpp
+  HamDrmHybridCodec.cpp
   HamDrmMotCodec.cpp
   HamDrmObjectAssembler.cpp
   HamDrmProfileRegistry.cpp
@@ -25,6 +26,7 @@ set (DECODIUM_HAMDRM_CORE_HEADERS
   HamDrmBsrCodec.h
   HamDrmCrc.h
   HamDrmImageValidator.h
+  HamDrmHybridCodec.h
   HamDrmMotCodec.h
   HamDrmObjectAssembler.h
   HamDrmProfileRegistry.h
@@ -142,6 +144,8 @@ set_target_properties (decodium_sstv_hamdrm_openjpeg PROPERTIES
 add_library (decodium_sstv_hamdrm_ui STATIC
   HamDrmController.cpp
   HamDrmController.h
+  HamDrmHybridFtp.cpp
+  HamDrmHybridFtp.h
   )
 add_library (Decodium::HamDrmUi ALIAS decodium_sstv_hamdrm_ui)
 target_include_directories (decodium_sstv_hamdrm_ui
@@ -156,6 +160,7 @@ target_link_libraries (decodium_sstv_hamdrm_ui
     Decodium::HamDrmOpenJpeg
     Qt6::Core
     Qt6::Gui
+    Qt6::Network
   )
 target_compile_features (decodium_sstv_hamdrm_ui PUBLIC cxx_std_17)
 set_target_properties (decodium_sstv_hamdrm_ui PROPERTIES

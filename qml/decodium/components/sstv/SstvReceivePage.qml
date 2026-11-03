@@ -389,9 +389,10 @@ SstvPage {
                             objectName: "sstvRadiofaxApply"
                             text: qsTr("Apply")
                             onClicked: {
-                                const ok = root.engine.configureSstvRadiofaxRxProfile(
+                                const ok = root.engine.configureSstvRadiofaxRxAdvanced(
                                     faxEnabled.checked, Number(faxIoc.currentText),
-                                    faxWidth.value, faxHeight.value, faxFldigiAlignment.checked, faxWmoDeadSector.checked)
+                                    faxWidth.value, faxHeight.value, faxFldigiAlignment.checked,
+                                    faxWmoDeadSector.checked, faxWmoTimedPhasing.checked)
                                 root.feedback = ok ? qsTr("Receiver profile applied")
                                                    : qsTr("Radiofax profile rejected; check settings or disable FAX480")
                             }
@@ -403,7 +404,7 @@ SstvPage {
                         enabled: faxEnabled.checked && root.engine && !root.engine.sstvRxActive && !root.replayActive
                         checked: !!root.controls.radiofaxCenteredPhasing
                         text: qsTr("FLdigi phasing: centered stripe and white end line")
-                        onToggled: if (checked) faxWmoDeadSector.checked = false
+                        onCheckedChanged: if (checked) { faxWmoDeadSector.checked = false; faxWmoTimedPhasing.checked = false }
                     }
                     CheckBox {
                         id: faxWmoDeadSector
@@ -412,6 +413,14 @@ SstvPage {
                         checked: !!root.controls.radiofaxWmoDeadSector
                         text: qsTr("WMO 4.5% white dead sector (width is active image)")
                         onToggled: if (checked) faxFldigiAlignment.checked = false
+                    }
+                    CheckBox {
+                        id: faxWmoTimedPhasing
+                        objectName: "sstvRadiofaxWmoTimedPhasing"
+                        enabled: faxEnabled.checked && root.engine && !root.engine.sstvRxActive && !root.replayActive
+                        checked: !!root.controls.radiofaxWmoTimedPhasing
+                        text: qsTr("Use 30-second WMO phasing after IOC start signal")
+                        onCheckedChanged: if (checked) faxFldigiAlignment.checked = false
                     }
                     Label {
                         Layout.fillWidth: true
@@ -451,7 +460,7 @@ SstvPage {
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: qsTr("Requires the selected start signal; stop and restart RX for another image.")
+                    text: qsTr("Requires the selected start signal; the receiver searches for the next image automatically.")
                     color: root.secondaryTextColor
                     font.pixelSize: 10
                     wrapMode: Text.Wrap
@@ -768,6 +777,20 @@ SstvPage {
                             }
                         }
                         SstvButton {
+                            objectName: "sstvRxSaveRecentAudio"
+                            text: qsTr("Save recent audio")
+                            enabled: !!(root.engine && root.engine.sstvStorageReady
+                                         && !root.audioJobBusy
+                                         && Number(root.stats.replayRetainedSamples || 0) > 0)
+                            Accessible.name: qsTr("Save the recent receiver audio buffer, including audio after the last recognised image")
+                            onClicked: {
+                                if (root.engine)
+                                    root.feedback = root.engine.saveSstvRecentRxAudio()
+                                            ? ""
+                                            : qsTr("Recent diagnostic WAV could not be saved")
+                            }
+                        }
+                        SstvButton {
                             objectName: "sstvRxCancelAudioJob"
                             text: qsTr("Cancel audio job")
                             visible: root.audioJobBusy
@@ -993,12 +1016,18 @@ SstvPage {
                     implicitHeight: 24
                     radius: 12
                     color: Qt.rgba(0, 0, 0, 0.72)
-                    border.color: root.stats && root.stats.imageComplete
+                    border.color: root.stats && root.stats.imageRadiofaxClockProvisional
+                                  ? root.warningColor
+                                  : root.stats && root.stats.imageComplete
                                   ? root.successColor : root.borderColor
                     Label {
                         id: imageProgressLabel
                         anchors.centerIn: parent
-                        text: root.stats && root.stats.imageComplete
+                        objectName: "sstvImageProgressLabel"
+                        text: root.stats && root.stats.imageRadiofaxClockProvisional
+                              ? qsTr("Radiofax · provisional timing · %1 lines")
+                                  .arg(root.textValue("imageLinesPublished", "0"))
+                              : root.stats && root.stats.imageComplete
                               ? qsTr("Complete · %1").arg(root.textValue("imageMode", qsTr("SSTV")))
                               : root.stats && root.stats.imageRadiofaxStopDetected
                                 ? qsTr("Radiofax stop · %1 lines")
@@ -1008,7 +1037,9 @@ SstvPage {
                                   .arg((root.imageCoverage * 100).toFixed(0))
                                   .arg(root.textValue("imageLinesPublished", "0"))
                                   .arg(root.textValue("imageHeight", "--"))
-                        color: root.stats && root.stats.imageComplete
+                        color: root.stats && root.stats.imageRadiofaxClockProvisional
+                               ? root.warningColor
+                               : root.stats && root.stats.imageComplete
                                ? root.successColor : root.primaryTextColor
                         font.pixelSize: 10
                         font.bold: true

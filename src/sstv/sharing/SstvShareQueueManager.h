@@ -116,6 +116,10 @@ struct SstvShareQueueConfig final
     // Returning nullopt rejects it; absence never falls back to plaintext.
     std::function<std::optional<QByteArray>(const SstvShareManifestV1&,
                                             const QByteArray&)> openEncryptedPayload;
+    // Worker-thread verification of a signed manifest before reserving a
+    // duplicate identity. Opening still rechecks authentication and payload.
+    // nullopt means that the key store is unavailable or cannot be trusted.
+    std::function<std::optional<bool>(const SstvShareManifestV1&)> verifyIncomingSender;
     // Re-evaluated when staging and before accepting an incoming item.
     std::function<bool(const SstvShareManifestV1&)> incomingPolicyAllows;
     // true: verified; false: invalid/missing; nullopt: temporarily unavailable.

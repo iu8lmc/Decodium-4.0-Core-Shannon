@@ -1075,9 +1075,11 @@ private slots:
     {
         for (const std::size_t block : {4093U, 8191U}) {
             for (const bool fullCanvas : {false, true}) {
+              for (const bool timed : {false, true}) {
                 SstvFaxConfig tx;
                 tx.width = 32U; tx.height = 4U; tx.linesPerMinute = 240U;
                 auto rx = tx; rx.height = fullCanvas ? 4U : 8U;
+                rx.wmoTimedPhasing = timed;
                 std::vector<std::int16_t> pcm;
                 for (const std::uint8_t value : {std::uint8_t {60}, std::uint8_t {180}}) {
                     SstvRadiofaxEncoder encoder(tx, std::vector<std::uint8_t>(tx.width * tx.height, value));
@@ -1113,12 +1115,14 @@ private slots:
                 QVERIFY(result.image.available);
                 QVERIFY(fullCanvas ? result.image.complete : (result.image.partial && result.image.radiofaxStopDetected));
                 QVERIFY2(result.image.acquisitionId > firstId, "second Radiofax image was not acquired");
+                QCOMPARE(result.image.radiofaxTimedPhasing, timed);
                 const auto image = runtime.latestImageSnapshot();
                 QVERIFY(image);
                 QVERIFY(std::abs(int(image->pixel(10U, 2U).red) - 180) < 25);
                 QCOMPARE(result.processingFailures, std::uint64_t {0U});
                 QCOMPARE(result.discontinuities, std::uint64_t {0U});
                 QVERIFY(runtime.stop());
+              }
             }
         }
     }
@@ -1170,7 +1174,8 @@ private slots:
 
     void fax480ConsecutiveImagesRearmAB()
     {
-        for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::LibsstvVis480}) {
+        for (const auto profile : {SstvFax480Profile::Dayton480, SstvFax480Profile::Qsstv500,
+                                   SstvFax480Profile::LibsstvVis480}) {
             const SstvFax480Mapper mapper(profile,kRate);
             const auto frameSamples=mapper.totalSamples();
             std::vector<std::int16_t> pcm(frameSamples*2U+kRate,0);

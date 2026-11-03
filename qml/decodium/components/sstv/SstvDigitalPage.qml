@@ -11,6 +11,13 @@ SstvPage {
     required property var controller
     panelColor: "#081017"
     property url selectedTxImage: ""
+    property int hybridSaveId: -1
+    property string hybridSaveToken: ""
+    function prepareHybridSave(transportId, referenceToken) {
+        hybridSaveId = transportId
+        hybridSaveToken = referenceToken || ""
+    }
+    property int completedSaveId: -1
     readonly property var capability: root.controller
                                       ? root.controller.capabilities : ({})
     readonly property var profile: root.controller
@@ -48,6 +55,21 @@ SstvPage {
             qsTr("HAMDRM images (*.jpg *.jpeg *.jp2 *.png *.gif *.bmp)")
         ]
         onAccepted: root.selectedTxImage = selectedFile
+    }
+
+    FileDialog {
+        id: hybridSavePicker
+        title: qsTr("Save hybrid image")
+        fileMode: FileDialog.SaveFile
+        onAccepted: if (root.controller && root.hybridSaveId >= 0)
+                        root.controller.downloadHybridIfUnchanged(root.hybridSaveId, selectedFile, root.hybridSaveToken)
+    }
+    FileDialog {
+        id: completedSavePicker
+        title: qsTr("Save received HAMDRM image")
+        fileMode: FileDialog.SaveFile
+        onAccepted: if (root.controller && root.completedSaveId >= 0)
+                        root.controller.saveCompletedImage(root.completedSaveId, selectedFile)
     }
 
     component SectionPanel: Rectangle {
@@ -251,9 +273,12 @@ SstvPage {
                             ToolTip.text: qsTr("For difficult incoming signals, including some QSSTV repair requests, enable this before starting transmission or reception.")
                         }
                         Label {
+                            objectName: "hamdrmAdaptiveGuidance"
                             Layout.fillWidth: true
-                            visible: root.controller && root.controller.experimentalTiming
-                            text: qsTr("Uses additional processing for difficult signals; results and compatibility are experimental.")
+                            visible: root.controller && root.controller.experimentalTimingAvailable
+                            text: root.controller && root.controller.experimentalTiming
+                                  ? qsTr("Adaptive reception is enabled. It uses additional processing and remains experimental.")
+                                  : qsTr("If a difficult signal does not decode, stop RX, enable adaptive reception and retry. Results remain experimental.")
                             color: root.secondaryTextColor
                             wrapMode: Text.WordWrap
                         }
@@ -322,8 +347,38 @@ SstvPage {
                             ComboBox {
                                 id: rsLevel
                                 objectName: "hamdrmRsLevel"
-                                enabled: root.controller && !root.controller.busy
+                                enabled: root.controller && !root.controller.busy && !hybridTxEnabled.checked
                                 model: [qsTr("None"), "RS1", "RS2", "RS3", "RS4"]
+                            }
+                        }
+                        CheckBox {
+                            id: hybridTxEnabled
+                            objectName: "hamdrmHybridTxEnabled"
+                            text: qsTr("Hybrid transmission")
+                            enabled: root.controller && !root.controller.busy
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: hybridTxEnabled.checked
+                            Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Hybrid sends the server, username and password over radio in a reversible format and uses unencrypted FTP. Use a dedicated account without private data.")
+                                color: root.secondaryTextColor
+                                wrapMode: Text.WordWrap
+                            }
+                            TextField { id: hybridCall; objectName: "hamdrmHybridCall"; Layout.fillWidth: true; placeholderText: qsTr("Callsign (letters, digits, underscore)") }
+                            TextField { id: hybridHost; objectName: "hamdrmHybridHost"; Layout.fillWidth: true; placeholderText: qsTr("FTP server") }
+                            TextField { id: hybridUser; objectName: "hamdrmHybridUser"; Layout.fillWidth: true; placeholderText: qsTr("FTP username") }
+                            TextField { id: hybridPassword; objectName: "hamdrmHybridPassword"; Layout.fillWidth: true; placeholderText: qsTr("FTP password"); echoMode: TextInput.Password }
+                            TextField { id: hybridDirectory; objectName: "hamdrmHybridDirectory"; Layout.fillWidth: true; placeholderText: qsTr("FTP base directory (optional)") }
+                            Button {
+                                objectName: "hamdrmStartHybridTx"
+                                text: qsTr("Upload and transmit hybrid")
+                                enabled: root.controller && !root.controller.busy
+                                         && root.selectedTxImage.toString().length > 0
+                                         && hybridCall.text.length > 0 && hybridHost.text.length > 0
+                                onClicked: root.controller.startHybridTx(root.selectedTxImage, hybridCall.text,
+                                              hybridHost.text, hybridUser.text, hybridPassword.text, hybridDirectory.text)
                             }
                         }
                         RowLayout {
@@ -347,6 +402,7 @@ SstvPage {
                                 text: qsTr("Start TX")
                                 enabled: root.controller
                                          && !root.controller.busy
+                                         && !hybridTxEnabled.checked
                                          && root.selectedTxImage.toString().length > 0
                                 onClicked: root.controller.startTxWithRs(root.selectedTxImage, rsLevel.currentIndex)
                             }
@@ -452,6 +508,34 @@ SstvPage {
                                 }
                                 Label {
                                     Layout.fillWidth: true
+                                    visible: !!objectRow.modelData.hybridReference
+                                    text: objectRow.modelData.hybridDownloaded
+                                          ? qsTr("Hybrid image saved.")
+                                          : qsTr("Hybrid server: %1. FTP sends credentials without encryption.")
+                                            .arg(objectRow.modelData.hybridHost || "")
+                                    color: root.secondaryTextColor
+                                    wrapMode: Text.Wrap
+                                }
+                                Button {
+                                    objectName: "hamdrmDownloadHybrid"
+                                    visible: !!objectRow.modelData.hybridReference
+                                    enabled: root.controller && !root.controller.hybridDownloadBusy
+                                    text: qsTr("Download hybrid image…")
+                                    onClicked: {
+                                        root.prepareHybridSave(objectRow.modelData.transportId,
+                                                               objectRow.modelData.hybridReferenceToken)
+                                        hybridSavePicker.open()
+                                    }
+                                }
+                                Button {
+                                    objectName: "hamdrmCancelHybridDownload"
+                                    visible: !!objectRow.modelData.hybridReference
+                                             && root.controller && root.controller.hybridDownloadBusy
+                                    text: qsTr("Cancel hybrid download")
+                                    onClicked: root.controller.cancelHybridDownload()
+                                }
+                                Label {
+                                    Layout.fillWidth: true
                                     text: qsTr("Segments %1/%2 · bytes %3/%4 · missing %5 · persisted %6")
                                           .arg(objectRow.modelData.bodySegmentsReceived || 0)
                                           .arg(objectRow.modelData.totalBodySegments || 0)
@@ -537,6 +621,15 @@ SstvPage {
                     RowLayout {
                         Layout.fillWidth: true
                         Button {
+                            objectName: "hamdrmSaveCompletedImage"
+                            text: qsTr("Save received image…")
+                            enabled: root.controller && root.controller.canSaveSelectedImage
+                            onClicked: {
+                                root.completedSaveId = root.controller.selectedTransportId
+                                completedSavePicker.open()
+                            }
+                        }
+                        Button {
                             objectName: "hamdrmRecoverRs"
                             text: qsTr("Recover RS")
                             enabled: root.controller && !root.controller.busy
@@ -549,6 +642,14 @@ SstvPage {
                             color: root.secondaryTextColor
                             wrapMode: Text.WordWrap
                         }
+                    }
+                    Label {
+                        objectName: "hamdrmStructuralOnlyNotice"
+                        Layout.fillWidth: true
+                        visible: root.controller && root.controller.selectedImageStructuralOnly
+                        text: qsTr("The file passed structural checks but could not be decoded as an image. It can be saved manually and was not added to Gallery.")
+                        color: root.secondaryTextColor
+                        wrapMode: Text.WordWrap
                     }
                     Label {
                         Layout.fillWidth: true

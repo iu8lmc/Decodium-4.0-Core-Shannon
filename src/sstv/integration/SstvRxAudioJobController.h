@@ -61,7 +61,8 @@ public:
 
     bool prepareRecentRedecode(SstvRxRedecodeParameters parameters);
     bool exportRawAudio(const QUrl& destination,
-                        std::uint64_t acquisitionId = 0U);
+                        std::uint64_t acquisitionId = 0U,
+                        bool recentBuffer = false);
     void discardPreparedRedecode();
     Q_INVOKABLE void cancel();
     void shutdown();
@@ -101,6 +102,7 @@ private:
         Operation operation,
         QString outputPath,
         std::uint64_t acquisitionId,
+        bool recentBuffer,
         SstvRxRedecodeParameters parameters,
         std::shared_ptr<std::atomic_bool> cancelRequested) noexcept;
     static QString displayName(State state);
@@ -109,7 +111,8 @@ private:
     bool startJob(Operation operation,
                   QString outputPath,
                   std::uint64_t acquisitionId,
-                  SstvRxRedecodeParameters parameters);
+                  SstvRxRedecodeParameters parameters,
+                  bool recentBuffer = false);
 
     SstvRxRuntime* const m_runtime;
     QFutureWatcher<JobResult> m_watcher;

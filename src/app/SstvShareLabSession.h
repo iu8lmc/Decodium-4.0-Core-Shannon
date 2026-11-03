@@ -45,24 +45,69 @@ public:
                 qInfo() << "[LAB][SHARE SESSION] duplicate encrypted envelope rejected";
                 return;
             }
+            if (!ok && op == QStringLiteral("download") && !path("replayTarget").isEmpty()
+                && config_.value(QStringLiteral("replayExpectInvalidSignature")).toBool()
+                && detail == QStringLiteral("incoming sender signature could not be authenticated")) {
+                replayRejected_ = true;
+                qInfo() << "[LAB][SHARE SESSION] replay sender signature rejected";
+                return;
+            }
+            if (!ok && op == QStringLiteral("download") && !path("invalidSignatureMarker").isEmpty()
+                && detail == QStringLiteral("incoming sender signature could not be authenticated")) {
+                QFile marker(path("invalidSignatureMarker"));
+                const QByteArray markerData = QJsonDocument(QJsonObject {
+                    {QStringLiteral("storageFolder"), share_->storageFolder()}}).toJson(QJsonDocument::Compact);
+                if (marker.exists() || !marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+                    || marker.write(markerData) != markerData.size()) { fail(QStringLiteral("invalid-signature marker failed")); return; }
+                qInfo() << "[LAB][SHARE SESSION] invalid sender signature rejected before download";
+                return;
+            }
+            if (!ok && op == QStringLiteral("refresh-inbox")
+                && detail == QStringLiteral("inbox provider is busy")) {
+                // A download can temporarily occupy the fixture's only slot.
+                // Retry the laboratory poll instead of mistaking that for an
+                // integrity result; the session deadline still bounds it.
+                refreshing_ = false;
+                lastRefresh_ = elapsed_.elapsed();
+                qInfo() << "[LAB][SHARE SESSION] inbox busy; polling will retry";
+                return;
+            }
             if (!ok) { fail(op + QStringLiteral(": ") + detail); return; }
             if (op == QStringLiteral("configure") && phase_ == Configuring) phase_ = Enable;
             else if (op == QStringLiteral("enable") && phase_ == Enabling) phase_ = WaitCapability;
             else if (op == QStringLiteral("sharing-pin") && phase_ == Pinning) phase_ = UploadFirst;
-            else if (op == QStringLiteral("sender-signing-pin") && phase_ == PinningSender) {
+            else if ((op == QStringLiteral("sender-signing-pin") || op == QStringLiteral("sender-signing-replace")) && phase_ == PinningSender) {
+                if (op == QStringLiteral("sender-signing-replace"))
+                    qInfo() << "[LAB][SHARE SESSION] verified sender signing pin replaced";
                 QSaveFile ready(path("signingReady"));
                 if (!ready.open(QIODevice::WriteOnly) || ready.write("ready\n") != 6 || !ready.commit()) {
                     fail(QStringLiteral("cannot publish signing readiness")); return;
                 }
                 phase_ = Receive;
             }
-            else if (op == QStringLiteral("upload") && phase_ == UploadingFirst) phase_ = UploadSecond;
+            else if (op == QStringLiteral("upload") && phase_ == UploadingFirst)
+                phase_ = config_.value(QStringLiteral("replaceRecipient")).toBool() ? ReplacePeer : UploadSecond;
+            else if (op == QStringLiteral("sharing-replace-pin") && phase_ == ReplacingPeer) {
+                qInfo() << "[LAB][SHARE SESSION] recipient pin replaced between images";
+                phase_ = UploadSecond;
+            }
             else if (op == QStringLiteral("upload") && phase_ == UploadingSecond) phase_ = WaitUploads;
             else if (op == QStringLiteral("refresh-inbox")) refreshing_ = false;
             else if (op == QStringLiteral("accept") && acceptedQueued_) acceptedDone_ = true;
         });
         connect(share_, &decodium::sstv::SstvShareController::sharingIdentityReady,
                 this, [this](const QString& key, const QString& fingerprint) {
+            if (phase_ == RotationPending) {
+                if (fingerprint == originalFingerprint_) { fail(QStringLiteral("rotation did not change identity")); return; }
+                QSaveFile rotated(path("identity") + QStringLiteral(".rotated"));
+                const auto data = QJsonDocument(QJsonObject {{"publicKey", key}, {"fingerprint", fingerprint}}).toJson(QJsonDocument::Compact);
+                if (!rotated.open(QIODevice::WriteOnly) || rotated.write(data) != data.size() || !rotated.commit()) {
+                    fail(QStringLiteral("cannot publish rotated identity")); return;
+                }
+                qInfo() << "[LAB][SHARE SESSION] receiver identity rotated before transfer";
+                phase_ = WaitSigningPeer;
+                return;
+            }
             if (phase_ != IdentityPending) return;
             QSaveFile file(path("identity"));
             const QByteArray data = QJsonDocument(QJsonObject {{"publicKey", key},
@@ -70,17 +115,35 @@ public:
             if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
                 fail(QStringLiteral("cannot publish identity")); return;
             }
-            phase_ = signedLab() ? WaitSigningPeer : Receive;
+            if (config_.value(QStringLiteral("rotateRecipient")).toBool()) {
+                originalFingerprint_ = fingerprint;
+                phase_ = RotationPending;
+                if (!signedLab() || !share_->rotateSharingIdentity(fingerprint))
+                    fail(QStringLiteral("rotation queue failed"));
+            } else phase_ = signedLab() ? WaitSigningPeer : Receive;
         });
         connect(share_, &decodium::sstv::SstvShareController::signingIdentityReady,
                 this, [this](const QString& key, const QString& fingerprint) {
-            if (phase_ != SigningIdentityPending) return;
+            if (phase_ == SigningIdentityPending && config_.value(QStringLiteral("rotateSenderSigning")).toBool()) {
+                if (fingerprint != path("oldSigningFingerprint")) {
+                    fail(QStringLiteral("sender signing fingerprint changed before rotation")); return;
+                }
+                phase_ = SigningRotationPending;
+                if (!share_->rotateSigningIdentity(fingerprint)) fail(QStringLiteral("signing rotation queue failed"));
+                return;
+            }
+            if (phase_ != SigningIdentityPending && phase_ != SigningRotationPending) return;
+            if (phase_ == SigningRotationPending) {
+                if (fingerprint == path("oldSigningFingerprint")) { fail(QStringLiteral("signing rotation did not change identity")); return; }
+                qInfo() << "[LAB][SHARE SESSION] sender signing identity rotated";
+            }
             QSaveFile file(path("signingIdentity"));
             const QByteArray data = QJsonDocument(QJsonObject {{"publicKey", key},
                 {"fingerprint", fingerprint}}).toJson(QJsonDocument::Compact);
             if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
                 fail(QStringLiteral("cannot publish signing identity")); return;
             }
+            if (config_.value(QStringLiteral("signingIdentityOnly")).toBool()) { success(); return; }
             phase_ = WaitPeer;
         });
         elapsed_.start();
@@ -89,8 +152,8 @@ public:
 
 private:
     enum Phase { WaitReady, Configure, Configuring, Enable, Enabling,
-                 WaitCapability, IdentityPending, SigningIdentityPending, WaitSigningPeer, PinningSender, WaitPeer, Pinning,
-                 UploadFirst, UploadingFirst, UploadSecond, UploadingSecond,
+                 WaitCapability, IdentityPending, RotationPending, SigningIdentityPending, SigningRotationPending, WaitSigningPeer, PinningSender, WaitPeer, Pinning,
+                 UploadFirst, UploadingFirst, ReplacePeer, ReplacingPeer, UploadSecond, UploadingSecond,
                  WaitUploads, Receive, Finished };
     QString path(const char* name) const { return config_.value(QLatin1String(name)).toString(); }
     bool signedLab() const {
@@ -139,7 +202,10 @@ private:
     void tick() {
         if (elapsed_.elapsed() > 90'000) { fail(QStringLiteral("session timeout")); return; }
         if (!share_ || phase_ == Finished) return;
-        if (phase_ == WaitReady && share_->ready()) phase_ = Configure;
+        if (phase_ == WaitReady && share_->ready()) {
+            phase_ = config_.value(QStringLiteral("resumeExistingProvider")).toBool()
+                ? WaitCapability : Configure;
+        }
         if (phase_ == Configure) {
             const QVariantMap cfg {{"type", "rest"}, {"providerId", "rest-encrypted"},
                 {"endpoint", path("endpoint")}, {"createPath", "/api/uploads"},
@@ -173,10 +239,20 @@ private:
             if (!file.open(QIODevice::ReadOnly) || file.size() > 4096) { fail(QStringLiteral("invalid signing identity")); return; }
             const QJsonObject identity = QJsonDocument::fromJson(file.readAll()).object();
             phase_ = PinningSender;
-            if (!share_->pinSenderSigningIdentity(QStringLiteral("labtx"), identity.value("publicKey").toString(),
-                                                  identity.value("fingerprint").toString(), true))
+            const auto oldFingerprint = path("oldSigningFingerprint");
+            const bool queued = oldFingerprint.isEmpty()
+                ? share_->pinSenderSigningIdentity(QStringLiteral("labtx"), identity.value("publicKey").toString(),
+                                                   identity.value("fingerprint").toString(), true)
+                : share_->replaceSenderSigningIdentity(QStringLiteral("labtx"), oldFingerprint,
+                    identity.value("publicKey").toString(), identity.value("fingerprint").toString(), true);
+            if (!queued)
                 fail(QStringLiteral("sender pin queue failed"));
         } else if (phase_ == WaitPeer) {
+            if (config_.value(QStringLiteral("reuseExistingPin")).toBool()) {
+                qInfo() << "[LAB][SHARE SESSION] reusing stored recipient pin";
+                phase_ = UploadFirst;
+                return;
+            }
             if (signedLab() && !QFileInfo::exists(path("signingReady"))) return;
             QFile file(path("identity"));
             if (!file.exists()) return;
@@ -186,6 +262,16 @@ private:
             if (!share_->pinSharingRecipient(path("recipient"), identity.value("publicKey").toString(),
                                              identity.value("fingerprint").toString(), true))
                 fail(QStringLiteral("pin queue failed"));
+        } else if (phase_ == ReplacePeer) {
+            QFile oldFile(path("identity")), newFile(path("identity") + QStringLiteral(".rotated"));
+            if (!oldFile.open(QIODevice::ReadOnly) || !newFile.open(QIODevice::ReadOnly)
+                || oldFile.size() > 4096 || newFile.size() > 4096) { fail(QStringLiteral("missing replacement identity")); return; }
+            const auto oldIdentity = QJsonDocument::fromJson(oldFile.readAll()).object();
+            const auto newIdentity = QJsonDocument::fromJson(newFile.readAll()).object();
+            phase_ = ReplacingPeer;
+            if (!share_->replaceSharingRecipient(path("recipient"), oldIdentity.value("fingerprint").toString(),
+                    newIdentity.value("publicKey").toString(), newIdentity.value("fingerprint").toString(), true))
+                fail(QStringLiteral("replacement pin queue failed"));
         } else if (phase_ == UploadFirst || phase_ == UploadSecond) {
             const bool first = phase_ == UploadFirst;
             phase_ = first ? UploadingFirst : UploadingSecond;
@@ -199,7 +285,7 @@ private:
                 if (field(history, i, "transferState").toString() == QStringLiteral("Failed"))
                     { fail(QStringLiteral("upload failed: ") + field(history, i, "error").toString()); return; }
             }
-            if (completed >= 2) success();
+            if (completed >= config_.value(QStringLiteral("expectedUploads")).toInt(2)) success();
         } else if (phase_ == Receive) {
             auto* history = share_->transferHistory();
             for (int i = 0; i < history->rowCount(); ++i) {
@@ -240,6 +326,16 @@ private:
             for (int i = 0; i < inbox->rowCount(); ++i) {
                 const QString id = field(inbox, i, "incomingId").toString();
                 const QString filename = field(inbox, i, "fileName").toString();
+                if (config_.value(QStringLiteral("restartImagesOnly")).toBool()
+                    && filename != QStringLiteral("restart-a.png") && filename != QStringLiteral("restart-b.png")) {
+                    const QString retiredPrefix = config_.value(QStringLiteral("retiredUnseen")).toBool()
+                        ? QStringLiteral("retired-") : QStringLiteral("image-");
+                    if (path("replayIncomingIdFile").isEmpty() || replayRejected_
+                        || filename != retiredPrefix + path("replayTarget") + QStringLiteral(".png")) continue;
+                    QFile replayId(path("replayIncomingIdFile"));
+                    if (!replayId.open(QIODevice::ReadOnly) || replayId.size() > 128
+                        || QString::fromLatin1(replayId.readAll()).trimmed() != id) continue;
+                }
                 if (field(inbox, i, "canDownload").toBool() && !queued_.contains(id)) {
                     queued_.insert(id);
                     if (!share_->requireIncomingEncryption()
@@ -267,7 +363,8 @@ private:
                     }
                     const auto handoff = field(inbox, i, "validatedHandoff").toMap();
                     const QString source = handoff.value(QStringLiteral("stagedCanonicalPath")).toString();
-                    if (filename != QStringLiteral("image-a.png") && filename != QStringLiteral("image-b.png"))
+                    if (filename != QStringLiteral("image-a.png") && filename != QStringLiteral("image-b.png")
+                        && filename != QStringLiteral("restart-a.png") && filename != QStringLiteral("restart-b.png"))
                         { fail(QStringLiteral("unexpected incoming filename")); return; }
                     if (config_.value(QStringLiteral("expiryWhileAwaiting")).toBool()
                         && path("expiryTarget") == QStringLiteral("a")
@@ -304,7 +401,8 @@ private:
                                      QDir::Files, QDirIterator::Subdirectories);
                 galleryImported = entries.hasNext();
             }
-            if (copied_.size() >= 2 && (path("replayTarget").isEmpty() || replayRejected_)
+            const int expectedCopies=config_.value(QStringLiteral("expectedCopies")).toInt(2);
+            if (copied_.size() >= expectedCopies && (path("replayTarget").isEmpty() || replayRejected_)
                 && galleryImported && (path("policyTarget").isEmpty() || policyStage_ == 4)) { success(); return; }
             if (!refreshing_ && elapsed_.elapsed() - lastRefresh_ >= 1500) {
                 refreshing_ = true; lastRefresh_ = elapsed_.elapsed();
@@ -322,6 +420,6 @@ private:
     bool acceptedQueued_ {false}, acceptedDone_ {false};
     qint64 lastRefresh_ {-1500};
     QSet<QString> queued_, copied_;
-    QString expiredId_, acceptedId_, policyTransferId_;
+    QString expiredId_, acceptedId_, policyTransferId_, originalFingerprint_;
     int policyStage_ {0};
 };

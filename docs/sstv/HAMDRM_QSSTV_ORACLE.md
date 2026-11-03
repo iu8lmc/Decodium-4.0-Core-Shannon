@@ -1,6 +1,883 @@
 # QSSTV MOT data-group oracle
 
+## A/2.3/normal/16-QAM/short: local A/B and QSSTV receiver
+
+Two Decodium application pairs transferred the A/B 225-byte JPEG fixtures
+byte-for-byte using `hamdrm-A-2300-normal-16-QAM-short`, with the laboratory
+checking restoration of the macOS legacy monitor. Artifacts are
+`.../decodium-hamdrm-two-app-a-r6cw8ezy` and
+`.../decodium-hamdrm-two-app-b-2bvf3wo9`.
+
+Two further A/B transfers through the 16-channel-to-2-channel virtual audio
+relay at half gain and zero echo also passed, producing recorded audio in
+`.../decodium-hamdrm-two-app-echo-umo7zmye` and
+`.../decodium-hamdrm-two-app-echo-__h5ewde`. The pinned unmodified
+QSSTV-Experimental 10.0 ARM64 batch receiver decoded both recordings to the
+exact source bytes and reported `A/2.3/Lo/16/Short` (QSSTV's `Lo` label is
+the native profile's normal-protection setting), 16 good CRCs and zero bad
+CRCs per recording. Results are `.../decodium-qsstv-drm-decode-i2qpz06z`
+and `.../decodium-qsstv-drm-decode-a7bwjmc7`. This is selected one-way,
+file-mediated independent receiver evidence, not live QSSTV transmission,
+EasyPal or RF interoperability.
+
+For the reverse direction, the locally instrumented QSSTV source build at
+revision `a84584248d3307bfa081362031ff20f365337633` generated A/B WAVs
+using A/2.3/low/16 and its `long` CLI interleaver argument (which maps to
+Short in this build). The source tree includes the signed-PCM correction and
+hybrid instrumentation; the hybrid switch was not enabled. The unmodified,
+SHA-256-pinned QSSTV-Experimental receiver identified both WAVs as
+`A/2.3/Lo/16/Short` and produced 277-byte JP2 references with 51 good and
+zero bad CRCs each. Full Decodium receivers replayed each WAV over BlackHole
+and recovered its reference byte-for-byte with clean laboratory audio
+diagnostics. Receiver artifacts are `.../decodium-qsstv-drm-app-67gk0_ea`
+and `.../decodium-qsstv-drm-app-xs2b0a03`; inputs, QSSTV logs and references
+are in `/tmp/decodium-qsstv-a23-normal16-ab`. A/B WAV SHA-256 values are
+`a0607f3ef17416139143d78b1884d8d6e4473d1afade0fb5f049702bd309f2f3` and
+`68d4776e9e51bc52278a174a9596bd122623766275780ae042f417ffce4db59d`.
+This adds file-mediated reverse-direction evidence, not an unmodified live
+QSSTV transmitter, EasyPal or RF test.
+
+The same two QSSTV-source A/2.3/normal/16/short WAVs were attenuated to
+0.35 amplitude with FFmpeg and replayed separately over BlackHole into full
+Decodium receivers. Both reconstructed the respective 277-byte unmodified
+QSSTV receiver references exactly, with clean RX diagnostics. The source
+QSSTV transmitter was instrumented as described above. The attenuated WAVs
+are `/tmp/decodium-qsstv-a23-attenuated-ab/{a,b}.wav`, SHA-256 respectively
+`6010966db2ff7cab6fed2e11cb7ef0e71f10db4def0b4e8b254aee48e0e0fde5`
+and `6690f63d2abc4c5feb14d0436a09a1e48c062761c4f90a5773943201bd8ae3b3`.
+Receiver artifacts are `.../decodium-qsstv-drm-app-o7bu5xeo` and
+`.../decodium-qsstv-drm-app-uklhm3hf`. This checks selected attenuated
+recordings; it does not measure minimum sensitivity or live EasyPal/RF.
+
+An additional independent frequency-offset A/B comparison exposes an open
+receiver limitation. A later zero-shift control below shows this cannot be
+attributed to frequency offset alone. FFmpeg `afreqshift` shifted the original A WAV by -5 Hz
+and B by +5 Hz. The pinned unmodified QSSTV-Experimental 10.0 batch receiver
+decoded both shifted files to the same 277-byte references, byte-for-byte.
+Full Decodium application receivers replaying the same files via BlackHole
+did not produce the expected images. In the A run the diagnostic snapshots
+reported no delivered HAMDRM groups and no audio discontinuities, dropped or
+rejected chunks, queue overflows or processing failures. This establishes
+the outcome for these generated files, not the cause or a general frequency
+tolerance limit. Shifted WAV SHA-256 values A/B are
+`9a0c1eb48c3a73854bd2b7db9fd2f649ebf0b12cc5a33c0675fcc08d5e1f0bf8` and
+`a0a841ec4365aaa018b133826ecb135f62bfcb2a08bd655c0bac0c0faf229d50`;
+files are `/tmp/decodium-qsstv-a23-offset-ab/{a,b}.wav`. Decodium artifacts
+are `.../decodium-qsstv-drm-app-zfaba8yk` and
+`.../decodium-qsstv-drm-app-r271uclq`; QSSTV artifacts are
+`.../decodium-qsstv-offset-oracle-xqvp9tom` and
+`.../decodium-qsstv-offset-oracle-7xxpw_jv`. Investigate acquisition and
+frequency estimation before treating this case as supported.
+
+The bounded offline receiver reproduced the gap after both WAVs were
+converted to 12 kHz mono PCM: unshifted A/B each yielded 54 validated groups
+and an exact object, while shifted A/B yielded no frames or groups under
+the normal pilot limits. A diagnostic trace now includes frequency estimates
+for pilot-rejected frames. Their median estimates were -4.979 Hz for A and
++4.993 Hz for B, consistent with the applied shifts; these medians do not
+prove every timing candidate is correct. Relaxing pilot limits to 0.30/0.50
+or 1.0/0.70 allowed 54 FAC-valid frames per shifted recording but all 54
+packets in each failed CRC and no groups were accepted. Raising the pilot
+threshold alone therefore does not repair this case. Logs are under
+`/tmp/decodium-qsstv-a23-offset-ab/`; this is an offline diagnosis, not a
+change to production thresholds or a complete root-cause analysis.
+
+The offline A/B recordings were also checked with the existing receiver
+candidates and normal pilot thresholds. Flat dual timing and adaptive
+multistage alone did not reconstruct either object; combining adaptive and
+early timing with a half-sample or sinc fractional candidate reconstructed
+both byte-for-byte. Full Decodium application receivers with the existing
+operator-selected experimental adaptive dual/fractional timing option then
+replayed the shifted recordings over BlackHole. Both matched their 277-byte
+QSSTV references exactly, with no reported dropped/rejected chunks, queue
+overflows or processing failures. Artifacts are
+`.../decodium-qsstv-drm-app-mc9bdkph` and
+`.../decodium-qsstv-drm-app-mm7qm7rn`. These checks show a usable opt-in
+path for the two inputs, not which specific candidate was necessary in the
+application, a correction to the default receiver, or live/RF interoperability.
+
+Test-only delivery isolation subsequently distinguished the application
+candidates. With adaptive equalization, flat and multistage retry enabled,
+delivering only the early-timing receiver's CRC-valid groups reconstructed
+both offset recordings byte-for-byte (`.../decodium-qsstv-drm-app-27y6lq19`
+and `.../decodium-qsstv-drm-app-96c7c7fh`). Delivering only the fractional
+receiver's groups reconstructed A (`.../decodium-qsstv-drm-app-tkzn6scg`)
+but did not complete B (`.../decodium-qsstv-drm-app-et9o4pc2`), despite 31
+fractional groups reported in each run. The early receiver reported 53/49
+groups A/B. The receivers still ran together; the switches restrict group
+delivery only. This isolates useful paths for these files, not the cause of
+default acquisition failure or the cost and false-positive risk of enabling
+multiple candidates by default.
+
+An offline diagnostic `adaptive-early` option now runs just one adaptive
+receiver with early timing and CRC-gated retries. It reconstructed all eight
+selected inputs: original, FFmpeg-zero-filtered, FFmpeg ±5 Hz and FFT ±5 Hz,
+each A/B. A test-only application switch
+`DECODIUM_LAB_HAMDRM_SINGLE_EARLY=1`, restricted to test mode, HAMDRM lab and
+the explicitly enabled adaptive estimator, then replayed the FFmpeg-zero A/B
+recordings. A was exact (`.../decodium-qsstv-drm-app-z0fosjmy`) but B did
+not complete (`.../decodium-qsstv-drm-app-9qwqppdn`); both showed zero audio
+errors and delivered 49/39 groups. This shows that an offline match does not
+establish robust single-receiver application behavior. The switch does not
+alter ordinary sessions; the normal waveform adapter CTest passed.
+
+The single-early laboratory flag now requires dual timing to be disabled, and
+the replay harness rejects both laboratory dual-timing and operator-selected
+dual-timing log markers when verifying this mode. Previously the operator
+option and single-early flag could coexist while the log misleadingly implied
+one receiver. After the guard, original unfiltered A/B QSSTV WAVs were
+replayed through the application in single-early mode, both byte-exact with
+clean audio diagnostics (`.../decodium-qsstv-drm-app-k6qghgg_` and
+`.../decodium-qsstv-drm-app-pu7wc49v`); the native adapter CTest also passed.
+This guards laboratory interpretation and does not enable automatic adaptive
+reception or resolve the filtered B single-candidate failure above.
+
+To test sensitivity to the 48-to-12 kHz sampling alignment, each FFmpeg-zero
+recording was trimmed by 0, 1, 2 or 3 input samples before FFmpeg resampling
+to 12 kHz mono. The single adaptive-early offline receiver reconstructed
+all four A variants and B at offsets 0, 1 and 3; B offset 2 delivered 39
+groups but did not complete. The failed single-receiver application B run
+also reported 39 delivered groups. That correspondence is consistent with
+an alignment-sensitive failure, but is not proof that the application used
+the same sample phase: its actual PCM was not captured and resampling paths
+are different. Controls and decoder logs are in
+`/tmp/decodium-qsstv-a23-offset-ab/{a,b}-phase*-early.log`.
+
+Using exactly the same 12 kHz phase-2 PCM, offline nominal adaptive decoding
+reconstructed both A and B while early adaptive missed B; combining nominal
+and early also reconstructed both. Single nominal-adaptive application
+replays of the two zero-filtered files subsequently both reconstructed the
+277-byte QSSTV references (`.../decodium-qsstv-drm-app-gk2dugk4` and
+`.../decodium-qsstv-drm-app-yr_m0cyi`) using strict pilot limits, flat and
+multistage CRC-gated retry and no dual timing. These app runs used new audio
+captures, not identical PCM to the earlier single-early runs; they do not
+establish which timing is generally superior or justify a default change.
+
+A same-PCM offline matrix compared nominal adaptive, early adaptive and their
+combined delivery on both zero-filtered recordings at each of the four
+48-to-12 kHz input sample offsets. Nominal adaptive reconstructed 6/8 exact
+objects, early adaptive 7/8, and combined delivery 8/8. Both nominal failures
+were offset 0; the early failure was B at offset 2, which nominal recovered.
+The two paths are therefore complementary on this bounded matrix. The
+combined diagnostic admits only individually CRC-validated packets and MOT
+groups, but this matrix alone does not measure sustained CPU cost or general
+false-positive probability. Logs are
+`/tmp/decodium-qsstv-a23-offset-ab/{a,b}-phase*-*-matrix.log`.
+
+A sequential process-level cost comparison replayed the same original
+QSSTV-source A/B WAVs through the ordinary receiver and through the existing
+operator-selected adaptive dual/fractional receiver. All four application
+runs reconstructed their 277-byte references exactly and passed the audio
+diagnostic checks. Sampling the full Decodium process every two seconds gave
+median CPU percentages of one core for normal/adaptive of 36.6/38.2 (A) and
+34.4/37.4 (B); sampled maxima were 93.7/86.6 and 92.5/84.9 respectively.
+Each run had 19 samples including startup and shutdown, and peak RSS ranged
+from 511,680 to 515,248 KiB. Reports are
+`.../decodium-hamdrm-measure-standard-ncfj2gen`,
+`.../decodium-hamdrm-measure-adaptive-tk_mk47z`,
+`.../decodium-hamdrm-measure-standard-jeo_ek93` and
+`.../decodium-hamdrm-measure-adaptive-fl8o6bq3`. This coarse single-Mac,
+sequential comparison is not a worker-only benchmark, worst-case channel or
+evidence of adequate headroom on slower hardware.
+
+Two additional 26-second A/2.3/normal/16/short application controls used
+the operator-selected adaptive dual/fractional path: deterministic uniform
+noise at peak 0.20 (NumPy seed 88123), and independently seeded noise at peak
+0.20 plus a 1700 Hz tone at peak 0.10 (seed 99777). Neither replay delivered
+groups or saved an image, and both reported zero audio discontinuities,
+dropped/rejected chunks, queue overflows and processing failures. Artifacts
+are `.../decodium-qsstv-drm-app-5w0lurqu` and
+`.../decodium-qsstv-drm-app-k7sooo7o`; input WAVs are under
+`/tmp/decodium-hamdrm-a23-negative/`. The lab's no-image check now explicitly
+requires clean audio diagnostics too, so a broken capture is not treated as a
+valid negative control. These are bounded synthetic inputs, not a measured
+general false-positive rate or evidence for arbitrary RF interference.
+
+The same process sampler compared ordinary and operator-selected adaptive
+receivers on the FFmpeg zero-filtered A/B signals that exercise the phase
+sensitivity. Each normal run delivered zero groups and no image, with clean
+audio counters; each adaptive run reconstructed the 277-byte QSSTV reference
+exactly with clean diagnostics. Median CPU percentages of one core for
+normal/adaptive were 37.7/38.8 for A and 39.6/37.0 for B; sampled maxima
+were 81.8/81.1 and 87.8/96.4 respectively. Each sequential run yielded 19
+whole-process samples including startup and shutdown. Reports are
+`.../decodium-hamdrm-measure-standard-n_d1dugx`,
+`.../decodium-hamdrm-measure-adaptive-r58shush`,
+`.../decodium-hamdrm-measure-standard-z23bfkfn` and
+`.../decodium-hamdrm-measure-adaptive-eem33jvx`. These numbers are coarse,
+single-machine measurements, and do not establish sustained worst-case cost
+or a safe automatic-selection policy.
+
+A local diagnostic prototype re-scored the nine sample positions within ±4
+of the nominal acquisition candidate using the frequency-corrected
+least-squares demodulator. On the same 12 kHz offline inputs, unshifted A/B
+remained exact but both ±5 Hz cases still yielded zero frames and zero
+groups with the strict flat/multistage path. This limited local re-scoring
+did not resolve the problem and was removed; it does not rule out a broader
+frequency-aware timing search or another cause.
+
+A subsequent A/B control changes the interpretation of the ±5 Hz result:
+applying the same FFmpeg `afreqshift` filter with **zero** frequency shift to
+the original recordings also made the strict flat/multistage offline receiver
+fail both objects (zero frames and groups). The unmodified QSSTV batch receiver
+decoded both zero-shift filtered inputs exactly. Applying a second inverse
+shift to the ±5 Hz files likewise failed in the strict offline receiver.
+Thus the earlier experiment does not isolate a frequency-offset defect:
+the filter's signal transformation, including possible phase effects, is a
+confounder. Offline controls are `/tmp/decodium-qsstv-a23-offset-ab/{a,b}-zero.log`;
+QSSTV controls are `.../decodium-qsstv-zero-oracle-qxcxyo5r` and
+`.../decodium-qsstv-zero-oracle-n0c95i75`. Full-application zero-shift
+controls and a frequency shift produced by an independently characterised
+method remain to be run.
+
+Full Decodium application controls have now replayed the two zero-shift
+FFmpeg-filtered WAVs. Neither reconstructed an image; both reported zero
+groups and zero dropped/rejected audio chunks, discontinuities, queue
+overflows or processing failures. Artifacts are
+`.../decodium-qsstv-drm-app-aeesl9de` and
+`.../decodium-qsstv-drm-app-cyakyccw`.
+
+An alternative offline frequency shift was then generated by NumPy FFT:
+construct an analytic signal by doubling positive-frequency bins, retaining
+DC/Nyquist, zeroing negative bins, inverse FFT, multiply by a complex 5 Hz
+oscillator, take the real part and round/clip to signed 16-bit. As a control,
+the real part before frequency multiplication was sample-identical to each
+FFmpeg-decoded original. The -5 Hz A and +5 Hz B outputs were both decoded
+byte-for-byte by the default Decodium offline receiver and by full application
+replays via BlackHole, with clean audio diagnostics. Application artifacts are
+`.../decodium-qsstv-drm-app-zow0la1s` and
+`.../decodium-qsstv-drm-app-6lcqgabt`; WAV SHA-256 values are
+`ca994fb6ab174733aebcc1de82679da5f3f867267f450252af23e1dcf5a655f2` and
+`2f1e6d4533b1a1541e3eb0901e34816a534a54db9b28ede872d1fa1fdfc7c296`.
+This supports ±5 Hz recovery for these FFT-shifted inputs and identifies a
+distinct sensitivity to the FFmpeg-filtered signals; it does not characterize
+the filter's exact phase response, prove generic frequency tolerance or RF.
+
+An exploratory FFT ratio of each zero-shift FFmpeg output to its input,
+using the strongest 10% of input bins from 500 to 2500 Hz, found a median
+amplitude ratio near 1.0. A weighted linear-phase fit had residual RMS phase
+of approximately 16.7/16.8 degrees for A/B; this whole-recording estimate
+includes boundaries and does not independently characterise the filter's
+transfer function. Under strict pilot thresholds, offline selective or
+adaptive-multistage decoding alone produced partial objects; adaptive dual
+timing reconstructed both. With the operator-selected adaptive dual/fractional
+option, full Decodium application replays of both zero-shift-filtered files
+also matched the 277-byte QSSTV references exactly and reported clean audio
+diagnostics (`.../decodium-qsstv-drm-app-uc2rplrs` and
+`.../decodium-qsstv-drm-app-3ec5621u`). The default flat receiver remains
+unable to reconstruct these filtered inputs; causality is not yet proven.
+
+The filter itself was subsequently measured on two phase variants of nine
+one-second pure tones from 500 to 2500 Hz. Excluding the first and last 0.2 s,
+the measured amplitude ratios were approximately 1.00000 in both sets. The
+unwrapped phase at 500/1500/2500 Hz was approximately -32.47/-252.21/-356.16
+degrees in both sets; subtracting a linear phase fit leaves residuals of
+about +43.53/-22.39/+27.50 degrees. Thus the zero-shift FFmpeg filter does
+introduce frequency-dependent phase on these tones, independently of image
+data. The reproducible diagnostic is
+`python3 tests/sstv/tools/measure_hamdrm_zero_shift_phase.py` (requires NumPy
+and FFmpeg). This verifies a property of the filter, not that it is the sole
+cause of the receiver failure or representative of all radio channels.
+
+An additional offline A/B experiment used FFmpeg's 1500 Hz second-order
+all-pass filter on the original 12 kHz PCM, with Q values 0.5, 1, 2 and 4.
+The analyzer used the normal 0.12 pilot-error and 0.30 corrupted-pilot
+limits. At Q=0.5 both flat/multistage and adaptive dual timing reconstructed
+both objects exactly. At Q=1 the flat path reconstructed A but not B (40/27
+validated groups); adaptive dual timing reconstructed both. At Q=2 and Q=4
+neither configuration reconstructed an object. Their nominal receivers recorded
+495–554 pilot failures and zero frames and groups. The timing-hybrid
+analyzer's frame statistics are those of its nominal path; object reconstruction combines validated
+groups from both timing paths. These observations isolate a second,
+phase-altering filter as a useful acquisition stress case; they do not prove
+which part of its transient or phase response causes failure, and are not
+full-application, independent-receiver or RF tests.
+
+The source PCM and JP2 references are in `/tmp/decodium-qsstv-a23-offset-ab`
+and `/tmp/decodium-qsstv-a23-normal16-ab/decoded-{a,b}`. For each variant and
+Q, generate the input using `ffmpeg -f s16le -ar 12000 -ac 1 -i INPUT
+-af allpass=f=1500:width_type=q:width=Q -f s16le OUTPUT`, then run
+`build/tests/sstv/analyze_hamdrm_capture OUTPUT A 2300 16 0.12 0.3
+REFERENCE short MODE normal`, with MODE `flat-multistage` and
+`timing-hybrid`. The generated local controls are
+`/tmp/decodium-hamdrm-allpass-{a,b}-{0.5,1,2,4}.s16`.
+
+For the Q=2 pair, another offline control raised the pilot-error and
+corrupted-pilot limits to 0.4 and 0.6. With each of selective,
+adaptive-multistage and sinc-hybrid modes, both nominal receivers accepted
+54 FAC-valid frames but all 54 packets failed CRC; neither object was
+reconstructed. The combined sinc-hybrid output also contained no complete
+object. Thus relaxing validation alone did not fix these signals. In one
+trace the accepted A candidate started at sample 1290 rather than 1299 in
+the unfiltered baseline; this observation alone does not establish the
+correct timing or the cause of failure.
+
+Two temporary diagnostic prototypes were removed after A/B offline tests.
+Interpolating pilot magnitude and unwrapped phase instead of complex values
+did not reconstruct either Q=2 or Q=4 object, with either normal or relaxed
+pilot-error limits. Forcing the adaptive acquisition candidate nine samples
+later also failed on Q=1, Q=2 and Q=4 for both objects, including Q=1 which
+the existing adaptive dual-timing path had recovered. These are negative
+results for these specific prototypes, not a general rejection of channel
+estimation or a fixed statement about all timing offsets. Production pilot
+limits and receiver behaviour were restored after the experiment.
+
+The pinned, unmodified QSSTV-Experimental 10.0 receiver was then given the
+same Q=2 A/B 12 kHz PCM, converted to 48 kHz stereo WAV with FFmpeg. It
+identified both as A/2.3/Lo/16/Short and recovered both 277-byte reference
+objects exactly; the first run reported 29/27 good and 5/5 bad MSC CRCs.
+Artifacts are `.../decodium-qsstv-allpass-ab-zlabfa52/{a,b}`. A reproducible
+repeat using `tests/sstv/tools/run_qsstv_allpass_oracle.py` also passed A/B
+and rejected swapped reference files; artifacts are
+`.../decodium-qsstv-allpass-ab-n_yyfsw2` and
+`.../decodium-qsstv-allpass-ab-23jlrkn5/a`, respectively. Pass the two
+`/tmp/decodium-hamdrm-allpass-{a,b}-2.s16` files followed by the matching
+`/tmp/decodium-qsstv-a23-normal16-ab/decoded-{a,b}/*_1_drm.jp2` references.
+QSSTV receives a resampled version, whereas the Decodium diagnostic receives
+the 12 kHz PCM directly, so this comparison establishes successful independent
+decoding of these recordings, not identical samples at both demodulators.
+The pinned QSSTV source uses a multi-symbol two-dimensional pilot window;
+Decodium's experimental estimator currently interpolates pilots within each
+symbol. This is a candidate direction for investigation, not a proven cause
+or permission to copy the reference implementation.
+
+An experimental Decodium estimator now combines pilot gains over the symbols
+of one frame. It aligns symbol phases using frequency-reference carriers,
+averages gains at each observed carrier and interpolates between carriers.
+Pilot validation removes the current observation from the corresponding
+carrier average where possible, or uses neighbouring carriers; the common
+phase estimate can still depend on frequency pilots, so this is not a fully
+independent validation. FAC and packet/MOT CRC checks remain in place. The
+option is disabled in default reception. The existing operator-selected
+experimental adaptive reception also runs it as an additional independent
+candidate; explicit HAMDRM test mode can select the temporal/flat pair with
+`DECODIUM_LAB_HAMDRM_TEMPORAL_PILOTS=1`. It does not enable an automatic
+production fallback.
+
+Offline A/B controls recovered both clean QSSTV objects and both Q=1, Q=2
+and Q=4 all-pass objects exactly with normal pilot limits. With the final
+build, Q=2 A/B each produced 54 validated groups and exact objects, where the
+flat receiver produced none. Before the final numerical guards were added,
+full Decodium RX replays of the Q=2 A/B WAVs over BlackHole also recovered
+the 277-byte references exactly with clean audio diagnostics; artifacts are
+`.../decodium-qsstv-drm-app-qazrwx0m` and
+`.../decodium-qsstv-drm-app-06845_si`. After those guards, two full Decodium
+TX/RX pairs with the test estimator transferred clean 225-byte A/B images
+exactly (`.../decodium-hamdrm-two-app-a-3207nqwm` and
+`.../decodium-hamdrm-two-app-b-6giwi59n`). Their audio path did not include
+the Q=2 filter.
+
+Two seeded noise and noise-plus-tone full-application controls produced no
+image or groups and had clean audio diagnostics with the estimator enabled
+before the final numerical guards (`.../decodium-qsstv-drm-app-d7d09hi1`,
+`.../decodium-qsstv-drm-app-1bgpun1g`). The waveform test now includes A/B
+clean and synthetic Q=2 all-pass loopbacks plus two seeded noise controls;
+the waveform and adapter suites passed after the guards. These bounded tests
+do not establish behaviour on time-varying channels, all DRM profiles,
+slow hardware, RF, or a general false-positive rate. The extra frame-wide
+demodulation and allocations also need performance and robustness evaluation
+before production use.
+
+The candidate was compared on 72 clean native profile combinations and 144
+synthetic echo cases: it recovered all 72 and 144 respectively, while the
+flat receiver completed 120 of the 144 echo cases. Tests reject any
+unexpected MOT group. A separate A/B synthetic time-varying gain and echo
+test used robustness A/E and variation rates 0.1, 0.5 and 2 Hz. Both
+estimators recovered all eight slower cases, but the temporal estimator
+missed all four 2 Hz cases that flat recovered. This is a bounded synthetic
+comparison, not a general fading-channel model.
+
+Accordingly the laboratory-only temporal adapter also runs an independent
+flat receiver and delivers its validated groups; it does not replace flat
+reception. Two Decodium TX/RX pairs transferred A/B images exactly through a
+2 Hz varying-gain and varying-echo relay, with no reported relay or audio
+errors (`.../decodium-hamdrm-two-app-a-xqf772d6`,
+`.../decodium-hamdrm-two-app-b-v0w5ixaw`; relay artifacts
+`.../decodium-hamdrm-two-app-echo-0ik_dn94` and
+`.../decodium-hamdrm-two-app-echo-fjuufj9y`). Their nominal temporal receiver
+reported zero validated frames; successful reconstruction therefore came
+from the parallel flat receiver. With both receivers enabled, full Decodium
+replays of the Q=2 QSSTV A/B recordings also recovered both references
+exactly (`.../decodium-qsstv-drm-app-qnllhlol` and
+`.../decodium-qsstv-drm-app-nvopbh8p`). The paired paths increase work and
+may deliver duplicate groups; throughput, long-running resource use and
+broader channels require further evaluation before enabling them normally.
+
+The ordinary and paired temporal receivers were sampled sequentially while
+replaying the original clean QSSTV A/B recordings through full Decodium on
+macOS ARM64. All four recovered their 277-byte references exactly and
+passed the audio checks. Median whole-process CPU, as a percentage of one
+core, was 36.25/36.55 for standard/paired on A and 35.85/37.00 on B;
+observed maxima were 89.7/84.1 and 94.7/81.0. Peak RSS ranged from 514,112
+to 516,928 KiB. Each run had 24 samples two seconds apart, including startup
+and shutdown. This coarse, single-machine comparison does not bound worst
+case cost or establish performance for long or busy sessions. Reports are
+`.../decodium-hamdrm-measure-standard-w1tmzrbk`,
+`.../decodium-hamdrm-measure-temporal-r14effyd`,
+`.../decodium-hamdrm-measure-standard-ul_7gf31` and
+`.../decodium-hamdrm-measure-temporal-_pny3z_3`.
+
+Two full Decodium A/B transfers with both paths active also checked the
+completed inbox while further carousel groups arrived. Both transferred 225
+bytes exactly; the nominal trace group count increased from 9 to 17 after
+save and all five later inbox snapshots in each run remained complete and
+error-free. This exercises continued delivery, including possible cross-path
+duplicates; the counters do not identify which repeated groups came from
+which path. Artifacts are `.../decodium-hamdrm-two-app-a-o_eeh9b0` and
+`.../decodium-hamdrm-two-app-b-dct8c_pz`. An earlier attempt was invalid
+because the harness had not enabled the trace needed by its own check; the
+harness now enables that trace automatically when the check is requested.
+
+The paired test was extended to two different 320×240 JPEGs of 9,454 and
+4,078 bytes, using E/2.5/normal/64-QAM/short. Two Decodium processes
+recovered each file exactly over BlackHole. After save, the nominal trace
+group count rose from 18 to 26 for A and 11 to 19 for B; all 23/20 later
+inbox snapshots remained complete and error-free. Across recorded audio
+diagnostics, dropped chunks, discontinuities, HAMDRM rejected chunks,
+queue overflows and processing failures remained zero. Process observation
+lasted approximately 150/120 seconds, including time after TX completed;
+it is not a continuous multi-hour stress test or a measured CPU benchmark.
+Artifacts are `.../decodium-hamdrm-two-app-a-vfgk7u3y` and
+`.../decodium-hamdrm-two-app-b-0bauomar`, with inputs in
+`.../decodium-hamdrm-temporal-large-w5z7qmhi`. The normal audio channel was
+used; the test does not establish radio-channel interoperability.
+
+The phase-sensitive comparison was then repeated live between Decodium TX
+and RX processes. A test-only BlackHole relay applied a 1500 Hz, Q=2
+second-order all-pass filter at 48 kHz, with 0.5 input gain and no echo or
+added noise. With the paired temporal/flat laboratory receiver, both 225-byte
+JPEGs were received byte-for-byte; the nominal temporal trace reached 17
+groups. With the ordinary flat receiver, independent A/B runs completed TX
+but delivered zero groups and no image. All four runs had zero reported relay
+errors, no clipping, and no audio discontinuities, dropped/rejected chunks,
+queue overflows or processing failures in the recorded RX diagnostics. The
+two modes were run sequentially, so their actual audio alignment was not
+identical. Successful application artifacts are
+`.../decodium-hamdrm-two-app-a-pgyuzhnf` and
+`.../decodium-hamdrm-two-app-b-jpl8j2w4`, with relays
+`.../decodium-hamdrm-two-app-echo-wmc0s906` and
+`.../decodium-hamdrm-two-app-echo-ycmmjxhm`. Checked flat controls are
+`.../decodium-hamdrm-two-app-a-f9x1panl` and
+`.../decodium-hamdrm-two-app-b-wjbu2cz2`, with relays
+`.../decodium-hamdrm-two-app-echo-_qcxar9x` and
+`.../decodium-hamdrm-two-app-echo-wlxy__iq`. Reproduce with
+`DECODIUM_LAB_ALLPASS_Q=2`, `DECODIUM_LAB_ECHO_PROFILE=hamdrm-A-2300-normal-16-QAM-short`
+and `run_hamdrm_two_app_echo_lab.py a short 0 flat`, repeated for B;
+set `DECODIUM_LAB_HAMDRM_TEMPORAL_PILOTS=1` for the paired receiver, or
+`DECODIUM_LAB_EXPECT_FLAT_NO_GROUPS=1` for the bounded flat negative control.
+The two synthetic noise/noise-plus-tone A/B application controls were also
+repeated with both paths active and produced no image or groups, with clean
+audio diagnostics (`.../decodium-qsstv-drm-app-0uyeldez` and
+`.../decodium-qsstv-drm-app-xm1tey4z`). These are selected local audio
+experiments, not a general false-positive rate or RF interoperability proof.
+
+The temporal estimator is now connected to the existing user-selectable
+experimental adaptive RX, alongside its original candidates. This does not
+change ordinary reception when the option is off. With the operator option
+selected through the laboratory controller, two full Decodium A/B transfers
+through the Q=2 all-pass relay reconstructed both JPEGs exactly and logged
+validated temporal-candidate groups. Artifacts are
+`.../decodium-hamdrm-two-app-a-r1h5s32_` and
+`.../decodium-hamdrm-two-app-b-_p25tx_q`, with relays
+`.../decodium-hamdrm-two-app-echo-dm95bmb9` and
+`.../decodium-hamdrm-two-app-echo-9xi3z5kq`. The selected option also passed
+two Decodium A/B transfers through the 2 Hz time-varying relay
+(`.../decodium-hamdrm-two-app-a-d5t5iwjl` and
+`.../decodium-hamdrm-two-app-b-hvcvo197`) and rejected the two existing
+noise controls without delivering groups or images
+(`.../decodium-qsstv-drm-app-zw_4v_qy` and
+`.../decodium-qsstv-drm-app-xu6eihny`). All these runs passed their audio
+diagnostic checks. QML toggle, controller and waveform-adapter CTests passed.
+The application tests select the option through the controller, not by a
+human clicking the QML control. The additional candidate increases processing;
+the earlier two-path cost measurements do not quantify the selected option
+after this change. Broader performance, channels and independent live peer
+interoperability remain unverified.
+
+The additional temporal receiver previously propagated its terminal errors
+to the entire adaptive RX session. A bounded test-mode-only frame limit of
+one reproduced this: the temporal receiver reached its limit and the
+controller stopped RX even though other receivers were active
+(`.../decodium-hamdrm-two-app-a-nsffi_dt`). A terminal status from this
+optional candidate now logs the reason and removes that candidate for the
+remainder of the session, while independent receivers continue. Their own
+terminal failures still stop the session. With the same injected limit, two
+Decodium A/B sessions received their 225-byte images exactly, observed the
+candidate-stop log and had clean checked audio diagnostics
+(`.../decodium-hamdrm-two-app-a-0hdw3f41`,
+`.../decodium-hamdrm-two-app-b-53co5gl8`). The limit is available only with
+test mode and `--lab-hamdrm`; use `DECODIUM_LAB_HAMDRM_USER_TIMING=1` and
+`DECODIUM_LAB_TEMPORAL_FRAME_LIMIT=1` with `run_hamdrm_two_app_lab.py a` or
+`b`. Without injected failure, selected adaptive A/B transfers through the
+Q=2 all-pass relay still reconstructed exact images and reported validated
+temporal groups (`.../decodium-hamdrm-two-app-a-s01cqee9` and
+`.../decodium-hamdrm-two-app-b-w4td9t7_`). The waveform-adapter CTest passed;
+the injected frame limit models that error path, not every possible failure.
+
+The operator-selected adaptive receiver including the temporal candidate was
+also exercised in two full Decodium A/B selective-repair sessions. The
+virtual-audio relay muted three seconds of the initial transmission; RX then
+requested the missing data using an over-audio BSR and received the repair
+over audio. Both 2,725-byte files were reconstructed exactly, and the test
+confirmed the temporal candidate in both applications. The relay reported
+139,508/139,525 muted active frames and no relay errors; active RX diagnostics
+had no discontinuities, dropped/rejected chunks, queue overflows or processing
+failures. Artifacts are `.../decodium-hamdrm-repair-a-ayvpp18o` and
+`.../decodium-hamdrm-repair-b-1ce4pnqc`, with relays
+`.../decodium-hamdrm-repair-audio-loss-e8l_c9eo` and
+`.../decodium-hamdrm-repair-audio-loss-1f2jeda6`. Reproduce with
+`DECODIUM_LAB_HAMDRM_USER_TIMING=1 python3
+tests/sstv/tools/run_hamdrm_repair_audio_loss_lab.py a`, then `b`. These
+are local two-Decodium tests, not new QSSTV, EasyPal or RF repair evidence.
+
+As a preliminary cost check after the added candidate, full-process samples
+of the adaptive option on the same clean QSSTV A/B inputs had median CPU
+39.1/35.7 percent of one core, maxima 87.6/84.6 and peak RSS
+527,728/522,272 KiB. Both references were reconstructed exactly. Each run
+had 24 samples two seconds apart, including startup and shutdown; artifacts
+are `.../decodium-hamdrm-measure-adaptive-ljvmbk8w` and
+`.../decodium-hamdrm-measure-adaptive-9q010nlq`. The earlier separate flat
+runs on these inputs measured median 36.25/35.85 percent and peak RSS
+514,112/516,144 KiB. These coarse, non-simultaneous measurements on one Mac
+do not bound worker cost, weaker hardware or sustained worst-case load.
+
+## Default CRC-gated multistage packet retry
+
+The native application RX adapter now enables the existing multistage MSC
+retry by default, with normal flat equalization and unchanged pilot limits.
+It runs only after the ordinary hard and soft packet decoders fail CRC; the
+alternate packet is admitted to reassembly only after its own CRC succeeds.
+The separate adaptive equalizer and additional timing candidates remain
+operator-selected. The codec-level option still defaults off when the codec
+is used directly, preserving explicit test controls.
+
+On macOS ARM64, a two-Decodium A/short transmission through a 1 ms echo at
+gain 0.27 completed TX but did not reconstruct its image with the previous
+ordinary receiver: it reported 18 packet CRC failures and zero groups. The
+relay reported no errors; capture and logs are
+`.../decodium-hamdrm-two-app-echo-td4g8d3l` and
+`.../decodium-hamdrm-two-app-a-vcfapoz_`. With the previously available
+test-only flat multistage option, replaying this recording through BlackHole
+reconstructed the 225-byte JPEG exactly, with 18 multistage recoveries
+(`.../decodium-qsstv-drm-app-r57jktvc`). After enabling the retry in the
+native adapter and rebuilding, the ordinary application replayed the same
+recording and again produced the exact bytes
+(`.../decodium-qsstv-drm-app-uzyq4f8u`). Audio conversion and replay can
+change alignment, so the before/after evidence includes that limitation.
+
+The separate B/long baseline already passed without retries. Its recording
+also replayed byte-for-byte with the new default
+(`.../decodium-hamdrm-two-app-echo-rbfl1dd3` and
+`.../decodium-qsstv-drm-app-1agmu3q2`). Fresh two-Decodium A/short and
+B/long transmissions with the same echo then produced exact 225-byte images,
+with 10 and four retry recoveries respectively; both checked zero audio
+discontinuities, dropped/rejected chunks, queue overflows and processing
+failures, plus legacy-monitor restoration with fresh PCM. App artifacts are
+`.../decodium-hamdrm-two-app-a-4lntux_g` and
+`.../decodium-hamdrm-two-app-b-2gfxy0an`; relay captures are
+`.../decodium-hamdrm-two-app-echo-8ab7j850` and
+`.../decodium-hamdrm-two-app-echo-mxyn4_id`.
+
+Two full-application 12-second noise controls, independent seeds and peak
+0.18, produced no groups or images and reported no audio errors
+(`.../decodium-qsstv-drm-app-16bi5wz3` and
+`.../decodium-qsstv-drm-app-pb8s37g0`). The waveform and native-adapter
+CTest targets passed. This selected local evidence does not measure the CPU
+cost of sustained CRC failures on slower systems, establish a general false
+positive rate or demonstrate live EasyPal or RF interoperability.
+
+The earlier flat-fallback laboratory comparison depended on multistage retry
+being disabled in both arms. To preserve that comparison after the default
+change, the receiver recognizes `DECODIUM_LAB_HAMDRM_DISABLE_MULTISTAGE=1`
+only when Qt test mode and both `--test-mode` and `--lab-hamdrm` are active.
+The test checks the explicit log for the disabled baseline; ordinary sessions
+do not use this override. Repeating the two-application-receiver laboratory
+comparisons for short and long interleaving produced the expected missing-group
+baseline and recovered both synthetic groups when flat fallback was enabled.
+Artifacts are `.../decodium-hamdrm-fallback-ab-rjsjasb7` and
+`.../decodium-hamdrm-fallback-ab-q9r5queq`. These are synthetic body-group
+replays into one Decodium receiver, not two live transmitting applications.
+
+The two recorded A/short and B/long echo signals were also replayed with the
+default retry while sampling the complete Decodium process every two seconds.
+Both images matched exactly with no reported audio errors. On this Mac, A/B
+median CPU was 34.8%/35.0% of one core, maximum sampled CPU 86.6%/87.1%,
+and maximum sampled RSS 505,728/503,600 KiB over 27 samples each. Samples
+include startup, idle and shutdown. Reports are
+`.../decodium-hamdrm-measure-standard-lihkjoti` and
+`.../decodium-hamdrm-measure-standard-jjje6329`; RX artifacts are
+`.../decodium-qsstv-drm-app-gx44f2ry` and
+`.../decodium-qsstv-drm-app-biclx6ba`. This is not a before/after CPU
+comparison or a sustained worst-case test on slower hardware.
+
+For a more targeted sustained-CRC control, the new
+`export_hamdrm_crc_stress` diagnostic generates two equal-length HAMDRM
+signals with matching FAC and pilots but different MSC data, then averages
+them. This is an artificial collision, not a model of arbitrary RF. Its
+24.0-second Short and 25.6-second Long cases use E/2.5/normal/64-QAM. In
+each of four full Decodium RX replays (two interleaver depths, multistage
+retry enabled and test-only disabled baseline), the trace recorded 60 packet
+CRC failures and no validated groups or saved images. Seven diagnostic
+snapshots in each run reported zero discontinuities, dropped/rejected chunks,
+queue overflows and processing failures.
+
+The same Mac process sampler reported median CPU percentages of one core
+of 36.4/36.7 for Short with retry on/off and 34.9/35.75 for Long on/off;
+maximum sampled values were 83.1/85.8 and 91.3/86.1 respectively. Each run
+had 17 or 18 samples taken two seconds apart, including startup and shutdown.
+This coarse, sequential comparison does not establish that the retry is
+free, measure only the decode worker, or predict performance on slower
+hardware. Reports are `.../decodium-hamdrm-measure-standard-ydtjwqgi`,
+`.../decodium-hamdrm-measure-standard-91xu5xlx`,
+`.../decodium-hamdrm-measure-standard-a3fymo03` and
+`.../decodium-hamdrm-measure-standard-o4zcm6o_`; RX logs are
+`.../decodium-qsstv-drm-app-gz6z4na3`,
+`.../decodium-qsstv-drm-app-haxchr5o`,
+`.../decodium-qsstv-drm-app-qye58k10` and
+`.../decodium-qsstv-drm-app-o67v3e0d` respectively. The new
+`test_hamdrm_crc_stress` regenerates both inputs and checks at least 50 CRC
+failures and zero groups with retry both off and on; it passed locally.
+This is a signal-injection test into one receiver, complementing the live
+two-Decodium A/B transfer above; it is not live EasyPal or RF evidence.
+
+## B/2.3/high/4-QAM/short: two applications and QSSTV replay
+
+On 2026-11-03, two independent A/B runs sent the 225-byte image fixtures
+between two Decodium sessions on macOS using the B/2.3/high/4-QAM/short
+profile. Audio was relayed from BlackHole 16ch to BlackHole 2ch at half gain,
+without echo or added noise. Both received files matched their respective
+fixtures byte for byte; the harness also verified legacy-backend restoration.
+All seven receiver diagnostic snapshots in each run reported zero audio
+discontinuities, dropped chunks, rejected HAMDRM chunks, queue overflows and
+processing failures. The application artifacts are
+`.../decodium-hamdrm-two-app-a-t3e4colf` and
+`.../decodium-hamdrm-two-app-b-dcbsuhh9`; the recordings are in
+`.../decodium-hamdrm-two-app-echo-m7kk0r6y` and
+`.../decodium-hamdrm-two-app-echo-q6xp_7a2` respectively.
+
+The unmodified QSSTV-Experimental 10.0 receiver (executable SHA-256
+`b2de73b06d2308e8363864555336f70eb0ba7603e7d3734c091da3da1a0cf1fa`)
+decoded each recorded signal offline, identified `B/2.3/Hi/4/Short`, and
+recovered the exact corresponding image. Its counters were A: `crc_ok=18`,
+`crc_bad=0`, `pkt_bad=3`, and B: `crc_ok=16`, `crc_bad=0`, `pkt_bad=3`.
+The QSSTV counter `pkt_bad` also counts incomplete packet fragments, as
+discussed below; these runs do not establish three corrupted packets. The
+QSSTV logs reported duplicate bundled/Homebrew Qt framework warnings.
+Artifacts are `.../decodium-qsstv-drm-decode-elnsk8b1` and
+`.../decodium-qsstv-drm-decode-myiz4upx`. This verifies selected recordings,
+not a live QSSTV peer, an RF link or general EasyPal interoperability.
+
+For the reverse direction, the locally built QSSTV source at revision
+`a84584248d3307bfa081362031ff20f365337633` generated two 26-second WAVs
+from the different fixtures, scaled to 320 x 240. This build includes the
+signed-PCM fix and additional hybrid-test instrumentation; the hybrid test
+environment switch was not set. Because this revision's CLI interleaver
+mapping is inverted (see below), `--drm-interleave long` produced Short.
+The unmodified receiver identified both as `B/2.3/Hi/4/Short` and decoded
+their 277-byte JP2 objects, reporting 49 good CRCs, zero bad CRCs and zero
+bad packets for each. These JP2 objects are the reference for the replay;
+they are recompressed images, not copies of the source JPEGs.
+
+Full Decodium receivers replayed both WAVs over BlackHole 2ch and produced
+the respective reference JP2 objects byte for byte. Eight diagnostic
+snapshots per run reported zero discontinuities, dropped chunks, rejected
+HAMDRM chunks, queue overflows and processing failures. The receiver
+artifacts are `.../decodium-qsstv-drm-app-mn67qgfe` and
+`.../decodium-qsstv-drm-app-mvboaj4y`; TX, unmodified-receiver logs and
+reference objects are in `/tmp/decodium-qsstv-b23-short-ab`. The A/B WAV
+SHA-256 values are
+`3208bd060bedb00307a08cba6868c8b7406702821de9b35b1ef5306ca3ea9451` and
+`005c5b33be17b3948c487d0f6e2bcc74069ddd07cb17454b6452872a4edbf471`.
+This is file-mediated interoperability using an instrumented transmitter;
+it does not establish operation with the unmodified transmitter or RF.
+
+The replay laboratory now requires clean audio diagnostics for every normal
+successful image replay, not only selected experimental or BSR paths. It
+rejects absent diagnostics, the wrong input device, missing counters and any
+nonzero discontinuity, dropped-chunk, rejected-chunk, overflow or processing
+failure counter. A/B unit controls exercise each rejection. Repeating the
+above A/B recordings passed the exact-byte and diagnostic checks; artifacts
+are `.../decodium-qsstv-drm-app-jetfslf9` and
+`.../decodium-qsstv-drm-app-j6yni9zf`. The A process used the equivalent
+inline check before it was extracted into the shared validator; its captured
+log also passes the final shared validator. These checks do not turn the
+file-mediated transmitter into a live or unmodified QSSTV sender.
+
+## FAC interleaver acquisition
+
+On 2026-11-03 the receiver was changed to use the CRC-validated FAC
+interleaver depth while still requiring the other configured FAC parameters
+to match. The waveform test exercises both mismatch directions, two distinct
+groups, repeated depth changes on one receiver, reset and rejection of a
+different constellation. Two Decodium sessions over BlackHole 2ch delivered
+image A byte-for-byte with TX long/RX initially short and image B with TX
+short/RX initially long. Their local artifacts are
+`.../decodium-hamdrm-two-app-a-be41d5p5` and
+`.../decodium-hamdrm-two-app-b-yncsxm2z`.
+
+The previously captured official QSSTV B transmission described below was
+also replayed over BlackHole to Decodium initially set to A/2.3/high/4/short;
+the received 225 bytes matched the independent input exactly. Artifacts are
+`.../decodium-qsstv-drm-app-syh8uxtz`. This is a replay of one captured
+signal, not a new live QSSTV transmission or a physical RF test.
+
+The waveform regression now also interrupts a long-interleaver transmission
+after two frames, inserts a silent frame, and verifies that the following
+short-interleaver group is the only group delivered, for two different
+payloads. The receiver reports the interleaver from its last accepted FAC in
+its waveform statistics; reset and incompatible-FAC tests check that this is
+not presented as a newly accepted profile. With `DECODIUM_HAMDRM_RX_TRACE`
+enabled, the application logs that value. The two-app A/B test was repeated
+with an explicit trace assertion: TX long/RX initially short reported long
+and delivered image A exactly (`.../decodium-hamdrm-two-app-a-eyuv9d0r`);
+TX short/RX initially long reported short and delivered B exactly
+(`.../decodium-hamdrm-two-app-b-fw8kf4es`). The interrupted-frame case is a
+codec-level synthetic test, not a two-application interruption test.
+
+An additional live interruption test then exposed a receive acquisition bug:
+after rejecting an out-of-range frequency estimate, repeated pushes could
+retry the same candidate indefinitely. In one failed long-to-short run the
+first FAC arrived, the transmitter was stopped, and the second transmission
+completed without an image while the receiver repeatedly logged the same
+frequency-range error (`.../decodium-hamdrm-interrupted-a-lx55prot`). The
+failure is consistent with the stalled candidate; the separate recording did
+not establish why that candidate had an out-of-range estimate.
+
+The receiver now advances past that rejected timing candidate while retaining
+later samples for acquisition. Two deterministic codec regressions use
+frequency offsets of -35 and +35 Hz followed by valid audio: the invalid
+signal is rejected and the later data group is recovered. The regression
+failed before this change and passed afterwards. With BlackHole 2ch, a single
+Decodium receiver then acquired an initial FAC while a sender was forcibly
+stopped, and received a different image from a subsequent sender using the
+other interleaver depth. Long-to-short and short-to-long both produced one
+byte-exact 225-byte image, with zero reported RX discontinuities, dropped or
+rejected chunks, queue overflows and processing failures. Artifacts are
+`.../decodium-hamdrm-interrupted-a-ehgikmnq` and
+`.../decodium-hamdrm-interrupted-b-uc2d1pjs`; the reproducible harness is
+`tests/sstv/tools/run_hamdrm_interrupted_change_lab.py`. These local tests do
+not establish RF or third-party interoperability under interrupted reception.
+
+The frequency-rejection codec regression was extended to one and five
+out-of-range short frames at each of -35 and +35 Hz, with 240- and
+977-sample input chunks. With one silent frame after the valid frame, all
+eight cases rejected the displaced signal and recovered the subsequent
+group without resource failures. Removing the final silence exposed an
+end-of-stream sensitivity at that stage: +35 Hz, one displaced frame and
+977-sample chunks produced no group from the single valid terminal frame.
+This negative result must not be represented as resolved by the continuous
+audio tests.
+
+Two additional application replays used previously captured Decodium E/2.5/
+high/16-QAM/long transmissions (`.../decodium-hamdrm-tx-a-8035qzr6` and
+`.../decodium-hamdrm-tx-b-mns8pien`). FFmpeg `afreqshift` shifted the first
+15 seconds of one stereo 48 kHz capture by +35 Hz or -35 Hz, then concatenated
+the complete unmodified capture of the other image. Decodium received these
+files through BlackHole 2ch. In both cases it logged out-of-range estimates,
+completed exactly one image, and the final 225 bytes matched the second
+input. All reported RX discontinuity, dropped-chunk, rejected-chunk, queue
+overflow and processing-failure counters were zero. +35 Hz used A then B
+(`.../decodium-qsstv-drm-app-4zryigd5`); -35 Hz used B then A
+(`.../decodium-qsstv-drm-app-52ahlg7x`). The constructed stereo files are
+`/tmp/decodium-hamdrm-cfo-ab-ex2JT2/{a,b}.f32`. These are modified recordings
+played into a local app, not live frequency-shifted transmitters or RF, and
+do not resolve the terminal-frame failure above.
+
+The terminal-frame failure was subsequently reproduced and traced to a
+frequency estimate with too few usable pilots. That result previously used
+the same `Incomplete` path as a search with no timing candidate, discarding
+an entire searched window even though only the best candidate had been
+examined. The receiver now advances past that candidate and continues the
+search. The waveform A/B matrix covers both signs of the offset, one or
+five displaced frames, 240- and 977-sample chunks, and both zero and one
+frame of trailing silence. All sixteen combinations recover the complete
+terminal group; for both offsets a one-sample-truncated final frame emits no
+group. The originally failing +35 Hz/977-sample/no-tail case now passes.
+This is a bounded synthetic result, not a claim for every possible timing
+offset or a physical radio test.
+The full-application interruption A/B check was repeated after the change:
+the long-to-short and short-to-long runs both reconstructed the second image
+byte-for-byte, with exactly one completed object and clean RX counters.
+Artifacts are `.../decodium-hamdrm-interrupted-a-ojtgla1l` and
+`.../decodium-hamdrm-interrupted-b-2roz9k20`. These application checks use
+continuous virtual audio and do not themselves exercise an exact terminal
+frame boundary.
+
+## Official QSSTV application live A/B images
+
+On 2026-11-03 the official macOS ARM64 QSSTV-Experimental 10.0 binary
+(SHA-256 `b2de73b06d2308e8363864555336f70eb0ba7603e7d3734c091da3da1a0cf1fa`)
+and Decodium ran simultaneously over BlackHole 2ch. The QSSTV executable was
+not patched, but an injected laboratory library redirected QSettings to a
+temporary INI directory, enabled Qt test-mode paths and set plugin search
+paths; therefore the process environment was instrumented even though its
+modem and audio implementations were unchanged. The library source and
+binary are in `/tmp/decodium-qsstv-official-isolated/`, and its SHA-256 is
+`b825bc4e5419198dc3994ec6378da7eb92420de3984cf4de480717214856e7c1`.
+The QSSTV UI showed BlackHole 2ch for both input and output, CAT and serial
+PTT disabled and `No Rig`. Test directories were explicitly configured in
+the isolated INI file, and online status was disabled. The application
+reported duplicate Qt-framework warnings, so this result is limited to this
+environment. Fusion style avoided a separate macOS slider painting stall;
+the initial process sample is retained as `hang-sample.txt` in that directory.
+
+In the Decodium-to-QSSTV direction, two Decodium TX sessions sent distinct
+225-byte JPEGs using E/2.5/high/16-QAM/long. The QSSTV DRM receive UI reported
+each filename and saved it to the isolated RX directory. The saved A/B files
+were byte-identical to the Decodium inputs (SHA-256
+`d8f477eda8727eb80f162760af8f93c7d655e5df81566a665cc53ef8a076ec03` and
+`14648ca1cfb6c6b186755a23c247bbc3d9b0eacc690897666676750f56b1b3ad`).
+Decodium TX captures and logs are `.../decodium-hamdrm-tx-a-8035qzr6` and
+`.../decodium-hamdrm-tx-b-mns8pien`; QSSTV outputs are under the isolated
+`data/rxDRMImagesPath` directory. The UI reported 34 and 35 dB respectively.
+
+In the opposite direction QSSTV's GUI sent the same A/B files as binary
+objects, and separate standard Decodium RX sessions reconstructed all 225
+bytes exactly, without adaptive mode. The received files and runtime logs
+are `/tmp/decodium-official-live-rx-long-a-20261103/received-a` and
+`/tmp/decodium-official-live-rx-long-b-20261103/received`. The diagnostics
+reported 48 and 36 delivered groups and zero discontinuities, dropped or
+rejected chunks, queue overflows and processing failures. The selected RX
+profile was A/2.3/high/4-QAM/long. Although the QSSTV TX panel displayed
+`Short`, the first attempts with Decodium's short profile reported FAC profile
+mismatch. A separately captured B transmission was decoded by the official
+QSSTV batch receiver as A/2.3/Hi/4/Long and produced the exact B file;
+its artifacts are `.../decodium-qsstv-drm-decode-14m7a_vd`. This establishes
+the observed transmitted profile for that capture, not why the GUI showed a
+different selection.
+
+A second QSSTV TX request in the same session did not produce a second
+Decodium object; a process sample recorded the GUI inside
+`dispatcher::startTX` / `rxFunctions::stopAndWait`, and the application was
+restarted before the successful B transmission. The sample is
+`hang-fusion.txt` in the isolated directory. This is not a clean sequential
+two-transmission result and the stall's cause is unproven. These are selected
+single-profile-per-direction, local virtual-audio tests with small synthetic
+JPEGs. They do not establish uninstrumented execution, live repair/BSR,
+hybrid FTP, other profiles, EasyPal compatibility or physical RF operation.
+
 ## Operator-selected experimental adaptive reception
+
+After the CRC-gated multistage retry became the ordinary application default,
+the two public EasyPal-labelled recordings below were replayed again without
+the operator-selected adaptive mode. A still produced zero delivered groups
+and no image; B produced 390 groups and the exact 10,546-byte unpadded
+reference. All 28/42 sampled diagnostics respectively reported zero audio
+discontinuities, dropped or rejected chunks, queue overflows and processing
+failures. Artifacts are `.../decodium-qsstv-drm-app-wzr8a7a1` and
+`.../decodium-qsstv-drm-app-4ttr0iqo`. This confirms the first recording's
+ordinary-receiver gap remains after that default change; it does not identify
+the original transmitter or establish live EasyPal interoperability.
+
+An additional offline comparison on the retained 12 kHz recordings used the
+current analyzer with strict 0.12/0.30 pilot limits. Flat plus multistage
+produced zero groups on A; the adaptive two-timing comparison delivered 164
+groups, and RS2 recovered the exact reference with 47 missing segments.
+Both paths recovered the exact unpadded B reference with 390 groups. This
+confirms that packet retry alone is insufficient for this A capture and that
+the adaptive path supplies useful data before CRC/RS verification. It does
+not justify changing the default by itself: these remain two recordings and
+do not bound false locks, latency or CPU cost across machines and channels.
 
 The Digital SSTV page now exposes an explicitly experimental adaptive RX
 option. It is off at startup, may only be changed while HAMDRM is idle, and
@@ -9,6 +886,16 @@ candidates and CRC-gated flat/multistage packet retries. It can require more pro
 EasyPal compatibility. The normal receiver remains the default. Backend
 capability is checked before enabling it, and the UI disables the control
 when the backend does not support it or an operation is active.
+
+The Digital SSTV page now shows guidance beside the option even while it is
+off: stop RX, enable adaptive reception and retry a difficult signal. When
+enabled, it instead identifies the additional processing as experimental.
+An offscreen QML test checks both messages and the disabled-while-busy state.
+After this change, two Decodium A/B sessions with operator-selected adaptive
+mode transferred the 225-byte fixtures exactly and verified legacy monitor
+restoration; artifacts are `.../decodium-hamdrm-two-app-a-ubjyjj57` and
+`.../decodium-hamdrm-two-app-b-ayqub9pk`. These are local transfers, not an
+automatic diagnosis or live EasyPal interoperability proof.
 
 On macOS ARM64, controller and adapter tests passed, and an offscreen QML
 test clicked the control on and off and verified it is disabled during RX.
@@ -32,6 +919,107 @@ reference before the successful repeat (`.../decodium-qsstv-drm-app-vap4vnq5`).
 The page control test is offscreen and the app replay sets its property via a
 test-only hook, not a mouse click in those live transfers. Windows, Linux,
 real RF, live EasyPal and performance on slower machines remain unverified.
+
+After adding the temporal candidate to the operator-selected path, the same
+two public recordings were replayed in full again. Decodium recovered A as
+the exact 21,191-byte QSSTV reference and B as the exact 10,546-byte
+unpadded reference. The original MP3 SHA-256 hashes and both reference
+hashes were checked before the runs. Across 29/43 RX diagnostic snapshots,
+there were no reported discontinuities, dropped/rejected chunks, queue
+overflows or processing failures. Maximum delivered-group counts were
+678/1,560 and can include repeated groups from the four candidates.
+Artifacts are `.../decodium-qsstv-drm-app-n2dvj1al` and
+`.../decodium-qsstv-drm-app-u3ye5i2`. The laboratory selected the same
+controller option and confirmed the new candidate started; it did not
+isolate which candidate supplied each group. As above, the B reference is
+199 bytes shorter than the zero-padded QSSTV output, and the recordings'
+EasyPal versions and original transmission paths are unverified. This is
+recorded-signal reception, not an EasyPal application or live RF exchange.
+
+An offline same-PCM comparison isolated the temporal candidate's contribution
+on those recordings at strict 0.12/0.30 pilot limits. On A, adaptive plus
+multistage alone recovered 152 of 245 body segments and could not complete;
+temporal alone recovered 172 and could not complete. Combining validated
+groups from those two independent receivers recovered 213 segments, allowing
+RS2 to reconstruct the exact 21,191-byte reference. On B, the combined
+receivers recovered all 350 segments and the exact unpadded reference.
+Swapping the A/B references was rejected in both cases. The analyzer's
+printed frame and group statistics refer to the primary receiver, while its
+assembler consumes validated groups from both. This comparison does not
+isolate their relative contribution in the preceding full-app runs or prove
+the original recordings' transmitter provenance.
+
+Reproduce by setting `DECODIUM_HAMDRM_TEMPORAL_MERGE=1` for
+`analyze_hamdrm_capture` with `adaptive-multistage`, using the A/B PCM and
+references in `/tmp/decodium-qsstv-easypal-check` and profiles
+`B 2500 16 ... long ... high` and `E 2300 4 ... long ... high` respectively.
+The analyzer regression suite also exercises merged A/B QSSTV fixtures,
+crossed references and seeded noise; it passed after the addition.
+
+`tests/sstv/tools/check_hamdrm_easypal_recordings.py ANALYZER DIRECTORY` now
+repeats the recorded A/B comparison with SHA-256-pinned PCM and references,
+the standard receiver, adaptive/temporal merge, and crossed-reference
+negatives. On the current Mac build, standard RX still did not reconstruct A
+and did reconstruct B; the adaptive merge reconstructed both byte-for-byte and
+rejected both crossed references. The check allows a future standard receiver
+to recover A without treating that improvement as failure. It clears diagnostic
+environment overrides that could change the mode or write decoded objects;
+an inherited output-path negative control created no file. The external
+recordings are not distributed with the repository, and this offline check
+does not establish their EasyPal provenance or a live peer exchange.
+
+With the current flat/multistage receiver, an offline A/B threshold sweep
+used normalized pilot-error limits 0.12, 0.20, 0.30, 0.50 and 1.0, each
+with the corrupted-pilot fraction set to 1.0. Recording A yielded no groups
+at any of these settings, although the reported pilot failures decreased
+from 203 to 101; B yielded 390 groups and its exact unpadded reference at
+each setting. Thus simply relaxing these diagnostic thresholds did not
+repair A, and the sweep does not justify weakening production checks. The
+hash-pinned comparison helper repeats it with `--pilot-sweep`; it reports
+outcomes without requiring A to remain a failure in future builds. These
+are two selected offline recordings, not an RF tolerance or safety bound.
+
+An offline-only experiment tried reducing the parallel-candidate cost by
+using one receiver and selecting, for each symbol, the lowest reported pilot
+error among temporal, interpolated and cross-validated flat estimates. On
+recording A it delivered 203 groups but retained 172 of 245 body segments,
+the same result as temporal alone, and did not reconstruct the image. B
+reconstructed its 10,546-byte reference. This selected comparison did not
+show an improvement sufficient to replace the existing multi-receiver merge;
+the experimental code was removed. In particular, it does not establish
+that differently computed pilot-error scores are directly comparable, nor
+that no lower-cost estimator could work on these or other signals.
+
+An independent optimization experiment precomputed the temporal estimator's
+pilot-neighbour indices once per frame instead of rescanning them for every
+symbol. Five alternating offline before/after runs on the same two recordings
+produced identical analyzer output and exact recovered objects. Median
+wall times were 1.0803/1.0840 seconds for A and 2.1708/2.1546 for B
+(before/after). These small changes do not establish a useful performance
+improvement; the prototype added four index vectors and was removed. The
+original receiver and waveform suite were rebuilt, and the waveform CTest
+passed. This small same-machine experiment is not a CPU, energy or
+cross-platform benchmark and does not resolve the standard receiver gap.
+
+The two recorded inputs were additionally resampled to simulate opposite
+small clock offsets: the 12 kHz PCM was interpreted as 12,001 Hz for A and
+11,999 Hz for B, then resampled back to 12 kHz (approximately ±83 ppm;
+this also shifts audio frequencies). The offline adaptive and temporal merged
+receiver recovered the A reference and B unpadded reference exactly. Full
+Decodium application receivers using the operator-selected experimental
+adaptive mode replayed those altered files over BlackHole and recovered
+21,191 and 10,546 bytes exactly, with no reported dropped or rejected chunks,
+discontinuities, queue overflows or processing failures. Artifacts are
+`.../decodium-qsstv-drm-app-974w5asx` and
+`.../decodium-qsstv-drm-app-u6fvisps`. Resampled s16 SHA-256 values are
+`c7598a0687a476dfbeec7575715f79e6b147ffb0402589926490ca53928f1066`
+and `3b9e9f2d6ec782eda9afffc2e06823c97ad71306dc1216917e6126727a07cbf2`.
+Separately, two Decodium application pairs using adaptive mode and the macOS
+legacy monitor exchanged 225-byte A/B fixtures exactly and restored fresh
+legacy PCM (`.../decodium-hamdrm-two-app-a-wzxunikz` and
+`.../decodium-hamdrm-two-app-b-1pjasimm`). Those local transfers did not
+include the clock offset. The recordings' EasyPal provenance remains
+unverified; none of these checks is a live EasyPal exchange or an RF test.
 
 Further operator-selected A/B tests checked the macOS legacy-backend handoff:
 both 225-byte images arrived exactly, monitoring was suspended while HAMDRM
@@ -134,6 +1122,74 @@ logs. These controls do not quantify false-positive rates or prove rejection
 of every malformed waveform. Use `DECODIUM_LAB_EXPECT_NO_IMAGE=1` with
 `DECODIUM_LAB_HAMDRM_USER_TIMING=1` and an explicit profile to reproduce the
 negative check with a generated noise WAV.
+
+## E/2.3/high/64-QAM/long with a synthetic echo
+
+Two different 225-byte JPEGs were transmitted by full Decodium processes on
+macOS ARM64 with E/2.3 kHz/high protection/64-QAM/long interleaving. A
+BlackHole relay added a 1 ms echo at gain 0.10 without additional noise or
+tone. Both ordinary receivers reconstructed their image byte-for-byte;
+active diagnostics reported no dropped/rejected chunks, queue overflows,
+discontinuities or processing failures, and the legacy monitor and fresh PCM
+resumed after cancellation. Relay active frames were 467,998 and 468,231;
+no relay errors were recorded. App artifacts are
+`.../decodium-hamdrm-two-app-a-xyjljont` and
+`.../decodium-hamdrm-two-app-b-uqhn8qau`, and relay captures are
+`.../decodium-hamdrm-two-app-echo-ms0tlxrw` and
+`.../decodium-hamdrm-two-app-echo-3h7qtlls`.
+
+The pinned unmodified QSSTV-Experimental 10.0 batch receiver independently
+identified both saved recordings as E/2.3/Hi/64/Long and recovered the exact
+225-byte inputs. Each reported 15 good MSC CRCs, zero bad MSC CRCs and one
+bad packet. Its artifacts are `.../decodium-qsstv-drm-decode-f8c928af` and
+`.../decodium-qsstv-drm-decode-_93p9ysm`. The first QSSTV batch check ran
+while the B audio test was starting; B's own audio diagnostics and relay
+reported no errors. These are local A/B transfers and one-way recorded-peer
+checks for one profile, not live two-way QSSTV, EasyPal or RF evidence.
+
+The same E/2.3/high/64-QAM/long profile was tested with a 1 ms echo at
+gain 0.10 plus deterministic noise and a 1700 Hz tone, each peak 0.01.
+With the ordinary receiver neither A nor B reconstructed the image: TX
+completed and the relay reported no errors, but RX delivered at most zero
+and one groups respectively. The harness ultimately reported a missing legacy
+restoration result because image completion did not trigger its restoration
+sequence; this is not evidence that a completed reception failed to restore
+the legacy backend. Ordinary artifacts are
+`.../decodium-hamdrm-two-app-{a-ed5r0w9j,b-6m39qofd}` and relays
+`.../decodium-hamdrm-two-app-echo-{r6env3tq,pdpcp8tu}`.
+
+With the operator-selected experimental adaptive option, new A/B sessions
+under the same nominal relay parameters reconstructed both 225-byte images
+exactly, with zero reported RX discontinuities, dropped/rejected chunks,
+queue overflows and processing failures; legacy monitoring and fresh PCM
+resumed after cancellation. The early candidate reported nine groups in each
+run; counts may duplicate primary results. The unmodified QSSTV batch
+receiver recovered both recorded outputs byte-for-byte and identified
+E/2.3/Hi/64/Long; it reported 16 good MSC CRCs, zero bad MSC CRCs and one
+bad packet per recording. App artifacts are
+`.../decodium-hamdrm-two-app-{a-19wj0qk6,b-ul_uy_cs}`, relay captures
+`.../decodium-hamdrm-two-app-echo-{g3nwaf6f,y6jqizvf}`, and QSSTV results
+`.../decodium-qsstv-drm-decode-{maewm4b0,fm967wwn}`. The runs are separate
+transmissions with the same nominal impairment, not sample-identical replay
+controls. They do not establish general noise tolerance, RF behaviour or
+live two-way interoperability.
+
+The two adaptive-run relay recordings above were then replayed without
+modification through BlackHole into separate full Decodium RX sessions,
+first with ordinary reception and then with the operator-selected adaptive
+option. The ordinary receiver saved no image and reported at most one group
+for each recording; the adaptive receiver recovered each 225-byte reference
+exactly. All replay runs reported zero discontinuities, dropped/rejected
+chunks, queue overflows and processing failures. Artifacts for ordinary A/B
+are `.../decodium-qsstv-drm-app-s3m1w6eg` and
+`.../decodium-qsstv-drm-app-rna7b3_t`; adaptive A/B are
+`.../decodium-qsstv-drm-app-k7v32dev` and
+`.../decodium-qsstv-drm-app-at37jseq`. This controlled recorded-signal A/B
+comparison keeps the waveform identical; the fresh audio playback sessions
+can still introduce timing variation. The harness supports
+`DECODIUM_LAB_EXPECT_INCOMPLETE=1` to assert no image and clean audio without
+requiring zero decoded groups. It does not claim a general false-positive or
+noise-sensitivity rate.
 
 ## A/2.5/high/64-QAM with a synthetic echo
 
@@ -1819,10 +2875,11 @@ decoded-group boundary, not caused by RF or a noisy channel.
 
 ### Experimental CRC-gated multistage retry
 
-An iterative multistage MSC decoder can be selected only in the laboratory
-test mode together with the experimental adaptive estimator. It retries a
-packet after existing decoders fail and accepts it only when its packet CRC
-passes. It is not enabled in ordinary Decodium sessions. Its clean output
+At the time of these earlier tests, an iterative multistage MSC decoder was
+selectable only in laboratory test mode. It retries a packet after existing
+decoders fail and accepts it only when its packet CRC passes. It is now enabled
+in ordinary application sessions as described at the start of this document.
+Its clean output
 matches all 36 independent QSSTV MSC cell vectors. For deterministic 64-QAM
 noise trials, it recovered 6, 19 and 8 additional blocks out of 20 at noise
 amplitudes 0.21, 0.23 and 0.25 respectively; these are synthetic test cases,
@@ -1947,8 +3004,9 @@ live transfers. On the earlier four phase-offset versions of the B capture,
 with ordinary 0.12/0.30 pilot limits, flat and flat-multistage both decoded
 offsets 0 and 1; both failed offset 2, and only flat-multistage reconstructed
 offset 3 exactly, with one recovered packet. This is a controlled offline
-comparison, not general channel or platform coverage. The strict-pilot
-multistage path remains disabled outside explicit test mode.
+comparison, not general channel or platform coverage. At the time of these
+tests the strict-pilot multistage path was disabled outside explicit test
+mode; it is now enabled by the native RX adapter.
 The capture analyzer and extended waveform/noise suites passed on macOS
 ARM64 with AddressSanitizer and UndefinedBehaviorSanitizer after this change
 (leak checking disabled). This does not establish Windows or Linux results.
@@ -2250,3 +3308,415 @@ per run had zero of the same audio/error counters. Artifacts are
 `.../decodium-hamdrm-two-app-b-wlyakorl`. These results extend the earlier
 short-profile Decodium-to-QSSTV small-image evidence in the reverse direction;
 they do not establish live QSSTV/EasyPal exchange or RF performance.
+
+### Flat receiver continuity on the two EasyPal-labelled recordings
+
+The standard flat receiver was traced again on the two SHA-256-pinned
+recordings used by `check_hamdrm_easypal_recordings.py`. With normal 0.12/0.30
+pilot limits, A accepted 284 frames and recorded 203 pilot failures but no
+validated groups; B accepted 401 frames and reconstructed all 350 object
+segments. Sampling the trace whenever the accepted-frame counter advanced
+showed at most two accepted frames between observed pilot-failure counter
+changes on A, versus a run of 400 on B. These are observations at PCM chunk
+boundaries, not instrumented exact lock durations. A long interleaver needs
+five frames, so frequent loss of the data path is a plausible contributing
+factor, not proof of the only cause.
+
+As a diagnostic only, raising both pilot limits to 1.0 extended the longest
+observed run on A to six frames but still produced no groups. B still produced
+the exact reference. Therefore simply relaxing pilot validation is neither a
+demonstrated fix nor appropriate evidence for changing production limits.
+The recordings have different DRM profiles and unverified transmitter
+provenance, so this A/B comparison does not isolate channel quality or prove
+live EasyPal interoperability. Local traces are
+`/tmp/decodium-hamdrm-{flat,loose}-{a,b}.trace` and corresponding `.out`
+files; they are transient laboratory artifacts.
+
+An offline timing experiment then linearly interpolated each recording to
+change its sample count by a fixed ratio, without changing production RX or
+its pilot limits. For recording A, shortening the PCM by 130, 140 and
+150 ppm made the flat-multistage receiver reconstruct the exact 21,191-byte
+reference, with respectively 224, 276 and 220 validated groups. Shortening
+by 120 ppm produced 172 groups but no complete match; lengthening by
+125 ppm produced no groups. For B, either shortening or lengthening by
+125 ppm produced no groups, whereas the unmodified B recording decoded
+exactly. Linear interpolation also changes the signal and this sweep does
+not identify the original transmitter or establish a physical clock error.
+It does show that relative sample timing strongly affects these two
+captures, and that an unconditional fixed correction would regress B. A
+receiver-side timing tracker must therefore adapt and be tested against
+both drift directions, stable clocks, discontinuities and independent peers.
+The generated PCM files are transient `/tmp/decodium-hamdrm-*.s16` artifacts.
+
+An offline-only tracking prototype retains up to two PCM samples after each
+frame and selects a nearby frame start using the nominal pilot score. Normal
+pilot, FAC and packet validation remains in force. With tracking enabled,
+the original A and B captures both produced exact output (280 and 390
+groups respectively), and both rejected the other capture's reference.
+Without tracking A produced no groups and B remained exact. After linear
+resampling by +125 and -125 ppm, B still decoded exactly in both cases;
+A decoded exactly when shortened by 125 ppm, but lengthening A by 125 ppm
+produced only 24 groups and no complete output. This limitation rules out
+enabling the prototype in normal RX. The baseline waveform suite also
+passed; it does not itself exercise this tracking option. The two pinned
+recordings and crossed-reference checks can be repeated with
+`check_hamdrm_easypal_recordings.py --frame-tracking`. This prototype is
+available only through the offline analyzer's diagnostic environment flag;
+it has not been tested in two running Decodium sessions, with live peers,
+or against all clock discontinuities and signal profiles.
+
+The later prototype scores pilots at both the first and last symbol of each
+frame. With this change A and B each reconstructed their exact reference
+after either +125 or -125 ppm linear resampling, and both unmodified
+recordings and crossed-reference negatives passed. The earlier failure on
+the lengthened A capture therefore applies to the first-symbol-only version.
+These selected fixtures do not establish general clock-tracking performance.
+The tracker remains experimental; the application exposes it only through a
+test-mode HAMDRM laboratory flag, never through the ordinary environment.
+Two local Decodium process pairs subsequently transferred fixture A and B
+byte-for-byte over clean BlackHole audio with tracking enabled; both RX logs
+confirmed the laboratory option and the legacy monitor restoration check
+passed. The respective artifacts are `.../decodium-hamdrm-two-app-a-2zj9hblw`
+and `.../decodium-hamdrm-two-app-b-ezmi371p`. These clean-audio app tests do
+not demonstrate live clock drift or independent EasyPal exchange.
+The waveform suite now also exercises tracking with two distinct synthetic
+12-group transmissions at nominal rate and +/-125 ppm, using 743-sample
+chunks and one trailing frame of silence. All six cases recovered their
+groups exactly. Without trailing samples the shortened first fixture lost
+its final group; the shortened stream leaves less data at the final boundary,
+this test does not establish recovery of a truncated final frame. The
+receiver avoids retaining its tracking look-behind when end-of-stream
+coincides exactly with the end of a complete frame.
+
+The experimental tracker now pads at most four missing samples only at a
+locked end-of-stream frame; normal pilot, FAC and packet CRC checks remain
+mandatory. With this change the same synthetic A/B fixtures recovered all
+groups at nominal and +/-125 ppm without trailing silence. Exact complete
+end boundaries also passed. For each fixture a separate final frame cut by
+100 samples remained incomplete and emitted only the correct preceding
+groups. Two deterministic noise fixtures produced no groups with tracking
+and multistage retry enabled. These checks do not cover every truncation,
+noise distribution or possible corruption; the option remains laboratory
+only. The two-app clean-audio evidence above predates this end-of-stream
+handling change.
+After the change, two clean-audio application pairs again delivered both
+fixture images byte-for-byte and passed the legacy restoration check:
+`.../decodium-hamdrm-two-app-a-yr30eyp5` and
+`.../decodium-hamdrm-two-app-b-n3z1s3ji`. These live audio tests do not
+exercise a finite truncated PCM file or establish independent-peer support.
+
+The native waveform matrix was extended to exercise experimental tracking
+across six mode/bandwidth combinations, three constellations, two protection
+levels and both interleavers. All 72 clean cases completed. With two echo
+levels, 120 of 144 cases completed, with no regression among the 120 cases
+completed by the ordinary flat receiver; neither completed the other 24 in
+this matrix. Two distinct synthetic streams also reacquired after eight
+frames of deterministic noise and recovered exactly their before/after
+groups. These bounded core tests do not establish performance with arbitrary
+channels, live timing drift or all third-party implementations.
+
+The local two-app BlackHole relay can now introduce a bounded simulated
+sample-rate mismatch by linear interpolation with a prebuffer; it reports
+the requested ratio and relay errors. With experimental tracking selected,
+fixture A at +250 ppm and fixture B at -250 ppm both arrived byte-for-byte,
+with legacy monitor restoration confirmed and no relay errors. These used
+mode A, 2.5 kHz, normal protection, 16-QAM and long interleaving, with zero
+intentional echo and noise. Relay artifacts are
+`.../decodium-hamdrm-two-app-echo-oqskef46` and
+`.../decodium-hamdrm-two-app-echo-iekrooi9`; the corresponding app artifacts
+are `.../decodium-hamdrm-two-app-a-hzrxdh7_` and
+`.../decodium-hamdrm-two-app-b-7ecmbm0p`. This is simulated drift through
+two local applications, not independent device clock measurements, an
+untracked-receiver comparison or live EasyPal interoperability.
+Separate untracked control runs using the same profiles and respective drift
+directions completed transmission but received zero validated groups and no
+image; the relay reported no errors and RX diagnostic counters were zero.
+In the A control, the harness reported the missing legacy-restoration marker
+before its image-completion check; B explicitly reported incomplete RX. The
+tracked runs did complete and restore legacy monitoring. The untracked app
+artifacts are `.../decodium-hamdrm-two-app-a-yytsoxwq` and
+`.../decodium-hamdrm-two-app-b-1dun3at4`; relay artifacts are
+`.../decodium-hamdrm-two-app-echo-2eu8su4y` and
+`.../decodium-hamdrm-two-app-echo-rw3qon4p`. These are separate real-time
+runs, not a bit-identical replay or proof across other channel conditions.
+
+The application now enables this frame-timing tracker for its ordinary
+single-receiver HAMDRM path; the user-selected multi-candidate adaptive
+path keeps its previous settings until its combined cost is evaluated. A
+test-mode-only switch can disable tracking for a controlled comparison.
+Two application-pair tests with the normal default and simulated +250 ppm
+(A) or -250 ppm (B) completed with exact images and restored legacy
+monitoring. The respective app artifacts are
+`.../decodium-hamdrm-two-app-a-u1pxv165` and
+`.../decodium-hamdrm-two-app-b-8fwj06sx`; their logs identify the enabled
+default. With tracking explicitly disabled for the laboratory controls,
+the same A/B scenarios transmitted fully but produced zero groups, with
+clean RX diagnostics. Their app artifacts are
+`.../decodium-hamdrm-two-app-a-92_46geu` and
+`.../decodium-hamdrm-two-app-b-tvnl84rf`. These are separate live runs.
+
+On this Mac, three offline analyzer runs on the 115-second A recording took
+2.938–2.966 s without tracking and 0.328–0.329 s with tracking; only the
+tracked runs reconstructed the reference. For the 188-second B recording,
+which both decoded, timings were 1.047–1.055 s without tracking and
+1.141–1.161 s with tracking. These wall times are specific to this machine
+and recording set, not a general CPU benchmark or cross-platform evidence.
+The evidence above does not establish live EasyPal interoperability, RF
+performance, or recovery for arbitrary profiles and channels.
+
+The two EasyPal-labelled recordings of uncertain provenance were then
+replayed through BlackHole into the full Decodium application using its
+ordinary single-receiver default, without enabling the adaptive candidates.
+A (B/2.5 kHz/high/16-QAM/long) reconstructed all 21,191 reference bytes;
+B (E/2.3 kHz/high/4-QAM/long) reconstructed 10,546 bytes equal to the
+unpadded reference, itself the prefix of the independent QSSTV output with
+199 trailing zero bytes removed. Both RX logs confirmed default timing
+tracking, and the replay harness checked source device plus zero
+discontinuities, dropped chunks, rejected chunks, queue overflows and
+processing failures across its diagnostic snapshots. Artifacts are
+`.../decodium-qsstv-drm-app-yiwf64dt` and
+`.../decodium-qsstv-drm-app-xniyg806`. These tests strengthen application
+replay evidence for the selected recordings; the original transmitter is
+unverified and this is not a live EasyPal or RF exchange.
+
+After the ordinary frame tracker was enabled, offline A/B controls revisited
+the independently generated A/2.3/normal/16-QAM/short recordings described
+at the start of this document. With tracking and strict normal pilot limits,
+both original recordings still decoded byte-exactly, but neither recording
+shifted by -5/+5 Hz acquired a valid frame. Thus tracking clock drift does
+not resolve that earlier frequency/timing acquisition gap.
+
+For a separate experimental interaction check, the existing adaptive-early
+single receiver without the new tracker reconstructed both shifted objects;
+enabling the tracker as well reconstructed A but not B (38 validated groups
+and an incomplete B object). This result is a reason not to enable the
+tracker indiscriminately in adaptive candidates. The app's user-selected
+multi-candidate path keeps tracking disabled by default. These are offline
+selected-recording checks, not a diagnosis of the regression, a new live
+peer exchange or a claim about all frequency offsets.
+
+On the current application build, the operator-selected adaptive reception
+was rechecked against both shifted WAVs through BlackHole: A (-5 Hz) and B
+(+5 Hz) each reconstructed their respective 277-byte QSSTV reference, and
+the harness confirmed clean RX audio diagnostics. These runs used the
+multi-candidate path, not ordinary single-receiver tracking; artifacts are
+`.../decodium-qsstv-drm-app-wgofzzmt` and
+`.../decodium-qsstv-drm-app-r5zh1jkm`. This is replay of instrumented
+QSSTV-source files, not live EasyPal interoperability or an automatic fix
+for the default receiver's acquisition gap.
+
+Two timing-score experiments were rejected: using the frequency-corrected
+demodulator for the existing flat pilot score changed the tracked
+adaptive-early result from exact A/incomplete B to incomplete A/exact B;
+selecting by cross-validated adaptive pilot error failed to reconstruct
+either reference. Neither experiment remains in the application. The
+bounded helper `tests/sstv/tools/check_qsstv_frequency_offset_recordings.py`
+now verifies the SHA-256 of the four original/shifted PCM fixtures and both
+references, then repeats the A/B baseline, shifted and crossed-reference
+controls. It requires exact results for the previously successful paths but
+reports rather than requires failure on the unresolved paths, so a future
+improvement is not rejected. A missing-fixture negative control also passed.
+The external recordings are not included in the repository; these checks
+do not establish live EasyPal operation or all channel conditions.
+
+The experimental early-timing tracker now keeps a one-sample early bias
+when following the pilot-score minimum, preserving the candidate's intended
+timing rather than converging it to the nominal candidate. Both shifted
+QSSTV-source recordings now reconstruct exactly with the adaptive-early
+receiver and tracking enabled, and crossed-reference negatives pass. A
+synthetic A/B test also passed all combinations of +/-4 Hz carrier offset
+and -125/0/+125 ppm sample-rate change, using a long interleaver and twelve
+groups. These selected core tests do not establish universal recovery.
+
+Two further full Decodium process pairs used the strict-pilot single
+adaptive-early laboratory receiver with tracking enabled. Over BlackHole,
+A with +250 ppm and B with -250 ppm reconstructed both 225-byte files
+exactly and restored legacy monitoring; their logs confirm the intended
+candidate and tracker. App artifacts are
+`.../decodium-hamdrm-two-app-a-7agczc9q` and
+`.../decodium-hamdrm-two-app-b-hn27tue5`, with relay artifacts
+`.../decodium-hamdrm-two-app-echo-q7d33f4u` and
+`.../decodium-hamdrm-two-app-echo-ygfu5psj`. Carrier offset and sample-rate
+offset were combined in the synthetic tests, but not in these two-app
+trials. Adaptive-early tracking remains a laboratory option; the ordinary
+receiver still does not acquire the shifted QSSTV recordings and the
+multi-candidate UI path has not been changed by this experiment.
+The subsequent 144-case native echo matrix found that the early receiver
+without frame tracking completed 124 cases, while the biased tracked version
+completed 104 and regressed 21 previously successful cases. Therefore the
+positive A/B results above are insufficient to enable this combination in
+normal or user-selected adaptive reception; it remains laboratory-only.
+
+A subsequent early-candidate tracker keeps its predicted timing unless the
+pilot score improves by at least 5%, reducing timing jitter from marginal
+score differences. On the same native echo matrix, both the untracked and
+tracked early candidates completed 124/144 cases, with zero regressions from
+the untracked result; the two shifted QSSTV-source recordings and their
+crossed-reference controls also passed. Synthetic A/B checks combining +/-4 Hz
+carrier offset with -125/0/+125 ppm sample-rate change passed. The tracker
+is now enabled for the early candidate when the operator selects the existing
+multi-candidate adaptive mode; the other adaptive candidates are unchanged.
+
+With only the early candidate's groups delivered for testing, two full
+Decodium process pairs using the operator-selected adaptive mode transferred
+images A/B exactly with simulated +250/-250 ppm respectively and restored
+legacy monitoring. App artifacts are `.../decodium-hamdrm-two-app-a-qur2lgtc`
+and `.../decodium-hamdrm-two-app-b-4ybusffx`. The same early-only delivery
+replayed the instrumented QSSTV-source -5/+5 Hz WAVs through BlackHole and
+recovered the respective 277-byte independent references exactly, with
+clean RX diagnostic snapshots; artifacts are
+`.../decodium-qsstv-drm-app-f2m56n78` and
+`.../decodium-qsstv-drm-app-gjq2jq98`. All candidates were still processing;
+only group delivery was isolated. These are selected laboratory scenarios,
+not RF or live EasyPal evidence. The normal single receiver still fails the
+shifted QSSTV files; operator selection remains necessary for those inputs.
+
+The ordinary application receiver now also runs a strict-pilot adaptive
+early candidate alongside its primary tracker and delivers independently
+validated groups from either. A terminal error in this optional candidate
+stops that candidate rather than the primary receiver. The user-selected
+multi-candidate mode retains its separate behaviour. On the current build,
+the -5/+5 Hz QSSTV-source A/B WAV replays reconstructed both 277-byte
+references exactly without operator-selected adaptive mode; primary traces
+showed no groups, while the automatic early candidate delivered groups.
+RX diagnostic snapshots were clean. Artifacts are
+`.../decodium-qsstv-drm-app-l823xsqj` and
+`.../decodium-qsstv-drm-app-b7ypr9p_`. Laboratory controls explicitly
+disabling the automatic candidate received no groups from those files and
+had clean diagnostics (`.../decodium-qsstv-drm-app-nlu9_wm_` and
+`.../decodium-qsstv-drm-app-v5tdzxlm`). These are separate replays, not
+independent live-transmitter tests.
+
+Two normal Decodium process pairs transferred the A/B files byte-for-byte,
+restored the legacy monitor, and reported zero audio diagnostic errors in
+the recorded snapshots (`.../decodium-hamdrm-two-app-a-369mkhul` and
+`.../decodium-hamdrm-two-app-b-z634kz1a`). Two further pairs forced the
+automatic candidate to hit a one-frame test-only limit; both primary
+receivers continued and delivered the exact images, with legacy monitoring
+restored (`.../decodium-hamdrm-two-app-a-mc06ptev` and
+`.../decodium-hamdrm-two-app-b-qkdb4su5`). Two 12-second deterministic
+noise replays on A/2.5/normal/16/short and B/2.5/high/16/long produced no
+groups or images and had clean RX diagnostics
+(`.../decodium-qsstv-drm-app-rdnla2ep` and
+`.../decodium-qsstv-drm-app-xrrwpzdw`). These selected controls do not
+quantify false positives, CPU cost on slower systems, or live EasyPal/RF
+interoperability. Controller and native adapter CTests passed on this Mac.
+
+For an indicative local cost comparison, the same two clean QSSTV-source
+A/2.3/normal/16/short WAVs were replayed in separate full-application runs
+with the automatic candidate disabled and enabled. All four produced exact
+277-byte references and clean RX diagnostics. With 19–20 `ps` samples per
+run, process-wide median CPU was 37.9% versus 38.9% of one core for A and
+34.2% versus 38.1% for B; peak sampled RSS ranged from 513,552 to 517,040
+KiB. The samples include application startup, other application processing
+and shutdown, and each condition was run only once per recording; these
+figures are not isolated DSP costs, a general performance benchmark or
+evidence for slower machines. Measurement artifacts, respectively
+A-disabled/A-enabled/B-disabled/B-enabled, are
+`.../decodium-hamdrm-measure-standard-n2l0lcj1`,
+`.../decodium-hamdrm-measure-standard-l1e22b2m`,
+`.../decodium-hamdrm-measure-standard-mxghlnoh` and
+`.../decodium-hamdrm-measure-standard-9_vduv6k`.
+
+`measure_hamdrm_replay.py` now records an explicit `--disable-auto-early`
+comparison, clears candidate-selection environment variables and checks the
+RX log to confirm the selected mode. It was exercised with A disabled and B
+enabled; both transfers matched exactly and the selection check passed.
+Those repetitions are `.../decodium-hamdrm-measure-standard-vpcg2e_x` and
+`.../decodium-hamdrm-measure-standard-94vejmf7`. They do not change the
+limits of the preceding measurements or establish live EasyPal support.
+
+Two further local two-application comparisons combined a 0.27-gain 1 ms
+echo, 0.01-amplitude deterministic noise, a 0.01-amplitude 1700 Hz tone,
+and +125/-125 ppm simulated sample-rate offsets for images A/B respectively.
+With the ordinary automatic two-candidate receiver, neither run completed;
+the primary reported at most 1/7 validated groups and no image was saved.
+In A, the harness reported a missing legacy-restoration marker before its
+image-completion check; B explicitly reported incomplete RX. Both TX runs
+completed, relay error lists were empty and all captured RX diagnostic
+counters were zero. App artifacts are
+`.../decodium-hamdrm-two-app-a-9eetnl7r` and
+`.../decodium-hamdrm-two-app-b-630c_g72`; relays are
+`.../decodium-hamdrm-two-app-echo-rut_wdki` and
+`.../decodium-hamdrm-two-app-echo-4lswfbau`.
+
+With the operator-selected multi-candidate adaptive mode, separate A/B
+repeats under the same configured impairments transferred the 225-byte
+images exactly and restored legacy monitoring; RX diagnostics and relay
+error lists were clean. App artifacts are
+`.../decodium-hamdrm-two-app-a-6gjf263h` and
+`.../decodium-hamdrm-two-app-b-5sa5zhzp`; relays are
+`.../decodium-hamdrm-two-app-echo-66zdosxd` and
+`.../decodium-hamdrm-two-app-echo-3nzzpi2r`. These were separate real-time
+signals, not identical recorded samples. They demonstrate the selected
+configuration on these two trials, not a general threshold or proof of live
+EasyPal interoperability.
+
+The ordinary receiver now also runs the independently validated temporal
+pilot candidate. It retains its existing untracked timing, and a terminal
+failure of this optional candidate does not stop the primary receiver.
+Repeating the combined echo/noise/tone and +/-125 ppm A/B scenarios above
+with ordinary settings reconstructed both 225-byte images exactly, restored
+legacy monitoring, and recorded zero RX diagnostic errors. Each temporal
+candidate reported nine validated groups. App artifacts are
+`.../decodium-hamdrm-two-app-a-tje3lfzs` and
+`.../decodium-hamdrm-two-app-b-m1gutmxh`, with relays
+`.../decodium-hamdrm-two-app-echo-lp2km2fn` and
+`.../decodium-hamdrm-two-app-echo-z8l2nu6n`. The earlier ordinary failures
+were separate real-time transmissions, not bit-identical replays.
+
+The independent QSSTV-source -5/+5 Hz A/B files still reconstructed both
+277-byte references in full-app replays with clean RX diagnostics
+(`.../decodium-qsstv-drm-app-r2m14kbt` and
+`.../decodium-qsstv-drm-app-f6qm4upb`). Two further app pairs forced both
+optional candidates to reach a one-frame lab limit; the primary continued,
+completed each exact A/B transfer and restored legacy monitoring
+(`.../decodium-hamdrm-two-app-a-83anuur_` and
+`.../decodium-hamdrm-two-app-b-_igiai27`). Two deterministic noise inputs
+produced no groups or images, with clean RX diagnostics
+(`.../decodium-qsstv-drm-app-o9zw2vam` and
+`.../decodium-qsstv-drm-app-_5o_vg63`). These bounded noise checks do not
+quantify false-positive probability.
+
+On this Mac, two further clean-file replays with all three automatic
+candidates sampled process-wide median CPU at 39.6% and 39.1% of one core;
+maximum sampled RSS was 509,920 and 518,608 KiB. These one-run figures
+include startup and unrelated application processing and cannot be treated
+as isolated DSP benchmarks or evidence for slower hardware. Artifacts are
+`.../decodium-hamdrm-measure-standard-zu0qs0ig` and
+`.../decodium-hamdrm-measure-standard-85ug6cz4`. The comparison helper now
+checks that both automatic-candidate log markers match the requested mode.
+Controller and native adapter CTests passed. None of these observations
+establishes arbitrary-channel recovery, RF or live EasyPal interoperability.
+
+The explicit test-only temporal-pilot mode now avoids starting a redundant
+automatic temporal candidate. Two isolated Decodium A/B transfers completed
+exactly and restored legacy monitoring, and their logs confirmed the
+temporal test mode without either automatic-candidate marker. Artifacts are
+`.../decodium-hamdrm-two-app-a-e6ljukrm` and
+`.../decodium-hamdrm-two-app-b-f85k_i58`; the adapter CTest also passed.
+The updated measurement helper's disabled-candidate control was checked
+against its RX log and received the exact A reference
+(`.../decodium-hamdrm-measure-standard-e5de9wzv`).
+
+With the three ordinary automatic candidates, two further full Decodium
+process pairs transferred distinct 320x240 JPEGs of 6,481 and 3,673 bytes
+over clean BlackHole audio. Both files matched byte-for-byte. After each
+object completed, the primary's group counter advanced from 15 to 23 and
+12 to 20 respectively, and every sampled inbox snapshot retained a complete
+object with no error. All RX diagnostic counters for discontinuities, dropped
+or rejected chunks, queue overflow and processing failures remained zero.
+Artifacts are `.../decodium-hamdrm-two-app-a-akntckkc` and
+`.../decodium-hamdrm-two-app-b-kdlm3xu8`; generated input JPEGs are in
+`/tmp/decodium-hamdrm-large-ab`.
+
+An earlier A run combined this post-completion requirement with the legacy
+restoration check. The 6,481-byte image was exact and inbox snapshots stayed
+complete, but restoration intentionally cancelled RX immediately after
+completion, so no later groups could be observed and the harness correctly
+failed that combined acceptance (`.../decodium-hamdrm-two-app-a-xjxpl2og`).
+The harness now rejects this incompatible combination before launching, with
+A/B controls for legacy-restoration and monitor-off modes. The successful
+large-image checks above keep RX active and do not themselves test legacy
+restoration; separate tests documented above cover restoration. These are
+selected local-audio cases, not live EasyPal, RF or general performance proof.

@@ -61,6 +61,7 @@ try:
     proxy.modem.set_carrier(1900)
     proxy.main.set_afc(False)
 
+
     class Info(c.Structure):
         _fields_ = [('version', c.c_int), ('name', c.c_char_p), ('host', c.c_int),
             ('inputs', c.c_int), ('outputs', c.c_int), ('lowin', c.c_double),

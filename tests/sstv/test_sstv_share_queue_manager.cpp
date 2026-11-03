@@ -3,6 +3,7 @@
 #include "src/sstv/sharing/SstvShareQueueManager.h"
 #ifdef DECODIUM_TEST_SHARE_CRYPTO
 #include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#include "src/sstv/sharing/SstvShareP256.h"
 #endif
 
 #include <QCoreApplication>
@@ -13,6 +14,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
+#include <QJsonObject>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -842,6 +844,60 @@ bool uploadRetryRestartResumeIsDurableAndRedacted()
     return true;
 }
 
+bool inboxRefreshDistinguishesBusyAndUnavailableAB()
+{
+    for (const bool activeUpload : {false, true}) {
+        Fixture fixture;
+        auto backend = std::make_shared<FakeBackend>();
+        backend->delayMs = 40;
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool firstDone = false;
+        QString uploadId;
+        QString error;
+        if (activeUpload) {
+            const QByteArray bytes = payload(32, 'b');
+            const QString source = fixture.uploadRoot + QStringLiteral("/busy.png");
+            CHECK(writeFile(source, bytes));
+            uploadId = manager->queueUpload(manifestFor(bytes, fixture.clock,
+                QStringLiteral("station:sender"), QStringLiteral("recipient:remote")), source, &error);
+            CHECK(!uploadId.isEmpty());
+            CHECK(manager->processDue(&error) == 1);
+        } else {
+            CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+                [&](SstvShareProviderResult result) { firstDone = result.ok(); }) != 0U);
+        }
+        for (const auto& expected : {std::pair {QStringLiteral("queue-test"), QStringLiteral("inbox provider is busy")},
+                                     std::pair {QStringLiteral("missing-provider"), QStringLiteral("inbox provider is unavailable")}}) {
+            bool called = false;
+            CHECK(manager->refreshInboxAsync(expected.first, [&](SstvShareProviderResult result) {
+                called = !result.ok() && result.category() == SstvShareProviderFailure::ProviderUnavailable
+                    && result.redactedDiagnostic() == expected.second
+                    && result.isLocalCapacityBusy() == (expected.first == QStringLiteral("queue-test"));
+            }) == 0U);
+            CHECK(called);
+        }
+        const auto forged = SstvShareProviderResult::failure(
+            SstvShareProviderFailure::ProviderUnavailable,
+            QStringLiteral("inbox provider is busy"));
+        CHECK(!forged.isLocalCapacityBusy());
+        if (activeUpload) {
+            CHECK(spinUntil([&] {
+                manager->processDue();
+                const auto record = manager->store().transfer(uploadId);
+                return record && record->state == SstvManagedTransferState::Completed;
+            }));
+        } else {
+            CHECK(spinUntil([&] { return firstDone; }));
+        }
+        bool retried = false;
+        CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+            [&](SstvShareProviderResult result) { retried = result.ok(); }) != 0U);
+        CHECK(spinUntil([&] { return retried; }));
+    }
+    return true;
+}
+
 bool duplicateIncomingEnvelopeIsNotDownloadedTwiceAB()
 {
     for (const bool encrypted : {false, true}) {
@@ -931,6 +987,269 @@ bool duplicateIncomingEnvelopeIsNotDownloadedTwiceAB()
             return r && r->state == SstvManagedTransferState::Cancelled; }));
         CHECK(!manager->queueDownload(QStringLiteral("queue-test"), retry,
                                       QStringLiteral("retry.png"), &error, encrypted).isEmpty());
+    }
+    return true;
+}
+
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+bool resignedEnvelopeIsNotDownloadedTwiceAB()
+{
+    for (const char variant : {'a', 'b'}) {
+        Fixture fixture;
+        const auto backend = std::make_shared<FakeBackend>();
+        backend->encryptedEnvelopes = true;
+        const QByteArray image = pngPayload(8, 8, variant);
+        auto manifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                    QStringLiteral("station:local"));
+        manifest.width = 8; manifest.height = 8;
+        manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
+        manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
+        manifest.encryption.keyId = QStringLiteral("test-key");
+        manifest.encryption.recipientKeyFingerprint = QString(64, 'a');
+        manifest.encryption.nonceBase64 = QString::fromLatin1(QByteArray(12, 'n').toBase64());
+        manifest.encryption.manifestBoundAsAuthenticatedData = true;
+        manifest.transport.providerCanReadContent = false;
+        const auto signer = sstvShareGenerateP256KeyPair();
+        CHECK(signer);
+        manifest.encryption.senderAuthAlgorithm = QStringLiteral("ecdsa-p256-sha256-v1");
+        manifest.encryption.senderKeyFingerprint = sstvShareP256Fingerprint(signer->publicDer);
+        manifest.encryption.senderSignatureBase64 = QString::fromLatin1(QByteArray::fromHex("3006020101020101").toBase64());
+        QJsonObject object = manifest.toJsonObject();
+        auto encryption = object.value(QStringLiteral("encryption")).toObject();
+        encryption.remove(QStringLiteral("senderSignatureBase64"));
+        object.insert(QStringLiteral("encryption"), encryption);
+        SstvShareValidationError validation;
+        const auto message = QByteArrayLiteral("Decodium-SSTV-sender-signature-v1\0") + canonicalJson(object, &validation);
+        CHECK(validation.ok());
+        const auto signature1 = sstvShareP256Sign(signer->privateDer, message);
+        const auto signature2 = sstvShareP256Sign(signer->privateDer, message);
+        CHECK(signature1 && signature2 && *signature1 != *signature2);
+        CHECK(sstvShareP256Verify(signer->publicDer, message, *signature1));
+        CHECK(sstvShareP256Verify(signer->publicDer, message, *signature2));
+        manifest.encryption.senderSignatureBase64 = QString::fromLatin1(signature1->toBase64());
+        const auto impostor = sstvShareGenerateP256KeyPair();
+        CHECK(impostor);
+        const auto forgedSignature = sstvShareP256Sign(impostor->privateDer, message);
+        CHECK(forgedSignature && !sstvShareP256Verify(signer->publicDer, message, *forgedSignature));
+        auto forged = manifest;
+        forged.encryption.senderSignatureBase64 = QString::fromLatin1(forgedSignature->toBase64());
+        auto resigned = manifest;
+        resigned.encryption.senderSignatureBase64 = QString::fromLatin1(signature2->toBase64());
+        auto distinct = manifest;
+        distinct.transferId = QUuid::createUuid();
+        auto distinctObject = distinct.toJsonObject();
+        auto distinctEncryption = distinctObject.value(QStringLiteral("encryption")).toObject();
+        distinctEncryption.remove(QStringLiteral("senderSignatureBase64"));
+        distinctObject.insert(QStringLiteral("encryption"), distinctEncryption);
+        const auto distinctMessage = QByteArrayLiteral("Decodium-SSTV-sender-signature-v1\0")
+            + canonicalJson(distinctObject, &validation);
+        const auto distinctSignature = sstvShareP256Sign(signer->privateDer, distinctMessage);
+        const auto retrySignature = sstvShareP256Sign(signer->privateDer, distinctMessage);
+        CHECK(validation.ok() && distinctSignature && retrySignature && *distinctSignature != *retrySignature
+              && sstvShareP256Verify(signer->publicDer, distinctMessage, *distinctSignature)
+              && sstvShareP256Verify(signer->publicDer, distinctMessage, *retrySignature));
+        distinct.encryption.senderSignatureBase64 = QString::fromLatin1(distinctSignature->toBase64());
+        auto retryManifest = distinct;
+        retryManifest.encryption.senderSignatureBase64 = QString::fromLatin1(retrySignature->toBase64());
+        CHECK(manifest.validate().ok() && resigned.validate().ok());
+        CHECK(SstvShareTransfer::deriveIdempotencyKey(manifest)
+              != SstvShareTransfer::deriveIdempotencyKey(resigned));
+        const QString first = QStringLiteral("incoming:signed-first");
+        const QString replay = QStringLiteral("incoming:signed-resigned");
+        const QString fresh = QStringLiteral("incoming:signed-distinct");
+        const QString retry = QStringLiteral("incoming:signed-retry");
+        const QString forgedId = QStringLiteral("incoming:signed-forged");
+        backend->incoming = {incomingFor(forgedId, forged, fixture.clock),
+                             incomingFor(first, manifest, fixture.clock),
+                             incomingFor(replay, resigned, fixture.clock),
+                             incomingFor(fresh, distinct, fixture.clock),
+                             incomingFor(retry, retryManifest, fixture.clock)};
+        backend->downloads.insert(first, image);
+        backend->downloads.insert(replay, image);
+        fixture.config.openEncryptedPayload = [image](const SstvShareManifestV1&, const QByteArray& bytes)
+            -> std::optional<QByteArray> { return bytes == image ? std::optional<QByteArray>(image) : std::nullopt; };
+        {
+            auto withoutVerifier = fixture.manager(backend);
+            CHECK(withoutVerifier);
+            bool listed = false;
+            CHECK(withoutVerifier->refreshInboxAsync(QStringLiteral("queue-test"),
+                  [&](SstvShareProviderResult result) { listed = result.ok(); }) != 0U);
+            CHECK(spinUntil([&] { return listed; }));
+            QString denied;
+            CHECK(withoutVerifier->queueDownload(QStringLiteral("queue-test"), first,
+                  QStringLiteral("first.png"), &denied, true).isEmpty());
+            CHECK(denied == QStringLiteral("incoming sender signature could not be authenticated"));
+            CHECK(backend->downloadCalls == 0);
+        }
+        const auto unavailable = std::make_shared<bool>(true);
+        fixture.config.verifyIncomingSender = [publicKey = signer->publicDer,
+                                                forgedBase64 = forged.encryption.senderSignatureBase64,
+                                                unavailable](const SstvShareManifestV1& candidate) -> std::optional<bool> {
+            if (*unavailable && candidate.encryption.senderSignatureBase64 == forgedBase64)
+                return std::nullopt;
+            auto data = candidate.toJsonObject();
+            auto signatureData = data.value(QStringLiteral("encryption")).toObject();
+            signatureData.remove(QStringLiteral("senderSignatureBase64"));
+            data.insert(QStringLiteral("encryption"), signatureData);
+            SstvShareValidationError error;
+            const auto bytes = QByteArrayLiteral("Decodium-SSTV-sender-signature-v1\0") + canonicalJson(data, &error);
+            return error.ok() && candidate.encryption.senderKeyFingerprint == sstvShareP256Fingerprint(publicKey)
+                && sstvShareP256Verify(publicKey, bytes, QByteArray::fromBase64(candidate.encryption.senderSignatureBase64.toLatin1()));
+        };
+        // Recreate a legacy queued record without a manager, so no network
+        // worker can race the transactional duplicate checks below.
+        {
+            Fixture legacyFixture;
+            legacyFixture.config.verifyIncomingSender = fixture.config.verifyIncomingSender;
+            SstvShareQueueStore legacy(legacyFixture.config, {}, [&legacyFixture] { return legacyFixture.clock.utc; });
+            QString error;
+            CHECK(legacy.open(&error));
+            const auto oldIncoming = incomingFor(forgedId, forged, legacyFixture.clock);
+            const auto newIncoming = incomingFor(first, manifest, legacyFixture.clock);
+            CHECK(legacy.upsertInboxItem(persistentInboxFor(oldIncoming, SstvInboxDisposition::New, legacyFixture.clock.utc), &error));
+            CHECK(legacy.upsertInboxItem(persistentInboxFor(newIncoming, SstvInboxDisposition::New, legacyFixture.clock.utc), &error));
+            auto old = acknowledgedDownloadFor(forged, oldIncoming,
+                QUuid::createUuid().toString(QUuid::WithoutBraces), {}, legacyFixture.clock.utc);
+            old.transfer.state = SstvManagedTransferState::DownloadQueued;
+            old.transfer.byteOffset = 0U;
+            old.inbox.disposition = SstvInboxDisposition::DownloadQueued;
+            CHECK(legacy.insertDownloadTransferAndInbox(old.transfer, old.inbox, &error));
+            auto candidate = acknowledgedDownloadFor(manifest, newIncoming,
+                QUuid::createUuid().toString(QUuid::WithoutBraces), {}, legacyFixture.clock.utc);
+            candidate.transfer.state = SstvManagedTransferState::DownloadQueued;
+            candidate.transfer.byteOffset = 0U;
+            candidate.inbox.disposition = SstvInboxDisposition::DownloadQueued;
+            CHECK(!legacy.insertDownloadTransferAndInbox(candidate.transfer, candidate.inbox, &error));
+            CHECK(error == QStringLiteral("could not check duplicate incoming envelope"));
+            CHECK(legacy.transfer(old.transfer.transferId));
+            CHECK(!legacy.transfer(candidate.transfer.transferId));
+            *unavailable = false;
+            CHECK(legacy.insertDownloadTransferAndInbox(candidate.transfer, candidate.inbox, &error));
+            CHECK(legacy.transfer(old.transfer.transferId));
+            CHECK(legacy.transfer(candidate.transfer.transferId));
+        }
+        auto manager = fixture.manager(backend);
+        CHECK(manager);
+        bool refreshed = false;
+        CHECK(manager->refreshInboxAsync(QStringLiteral("queue-test"),
+              [&](SstvShareProviderResult result) { refreshed = result.ok(); }) != 0U);
+        CHECK(spinUntil([&] { return refreshed; }));
+        QString error;
+        CHECK(manager->queueDownload(QStringLiteral("queue-test"), forgedId, QStringLiteral("forged.png"), &error, true).isEmpty());
+        CHECK(error == QStringLiteral("incoming sender signature could not be authenticated"));
+        CHECK(backend->downloadCalls == 0);
+        const auto id = manager->queueDownload(QStringLiteral("queue-test"), first, QStringLiteral("first.png"), &error, true);
+        CHECK(!id.isEmpty());
+        CHECK(manager->queueDownload(QStringLiteral("queue-test"), replay, QStringLiteral("replay.png"), &error, true).isEmpty());
+        CHECK(error == QStringLiteral("incoming envelope already queued or accepted"));
+        CHECK(manager->processDue(&error) == 1);
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(id);
+            return r && r->state == SstvManagedTransferState::AwaitingAcceptance; }));
+        CHECK(manager->acceptDownload(id, &error));
+        manager.reset();
+        manager = fixture.manager(backend);
+        CHECK(manager);
+        CHECK(manager->queueDownload(QStringLiteral("queue-test"), replay, QStringLiteral("replay.png"), &error, true).isEmpty());
+        CHECK(error == QStringLiteral("incoming envelope already queued or accepted"));
+        const auto freshId = manager->queueDownload(QStringLiteral("queue-test"), fresh, QStringLiteral("fresh.png"), &error, true);
+        CHECK(!freshId.isEmpty());
+        CHECK(manager->cancelTransfer(freshId, &error));
+        CHECK(spinUntil([&] { const auto r = manager->store().transfer(freshId);
+            return r && r->state == SstvManagedTransferState::Cancelled; }));
+        CHECK(!manager->queueDownload(QStringLiteral("queue-test"), retry, QStringLiteral("retry.png"), &error, true).isEmpty());
+    }
+    return true;
+}
+#endif
+
+bool replayIndexesUpgradeExistingQueuesAB()
+{
+    for (const char variant : {'a', 'b'}) {
+        Fixture fixture;
+        const auto image = pngPayload(8, 8, variant);
+        const auto manifest = manifestFor(image, fixture.clock, QStringLiteral("station:remote"),
+                                          QStringLiteral("station:local"));
+        const auto incoming = incomingFor(QStringLiteral("index:retained"), manifest, fixture.clock);
+        const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        auto retained = acknowledgedDownloadFor(manifest, incoming, id, {}, fixture.clock.utc);
+        QString error;
+        {
+            SstvShareQueueStore store(fixture.config);
+            CHECK(store.open(&error));
+            CHECK(store.upsertInboxItem(retained.inbox, &error));
+            CHECK(store.insertDownloadTransferAndInbox(retained.transfer, retained.inbox, &error));
+        }
+        const QString connectionName = QStringLiteral("replay-index-test-") + QChar::fromLatin1(variant);
+        {
+            auto db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(fixture.config.databasePath);
+            CHECK(db.open());
+            QSqlQuery query(db);
+            CHECK(query.exec(QStringLiteral("DROP INDEX IF EXISTS idx_sstv_share_replay_key")));
+            CHECK(query.exec(QStringLiteral("DROP INDEX IF EXISTS idx_sstv_share_replay_payload")));
+            CHECK(query.exec(QStringLiteral("PRAGMA user_version=3")));
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connectionName);
+        {
+            const auto fault = std::make_shared<TestFaultInjector>();
+            fault->arm(SstvShareFaultPoint::BeforeDatabaseCommit);
+            SstvShareQueueStore interrupted(fixture.config, fault);
+            CHECK(!interrupted.open(&error));
+            CHECK(fault->remaining() == 0);
+        }
+        {
+            auto db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(fixture.config.databasePath);
+            CHECK(db.open());
+            QSqlQuery query(db);
+            CHECK(query.exec(QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND "
+                                            "name IN ('idx_sstv_share_replay_key','idx_sstv_share_replay_payload')")));
+            CHECK(query.next() && query.value(0).toInt() == 0);
+            CHECK(query.exec(QStringLiteral("SELECT COUNT(*) FROM sstv_share_transfers")));
+            CHECK(query.next() && query.value(0).toInt() == 1);
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connectionName);
+        {
+            SstvShareQueueStore upgraded(fixture.config);
+            CHECK(upgraded.open(&error));
+            CHECK(upgraded.schemaVersion() == 3);
+            const auto row = upgraded.transfer(id, &error);
+            CHECK(row && row->canonicalManifestJson == retained.transfer.canonicalManifestJson
+                  && row->idempotencyKey == retained.transfer.idempotencyKey
+                  && row->state == SstvManagedTransferState::Acknowledged);
+            CHECK(upgraded.inboxItem(incoming.providerId, incoming.opaqueId, &error));
+        }
+        {
+            auto db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(fixture.config.databasePath);
+            CHECK(db.open());
+            for (const auto& column : {QStringLiteral("idempotency_key"), QStringLiteral("payload_sha256")}) {
+                QSqlQuery query(db);
+                CHECK(query.exec(QStringLiteral("EXPLAIN QUERY PLAN SELECT manifest_json FROM sstv_share_transfers "
+                    "WHERE direction=2 AND provider_id='queue-test' AND %1='%2' "
+                    "AND state NOT IN ('Failed','Cancelled','Rejected','Expired')")
+                    .arg(column, QString(64, QLatin1Char('a')))));
+                QString plan;
+                while (query.next()) plan += query.value(3).toString();
+                const auto expected = column == QStringLiteral("idempotency_key")
+                    ? QStringLiteral("idx_sstv_share_replay_key") : QStringLiteral("idx_sstv_share_replay_payload");
+                CHECK(plan.contains(expected));
+            }
+            // Reopening a previously upgraded queue must not take a new
+            // writer lock merely to rediscover existing indexes.
+            QSqlQuery lock(db);
+            CHECK(lock.exec(QStringLiteral("BEGIN IMMEDIATE")));
+            {
+                SstvShareQueueStore concurrent(fixture.config);
+                CHECK(concurrent.open(&error));
+                CHECK(concurrent.transfer(id, &error));
+            }
+            CHECK(lock.exec(QStringLiteral("ROLLBACK")));
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connectionName);
     }
     return true;
 }
@@ -3078,7 +3397,12 @@ int main(int argc, char** argv)
          uploadRetryRestartResumeIsDurableAndRedacted},
         {"inboxDownloadAcceptanceAckAndRejectAreExplicit",
          inboxDownloadAcceptanceAckAndRejectAreExplicit},
+        {"inboxRefreshDistinguishesBusyAndUnavailableAB", inboxRefreshDistinguishesBusyAndUnavailableAB},
         {"duplicateIncomingEnvelopeIsNotDownloadedTwiceAB", duplicateIncomingEnvelopeIsNotDownloadedTwiceAB},
+        {"replayIndexesUpgradeExistingQueuesAB", replayIndexesUpgradeExistingQueuesAB},
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+        {"resignedEnvelopeIsNotDownloadedTwiceAB", resignedEnvelopeIsNotDownloadedTwiceAB},
+#endif
         {"unexpiredEncryptedReplayEvidenceSurvivesReclamationAB", unexpiredEncryptedReplayEvidenceSurvivesReclamationAB},
         {"downloadExpiresWhileProviderRespondsAB",
          downloadExpiresWhileProviderRespondsAB},

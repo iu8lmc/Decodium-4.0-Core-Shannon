@@ -229,7 +229,8 @@ bool SstvRxAudioJobController::prepareRecentRedecode(
 
 bool SstvRxAudioJobController::exportRawAudio(
     const QUrl& destination,
-    std::uint64_t acquisitionId)
+    std::uint64_t acquisitionId,
+    bool recentBuffer)
 {
     const QString path = destination.isLocalFile()
         ? destination.toLocalFile()
@@ -241,7 +242,7 @@ bool SstvRxAudioJobController::exportRawAudio(
                  tr("Raw SSTV audio requires an absolute local .wav destination"));
         return false;
     }
-    return startJob(Operation::RawExport, path, acquisitionId, {});
+    return startJob(Operation::RawExport, path, acquisitionId, {}, recentBuffer);
 }
 
 void SstvRxAudioJobController::discardPreparedRedecode()
@@ -284,6 +285,7 @@ SstvRxAudioJobController::JobResult SstvRxAudioJobController::runJob(
     Operation operation,
     QString outputPath,
     std::uint64_t acquisitionId,
+    bool recentBuffer,
     SstvRxRedecodeParameters parameters,
     std::shared_ptr<std::atomic_bool> cancelRequested) noexcept
 {
@@ -299,19 +301,20 @@ SstvRxAudioJobController::JobResult SstvRxAudioJobController::runJob(
         }
         const SstvRxRuntime::Snapshot runtimeSnapshot = runtime->snapshot();
         std::uint64_t selectedId = acquisitionId;
-        if (selectedId == 0U) {
-            selectedId = runtimeSnapshot.image.acquisitionId != 0U
-                ? runtimeSnapshot.image.acquisitionId
-                : runtimeSnapshot.replay.mostRecentAcquisitionId;
+        if (!recentBuffer && selectedId == 0U) {
+            // Retention IDs are namespaced by route generation; image IDs
+            // come from a different counter and cannot address that store.
+            selectedId = runtimeSnapshot.replay.mostRecentAcquisitionId;
         }
         std::optional<SstvRxRetainedAudioSnapshot> acquisition;
-        if (selectedId != 0U) {
+        if (!recentBuffer && selectedId != 0U) {
             acquisition = runtime->retainedAudioForAcquisition(selectedId);
         }
         SstvRxRetainedAudioSnapshot retained = acquisition.has_value()
             ? std::move(*acquisition) : runtime->retainedRecentAudio();
-        result.acquisitionId = retained.acquisitionId != 0U
-            ? retained.acquisitionId : selectedId;
+        // A missing/expired descriptor falls back to recent audio.  Do not
+        // label that fallback as the requested acquisition.
+        result.acquisitionId = acquisition.has_value() ? retained.acquisitionId : 0U;
         if (retained.chunks.empty() || retained.sampleCount == 0U) {
             result.error = tr("No retained SSTV audio is available");
             return result;
@@ -395,7 +398,8 @@ bool SstvRxAudioJobController::startJob(
     Operation operation,
     QString outputPath,
     std::uint64_t acquisitionId,
-    SstvRxRedecodeParameters parameters)
+    SstvRxRedecodeParameters parameters,
+    bool recentBuffer)
 {
     if (!isOnOwnerThread() || busy() || m_state == State::Shutdown
         || operation == Operation::None || m_watcher.isRunning()) {
@@ -416,6 +420,7 @@ bool SstvRxAudioJobController::startJob(
             operation,
             std::move(outputPath),
             acquisitionId,
+            recentBuffer,
             std::move(parameters),
             m_cancelRequested));
     } catch (const std::exception& exception) {

@@ -68,6 +68,9 @@ struct HamDrmWaveformLimits final
     std::size_t maximumSyncSearchSamples {2'048U};
     // Laboratory candidate, kept independent from the normal timing path.
     bool experimentalEarlyTiming {false};
+    // Track frame timing using nearby pilot candidates; enabled for the
+    // ordinary primary receiver and the adaptive early candidate.
+    bool experimentalFrameTimingTracking {false};
     double minimumCyclicPrefixMetric {0.015};
     double maximumFrequencyOffsetHz {15.0};
     double maximumNormalizedPilotSquaredError {0.12};
@@ -75,6 +78,8 @@ struct HamDrmWaveformLimits final
     double maximumCorruptedPilotFraction {0.30};
     // Explicit diagnostic opt-in; production continues to use flat pilots.
     bool experimentalFrequencySelective {false};
+    // Multi-symbol candidate used by explicitly selected adaptive RX.
+    bool experimentalTemporalPilots {false};
     bool experimentalAdaptiveEqualizer {false};
     // Diagnostic: retain a second flat MSC deinterleaver for CRC-gated retry.
     bool experimentalFlatPacketFallback {false};
@@ -98,6 +103,9 @@ HamDrmValueResult<HamDrmWaveformCapacity> hamDrmWaveformCapacity(
 
 struct HamDrmWaveformStatistics final
 {
+    // Most recently accepted FAC, not the operator's initial profile.
+    bool hasFacInterleaver {false};
+    HamDrmInterleaver lastFacInterleaver {HamDrmInterleaver::Long};
     std::size_t transmittedFrames {0U};
     std::size_t receivedFrames {0U};
     std::size_t validatedDataGroups {0U};

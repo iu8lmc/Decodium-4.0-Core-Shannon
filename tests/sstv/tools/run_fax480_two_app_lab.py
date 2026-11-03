@@ -18,7 +18,12 @@ variant=sys.argv[2] if len(sys.argv)>2 else ('a' if profile=='dayton-480' else '
 if variant not in ('a','b'): raise SystemExit('image variant must be a or b')
 if len(sys.argv) > 4 or (len(sys.argv) == 4 and sys.argv[3] != 'pattern'):
     raise SystemExit('optional fourth argument must be pattern')
-if len(sys.argv) == 4:
+custom_image = os.environ.get('DECODIUM_LAB_FAX480_IMAGE')
+if custom_image and len(sys.argv) == 4:
+    raise SystemExit('custom image cannot be combined with generated pattern')
+if custom_image:
+    fixture = Path(custom_image).resolve(strict=True)
+elif len(sys.argv) == 4:
     fixture = root / 'input.pgm'
     pixels = bytearray()
     for y in range(480):

@@ -9,12 +9,46 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import base64
 import re
 import secrets
 import ssl
 import threading
+import time
 from urllib.parse import urlsplit
+
+P256_ORDER = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+
+
+def high_s_signature(encoded):
+    """Change a canonical low-S P-256 DER signature to its equivalent high-S form."""
+    raw = base64.b64decode(encoded, validate=True)
+    if len(raw) < 8 or raw[0] != 0x30 or raw[1] != len(raw) - 2:
+        raise ValueError('invalid DER signature sequence')
+    pos = 2
+    values = []
+    for _ in range(2):
+        if pos + 2 > len(raw) or raw[pos] != 2:
+            raise ValueError('invalid DER integer')
+        length = raw[pos + 1]
+        pos += 2
+        value = raw[pos:pos + length]
+        pos += length
+        if (not value or len(value) != length or value[0] & 0x80
+                or (len(value) > 1 and value[0] == 0 and not value[1] & 0x80)):
+            raise ValueError('noncanonical DER integer')
+        values.append(int.from_bytes(value, 'big'))
+    r, s = values
+    if pos != len(raw) or not 0 < r < P256_ORDER or not 0 < s <= P256_ORDER // 2:
+        raise ValueError('signature is not canonical low-S P-256')
+
+    def integer(value):
+        buf = value.to_bytes((value.bit_length() + 7) // 8, 'big')
+        if buf[0] & 0x80:
+            buf = b'\0' + buf
+        return b'\x02' + bytes([len(buf)]) + buf
+
+    body = integer(r) + integer(P256_ORDER - s)
+    return base64.b64encode(b'\x30' + bytes([len(body)]) + body).decode('ascii')
 
 
 def _utc_now():
@@ -25,7 +59,7 @@ class ShareFixture(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, certificate, private_key, tamper=False, tamper_manifest=False, first_output=None, downgrade_manifest=None, expiry_target=None, expiry_marker=None, expiry_after_chunk=False, swap_payload=None, replay_target=None, replay_after=None, tamper_manifest_field='sstvMode'):
+    def __init__(self, certificate, private_key, tamper=False, tamper_manifest=False, first_output=None, downgrade_manifest=None, expiry_target=None, expiry_marker=None, expiry_after_chunk=False, swap_payload=None, replay_target=None, replay_after=None, tamper_manifest_field='sstvMode', replay_high_s=False):
         super().__init__(('127.0.0.1', 0), _Handler)
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         tls.load_cert_chain(str(certificate), str(private_key))
@@ -34,13 +68,14 @@ class ShareFixture(ThreadingHTTPServer):
         self.uploads = {}
         self.tamper = tamper
         self.tamper_manifest = tamper_manifest
-        if tamper_manifest_field not in ('sstvMode', 'expiresUtc', 'keyId', 'senderId', 'senderSignatureBase64', 'senderAuth'):
+        if tamper_manifest_field not in ('sstvMode', 'expiresUtc', 'keyId', 'nonceBase64', 'senderId', 'senderSignatureBase64', 'senderSignatureHighS', 'senderAuth'):
             raise ValueError('unsupported manifest tamper field')
         self.tamper_manifest_field = tamper_manifest_field
         self.downgrade_manifest = downgrade_manifest
         self.downgraded_id = None
         self.downgraded_downloads = 0
         self.stripped_signature_downloads = 0
+        self.signed_tampered_downloads = 0
         self.first_output = first_output
         self.tamper_count = 0
         self.expiry_target = expiry_target
@@ -50,9 +85,18 @@ class ShareFixture(ThreadingHTTPServer):
         self.expiry_offsets = []
         self.swap_payload = swap_payload
         self.replay_target = replay_target
+        self.replay_high_s = replay_high_s
+        self.replay_resigned_signature = None
         self.replay_after = replay_after
         self.replay_id = None
+        self.replay_id_path = None
         self.replay_downloads = 0
+        self.invalid_before_target = None
+        self.invalid_before_nonce = False
+        self.invalid_before_marker = None
+        self.invalid_before_release = None
+        self.invalid_before_id = None
+        self.invalid_before_downloads = 0
 
     @property
     def url(self):
@@ -146,17 +190,35 @@ class _Handler(BaseHTTPRequestHandler):
                         item['canonical'] = json.dumps(item['manifest'], ensure_ascii=False,
                             sort_keys=True, separators=(',', ':')).encode('utf-8')
                     else:
-                        container = encryption if field in ('keyId', 'senderSignatureBase64') else item['manifest']
+                        if field == 'senderSignatureHighS':
+                            if not item['signed_before_tamper']:
+                                return self._reply(400)
+                            field = 'senderSignatureBase64'
+                            item['high_s_attack'] = True
+                        container = encryption if field in ('keyId', 'nonceBase64', 'senderSignatureBase64') else item['manifest']
                         before_value = container[field]
                         if field == 'expiresUtc':
                             expiry = datetime.fromisoformat(before_value.replace('Z', '+00:00'))
                             after_value = (expiry - timedelta(minutes=5)).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
                         elif field == 'keyId':
                             after_value = 'x25519-v1-' + '09' + '00' * 31
+                        elif field == 'nonceBase64':
+                            nonce = bytearray(base64.b64decode(before_value, validate=True))
+                            if len(nonce) != 12:
+                                return self._reply(400)
+                            nonce[0] ^= 1
+                            after_value = base64.b64encode(nonce).decode('ascii')
                         elif field == 'senderSignatureBase64':
-                            signature = bytearray(base64.b64decode(before_value, validate=True))
-                            signature[-1] ^= 1
-                            after_value = base64.b64encode(signature).decode('ascii')
+                            if item.get('high_s_attack'):
+                                try:
+                                    after_value = high_s_signature(before_value)
+                                except ValueError:
+                                    return self._reply(400)
+                                item['original_signature'] = before_value
+                            else:
+                                signature = bytearray(base64.b64decode(before_value, validate=True))
+                                signature[-1] ^= 1
+                                after_value = base64.b64encode(signature).decode('ascii')
                         else:
                             after_value = 'altered'
                         prefix = json.dumps(field).encode() + b':'
@@ -220,6 +282,28 @@ class _Handler(BaseHTTPRequestHandler):
                 'trust': 'trusted'})
         if parsed.path == '/api/v1/inbox':
             with self.server.lock:
+                if self.server.invalid_before_target and self.server.invalid_before_id is None:
+                    matches = [item for item in self.server.uploads.values()
+                               if item['complete'] and item['manifest']['safeDisplayFilename']
+                               == 'image-{}.png'.format(self.server.invalid_before_target)]
+                    if matches:
+                        item = dict(matches[0])
+                        item['manifest'] = json.loads(json.dumps(item['manifest']))
+                        encryption = item['manifest']['encryption']
+                        field = 'nonceBase64' if self.server.invalid_before_nonce else 'senderSignatureBase64'
+                        original = encryption[field]
+                        altered = bytearray(base64.b64decode(original, validate=True))
+                        if self.server.invalid_before_nonce and len(altered) != 12:
+                            return self._reply(500)
+                        altered[0 if self.server.invalid_before_nonce else -1] ^= 1
+                        replacement = base64.b64encode(altered).decode('ascii')
+                        encryption[field] = replacement
+                        old = json.dumps(field).encode() + b':' + json.dumps(original).encode()
+                        new = json.dumps(field).encode() + b':' + json.dumps(replacement).encode()
+                        if item['canonical'].count(old) != 1: return self._reply(500)
+                        item['canonical'] = item['canonical'].replace(old, new)
+                        self.server.invalid_before_id = secrets.token_hex(12)
+                        self.server.uploads[self.server.invalid_before_id] = item
                 if (self.server.replay_target and self.server.replay_id is None
                         and self.server.replay_after.exists()):
                     matches = [item for item in self.server.uploads.values()
@@ -228,7 +312,24 @@ class _Handler(BaseHTTPRequestHandler):
                     if len(matches) != 1:
                         return self._reply(500)
                     self.server.replay_id = secrets.token_hex(12)
-                    self.server.uploads[self.server.replay_id] = dict(matches[0])
+                    if self.server.replay_id_path is not None:
+                        self.server.replay_id_path.write_text(self.server.replay_id, encoding='ascii')
+                    replay = dict(matches[0])
+                    if self.server.replay_high_s or self.server.replay_resigned_signature is not None:
+                        # Copy nested data: the original signed envelope must
+                        # remain untouched while the provider creates a new ID.
+                        replay['manifest'] = json.loads(json.dumps(replay['manifest']))
+                        encryption = replay['manifest']['encryption']
+                        before = encryption['senderSignatureBase64']
+                        after = (high_s_signature(before) if self.server.replay_high_s
+                                 else self.server.replay_resigned_signature)
+                        encryption['senderSignatureBase64'] = after
+                        old = b'"senderSignatureBase64":' + json.dumps(before).encode()
+                        new = b'"senderSignatureBase64":' + json.dumps(after).encode()
+                        if replay['canonical'].count(old) != 1:
+                            return self._reply(500)
+                        replay['canonical'] = replay['canonical'].replace(old, new)
+                    self.server.uploads[self.server.replay_id] = replay
                 if self.server.swap_payload and self.server.tamper_count == 0:
                     completed = {item['manifest']['safeDisplayFilename']: item
                                  for item in self.server.uploads.values() if item['complete']}
@@ -253,6 +354,11 @@ class _Handler(BaseHTTPRequestHandler):
                          'byteSize': len(item['payload']), 'receivedUtc': item['receivedUtc'],
                          'expiresUtc': item['manifest']['expiresUtc']}
                         for identifier, item in self.server.uploads.items() if item['complete']
+                        and not (self.server.invalid_before_target
+                                 and item['manifest']['safeDisplayFilename'] == 'image-{}.png'.format(self.server.invalid_before_target)
+                                 and ((identifier != self.server.invalid_before_id and not (self.server.invalid_before_marker.exists()
+                                            and (self.server.invalid_before_release is None or self.server.invalid_before_release.exists())))
+                                      or (identifier == self.server.invalid_before_id and self.server.invalid_before_marker.exists())))
                         and not (self.server.first_output is not None
                                  and not self.server.first_output.exists()
                                  and item['manifest']['safeDisplayFilename'] == 'image-b.png')]
@@ -260,11 +366,16 @@ class _Handler(BaseHTTPRequestHandler):
         match = re.fullmatch(r'/api/v1/inbox/([a-f0-9]{24})/content', parsed.path)
         if match:
             with self.server.lock:
-                if match.group(1) == self.server.replay_id:
+                is_replay = match.group(1) == self.server.replay_id
+                if is_replay:
                     self.server.replay_downloads += 1
+                if match.group(1) == self.server.invalid_before_id:
+                    self.server.invalid_before_downloads += 1
                 if match.group(1) == self.server.downgraded_id:
                     self.server.downgraded_downloads += 1
                 item = self.server.uploads.get(match.group(1))
+                if item and item.get('signed_before_tamper'):
+                    self.server.signed_tampered_downloads += 1
                 if (item and item.get('signed_before_tamper')
                         and self.server.tamper_manifest_field == 'senderAuth'):
                     self.server.stripped_signature_downloads += 1
@@ -284,6 +395,16 @@ class _Handler(BaseHTTPRequestHandler):
                     if not self.server.expiry_after_chunk or first > 0:
                         self.server.expiry_marker.write_text('expire\n')
                         self.server.expiry_count += 1
+            if is_replay and self.server.replay_high_s:
+                # Keep the provider's download slot occupied across an inbox
+                # polling interval; do not hold the shared fixture lock.
+                time.sleep(3.5)
+            elif (getattr(self.server, 'busy_refresh_target', None)
+                    and item['manifest']['safeDisplayFilename']
+                        == 'image-' + self.server.busy_refresh_target + '.png'):
+                with self.server.lock:
+                    self.server.busy_refresh_delays += 1
+                time.sleep(getattr(self.server, 'busy_refresh_seconds', 3.5))
             body = payload[first:last + 1]
             digest = base64.b64encode(hashlib.sha256(body).digest()).decode('ascii')
             return self._reply(206, body, 'application/octet-stream',

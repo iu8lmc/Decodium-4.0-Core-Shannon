@@ -5279,6 +5279,12 @@ void SstvRxRuntime::consumeRadiofaxObservations(
         const std::size_t consumed = pipeline.radiofax->consume(observations.data() + offset, count);
         offset += consumed;
         const auto after = pipeline.radiofax->state();
+        if (before == SstvRadiofaxAutoRxState::SearchingPhasing
+            && after == SstvRadiofaxAutoRxState::SearchingImage
+            && pipeline.radiofax->wmoTimingArmed()
+            && QStandardPaths::isTestModeEnabled()
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_FAX_DIAGNOSTICS") == 1)
+            qInfo().noquote() << "[LAB][RADIOFAX] WMO timer armed";
         const bool dirty = !pipeline.radiofax->takeDirtyEvents().empty();
         if (dirty || after != before) publishRadiofaxImage(pipeline, after != before);
         if ((after == SstvRadiofaxAutoRxState::Complete || after == SstvRadiofaxAutoRxState::Partial)
@@ -5305,6 +5311,8 @@ void SstvRxRuntime::publishRadiofaxImage(WorkerPipeline& pipeline, bool force)
     summary.partial = state == SstvRadiofaxAutoRxState::Partial || state == SstvRadiofaxAutoRxState::Failed;
     summary.cancelled = state == SstvRadiofaxAutoRxState::Cancelled;
     summary.radiofaxStopDetected = pipeline.radiofax->stopSample().has_value();
+    summary.radiofaxClockProvisional = pipeline.radiofax->imageClockProvisional();
+    summary.radiofaxTimedPhasing = pipeline.radiofax->usedWmoTimedPhasing();
     summary.acquisitionId = pipeline.radiofaxAcquisitionId;
     summary.generation = pipeline.generation;
     summary.revision = image->revision;
@@ -5334,8 +5342,15 @@ void SstvRxRuntime::publishRadiofaxImage(WorkerPipeline& pipeline, bool force)
                           << "stop=" << pipeline.radiofax->stopSample().value_or(0U)
                           << "stop_kind=" << (pipeline.radiofax->stopWasAudioTone() ? "audio" : "frequency-or-none")
                           << "lpm=" << (lock ? lock->linesPerMinute : 0U)
+                          << "lock_edge=" << (lock ? lock->latestWhiteEdgeSample : 0U)
+                          << "lock_period=" << (lock ? lock->detectedPeriodSamples : 0U)
                           << "clock_samples=" << (clock ? clock->samples : 0U)
                           << "clock_lines=" << (clock ? clock->lines : 0U)
+                          << "clock_provisional=" << (pipeline.radiofax->imageClockProvisional() ? 1 : 0)
+                          << "wmo_timed_phasing=" << (pipeline.radiofax->usedWmoTimedPhasing() ? 1 : 0)
+                          << "ignored_irregular_pulses=" << pipeline.radiofax->ignoredIrregularPhasingPulses()
+                          << "clock_tracker_valid=" << (pipeline.radiofax->phasingClockTrackerValid() ? 1 : 0)
+                          << "clock_restarts=" << pipeline.radiofax->phasingClockRestarts()
                           << "black_hz=" << (levels ? levels->blackHz : 0.0)
                           << "white_hz=" << (levels ? levels->whiteHz : 0.0)
                           << "incomplete=" << incomplete.join(QLatin1Char(','));

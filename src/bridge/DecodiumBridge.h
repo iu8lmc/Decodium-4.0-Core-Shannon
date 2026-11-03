@@ -23,6 +23,7 @@ namespace decodium::audio { class RttyRxRecovery; }
 #include <QQueue>
 #include <QSet>
 #include <QDateTime>
+#include <QImage>
 #include <QMutex>
 #include <QFutureWatcher>
 #include <QFont>
@@ -32,6 +33,7 @@ namespace decodium::audio { class RttyRxRecovery; }
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "DecodiumThemeManager.h"
 #include "Detector/Ft2AsyncRegistry.hpp"
@@ -49,6 +51,7 @@ namespace decodium::audio { class RttyRxRecovery; }
 #include "FtRuntimeAdaptivePolicy.hpp"
 #include "PttTransitionPolicy.h"
 #include "Ft8AutoTxDecodeGate.h"
+#include "src/radio/ProfiledBoolCache.h"
 
 class ActiveStationsModel;
 class DecodiumAlertManager;
@@ -872,11 +875,16 @@ public:
                                                     bool centeredPhasingWithWhiteEndLine);
     Q_INVOKABLE bool configureSstvRadiofaxRxProfile(bool enabled, int ioc, int width, int height,
                                                     bool centeredPhasingWithWhiteEndLine, bool wmoDeadSector);
+    Q_INVOKABLE bool configureSstvRadiofaxRxAdvanced(bool enabled, int ioc, int width, int height,
+                                                     bool centeredPhasingWithWhiteEndLine, bool wmoDeadSector,
+                                                     bool wmoTimedPhasing);
     Q_INVOKABLE void resetSstvRxAfc();
     Q_INVOKABLE void resetSstvRxSlant();
     Q_INVOKABLE bool redecodeRecentSstv(
         const QVariantMap& parameters = {});
     Q_INVOKABLE bool saveSstvRxRawAudio();
+    Q_INVOKABLE bool saveSstvRecentRxAudio();
+    bool saveSstvRxRawAudioImpl(bool recentBuffer);
     Q_INVOKABLE void cancelSstvRxAudioJob();
     Q_INVOKABLE bool saveSstvRxImage();
     // Bounded view of the active native logbook for the explicit Gallery
@@ -897,6 +905,7 @@ public:
     Q_INVOKABLE bool startSstvRadiofaxTx(int ioc, int linesPerMinute);
     Q_INVOKABLE bool startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, bool centeredPhasing);
     Q_INVOKABLE bool startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, bool centeredPhasing, bool wmoDeadSector);
+    Q_INVOKABLE bool startSstvRadiofaxTxAdvanced(int ioc, int linesPerMinute, bool centeredPhasing, bool wmoDeadSector, bool symmetricPhasing);
     Q_INVOKABLE bool startSstvFax480Tx(const QString& profile);
     Q_INVOKABLE bool startSstvCalibrationTone(const QString& toneId);
     Q_INVOKABLE void cancelSstvTx();
@@ -2957,6 +2966,8 @@ private:
     bool m_sstvRedecodeActive {false};
     QString m_sstvRxRawAudioPath;
     quint64 m_sstvRxRawAudioAcquisitionId {0U};
+    quint64 m_sstvRxRawAudioPendingImageId {0U};
+    quint64 m_sstvRxRawAudioPendingRetainedId {0U};
     quint64 m_sstvRxStartAcquisitionId {0U};
     QDateTime m_sstvRxStartUtc;
     decodium::sstv::SstvStudioController* m_sstvStudioController {nullptr};
@@ -2981,6 +2992,18 @@ private:
     QPointer<decodium::sstv::SstvThumbnailProvider> m_sstvThumbnailProvider;
     quint64 m_sstvStorageRequestId {1};
     bool m_sstvStorageReady {false};
+#if DECODIUM_HAS_HAMDRM
+    struct PendingHamDrmGalleryImage {
+        QImage image;
+        QString profileId;
+        int occupiedBandwidthHz {0};
+        bool hybrid {false};
+        QDateTime eventAtUtc;
+    };
+    std::vector<PendingHamDrmGalleryImage> m_pendingHamDrmGalleryImages;
+    qint64 m_pendingHamDrmGalleryBytes {0};
+    bool m_sstvStorageInitializationPending {false};
+#endif
     bool m_sstvRxAutoSaveEnabled {false};
     QString m_sstvRxSaveState {QStringLiteral("idle")};
     QString m_sstvRxSaveError;
@@ -3753,10 +3776,12 @@ private:
     SoundOutput*       m_soundOutput {nullptr};
     Modulator*         m_modulator   {nullptr};
     DecodiumAudioSink* m_audioSink   {nullptr};
+    decodium::ProfiledBoolCache m_rtlSdrEnabledCache;
     RtlSdrInput*       m_rtlSdrInput {nullptr};
     QTimer*            m_rtlSdrRetuneTimer {nullptr};
     QThread*           m_rtlSdrAudioThread {nullptr};
     RtlSdrAudioOutput* m_rtlSdrAudioOutput {nullptr};
+    bool               m_rtlSdrAudioStopping {false};
     bool               m_rtlSdrAudioPlaybackRequested {false};
     QByteArray         m_rtlSdrAudioPlaybackDeviceId;
     int                m_rtlSdrAudioPlaybackSampleRate {0};
@@ -4873,7 +4898,10 @@ private:
     void deactivateHamDrmRxTap();
     void queueHamDrmTransmittedImage(QImage image,
                                      QString profileId,
-                                     int occupiedBandwidthHz);
+                                     int occupiedBandwidthHz,
+                                     bool received = false,
+                                     bool hybrid = false,
+                                     QDateTime eventAtUtc = {});
     decodium::sstv::SstvTxCoordinatorResult startHamDrmPreparedAudio(
         std::unique_ptr<decodium::sstv::SstvPcm16Source> source,
         std::string mode);

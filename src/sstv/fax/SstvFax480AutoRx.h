@@ -32,6 +32,8 @@ private:
     SstvVisDetector vis_;
     double visFrequency_ {0.0};
     std::uint64_t visRunStart_ {0}, visRunEnd_ {0};
+    double visPendingFrequency_ {0.0};
+    std::uint64_t visPendingStart_ {0};
     std::deque<SstvFrequencyObservation> replay_;
     std::optional<std::uint64_t> anchor_;
     std::uint64_t last_ {0}, runStart_ {0}, lastChange_ {0}, syncStart_ {0};

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "src/sstv/digital/HamDrmController.h"
+#include "src/sstv/digital/HamDrmHybridCodec.h"
 
 #include <QtTest/QtTest>
 
+#include <QBuffer>
 #include <QImage>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -104,6 +106,198 @@ class TestSstvDigitalQml final : public QObject
     Q_OBJECT
 
 private slots:
+    void hybridPickerRetainsReferenceToken_data()
+    {
+        QTest::addColumn<int>("transportId");
+        QTest::newRow("A") << 123;
+        QTest::newRow("B") << 456;
+    }
+
+    void hybridPickerRetainsReferenceToken()
+    {
+        QFETCH(int, transportId);
+        hamdrm::HamDrmController controller({}, {});
+        const auto reference = hamdrm::encodeHamDrmHybridServer({"example.invalid", "user", "dummy", "radio"});
+        QVERIFY(reference.ok());
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.filename = "de_TEST-1-image.jpg";
+        metadata.transportId = static_cast<std::uint16_t>(transportId);
+        const auto object = hamdrm::encodeHamDrmObject(metadata, *reference.value, 128);
+        QVERIFY(object.ok());
+        const auto ingest = [&] {
+            for (const auto& group : object.value->headerGroups)
+                if (!controller.ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok()) return false;
+            for (const auto& group : object.value->bodyGroups)
+                if (!controller.ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok()) return false;
+            return true;
+        };
+        QVERIFY(ingest());
+        const auto token = controller.inbox().front().toMap().value("hybridReferenceToken").toString();
+        QVERIFY(!token.isEmpty());
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)), QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QVERIFY(QMetaObject::invokeMethod(page.data(), "prepareHybridSave",
+                                          Q_ARG(QVariant, transportId), Q_ARG(QVariant, token)));
+        QCOMPARE(page->property("hybridSaveId").toInt(), transportId);
+        QCOMPARE(page->property("hybridSaveToken").toString(), token);
+        QVERIFY(controller.discardObject(transportId));
+        QVERIFY(ingest());
+        QVERIFY(controller.inbox().front().toMap().value("hybridReferenceToken").toString() != token);
+        QCOMPARE(page->property("hybridSaveToken").toString(), token);
+    }
+
+    void completedImageShowsSaveControl_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::newRow("A") << 24;
+        QTest::newRow("B") << 31;
+    }
+
+    void completedImageShowsSaveControl()
+    {
+        QFETCH(int, width);
+        hamdrm::HamDrmController controller({}, {});
+        QImage image(width, 20, QImage::Format_RGB32);
+        image.fill(Qt::blue);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.filename = "received.png";
+        metadata.transportId = 177;
+        const std::vector<std::uint8_t> body(png.begin(), png.end());
+        const auto object = hamdrm::encodeHamDrmObject(metadata, body, 128);
+        QVERIFY(object.ok());
+        const auto ingest = [&controller](const std::vector<std::uint8_t>& group) {
+            return controller.ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok();
+        };
+        for (const auto& group : object.value->headerGroups) QVERIFY(ingest(group));
+        for (const auto& group : object.value->bodyGroups) QVERIFY(ingest(group));
+        QVERIFY(!controller.selectedImageStructuralOnly());
+        QCOMPARE(controller.inbox().front().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("complete"));
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)),
+                                QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QTRY_VERIFY_WITH_TIMEOUT(page->findChild<QObject*>(QStringLiteral("hamdrmSaveCompletedImage")), 5000);
+        QObject* button = page->findChild<QObject*>(QStringLiteral("hamdrmSaveCompletedImage"));
+        QVERIFY(button->property("enabled").toBool());
+        QVERIFY(button->property("visible").toBool());
+    }
+
+    void structuralOnlyShowsNotice_data() { completedImageShowsSaveControl_data(); }
+    void structuralOnlyShowsNotice()
+    {
+        QFETCH(int, width);
+        hamdrm::HamDrmController controller({}, {});
+        std::vector<std::uint8_t> body {
+            0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x14,
+            0x00, static_cast<std::uint8_t>(width), 0x03,
+            0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00, 0xff, 0xd9
+        };
+        body.resize(160U, 0);
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.filename = "structural.jpg"; metadata.transportId = 178;
+        const auto object = hamdrm::encodeHamDrmObject(metadata, body, 128);
+        QVERIFY(object.ok());
+        const auto ingest = [&controller](const std::vector<std::uint8_t>& group) {
+            return controller.ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok();
+        };
+        for (const auto& group : object.value->headerGroups) QVERIFY(ingest(group));
+        for (const auto& group : object.value->bodyGroups) QVERIFY(ingest(group));
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)),
+                                QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QObject* notice = requiredObject(page.data(), "hamdrmStructuralOnlyNotice");
+        QObject* button = requiredObject(page.data(), "hamdrmSaveCompletedImage");
+        QVERIFY(notice && button);
+        QTRY_VERIFY(notice->property("visible").toBool());
+        QVERIFY(button->property("enabled").toBool());
+    }
+
+    void hybridModeDoesNotUseOrdinaryTx_data()
+    {
+        QTest::addColumn<QString>("callsign");
+        QTest::addColumn<QString>("host");
+        QTest::newRow("A") << QStringLiteral("TEST1") << QStringLiteral("a.example.invalid");
+        QTest::newRow("B") << QStringLiteral("TEST2") << QStringLiteral("b.example.invalid");
+    }
+
+    void hybridModeDoesNotUseOrdinaryTx()
+    {
+        QFETCH(QString, callsign);
+        QFETCH(QString, host);
+        hamdrm::HamDrmController controller({}, {});
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)),
+                                QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QObject* toggle = requiredObject(page.data(), "hamdrmHybridTxEnabled");
+        QObject* normal = requiredObject(page.data(), "hamdrmStartTx");
+        QObject* hybrid = requiredObject(page.data(), "hamdrmStartHybridTx");
+        QObject* call = requiredObject(page.data(), "hamdrmHybridCall");
+        QObject* server = requiredObject(page.data(), "hamdrmHybridHost");
+        QObject* password = requiredObject(page.data(), "hamdrmHybridPassword");
+        QObject* recovery = requiredObject(page.data(), "hamdrmRsLevel");
+        QVERIFY(toggle && normal && hybrid && call && server && password && recovery);
+        QVERIFY(page->setProperty("selectedTxImage", QUrl::fromLocalFile("/tmp/synthetic.jpg")));
+        QTRY_VERIFY(normal->property("enabled").toBool());
+        QVERIFY(toggle->setProperty("checked", true));
+        QTRY_VERIFY(!normal->property("enabled").toBool());
+        QTRY_VERIFY(!recovery->property("enabled").toBool());
+        QVERIFY(!hybrid->property("enabled").toBool());
+        QVERIFY(call->setProperty("text", callsign));
+        QVERIFY(server->setProperty("text", host));
+        QTRY_VERIFY(hybrid->property("enabled").toBool());
+        QCOMPARE(password->property("echoMode").toInt(), 2); // TextInput.Password
+        QVERIFY(toggle->setProperty("checked", false));
+        QTRY_VERIFY(normal->property("enabled").toBool());
+        QTRY_VERIFY(recovery->property("enabled").toBool());
+    }
+
     void unknownBsrNotice_data()
     {
         QTest::addColumn<QByteArray>("body");
@@ -231,6 +425,10 @@ private slots:
         QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
         QVERIFY(page);
         QObject* toggle = requiredObject(page.data(), "hamdrmExperimentalTiming");
+        QObject* guidance = requiredObject(page.data(), "hamdrmAdaptiveGuidance");
+        QVERIFY(guidance);
+        QVERIFY(guidance->property("visible").toBool());
+        QVERIFY(guidance->property("text").toString().contains(QStringLiteral("stop RX")));
         QVERIFY(toggle && toggle->property("enabled").toBool());
         auto* item = qobject_cast<QQuickItem*>(page.data());
         auto* checkbox = qobject_cast<QQuickItem*>(toggle);
@@ -247,9 +445,11 @@ private slots:
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, click);
         QVERIFY(controller.experimentalTiming() && rx->selected);
         QVERIFY(toggle->property("checked").toBool());
+        QVERIFY(guidance->property("text").toString().contains(QStringLiteral("is enabled")));
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, click);
         QVERIFY(!controller.experimentalTiming() && !rx->selected);
         QVERIFY(!toggle->property("checked").toBool());
+        QVERIFY(guidance->property("text").toString().contains(QStringLiteral("stop RX")));
         QVERIFY(controller.startRx());
         QVERIFY(!toggle->property("enabled").toBool());
     }

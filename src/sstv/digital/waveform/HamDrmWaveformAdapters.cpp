@@ -608,7 +608,47 @@ public:
         bool requestedEarlyOnly = false;
         bool requestedFractionalTiming = false;
         bool requestedFractionalOnly = false;
+        bool requestedAutomaticEarly = false;
         requestedWaveformLimits.maximumFrames = limits.maximumRxSessionFrames;
+        // Retry only packets rejected by the ordinary hard and soft decoders.
+        // The alternate packet must pass its own CRC before reassembly.
+        requestedWaveformLimits.experimentalMultistagePacketRetry = true;
+        // Follow gradual clock mismatch in the ordinary single receiver.
+        // The multi-candidate adaptive path retains its existing behaviour
+        // until its combined CPU cost has been measured separately.
+        requestedWaveformLimits.experimentalFrameTimingTracking = !selectedExperimentalTiming;
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_DISABLE_FRAME_TRACKING") == 1) {
+            requestedWaveformLimits.experimentalFrameTimingTracking = false;
+            qInfo() << "[LAB][HAMDRM] frame timing tracking disabled for comparison";
+        }
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_FRAME_TRACKING") == 1) {
+            requestedWaveformLimits.experimentalFrameTimingTracking = true;
+            qInfo() << "[LAB][HAMDRM] experimental frame timing tracking";
+        }
+        if (requestedWaveformLimits.experimentalFrameTimingTracking)
+            qInfo() << "[HAMDRM] frame timing tracking enabled";
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_TEMPORAL_PILOTS") == 1) {
+            requestedWaveformLimits.experimentalTemporalPilots = true;
+            qInfo() << "[LAB][HAMDRM] experimental temporal pilot estimator";
+        }
+        // Keep an explicit baseline for reproducible laboratory comparisons.
+        // Ordinary sessions must not be affected by process environment.
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_DISABLE_MULTISTAGE") == 1) {
+            requestedWaveformLimits.experimentalMultistagePacketRetry = false;
+            qInfo() << "[LAB][HAMDRM] multistage packet retry disabled for comparison";
+        }
         if (selectedExperimentalTiming) {
             requestedWaveformLimits.experimentalFrequencySelective = true;
             requestedWaveformLimits.experimentalAdaptiveEqualizer = true;
@@ -619,6 +659,7 @@ public:
             qInfo() << "[HAMDRM] operator selected experimental adaptive dual timing";
             qInfo() << "[HAMDRM] operator selected fractional timing candidate";
             qInfo() << "[HAMDRM] operator selected CRC-gated packet retries";
+            qInfo() << "[HAMDRM] operator selected temporal pilot candidate";
         }
         // Diagnostic-only replay of difficult recorded channels. Never select
         // the relaxed limits in a normal session, even if the environment is set.
@@ -656,6 +697,15 @@ public:
         if (QStandardPaths::isTestModeEnabled()
             && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
             && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
+            && requestedWaveformLimits.experimentalAdaptiveEqualizer
+            && !requestedDualTiming
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_SINGLE_EARLY") == 1) {
+            requestedWaveformLimits.experimentalEarlyTiming = true;
+            qInfo() << "[LAB][HAMDRM] single adaptive early timing candidate";
+        }
+        if (QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))
             && (requestedWaveformLimits.experimentalAdaptiveEqualizer
                 || requestedWaveformLimits.experimentalMultistagePacketRetry)
             && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_DUAL_TIMING") == 1) {
@@ -675,6 +725,18 @@ public:
                 }
             }
         }
+        const bool laboratory = QStandardPaths::isTestModeEnabled()
+            && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+            && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"));
+        if (!selectedExperimentalTiming && !requestedDualTiming
+            && !requestedWaveformLimits.experimentalAdaptiveEqualizer
+            && !requestedWaveformLimits.experimentalTemporalPilots
+            && !(laboratory && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_DISABLE_AUTO_EARLY") == 1)) {
+            requestedAutomaticEarly = true;
+            requestedDualTiming = true;
+            qInfo() << "[HAMDRM] automatic adaptive early receiver enabled";
+            qInfo() << "[HAMDRM] automatic temporal pilot receiver enabled";
+        }
         try {
             static_cast<void>(HamDrmWaveformReceiver(
                 requestedConfig, requestedWaveformLimits));
@@ -693,9 +755,13 @@ public:
             config = requestedConfig;
             waveformLimits = requestedWaveformLimits;
             dualTiming = requestedDualTiming;
+            automaticEarlyRecovery = requestedAutomaticEarly;
             earlyOnly = requestedEarlyOnly;
             fractionalTiming = requestedFractionalTiming;
             fractionalOnly = requestedFractionalOnly;
+            // The temporal pilot candidate improves reception in channels
+            // whose frequency response changes across the occupied band.
+            temporalReferenceEnabled = selectedExperimentalTiming || requestedAutomaticEarly;
             sessionId = requestedSession;
             sink = &requestedSink;
             queue.clear();
@@ -999,10 +1065,62 @@ private:
             HamDrmWaveformReceiver receiver(config, waveformLimits);
             std::unique_ptr<HamDrmWaveformReceiver> earlyReceiver;
             std::unique_ptr<HamDrmWaveformReceiver> fractionalReceiver;
+            std::unique_ptr<HamDrmWaveformReceiver> flatReferenceReceiver;
+            std::unique_ptr<HamDrmWaveformReceiver> temporalReferenceReceiver;
             HamDrmFractionalDelay fractionalDelay;
+            if (waveformLimits.experimentalTemporalPilots) {
+                auto flatLimits = waveformLimits;
+                flatLimits.experimentalTemporalPilots = false;
+                flatReferenceReceiver = std::make_unique<HamDrmWaveformReceiver>(config, flatLimits);
+            }
+            if (temporalReferenceEnabled) {
+                auto temporalLimits = waveformLimits;
+                temporalLimits.experimentalFrequencySelective = false;
+                temporalLimits.experimentalAdaptiveEqualizer = false;
+                temporalLimits.experimentalFlatPacketFallback = false;
+                temporalLimits.experimentalEarlyTiming = false;
+                temporalLimits.experimentalTemporalPilots = true;
+                // This candidate has its own temporal pilot estimator; keep
+                // its timing behaviour identical to the validated adaptive
+                // path until their interaction has separate coverage.
+                temporalLimits.experimentalFrameTimingTracking = false;
+                if (QStandardPaths::isTestModeEnabled()
+                    && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+                    && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))) {
+                    bool ok = false;
+                    const auto frameLimit = qEnvironmentVariableIntValue("DECODIUM_LAB_TEMPORAL_FRAME_LIMIT", &ok);
+                    if (ok && frameLimit > 0 && std::size_t(frameLimit) < temporalLimits.maximumFrames) {
+                        temporalLimits.maximumFrames = std::size_t(frameLimit);
+                        qInfo() << "[LAB][HAMDRM] temporal frame limit" << frameLimit;
+                    }
+                }
+                temporalReferenceReceiver = std::make_unique<HamDrmWaveformReceiver>(config, temporalLimits);
+            }
             if (dualTiming) {
                 auto earlyLimits = waveformLimits;
                 earlyLimits.experimentalEarlyTiming = true;
+                if (automaticEarlyRecovery) {
+                    earlyLimits.experimentalFrequencySelective = true;
+                    earlyLimits.experimentalAdaptiveEqualizer = true;
+                    earlyLimits.experimentalFlatPacketFallback = true;
+                    earlyLimits.experimentalMultistagePacketRetry = true;
+                    earlyLimits.experimentalFrameTimingTracking = true;
+                    if (QStandardPaths::isTestModeEnabled()
+                        && QCoreApplication::arguments().contains(QStringLiteral("--test-mode"))
+                        && QCoreApplication::arguments().contains(QStringLiteral("--lab-hamdrm"))) {
+                        bool ok = false;
+                        const auto frameLimit = qEnvironmentVariableIntValue(
+                            "DECODIUM_LAB_AUTO_EARLY_FRAME_LIMIT", &ok);
+                        if (ok && frameLimit > 0 && std::size_t(frameLimit) < earlyLimits.maximumFrames) {
+                            earlyLimits.maximumFrames = std::size_t(frameLimit);
+                            qInfo() << "[LAB][HAMDRM] automatic early frame limit" << frameLimit;
+                        }
+                    }
+                }
+                if (temporalReferenceEnabled) {
+                    earlyLimits.experimentalFrameTimingTracking = true;
+                    qInfo() << "[HAMDRM] adaptive early candidate tracks frame timing";
+                }
                 earlyReceiver = std::make_unique<HamDrmWaveformReceiver>(config, earlyLimits);
             }
             if (fractionalTiming)
@@ -1027,6 +1145,8 @@ private:
                     } else if (generation != workerGeneration) {
                         workerGeneration = generation;
                         receiver.reset();
+                        if (flatReferenceReceiver) flatReferenceReceiver->reset();
+                        if (temporalReferenceReceiver) temporalReferenceReceiver->reset();
                         if (earlyReceiver) earlyReceiver->reset();
                         if (fractionalReceiver) fractionalReceiver->reset();
                         fractionalDelay.reset();
@@ -1051,6 +1171,8 @@ private:
                 if (chunk.sampleRate == kHamDrmPcmSampleRateHz) {
                     if (inputRate != chunk.sampleRate) {
                         receiver.reset();
+                        if (flatReferenceReceiver) flatReferenceReceiver->reset();
+                        if (temporalReferenceReceiver) temporalReferenceReceiver->reset();
                         if (earlyReceiver) earlyReceiver->reset();
                         if (fractionalReceiver) fractionalReceiver->reset();
                         fractionalDelay.reset();
@@ -1067,6 +1189,8 @@ private:
                 } else {
                     if (!resampler || inputRate != chunk.sampleRate) {
                         receiver.reset();
+                        if (flatReferenceReceiver) flatReferenceReceiver->reset();
+                        if (temporalReferenceReceiver) temporalReferenceReceiver->reset();
                         if (earlyReceiver) earlyReceiver->reset();
                         if (fractionalReceiver) fractionalReceiver->reset();
                         fractionalDelay.reset();
@@ -1094,6 +1218,9 @@ private:
                     && (batch.statistics.receivedFrames != loggedFrames || !batch.status.ok())) {
                     loggedFrames = batch.statistics.receivedFrames;
                     qInfo() << "[HAMDRM RX trace] frames" << loggedFrames
+                            << "FAC interleaver" << (batch.statistics.hasFacInterleaver
+                                ? (batch.statistics.lastFacInterleaver == HamDrmInterleaver::Long
+                                    ? "long" : "short") : "unknown")
                             << "pilot failures" << batch.statistics.pilotFailures
                             << "FAC failures" << batch.statistics.facFailures
                             << "MSC failures" << batch.statistics.mscFailures
@@ -1113,6 +1240,27 @@ private:
                     finishFromWorker(batch.status);
                     return;
                 }
+                if (flatReferenceReceiver) {
+                    const auto flatBatch = flatReferenceReceiver->pushPcm(pcm.data(), pcm.size(), false);
+                    if (!deliverBatch(flatBatch, chunk.generation)) return;
+                    if (!flatBatch.status.ok() && terminalRxStatus(flatBatch.status)) {
+                        finishFromWorker(flatBatch.status);
+                        return;
+                    }
+                }
+                if (temporalReferenceReceiver) {
+                    const auto temporalBatch = temporalReferenceReceiver->pushPcm(pcm.data(), pcm.size(), false);
+                    if (qEnvironmentVariableIsSet("DECODIUM_HAMDRM_RX_TRACE") && !temporalBatch.dataGroups.empty())
+                        qInfo() << "[HAMDRM RX temporal timing] groups" << temporalBatch.statistics.validatedDataGroups;
+                    if (!earlyOnly && !fractionalOnly && !deliverBatch(temporalBatch, chunk.generation)) return;
+                    if (!temporalBatch.status.ok() && terminalRxStatus(temporalBatch.status)) {
+                        // This candidate is optional: a local limit or failure
+                        // must not stop the independently running receivers.
+                        qWarning() << "[HAMDRM] temporal pilot candidate stopped; other receivers continue:"
+                                   << QString::fromStdString(temporalBatch.status.detail);
+                        temporalReferenceReceiver.reset();
+                    }
+                }
                 if (earlyReceiver) {
                     const auto earlyBatch = earlyReceiver->pushPcm(pcm.data(), pcm.size(), false);
                     if (qEnvironmentVariableIsSet("DECODIUM_HAMDRM_RX_TRACE")
@@ -1124,8 +1272,14 @@ private:
                     }
                     if (!fractionalOnly && !deliverBatch(earlyBatch, chunk.generation)) return;
                     if (!earlyBatch.status.ok() && terminalRxStatus(earlyBatch.status)) {
-                        finishFromWorker(earlyBatch.status);
-                        return;
+                        if (automaticEarlyRecovery) {
+                            qWarning() << "[HAMDRM] automatic early receiver stopped; primary continues:"
+                                       << QString::fromStdString(earlyBatch.status.detail);
+                            earlyReceiver.reset();
+                        } else {
+                            finishFromWorker(earlyBatch.status);
+                            return;
+                        }
                     }
                 }
                 if (fractionalReceiver) {
@@ -1159,9 +1313,11 @@ private:
     HamDrmWaveformConfig config;
     HamDrmWaveformLimits waveformLimits;
     bool dualTiming {false};
+    bool automaticEarlyRecovery {false};
     bool experimentalTimingSelected {false};
     bool earlyOnly {false};
     bool fractionalTiming {false};
+    bool temporalReferenceEnabled {false};
     bool fractionalOnly {false};
     HamDrmWaveformRxSink* sink {nullptr};
     std::optional<HamDrmStatus> fatalStatus;

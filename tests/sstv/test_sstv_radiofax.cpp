@@ -15,6 +15,201 @@ using namespace decodium::sstv;
 class TestSstvRadiofax final : public QObject {
     Q_OBJECT
 private slots:
+    void aptStartDetectsIocAndRejectsOtherPatternsAB()
+    {
+        constexpr std::uint32_t rate = 12000U;
+        for (const auto ioc : {SstvFaxIoc::Ioc576, SstvFaxIoc::Ioc288}) {
+            const unsigned expected = ioc == SstvFaxIoc::Ioc576 ? 300U : 675U;
+            const unsigned otherIoc = ioc == SstvFaxIoc::Ioc576 ? 675U : 300U;
+            const unsigned tolerance = ioc == SstvFaxIoc::Ioc576 ? 3U : 7U;
+            for (const unsigned modulation : {expected - tolerance, expected, expected + tolerance, otherIoc, 450U}) {
+                SstvRadiofaxAptStartDetector whole(rate, ioc), duplicate(rate, ioc);
+                SstvFrequencyObservation obs;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                for (std::uint64_t sample = 0; sample < 3U * rate; ++sample) {
+                    obs.centreSample = sample;
+                    obs.correctedFrequencyHz = (sample * modulation * 2U / rate) % 2U ? 2300.0 : 1500.0;
+                    whole.consume(obs);
+                    duplicate.consume(obs);
+                    if (sample % 7U == 0U) duplicate.consume(obs);
+                }
+                const bool expectedSignal = modulation >= expected - tolerance && modulation <= expected + tolerance;
+                QCOMPARE(whole.lastAptWhiteEdge().has_value(), expectedSignal);
+                QCOMPARE(duplicate.lastAptWhiteEdge(), whole.lastAptWhiteEdge());
+                if (whole.lastAptWhiteEdge()) QVERIFY(*whole.lastAptWhiteEdge() > 2U * rate);
+            }
+        }
+    }
+
+    void wmoTimedPhasingPreservesPhasingLikeFirstRowsAB()
+    {
+        constexpr std::uint32_t rate = 12000U;
+        for (const auto ioc : {SstvFaxIoc::Ioc576, SstvFaxIoc::Ioc288}) {
+         for (const std::uint16_t lpm : {60U, 90U, 120U, 240U}) {
+          for (const std::uint64_t scale : {997U, 1000U, 1003U}) {
+           const std::uint64_t period = (std::uint64_t(rate) * 60U / lpm) * scale / 1000U;
+           for (const auto pattern : {SstvFaxPhasePattern::Symmetric, SstvFaxPhasePattern::WhiteFivePercent}) {
+            SstvFaxConfig config;
+            config.ioc = ioc;
+            config.width = 32U;
+            config.height = 8U;
+            config.linesPerMinute = lpm;
+            config.phasing = pattern;
+            config.wmoTimedPhasing = true;
+            SstvRadiofaxAutoRx timed(config);
+            config.wmoTimedPhasing = false;
+            SstvRadiofaxAutoRx heuristic(config);
+            constexpr std::uint64_t aptEnd = 5U * rate;
+            const std::uint64_t imageStart = aptEnd + std::uint64_t(lpm / 2U) * period;
+            const unsigned apt = ioc == SstvFaxIoc::Ioc576 ? 300U : 675U;
+            std::vector<SstvFrequencyObservation> batch;
+            auto deliver = [&] {
+                timed.consume(batch);
+                heuristic.consume(batch);
+                batch.clear();
+            };
+            for (std::uint64_t sample = 0; sample < imageStart + 11U * period;) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                if (sample < aptEnd)
+                    obs.correctedFrequencyHz = (sample * apt * 2U / rate) % 2U ? 2300.0 : 1500.0;
+                else if (sample < imageStart + 3U * period)
+                    obs.correctedFrequencyHz = ((sample - aptEnd) % period
+                        < period / (pattern == SstvFaxPhasePattern::Symmetric ? 2U : 20U)) ? 2300.0 : 1500.0;
+                else obs.correctedFrequencyHz = 1900.0;
+                batch.push_back(obs);
+                if (batch.size() == 4096U) deliver();
+                sample += sample < aptEnd ? 1U : 6U;
+            }
+            if (!batch.empty()) deliver();
+            QVERIFY(timed.imageStartSample());
+            QVERIFY(timed.usedWmoTimedPhasing());
+            QVERIFY(!heuristic.usedWmoTimedPhasing());
+            QVERIFY(heuristic.imageStartSample());
+            QVERIFY2(std::llabs(qint64(*timed.imageStartSample()) - qint64(imageStart)) < 20,
+                     "timed receiver did not preserve the first image line");
+            QVERIFY(*heuristic.imageStartSample() >= imageStart + 2U * period);
+            timed.finish();
+            const auto image = timed.snapshot();
+            QVERIFY(image);
+            QVERIFY(image->isScanlineComplete(0));
+            QVERIFY(image->pixel(pattern == SstvFaxPhasePattern::Symmetric ? 4 : 0, 0).red > 240);
+            QVERIFY(image->pixel(28, 0).red < 15);
+           }
+          }
+         }
+        }
+    }
+
+    void wmoTimedPhasingFallsBackWithoutIocStartAB()
+    {
+        for (const auto ioc : {SstvFaxIoc::Ioc576, SstvFaxIoc::Ioc288}) {
+            SstvFaxConfig config;
+            config.ioc = ioc;
+            config.width = 32U;
+            config.height = 4U;
+            config.linesPerMinute = 240U;
+            config.phasing = SstvFaxPhasePattern::Symmetric;
+            config.wmoTimedPhasing = true;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> batch;
+            constexpr std::uint64_t period = 3000U;
+            constexpr std::uint64_t imageStart = 18U * period;
+            for (std::uint64_t sample = 0; sample < imageStart + 7U * period; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                obs.correctedFrequencyHz = sample < imageStart
+                    ? (sample % period < period / 2U ? 2300.0 : 1500.0) : 1900.0;
+                batch.push_back(obs);
+                if (batch.size() == 4096U) { receiver.consume(batch); batch.clear(); }
+            }
+            receiver.consume(batch);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY(!receiver.usedWmoTimedPhasing());
+            QVERIFY(std::llabs(qint64(*receiver.imageStartSample()) - qint64(imageStart)) < 20);
+        }
+    }
+
+    void wmoTimedPhasingIgnoresEarlyFalseImageAB()
+    {
+        constexpr std::uint32_t rate = 12000U;
+        constexpr std::uint64_t period = 3000U;
+        constexpr std::uint64_t aptEnd = 5U * rate;
+        constexpr std::uint64_t imageStart = aptEnd + 120U * period;
+        for (const auto ioc : {SstvFaxIoc::Ioc576, SstvFaxIoc::Ioc288}) {
+            SstvFaxConfig config;
+            config.ioc = ioc;
+            config.width = 32U;
+            config.height = 4U;
+            config.linesPerMinute = 240U;
+            config.phasing = SstvFaxPhasePattern::Symmetric;
+            config.wmoTimedPhasing = true;
+            SstvRadiofaxAutoRx receiver(config);
+            const unsigned apt = ioc == SstvFaxIoc::Ioc576 ? 300U : 675U;
+            std::vector<SstvFrequencyObservation> batch;
+            for (std::uint64_t sample = 0; sample < imageStart + 7U * period;) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                if (sample < aptEnd)
+                    obs.correctedFrequencyHz = (sample * apt * 2U / rate) % 2U ? 2300.0 : 1500.0;
+                else if (sample < imageStart) {
+                    const auto relative = sample - aptEnd;
+                    const bool noise = relative / period == 60U;
+                    obs.correctedFrequencyHz = noise || relative % period < period / 2U ? 2300.0 : 1500.0;
+                } else obs.correctedFrequencyHz = 1900.0;
+                batch.push_back(obs);
+                if (batch.size() == 4096U) { receiver.consume(batch); batch.clear(); }
+                sample += sample < aptEnd ? 1U : 6U;
+            }
+            receiver.consume(batch);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY(receiver.usedWmoTimedPhasing());
+            QVERIFY(std::llabs(qint64(*receiver.imageStartSample()) - qint64(imageStart)) < 20);
+        }
+    }
+
+    void wmoTimedPhasingDoesNotInventImageAfterSignalLossAB()
+    {
+        constexpr std::uint32_t rate = 12000U;
+        constexpr std::uint64_t period = 3000U;
+        constexpr std::uint64_t aptEnd = 5U * rate;
+        constexpr std::uint64_t loss = aptEnd + 60U * period;
+        for (const auto ioc : {SstvFaxIoc::Ioc576, SstvFaxIoc::Ioc288}) {
+            SstvFaxConfig config;
+            config.ioc = ioc;
+            config.width = 32U;
+            config.height = 4U;
+            config.linesPerMinute = 240U;
+            config.wmoTimedPhasing = true;
+            SstvRadiofaxAutoRx receiver(config);
+            const unsigned apt = ioc == SstvFaxIoc::Ioc576 ? 300U : 675U;
+            std::vector<SstvFrequencyObservation> batch;
+            for (std::uint64_t sample = 0; sample < aptEnd + 130U * period;) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = sample < loss ? SstvFrequencyStatus::Valid : SstvFrequencyStatus::LowSignal;
+                obs.confidence = sample < loss ? 1.0 : 0.0;
+                obs.correctedFrequencyHz = sample < aptEnd
+                    ? ((sample * apt * 2U / rate) % 2U ? 2300.0 : 1500.0)
+                    : ((sample - aptEnd) % period < period / 20U ? 2300.0 : 1500.0);
+                batch.push_back(obs);
+                if (batch.size() == 4096U) { receiver.consume(batch); batch.clear(); }
+                sample += sample < aptEnd ? 1U : 6U;
+            }
+            receiver.consume(batch);
+            QVERIFY(!receiver.imageStartSample());
+            QVERIFY(!receiver.snapshot());
+            QVERIFY(!receiver.usedWmoTimedPhasing());
+            QCOMPARE(receiver.state(), SstvRadiofaxAutoRxState::SearchingPhasing);
+        }
+    }
     void autoReceiverCalibratesPhasingLevelsAB()
     {
         SstvFaxConfig config;
@@ -90,6 +285,54 @@ private slots:
         }
     }
 
+    void phasingStartWaitsForClockAtSmallOffsetAB()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxImageStartDetector detector(rate,
+                {240U, SstvFaxPhasePattern::WhiteFivePercent, 0U, period});
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < period * 16U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                obs.correctedFrequencyHz = sample % period < period / 20U ? 2300.0 : 1500.0;
+                observations.push_back(obs);
+                if (observations.size() == 4096U) {
+                    QVERIFY(!detector.consume(observations));
+                    observations.clear();
+                }
+            }
+            QVERIFY(!detector.consume(observations));
+            QVERIFY(detector.valid());
+        }
+    }
+
+    void phasingLockUsesMedianOfRecentPeriodsAB()
+    {
+        for (const std::uint64_t base : {2991U, 3009U}) {
+            const auto transition = base < 3000U ? 2U * base + 50U : 2U * base - 50U;
+            const std::vector<std::uint64_t> edges {0U, base, transition,
+                                                     transition + base, transition + 2U * base};
+            SstvRadiofaxPhasingDetector detector(12'000U);
+            std::optional<SstvRadiofaxPhaseLock> lock;
+            for (std::uint64_t sample = 0; sample <= edges.back(); ++sample) {
+                const auto after = std::upper_bound(edges.begin(), edges.end(), sample);
+                const auto edge = *(after - 1);
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                obs.correctedFrequencyHz = sample - edge < 150U ? 2300.0 : 1500.0;
+                if (const auto value = detector.consume(&obs, 1U)) { lock = value; break; }
+            }
+            QVERIFY(lock);
+            QCOMPARE(lock->linesPerMinute, std::uint16_t(240U));
+            QCOMPARE(lock->detectedPeriodSamples, base);
+        }
+    }
+
     void phasingClockRejectsInsufficientAndIrregularPulses()
     {
         SstvRadiofaxClockTracker tracker(12'000U,
@@ -99,7 +342,7 @@ private slots:
         obs.confidence = 1.0;
         for (std::uint64_t sample = 0; sample < 12U * 6000U; ++sample) {
             obs.centreSample = sample;
-            // One malformed period must invalidate an otherwise plausible clock.
+            // Sustained malformed periods must invalidate a plausible clock.
             const auto within = sample < 9U * 6000U ? sample % 6000U
                 : (sample - 9U * 6000U) % 6100U;
             obs.correctedFrequencyHz = within < 300U ? 2300.0 : 1500.0;
@@ -111,6 +354,721 @@ private slots:
         obs.centreSample = 0U;
         tracker.consume(obs);
         QVERIFY(!tracker.estimate());
+    }
+
+    void provisionalPhasingClockRequiresConsecutiveEdgesAB()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            for (const bool missing : {false, true}) {
+                SstvRadiofaxClockTracker tracker(rate,
+                    {240U, SstvFaxPhasePattern::WhiteFivePercent, 0U});
+                SstvFrequencyObservation obs;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                for (std::uint64_t sample = 0; sample < period * 5U; sample += 3U) {
+                    obs.centreSample = sample;
+                    const auto line = sample / period;
+                    const bool white = sample % period < period / 20U && !(missing && line == 2U);
+                    obs.correctedFrequencyHz = white ? 2300.0 : 1500.0;
+                    tracker.consume(obs);
+                    if (sample < period * 2U) QVERIFY(!tracker.provisionalEstimate());
+                }
+                QVERIFY(tracker.valid());
+                const auto estimate = tracker.provisionalEstimate();
+                if (missing) QVERIFY(!estimate);
+                else {
+                    QVERIFY(estimate);
+                    QVERIFY(std::abs(double(estimate->samples) / estimate->lines - double(period)) < 1.0);
+                    QVERIFY(!tracker.estimate());
+                }
+            }
+        }
+    }
+
+    void provisionalTwoEdgesRequirePriorReferenceAB()
+    {
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            for (const bool reference : {false, true}) {
+                for (const bool missing : {false, true}) {
+                    SstvRadiofaxClockTracker tracker(12000U,
+                        {240U, SstvFaxPhasePattern::WhiteFivePercent, 0U});
+                    if (reference) tracker.setPhaseReference(0U, {period, 1U});
+                    SstvFrequencyObservation obs;
+                    obs.status = SstvFrequencyStatus::Valid;
+                    obs.confidence = 1.0;
+                    for (std::uint64_t sample = 0; sample < period * 2U; sample += 3U) {
+                        obs.centreSample = sample;
+                        const auto line = sample / period;
+                        obs.correctedFrequencyHz = (sample % period < period / 20U
+                            && !(missing && line == 1U)) ? 2300.0 : 1500.0;
+                        tracker.consume(obs);
+                        if (sample < period) QVERIFY(!tracker.provisionalEstimate());
+                    }
+                    const auto estimate = tracker.provisionalEstimate();
+                    if (reference && !missing) {
+                        QVERIFY(estimate);
+                        QVERIFY(std::abs(double(estimate->samples) / estimate->lines - double(period)) < 1.0);
+                        QVERIFY(!tracker.estimate());
+                    } else QVERIFY(!estimate);
+                }
+            }
+        }
+    }
+
+    void phasingClockSurvivesSingleFalsePulseAB()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        for (const std::uint64_t glitchStart : {2000U, 3500U}) {
+            SstvRadiofaxClockTracker tracker(rate,
+                {120U, SstvFaxPhasePattern::WhiteFivePercent, 0U});
+            SstvFrequencyObservation obs;
+            obs.status = SstvFrequencyStatus::Valid;
+            obs.confidence = 1.0;
+            bool checkedIrregular = false;
+            for (std::uint64_t sample = 0; sample < 20U * 6000U; sample += 6U) {
+                obs.centreSample = sample;
+                const auto within = sample % 6000U;
+                const bool falsePulse = sample / 6000U == 11U
+                    && within >= glitchStart && within < glitchStart + 300U;
+                obs.correctedFrequencyHz = within < 300U || falsePulse ? 2300.0 : 1500.0;
+                tracker.consume(obs);
+                if (sample / 6000U == 11U && within >= glitchStart + 300U
+                    && within < glitchStart + 306U) {
+                    QVERIFY(!tracker.provisionalEstimate());
+                    checkedIrregular = true;
+                }
+            }
+            QVERIFY(checkedIrregular);
+            QVERIFY(tracker.valid());
+            QCOMPARE(tracker.ignoredIrregularPulses(), 1U);
+            const auto estimate = tracker.estimate();
+            QVERIFY(estimate);
+            QVERIFY(std::abs(double(estimate->samples) / estimate->lines - 6000.0) < 1.0);
+        }
+    }
+
+    void phasingClockRejectsEarlyFalsePulseAB()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        for (const std::uint64_t glitchStart : {2000U, 3500U}) {
+            SstvRadiofaxClockTracker tracker(rate,
+                {120U, SstvFaxPhasePattern::WhiteFivePercent, 0U});
+            SstvFrequencyObservation obs;
+            obs.status = SstvFrequencyStatus::Valid;
+            obs.confidence = 1.0;
+            for (std::uint64_t sample = 0; sample < 8U * 6000U; sample += 6U) {
+                obs.centreSample = sample;
+                const auto within = sample % 6000U;
+                const bool falsePulse = sample / 6000U == 2U
+                    && within >= glitchStart && within < glitchStart + 300U;
+                obs.correctedFrequencyHz = within < 300U || falsePulse ? 2300.0 : 1500.0;
+                tracker.consume(obs);
+            }
+            QVERIFY(!tracker.valid());
+            QVERIFY(!tracker.estimate());
+            QCOMPARE(tracker.ignoredIrregularPulses(), 0U);
+        }
+    }
+
+    void phasingClockRejectsTwoFalsePulsesAB()
+    {
+        constexpr std::uint32_t rate = 12'000U;
+        for (const std::uint64_t glitchStart : {1200U, 1800U}) {
+            SstvRadiofaxClockTracker tracker(rate,
+                {120U, SstvFaxPhasePattern::WhiteFivePercent, 0U});
+            SstvFrequencyObservation obs;
+            obs.status = SstvFrequencyStatus::Valid;
+            obs.confidence = 1.0;
+            for (std::uint64_t sample = 0; sample < 20U * 6000U; sample += 6U) {
+                obs.centreSample = sample;
+                const auto within = sample % 6000U;
+                const bool first = within >= glitchStart && within < glitchStart + 300U;
+                const bool second = within >= glitchStart + 1800U && within < glitchStart + 2100U;
+                const bool falsePulse = sample / 6000U == 11U && (first || second);
+                obs.correctedFrequencyHz = within < 300U || falsePulse ? 2300.0 : 1500.0;
+                tracker.consume(obs);
+            }
+            QVERIFY(!tracker.valid());
+            QVERIFY(!tracker.estimate());
+            QCOMPARE(tracker.ignoredIrregularPulses(), 1U);
+        }
+    }
+
+    void phasingClockReferenceRejectsPersistentFalsePulsesAB()
+    {
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            for (const bool wrongPhase : {false, true}) {
+                SstvRadiofaxClockTracker tracker(12'000U,
+                    {240U, SstvFaxPhasePattern::WhiteFivePercent, period});
+                tracker.setPhaseReference(wrongPhase ? period - period / 4U : period,
+                                          {period, 1U});
+                SstvFrequencyObservation obs;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                for (std::uint64_t sample = period; sample < period * 40U; sample += 6U) {
+                    obs.centreSample = sample;
+                    const auto within = sample % period;
+                    const bool pulse = within < period / 20U
+                        || (within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U);
+                    obs.correctedFrequencyHz = pulse ? 2300.0 : 1500.0;
+                    tracker.consume(obs);
+                }
+                if (wrongPhase) QVERIFY(!tracker.estimate());
+                else {
+                    const auto estimate = tracker.estimate();
+                    QVERIFY(estimate);
+                    QVERIFY(std::abs(double(estimate->samples) / estimate->lines - double(period)) < 1.0);
+                    QVERIFY(tracker.ignoredIrregularPulses() > 20U);
+                }
+            }
+        }
+    }
+
+    void phasingClockReferenceExpiresWithoutExpectedPulsesAB()
+    {
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxClockTracker tracker(12'000U,
+                {240U, SstvFaxPhasePattern::WhiteFivePercent, period});
+            tracker.setPhaseReference(period, {period, 1U});
+            SstvFrequencyObservation obs;
+            obs.status = SstvFrequencyStatus::Valid;
+            obs.confidence = 1.0;
+            for (std::uint64_t sample = period; sample < period * 25U; sample += 6U) {
+                obs.centreSample = sample;
+                obs.correctedFrequencyHz = sample < period * 16U && sample % period < period / 20U
+                    ? 2300.0 : 1500.0;
+                tracker.consume(obs);
+                if (sample >= period * 14U && sample < period * 14U + 6U)
+                    QVERIFY(tracker.estimate());
+            }
+            QVERIFY(!tracker.valid());
+            QVERIFY(!tracker.estimate());
+        }
+    }
+
+    void phasingClockReferenceRejectsChangedRateAB()
+    {
+        for (const bool reverse : {false, true}) {
+            const std::uint64_t initial = reverse ? 3009U : 2991U;
+            const std::uint64_t changed = reverse ? 2991U : 3009U;
+            SstvRadiofaxClockTracker tracker(12'000U,
+                {240U, SstvFaxPhasePattern::WhiteFivePercent, initial});
+            tracker.setPhaseReference(initial, {initial, 1U});
+            SstvFrequencyObservation obs;
+            obs.status = SstvFrequencyStatus::Valid;
+            obs.confidence = 1.0;
+            const auto changeAt = initial * 20U;
+            for (std::uint64_t sample = initial; sample < changeAt + changed * 60U; sample += 6U) {
+                obs.centreSample = sample;
+                const auto within = sample < changeAt ? sample % initial : (sample - changeAt) % changed;
+                const auto period = sample < changeAt ? initial : changed;
+                obs.correctedFrequencyHz = within < period / 20U ? 2300.0 : 1500.0;
+                tracker.consume(obs);
+                if (sample >= initial * 14U && sample < initial * 14U + 6U)
+                    QVERIFY(tracker.estimate());
+            }
+            QVERIFY(!tracker.valid());
+            QVERIFY(!tracker.estimate());
+        }
+    }
+
+    void autoReceiverReacquiresClockAfterTwoFalsePulsesAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            const auto end = period * 124U;
+            for (std::uint64_t sample = 0; sample < end; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool phasingWhite = within < period / 40U
+                    || within >= period - period / 40U;
+                const bool glitch = line == 18U
+                    && ((within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U));
+                obs.correctedFrequencyHz = line < 120U ? (phasingWhite || glitch ? 2300.0 : 1500.0)
+                    : (line == 120U ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(period * 121U)) < 60.0,
+                     "receiver acquired image during phasing after two false pulses");
+            const auto clock = receiver.imageClock();
+            QVERIFY(clock);
+            QVERIFY(std::abs(double(clock->samples) / clock->lines - double(period)) < 1.0);
+            QCOMPARE(receiver.phasingClockRestarts(), 1U);
+            QCOMPARE(receiver.ignoredIrregularPhasingPulses(), 1U);
+        }
+    }
+
+    void autoReceiverStartsImageDuringClockReacquisitionAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            const auto end = period * 23U;
+            for (std::uint64_t sample = 0; sample < end; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool phasingWhite = within < period / 40U
+                    || within >= period - period / 40U;
+                const bool glitch = line == 18U
+                    && ((within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U));
+                obs.correctedFrequencyHz = line < 19U ? (phasingWhite || glitch ? 2300.0 : 1500.0)
+                    : (line == 19U ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(period * 20U)) < 60.0,
+                     "receiver acquired image during phasing after two false pulses");
+            QVERIFY(receiver.imageClock());
+            QVERIFY(receiver.imageClockProvisional());
+            QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines - double(period)) < 1.0);
+            QVERIFY(receiver.phasingClockRestarts() >= 1U);
+        }
+    }
+
+    void autoReceiverMarksUnconfirmedImmediateClockChangeAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const bool reverse : {false, true}) {
+            const std::uint64_t initial = reverse ? 3009U : 2991U;
+            const std::uint64_t changed = reverse ? 2991U : 3009U;
+            const auto endPhasing = initial * 19U;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < endPhasing + changed * 4U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / initial;
+                const auto within = sample % initial;
+                const bool white = within < initial / 40U || within >= initial - initial / 40U;
+                const bool glitch = line == 18U && sample < endPhasing
+                    && ((within >= initial * 2U / 5U && within < initial * 9U / 20U)
+                        || (within >= initial * 16U / 25U && within < initial * 69U / 100U));
+                obs.correctedFrequencyHz = sample < endPhasing ? (white || glitch ? 2300.0 : 1500.0)
+                    : (sample < endPhasing + changed ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY(receiver.imageClock());
+            QVERIFY(receiver.imageClockProvisional());
+            const auto used = double(receiver.imageClock()->samples) / receiver.imageClock()->lines;
+            QVERIFY(std::abs(used - double(initial)) < 1.0);
+            QVERIFY(std::abs(used - double(changed)) > 15.0);
+        }
+    }
+
+    void autoReceiverAcceptsNoisyWhiteEndLineAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            const auto end = period * 23U;
+            for (std::uint64_t sample = 0; sample < end; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool phasingWhite = within < period / 40U
+                    || within >= period - period / 40U;
+                const bool glitch = line == 18U
+                    && ((within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U));
+                obs.correctedFrequencyHz = line < 19U ? (phasingWhite || glitch ? 2300.0 : 1500.0)
+                    : (line == 19U ? (within >= period / 3U && within < period * 8U / 15U ? 1500.0 : 2300.0) : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(period * 20U)) < 60.0,
+                     "receiver acquired image during phasing after two false pulses");
+            QVERIFY(receiver.imageClock());
+            QVERIFY(receiver.imageClockProvisional());
+            QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines - double(period)) < 1.0);
+            QVERIFY(receiver.phasingClockRestarts() >= 1U);
+        }
+    }
+
+    void autoReceiverDoesNotUseExpiredClockAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> batch;
+            for (std::uint64_t sample = 0; sample < period * 34U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool white = within < period / 40U || within >= period - period / 40U;
+                // An extended black interval prevents a new estimate before
+                // the end line. It must not keep the old raster clock alive.
+                obs.correctedFrequencyHz = line < 18U ? (white ? 2300.0 : 1500.0)
+                    : (line < 30U ? 1500.0 : (line == 30U ? 2300.0 : 1900.0));
+                batch.push_back(obs);
+                if (batch.size() == 4096U) { receiver.consume(batch); batch.clear(); }
+            }
+            receiver.consume(batch);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY(!receiver.imageClock());
+            QVERIFY(!receiver.imageClockProvisional());
+        }
+    }
+
+    void autoReceiverBoundsRepeatedClockRestartsAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < period * 124U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool phasingWhite = within < period / 40U
+                    || within >= period - period / 40U;
+                const bool disturbedLine = line == 18U || line == 36U
+                    || line == 54U || line == 72U;
+                const bool glitch = disturbedLine
+                    && ((within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U));
+                obs.correctedFrequencyHz = line < 120U ? (phasingWhite || glitch ? 2300.0 : 1500.0)
+                    : (line == 120U ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QCOMPARE(receiver.phasingClockRestarts(), 1U);
+            QVERIFY(receiver.phasingClockTrackerValid());
+            QVERIFY(receiver.imageClock());
+            QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines - double(period)) < 1.0);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(period * 121U)) < 60.0,
+                     "receiver acquired image during phasing after exhausting clock retries");
+        }
+    }
+
+    void autoReceiverReacquiresAfterCloselySpacedDisturbancesAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < period * 124U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool phasingWhite = within < period / 40U
+                    || within >= period - period / 40U;
+                const bool disturbedLine = line == 18U || line == 20U
+                    || line == 22U || line == 24U;
+                const bool glitch = disturbedLine
+                    && ((within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U));
+                obs.correctedFrequencyHz = line < 120U ? (phasingWhite || glitch ? 2300.0 : 1500.0)
+                    : (line == 120U ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.phasingClockTrackerValid());
+            QVERIFY(receiver.imageClock());
+            QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines - double(period)) < 1.0);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(period * 121U)) < 60.0,
+                     "receiver acquired image during phasing after exhausting clock retries");
+        }
+    }
+
+    void autoReceiverTracksClockDuringPersistentDisturbanceAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < period * 124U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto line = sample / period;
+                const auto within = sample % period;
+                const bool phasingWhite = within < period / 40U
+                    || within >= period - period / 40U;
+                const bool disturbedLine = line >= 18U && line < 120U;
+                const bool glitch = disturbedLine
+                    && ((within >= period * 2U / 5U && within < period * 9U / 20U)
+                        || (within >= period * 16U / 25U && within < period * 69U / 100U));
+                obs.correctedFrequencyHz = line < 120U ? (phasingWhite || glitch ? 2300.0 : 1500.0)
+                    : (line == 120U ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY(receiver.imageClock());
+            QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines - double(period)) < 1.0);
+            QCOMPARE(receiver.phasingClockRestarts(), 1U);
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(period * 121U)) < 60.0,
+                     qPrintable(QStringLiteral("early start at %1, expected %2")
+                                    .arg(*receiver.imageStartSample()).arg(period * 121U)));
+        }
+    }
+
+    void autoReceiverReacquiresChangedClockAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const bool reverse : {false, true}) {
+            const std::uint64_t initial = reverse ? 3009U : 2991U;
+            const std::uint64_t changed = reverse ? 2991U : 3009U;
+            const auto changeAt = initial * 30U;
+            const auto imageWhite = changeAt + changed * 90U;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < imageWhite + changed * 4U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto within = sample < changeAt ? sample % initial : (sample - changeAt) % changed;
+                const auto period = sample < changeAt ? initial : changed;
+                const bool white = within < period / 40U || within >= period - period / 40U;
+                const bool glitch = sample / initial == 18U && sample < changeAt
+                    && ((within >= initial * 2U / 5U && within < initial * 9U / 20U)
+                        || (within >= initial * 16U / 25U && within < initial * 69U / 100U));
+                obs.correctedFrequencyHz = sample < imageWhite ? (white || glitch ? 2300.0 : 1500.0)
+                    : (sample < imageWhite + changed ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(imageWhite + changed)) < 80.0,
+                     qPrintable(QStringLiteral("start %1 expected %2").arg(*receiver.imageStartSample()).arg(imageWhite + changed)));
+            QVERIFY(receiver.imageClock());
+            QVERIFY(!receiver.imageClockProvisional());
+            QVERIFY(std::abs(double(receiver.imageClock()->samples) / receiver.imageClock()->lines - double(changed)) < 1.0);
+        }
+    }
+
+    void autoReceiverRejectsBroadFalseWhitePhasingAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const bool reverse : {false, true}) for (const std::uint64_t whiteEndTwentieths : {13U, 18U}) {
+            const std::uint64_t initial = reverse ? 3009U : 2991U;
+            const std::uint64_t changed = reverse ? 2991U : 3009U;
+            const auto changeAt = initial * 30U;
+            const auto imageWhite = changeAt + changed * 90U;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < imageWhite + changed * 4U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto within = sample < changeAt ? sample % initial : (sample - changeAt) % changed;
+                const auto period = sample < changeAt ? initial : changed;
+                const bool white = within < period / 40U || within >= period - period / 40U;
+                const bool glitch = (sample / initial == 18U && sample < changeAt
+                    && ((within >= initial * 2U / 5U && within < initial * 9U / 20U)
+                        || (within >= initial * 16U / 25U && within < initial * 69U / 100U)))
+                    || (sample >= changeAt + changed * 10U && sample < changeAt + changed * 18U
+                        && within >= changed / 4U && within < changed * whiteEndTwentieths / 20U);
+                obs.correctedFrequencyHz = sample < imageWhite ? (white || glitch ? 2300.0 : 1500.0)
+                    : (sample < imageWhite + changed ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(imageWhite + changed)) < 80.0,
+                     qPrintable(QStringLiteral("start %1 expected %2 reverse=%3 end=%4").arg(*receiver.imageStartSample()).arg(imageWhite + changed).arg(reverse).arg(whiteEndTwentieths)));
+            QVERIFY(receiver.imageClock());
+        }
+    }
+
+    void autoReceiverReacquiresChangedClockWithNoisyEndAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const bool reverse : {false, true}) {
+            const std::uint64_t initial = reverse ? 3009U : 2991U;
+            const std::uint64_t changed = reverse ? 2991U : 3009U;
+            const auto changeAt = initial * 30U;
+            const auto imageWhite = changeAt + changed * 90U;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < imageWhite + changed * 4U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto within = sample < changeAt ? sample % initial : (sample - changeAt) % changed;
+                const auto period = sample < changeAt ? initial : changed;
+                const bool white = within < period / 40U || within >= period - period / 40U;
+                const bool glitch = sample / initial == 18U && sample < changeAt
+                    && ((within >= initial * 2U / 5U && within < initial * 9U / 20U)
+                        || (within >= initial * 16U / 25U && within < initial * 69U / 100U));
+                obs.correctedFrequencyHz = sample < imageWhite ? (white || glitch ? 2300.0 : 1500.0)
+                    : (sample < imageWhite + changed ? ((sample - imageWhite >= changed / 3U && sample - imageWhite < changed * 8U / 15U) ? 1500.0 : 2300.0) : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY(receiver.imageClock());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(imageWhite + changed)) < 80.0,
+                     qPrintable(QStringLiteral("start %1 expected %2").arg(*receiver.imageStartSample()).arg(imageWhite + changed)));
+        }
+    }
+
+    void autoReceiverStartsBeforePhasingLikeImageAB()
+    {
+        // Image content can repeat a broad white stripe or resemble the
+        // phasing pulse. Neither is evidence that phasing has continued.
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const bool reverse : {false, true}) for (const bool narrow : {false, true}) {
+            const std::uint64_t initial = reverse ? 3009U : 2991U;
+            const std::uint64_t changed = reverse ? 2991U : 3009U;
+            const auto changeAt = initial * 30U;
+            const auto imageWhite = changeAt + changed * 90U;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < imageWhite + changed * 5U; sample += 6U) {
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                const auto within = sample < changeAt ? sample % initial : (sample - changeAt) % changed;
+                const auto period = sample < changeAt ? initial : changed;
+                const bool phaseWhite = within < period / 40U || within >= period - period / 40U;
+                const bool imageStripe = narrow ? phaseWhite
+                    : (within >= period / 4U && within < period * 9U / 10U) || phaseWhite;
+                obs.correctedFrequencyHz = sample < imageWhite ? (phaseWhite ? 2300.0 : 1500.0)
+                    : (sample < imageWhite + changed ? 2300.0 : (imageStripe ? 2300.0 : 1500.0));
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(imageWhite + changed)) < 80.0,
+                     qPrintable(QStringLiteral("start %1 expected %2 reverse=%3 narrow=%4")
+                                    .arg(*receiver.imageStartSample()).arg(imageWhite + changed).arg(reverse).arg(narrow)));
+        }
+    }
+
+    void autoReceiverRejectsEarlyBroadWhitePhasingAB()
+    {
+        SstvFaxConfig config;
+        config.width = 32U;
+        config.height = 3U;
+        config.linesPerMinute = 240U;
+        config.centeredPhasingWithWhiteEndLine = true;
+        for (const std::uint64_t period : {2991U, 3009U}) {
+            const auto end = period * 20U;
+            SstvRadiofaxAutoRx receiver(config);
+            std::vector<SstvFrequencyObservation> observations;
+            for (std::uint64_t sample = 0; sample < end + period * 5U; sample += 6U) {
+                const auto within = sample % period;
+                const bool phaseWhite = within < period / 40U || within >= period - period / 40U;
+                const bool interference = sample >= period * 10U && sample < period * 18U
+                    && within >= period / 4U && within < period * 9U / 10U;
+                SstvFrequencyObservation obs;
+                obs.centreSample = sample;
+                obs.status = SstvFrequencyStatus::Valid;
+                obs.confidence = 1.0;
+                obs.correctedFrequencyHz = sample < end ? (phaseWhite || interference ? 2300.0 : 1500.0)
+                    : (sample < end + period ? 2300.0 : 1900.0);
+                observations.push_back(obs);
+                if (observations.size() == 4096U) { receiver.consume(observations); observations.clear(); }
+            }
+            receiver.consume(observations);
+            QVERIFY(receiver.imageStartSample());
+            QVERIFY2(std::abs(double(*receiver.imageStartSample()) - double(end + period)) < 80.0,
+                     qPrintable(QStringLiteral("start %1 expected %2 period=%3")
+                                    .arg(*receiver.imageStartSample()).arg(end + period).arg(period)));
+        }
     }
 
     void measuredClockMapsObservedPixelsAtBothClockOffsets()
@@ -203,6 +1161,14 @@ private slots:
             const auto image = receiver.snapshot();
             QVERIFY(image);
             QCOMPARE(image->completedPixels, std::size_t(120U * config.width));
+            QCOMPARE(receiver.state(), SstvRadiofaxAutoRxState::Partial);
+            QVERIFY(!image->isComplete());
+            QCOMPARE(image->coveredComponents, std::size_t(120U * config.width * 3U));
+            for (std::uint32_t row = 0; row < config.height; ++row) {
+                QCOMPARE(image->isScanlineComplete(row), row < 120U);
+                for (std::uint32_t column = 0; column < config.width; ++column)
+                    QCOMPARE(image->coverageMask(column, row), std::uint8_t(row < 120U ? 0x07U : 0U));
+            }
         }
     }
 
@@ -268,6 +1234,14 @@ private slots:
                 const auto image = receiver.snapshot();
                 QVERIFY(image);
                 QCOMPARE(image->completedPixels, std::size_t(120U * config.width));
+                QCOMPARE(receiver.state(), SstvRadiofaxAutoRxState::Partial);
+                QVERIFY(!image->isComplete());
+                QCOMPARE(image->coveredComponents, std::size_t(120U * config.width * 3U));
+                for (std::uint32_t row = 0; row < config.height; ++row) {
+                    QCOMPARE(image->isScanlineComplete(row), row < 120U);
+                    for (std::uint32_t column = 0; column < config.width; ++column)
+                        QCOMPARE(image->coverageMask(column, row), std::uint8_t(row < 120U ? 0x07U : 0U));
+                }
                 for (std::uint32_t y = 10U; y < 120U; ++y)
                     for (std::uint32_t x = 0U; x < config.width; ++x)
                         QCOMPARE(image->pixel(x, y).red, std::uint8_t((x + y) % 2U ? 255U : 0U));
@@ -748,7 +1722,8 @@ private slots:
                 observations.push_back(obs);
             }
             SstvRadiofaxStopDetector whole(rate, offset), fragmented(rate, offset), insufficient(rate, offset);
-            std::optional<std::uint64_t> a, b, negative;
+            SstvRadiofaxStopDetector impossibleConfidence(rate, offset);
+            std::optional<std::uint64_t> a, b, negative, impossible;
             for (std::size_t i = 0U; i < observations.size(); i += 997U) {
                 const auto n = std::min(std::size_t {997U}, observations.size() - i);
                 if (auto found = whole.consume(observations.data() + i, n)) a = found;
@@ -758,10 +1733,14 @@ private slots:
                 auto weak = observations[i];
                 if (i % 2U == 0U) weak.confidence = 0.0;
                 if (auto found = insufficient.consume(&weak, 1U)) negative = found;
+                auto invalid = observations[i];
+                invalid.confidence = 1.01;
+                if (auto found = impossibleConfidence.consume(&invalid, 1U)) impossible = found;
             }
             QVERIFY(a);
             QCOMPARE(a, b);
             QVERIFY(!negative);
+            QVERIFY(!impossible);
         }
     }
 

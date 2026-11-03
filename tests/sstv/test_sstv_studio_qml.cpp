@@ -94,12 +94,16 @@ public:
     Q_INVOKABLE bool startSstvRadiofaxTxProfile(int ioc, int rate, bool centered, bool dead) {
         faxDead = dead; return startSstvRadiofaxTxAligned(ioc, rate, centered);
     }
+    Q_INVOKABLE bool startSstvRadiofaxTxAdvanced(int ioc, int rate, bool centered, bool dead, bool symmetric) {
+        faxSymmetric = symmetric; return startSstvRadiofaxTxProfile(ioc, rate, centered, dead);
+    }
     Q_INVOKABLE bool startSstvFax480Tx(const QString& profile) { fax480Profile=profile; return true; }
     QString fax480Profile;
     int faxIoc {0};
     int faxRate {0};
     bool faxCentered {false};
     bool faxDead {false};
+    bool faxSymmetric {false};
     Q_INVOKABLE bool startSstvCalibrationTone(const QString& id)
     {
         m_lastCalibrationTone = id;
@@ -307,6 +311,21 @@ private slots:
         auto* faxCentered = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxTxCenteredPhasing"));
         QVERIFY(faxCentered);
         QVERIFY(faxCentered->setProperty("checked", true));
+        auto* faxNotice = page->findChild<QQuickItem*>(QStringLiteral("sstvRadiofaxFldigiRateNotice"));
+        QVERIFY(faxNotice);
+        QVERIFY(!faxNotice->isVisible()); // IOC 288 at 90 LPM.
+        QVERIFY(faxIoc->setProperty("currentIndex", 0));
+        QTRY_VERIFY(faxNotice->isVisible()); // Observed IOC 576 / 90 LPM case.
+        QTRY_VERIFY(faxNotice->width() > 0 && faxNotice->height() > 0);
+        QVERIFY(faxTx->isEnabled());
+        QVERIFY(faxCentered->setProperty("checked", false));
+        QTRY_VERIFY(!faxNotice->isVisible());
+        QVERIFY(faxCentered->setProperty("checked", true));
+        QTRY_VERIFY(faxNotice->isVisible());
+        QVERIFY(faxRate->setProperty("currentIndex", 0));
+        QTRY_VERIFY(!faxNotice->isVisible()); // IOC 576 at 120 LPM.
+        QVERIFY(faxIoc->setProperty("currentIndex", 1));
+        QVERIFY(faxRate->setProperty("currentIndex", 2));
         QVERIFY(QMetaObject::invokeMethod(faxTx, "clicked"));
         QVERIFY(fixture.faxCentered);
         auto* faxDead = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxTxWmoDeadSector"));
@@ -316,6 +335,19 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(faxTx, "clicked"));
         QVERIFY(fixture.faxDead);
         QVERIFY(!fixture.faxCentered);
+        auto* faxSymmetric = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxTxSymmetricPhasing"));
+        QVERIFY(faxSymmetric);
+        QVERIFY(faxSymmetric->setProperty("checked", true));
+        QVERIFY(QMetaObject::invokeMethod(faxTx, "clicked"));
+        QVERIFY(fixture.faxSymmetric);
+        QVERIFY(fixture.faxDead);
+        QVERIFY(!fixture.faxCentered);
+        QVERIFY(faxCentered->setProperty("checked", true));
+        QVERIFY(!faxSymmetric->property("checked").toBool());
+        QVERIFY(!faxDead->property("checked").toBool());
+        QVERIFY(QMetaObject::invokeMethod(faxTx, "clicked"));
+        QVERIFY(!fixture.faxSymmetric);
+        QVERIFY(fixture.faxCentered);
         auto* fax480Button = page->findChild<QQuickItem*>(QStringLiteral("sstvFax480TransmitButton"));
         auto* fax480Profile = page->findChild<QObject*>(QStringLiteral("sstvFax480TxProfile"));
         QVERIFY(fax480Button && fax480Profile && fax480Button->isEnabled());

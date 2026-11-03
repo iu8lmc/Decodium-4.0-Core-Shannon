@@ -2,6 +2,7 @@
 
 #include "src/sstv/digital/HamDrmController.h"
 #include "src/sstv/digital/HamDrmBsrCodec.h"
+#include "src/sstv/digital/HamDrmHybridCodec.h"
 #include "src/sstv/digital/HamDrmRsCodec.h"
 
 #include <QtTest/QtTest>
@@ -9,6 +10,7 @@
 #include <QBuffer>
 #include <QFile>
 #include <QImage>
+#include <QJsonDocument>
 #include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -390,6 +392,129 @@ private slots:
         }
     }
 
+    void hybridReferencesAreNotImagesAB()
+    {
+        for (unsigned variant : {0U, 1U}) {
+            const hamdrm::HamDrmHybridServer server {
+                variant ? "b.example.invalid" : "a.example.invalid", "operator",
+                variant ? "dummy-b" : "dummy-a", "radio"
+            };
+            const auto body = hamdrm::encodeHamDrmHybridServer(server);
+            QVERIFY(body.ok());
+            hamdrm::HamDrmMotObjectMetadata metadata;
+            metadata.transportId = static_cast<std::uint16_t>(0x6100U + variant);
+            metadata.filename = variant ? "de_TEST2-1-b.jpg" : "de_TEST1-1-a.jpg";
+            const auto object = hamdrm::encodeHamDrmObject(metadata, *body.value, 64U);
+            QVERIFY(object.ok());
+            hamdrm::HamDrmController receiver({}, backends({}, {}));
+            QSignalSpy hybrid(&receiver, &hamdrm::HamDrmController::hybridReferenceReceived);
+            QSignalSpy image(&receiver, &hamdrm::HamDrmController::objectCompleted);
+            QSignalSpy gallery(&receiver, &hamdrm::HamDrmController::receivedImageReady);
+            for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            QCOMPARE(hybrid.count(), 1);
+            QCOMPARE(image.count(), 0);
+            QCOMPARE(gallery.count(), 0);
+            const auto rows = receiver.inbox();
+            QCOMPARE(rows.size(), 1);
+            const QVariantMap row = rows.front().toMap();
+            QCOMPARE(row.value("state").toString(), QStringLiteral("hybrid-reference"));
+            QVERIFY(row.value("hybridReference").toBool());
+            QVERIFY(!row.value("imageStructurallyValidated").toBool());
+            const QByteArray json = QJsonDocument::fromVariant(row).toJson();
+            QVERIFY(!json.contains(QByteArray::fromStdString(server.password)));
+            QCOMPARE(row.value("hybridHost").toString(), QString::fromStdString(server.host));
+            const auto completed = receiver.completedObject(metadata.transportId);
+            QVERIFY(completed.ok());
+            QCOMPARE(completed.value->originalBytes, *body.value);
+            QTemporaryDir saveDir;
+            QVERIFY(saveDir.isValid());
+            QVERIFY(!receiver.saveCompletedImage(metadata.transportId,
+                                                   QUrl::fromLocalFile(saveDir.filePath("not-an-image.jpg"))));
+            QVERIFY(!QFile::exists(saveDir.filePath("not-an-image.jpg")));
+
+            // A normal image with a de_ prefix must still be received as an image.
+            metadata.transportId += 0x100;
+            const auto ordinary = hamdrm::encodeHamDrmObject(metadata, jpegFixture(16, 16), 64U);
+            QVERIFY(ordinary.ok());
+            hamdrm::HamDrmController ordinaryReceiver({}, backends({}, {}));
+            QSignalSpy ordinaryImage(&ordinaryReceiver, &hamdrm::HamDrmController::objectCompleted);
+            QSignalSpy ordinaryHybrid(&ordinaryReceiver, &hamdrm::HamDrmController::hybridReferenceReceived);
+            for (const auto& group : ordinary.value->headerGroups) QVERIFY(ordinaryReceiver.ingestMotGroup(bytes(group)).ok());
+            for (const auto& group : ordinary.value->bodyGroups) QVERIFY(ordinaryReceiver.ingestMotGroup(bytes(group)).ok());
+            QCOMPARE(ordinaryImage.count(), 1);
+            QCOMPARE(ordinaryHybrid.count(), 0);
+            QVERIFY(!ordinaryReceiver.inbox().front().toMap().value("hybridReference").toBool());
+
+            // A truncated hybrid body must not be promoted to an image or reference.
+            auto bad = *body.value; bad.pop_back();
+            metadata.transportId += 0x100;
+            const auto invalid = hamdrm::encodeHamDrmObject(metadata, bad, 64U);
+            QVERIFY(invalid.ok());
+            hamdrm::HamDrmController rejected({}, backends({}, {}));
+            for (const auto& group : invalid.value->headerGroups) QVERIFY(rejected.ingestMotGroup(bytes(group)).ok());
+            bool failed = false;
+            for (const auto& group : invalid.value->bodyGroups)
+                if (!rejected.ingestMotGroup(bytes(group)).ok()) failed = true;
+            QVERIFY(failed);
+            QVERIFY(!rejected.completedObject(metadata.transportId).ok());
+        }
+    }
+
+    void legacyDotHybridReferencesAB()
+    {
+        for (unsigned variant : {0U, 1U}) {
+            const auto body = hamdrm::encodeHamDrmHybridServer({"server.invalid", "operator", "dummy", "radio"});
+            QVERIFY(body.ok());
+            hamdrm::HamDrmMotObjectMetadata metadata;
+            metadata.transportId = static_cast<std::uint16_t>(0x6300U + variant);
+            metadata.filename = variant ? ".de_TEST2-1-b.jpg" : ".de_TEST1-1-a.jpg";
+            const auto object = hamdrm::encodeHamDrmObject(metadata, *body.value, 64U);
+            QVERIFY(object.ok());
+            hamdrm::HamDrmController receiver({}, backends({}, {}));
+            QSignalSpy hybrid(&receiver, &hamdrm::HamDrmController::hybridReferenceReceived);
+            QSignalSpy image(&receiver, &hamdrm::HamDrmController::objectCompleted);
+            for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            QCOMPARE(hybrid.count(), 1);
+            QCOMPARE(image.count(), 0);
+            QVERIFY(receiver.inbox().front().toMap().value("hybridReference").toBool());
+        }
+        QVERIFY(!hamdrm::validateHamDrmFilename(".de/../image.jpg").ok());
+        QVERIFY(!hamdrm::validateHamDrmFilename(".de\\image.jpg").ok());
+        QVERIFY(!hamdrm::validateHamDrmFilename("..hidden.jpg").ok());
+        QVERIFY(!hamdrm::validateHamDrmFilename(".hidden.jpg").ok());
+        QVERIFY(!hamdrm::validateHamDrmFilename(".de").ok());
+    }
+
+    void structuralOnlyImageIsNotArchivedAB()
+    {
+        for (unsigned variant : {0U, 1U}) {
+            const auto original = jpegFixture(16 + variant, 16 + variant);
+            QVERIFY(QImage::fromData(bytes(original)).isNull());
+            hamdrm::HamDrmMotObjectMetadata metadata;
+            metadata.filename = variant ? "damaged-b.jpg" : "damaged-a.jpg";
+            metadata.transportId = static_cast<std::uint16_t>(0x6400U + variant);
+            const auto object = hamdrm::encodeHamDrmObject(metadata, original, 64U);
+            QVERIFY(object.ok());
+            hamdrm::HamDrmController receiver({}, backends({}, {}));
+            QSignalSpy gallery(&receiver, &hamdrm::HamDrmController::receivedImageReady);
+            for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            QCOMPARE(gallery.count(), 0);
+            QCOMPARE(receiver.inbox().front().toMap().value("state").toString(), QStringLiteral("complete-structural"));
+            QVERIFY(receiver.selectedImageStructuralOnly());
+            QVERIFY(receiver.canSaveSelectedImage());
+            QTemporaryDir temp;
+            QVERIFY(temp.isValid());
+            const QString path = temp.filePath("structural.jpg");
+            QVERIFY(receiver.saveCompletedImage(metadata.transportId, QUrl::fromLocalFile(path)));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(file.readAll(), bytes(original));
+        }
+    }
+
     void qsstvPngMislabelledAsJp2AB()
     {
         for (const unsigned variant : {0U, 1U}) {
@@ -406,8 +531,24 @@ private slots:
             const auto object = hamdrm::encodeHamDrmObject(metadata, original, 64U);
             QVERIFY(object.ok());
             hamdrm::HamDrmController receiver({}, backends({}, {}));
+            QSignalSpy gallery(&receiver, &hamdrm::HamDrmController::receivedImageReady);
             for (const auto& group : object.value->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
             for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            QCOMPARE(gallery.count(), 1);
+            const QImage snapshot = qvariant_cast<QImage>(gallery[0][0]);
+            QCOMPARE(snapshot.size(), image.size());
+            QCOMPARE(snapshot.pixelColor(0, 0), image.pixelColor(0, 0));
+            QVERIFY(!gallery[0][2].toBool());
+            for (const auto& group : object.value->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+            QCOMPARE(gallery.count(), 1);
+            QTemporaryDir savedDir;
+            QVERIFY(savedDir.isValid());
+            const QString savedPath = savedDir.filePath(variant ? "saved-b.png" : "saved-a.png");
+            QVERIFY(receiver.saveCompletedImage(metadata.transportId, QUrl::fromLocalFile(savedPath)));
+            QFile saved(savedPath);
+            QVERIFY(saved.open(QIODevice::ReadOnly));
+            QCOMPARE(saved.readAll(), payload);
+            QVERIFY(!receiver.saveCompletedImage(metadata.transportId, QUrl(QStringLiteral("https://example.invalid/file.png"))));
             const auto received = receiver.takeCompletedObject(metadata.transportId);
             QVERIFY2(received.ok(), received.status.detail.c_str());
             QCOMPARE(received.value->originalBytes, original);
@@ -495,7 +636,7 @@ private slots:
         QCOMPARE(resumed.inbox().size(), 1);
         QCOMPARE(resumed.inbox().front().toMap()
                      .value(QStringLiteral("state")).toString(),
-                 QStringLiteral("complete"));
+                 QStringLiteral("complete-structural"));
 
         const auto assembled = resumed.takeCompletedObject(transportId);
         QVERIFY2(assembled.ok(), assembled.status.detail.c_str());

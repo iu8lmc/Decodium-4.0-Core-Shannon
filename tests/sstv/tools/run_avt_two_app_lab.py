@@ -14,10 +14,10 @@ import time
 
 mode=sys.argv[1]
 allowed={f'avt-{duration}-{variant}' for duration in ('24','90','94')
-         for variant in ('qrm','narrow-qrm')}
+         for variant in ('narrow','qrm','narrow-qrm')}
 allowed.add('avt-24')
 allowed.add('robot-c12')
-if mode not in allowed: raise SystemExit('expected robot-c12, avt-24 or an AVT 24/90/94 QRM or narrow-QRM mode')
+if mode not in allowed: raise SystemExit('expected robot-c12, avt-24 or an AVT 24/90/94 narrow, QRM or narrow-QRM mode')
 root=Path(tempfile.mkdtemp(prefix='decodium-avt-two-app-'+mode+'-'))
 binary=Path('build/decodium').resolve(strict=True)
 if len(sys.argv) > 4: raise SystemExit('expected mode, optional variant, and optional image path')

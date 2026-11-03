@@ -1,6 +1,7 @@
 // Cross-process storage test. Does not instantiate radio/audio services or use
 // the operator's settings. GUI/backend integration is a separate validation.
 #include "../src/radio/DecodiumProfileSettings.h"
+#include "../src/radio/ProfiledBoolCache.h"
 #include "../src/bridge/SettingsAsyncHandoff.h"
 #include <QThreadPool>
 #include <QRunnable>
@@ -83,6 +84,44 @@ private slots:
         settings.sync();
 
         QCOMPARE(decodium::profiledSettingsValue({}, "MaxCallerRetries", 10).toInt(), 3);
+    }
+
+    void rtlSdrCacheTracksLiveProfileAndSettingChanges()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        settings.setValue("A/RtlSdrEnabled", false);
+        settings.setValue("B/RtlSdrEnabled", true);
+        settings.sync();
+        decodium::ProfiledBoolCache cache;
+        int reads = 0;
+        auto read = [&] {
+            return cache.value(decodium::activeSettingsProfileName(), [&] {
+                ++reads;
+                return decodium::profiledSettingsValue({}, "RtlSdrEnabled", false).toBool();
+            });
+        };
+        auto* app = QCoreApplication::instance();
+        app->setProperty("decodiumConfigName", "A");
+        QVERIFY(!read());
+        QVERIFY(!read());
+        QCOMPARE(reads, 1);
+        app->setProperty("decodiumConfigName", "B");
+        QVERIFY(read());
+        QCOMPARE(reads, 2);
+        app->setProperty("decodiumConfigName", "A");
+        QVERIFY(!read());
+        settings.setValue("A/RtlSdrEnabled", true);
+        settings.sync();
+        cache.invalidate();
+        QVERIFY(read());
+        settings.setValue("A/RtlSdrEnabled", false);
+        settings.sync();
+        cache.invalidate();
+        QVERIFY(!read());
+        app->setProperty("decodiumConfigName", QString {});
     }
 
     void asyncSettingsHandoffKeepsThreadAffinity()

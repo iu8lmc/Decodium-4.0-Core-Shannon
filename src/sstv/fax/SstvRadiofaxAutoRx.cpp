@@ -7,7 +7,8 @@
 namespace decodium::sstv {
 
 SstvRadiofaxAutoRx::SstvRadiofaxAutoRx(SstvFaxConfig config, double frequencyOffsetHz)
-    : config_(config), offset_(frequencyOffsetHz), phase_(config.sampleRate, frequencyOffsetHz), stop_(config.sampleRate, frequencyOffsetHz)
+    : config_(config), offset_(frequencyOffsetHz), phase_(config.sampleRate, frequencyOffsetHz),
+      aptStart_(config.sampleRate, config.ioc, frequencyOffsetHz), stop_(config.sampleRate, frequencyOffsetHz)
 {
     // Validate output and nominal rate up front. Detected speed is validated
     // again when the image session is created.
@@ -79,18 +80,43 @@ void SstvRadiofaxAutoRx::beginImage(std::uint64_t sample)
     config_.linesPerMinute = lock_->linesPerMinute;
     config_.phasing = lock_->pattern;
     clock_ = clockTracker_ ? clockTracker_->estimate() : std::nullopt;
+    bool usingFreshProvisional = false;
+    if (!clock_ && phasingClockRestarts_ && clockTracker_) {
+        const auto provisional = clockTracker_->provisionalEstimate();
+        const auto edge = clockTracker_->lastConfirmedWhiteEdge();
+        if (provisional && sample >= edge && (sample - edge) * provisional->lines
+                <= provisional->samples * 2U) {
+            clock_ = provisional;
+            imageClockProvisional_ = true;
+            usingFreshProvisional = true;
+        }
+    }
+    // If an image follows a disturbance immediately, a new estimate cannot
+    // yet be confirmed. A recently confirmed clock is a better provisional
+    // raster hint than silently reverting to nominal speed. Bound its age:
+    // an old clock must not survive prolonged loss of phasing.
+    if (!clock_ && lastConfirmedClock_ && lastConfirmedClock_->lines
+        && sample >= lastConfirmedClockEdge_
+        && (sample - lastConfirmedClockEdge_) * lastConfirmedClock_->lines
+            <= lastConfirmedClock_->samples * 4U) {
+        clock_ = lastConfirmedClock_;
+        imageClockProvisional_ = true;
+    }
     if (clock_) {
         const double nominal = double(config_.sampleRate) * 60.0 / config_.linesPerMinute;
         if (!clock_->lines || clock_->samples / clock_->lines
                 - (config_.wmoDeadSector ? sstvRadiofaxDeadSectorSamples(clock_->samples / clock_->lines) : 0U) < config_.width
             || std::abs(double(clock_->samples) / clock_->lines - nominal) > nominal * kRadiofaxMaximumClockDeviation)
-            clock_.reset();
+            { clock_.reset(); imageClockProvisional_ = false; }
     }
     if (clock_) {
-        const auto elapsed = sample - lock_->latestWhiteEdgeSample;
+        const auto trackedEdge = imageClockProvisional_ && !usingFreshProvisional ? lastConfirmedClockEdge_
+            : clockTracker_->lastConfirmedWhiteEdge();
+        const auto anchor = trackedEdge <= sample ? trackedEdge : lock_->latestWhiteEdgeSample;
+        const auto elapsed = sample - anchor;
         const auto line = (elapsed * clock_->lines + clock_->samples / 2U)
             / clock_->samples;
-        sample = lock_->latestWhiteEdgeSample + line * clock_->samples / clock_->lines;
+        sample = anchor + line * clock_->samples / clock_->lines;
     }
     if (config_.centeredPhasingWithWhiteEndLine
         && lock_->pattern == SstvFaxPhasePattern::WhiteFivePercent) {
@@ -150,7 +176,7 @@ std::uint64_t SstvRadiofaxAutoRx::refineStopBoundary(std::uint64_t candidate) co
             if (obs.centreSample >= end) break;
             ++total;
             if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz)
-                || !std::isfinite(obs.confidence) || obs.confidence < 0.2) continue;
+                || !std::isfinite(obs.confidence) || obs.confidence < 0.2 || obs.confidence > 1.0) continue;
             const double value = obs.correctedFrequencyHz - offset_ - 1900.0;
             // The main stop detector accepts 440-460 Hz. Use a small bank
             // across that same range so a valid off-centre stop can also be
@@ -243,27 +269,149 @@ std::size_t SstvRadiofaxAutoRx::consume(const SstvFrequencyObservation* data, st
         lastSample_ = obs.centreSample;
         hasLast_ = true;
         if (state_ == SstvRadiofaxAutoRxState::SearchingPhasing) {
+            if (config_.wmoTimedPhasing) aptStart_.consume(obs);
             lock_ = phase_.consume(&obs, 1U);
             if (!lock_) continue;
+            if (config_.wmoTimedPhasing) {
+                const auto aptEdge = aptStart_.lastAptWhiteEdge();
+                const auto nominal = std::uint64_t(config_.sampleRate) * 60U / lock_->linesPerMinute;
+                const auto period = lock_->detectedPeriodSamples ? lock_->detectedPeriodSamples : nominal;
+                if (aptEdge && lock_->latestWhiteEdgeSample > *aptEdge) {
+                    const auto elapsed = lock_->latestWhiteEdgeSample - *aptEdge;
+                    const auto lines = elapsed / period;
+                    const auto phasingLines = std::uint64_t(lock_->linesPerMinute) / 2U;
+                    if (lines >= 1U && lines <= 10U && lines < phasingLines)
+                        wmoLockedPhasingLines_ = lines;
+                }
+            }
             start_ = std::make_unique<SstvRadiofaxImageStartDetector>(config_.sampleRate, *lock_, offset_);
             clockTracker_ = std::make_unique<SstvRadiofaxClockTracker>(config_.sampleRate, *lock_, offset_);
             state_ = SstvRadiofaxAutoRxState::SearchingImage;
         }
         if (state_ == SstvRadiofaxAutoRxState::SearchingImage) {
             collectPhasingLevel(obs);
+            const auto previousEstimate = clockTracker_->estimate();
             clockTracker_->consume(obs);
-            if (const auto estimate = clockTracker_->estimate())
+            if (const auto estimate = clockTracker_->estimate()) {
+                hasConfirmedClock_ = true;
+                lastConfirmedClock_ = estimate;
+                lastConfirmedClockEdge_ = clockTracker_->lastConfirmedWhiteEdge();
                 start_->setClockEstimate(estimate);
-            else if (!clockTracker_->valid())
-                start_->setClockEstimate(std::nullopt);
+            } else if (!clockTracker_->valid() && hasConfirmedClock_ && phasingClockRestarts_ < 1800U) {
+                // Retain the last confirmed clock as an acquisition anchor
+                // while a fresh tracker rechecks phasing. beginImage() may
+                // also use a recent estimate as a labelled provisional hint.
+                auto restartLock = *lock_;
+                restartLock.latestWhiteEdgeSample = previousEstimate
+                    ? clockTracker_->lastConfirmedWhiteEdge() : obs.centreSample;
+                priorIgnoredPhasingPulses_ += clockTracker_->ignoredIrregularPulses();
+                ++phasingClockRestarts_;
+                clockTracker_ = std::make_unique<SstvRadiofaxClockTracker>(config_.sampleRate, restartLock, offset_);
+                if (previousEstimate)
+                    clockTracker_->setPhaseReference(restartLock.latestWhiteEdgeSample, *previousEstimate);
+                clockTracker_->consume(obs);
+            } else if (!clockTracker_->valid()) {
+                if (hasConfirmedClock_ && phasingClockRestarts_ >= 1800U)
+                    retainExhaustedClockAnchor_ = true;
+                if (!retainExhaustedClockAnchor_)
+                    start_->setClockEstimate(std::nullopt);
+            }
             buffer(obs);
             if (state_ == SstvRadiofaxAutoRxState::Failed) break;
+            if (wmoLockedPhasingLines_) {
+                const auto remaining = std::uint64_t(lock_->linesPerMinute) / 2U - *wmoLockedPhasingLines_;
+                const auto estimate = clockTracker_->estimate();
+                const auto predicted = lock_->latestWhiteEdgeSample + (estimate
+                    ? remaining * estimate->samples / estimate->lines
+                    : remaining * std::uint64_t(config_.sampleRate) * 60U / lock_->linesPerMinute);
+                if (obs.centreSample >= predicted) {
+                    const auto recentClock = estimate ? estimate : clockTracker_->provisionalEstimate();
+                    const auto lastEdge = clockTracker_->lastConfirmedWhiteEdge();
+                    if (recentClock && lastEdge <= predicted
+                        && (predicted - lastEdge) * recentClock->lines <= recentClock->samples * 3U) {
+                        usedWmoTimedPhasing_ = true;
+                        beginImage(predicted);
+                    } else {
+                        // Do not fabricate an image when the signal vanished
+                        // before the timer expired. Resume clean acquisition.
+                        phase_.reset();
+                        aptStart_ = SstvRadiofaxAptStartDetector(config_.sampleRate, config_.ioc, offset_);
+                        lock_.reset();
+                        wmoLockedPhasingLines_.reset();
+                        start_.reset();
+                        clockTracker_.reset();
+                        lastConfirmedClock_.reset();
+                        lastConfirmedClockEdge_ = 0U;
+                        hasConfirmedClock_ = false;
+                        retainExhaustedClockAnchor_ = false;
+                        phasingClockRestarts_ = priorIgnoredPhasingPulses_ = 0U;
+                        blackLevels_.fill(0U); whiteLevels_.fill(0U);
+                        replay_.clear();
+                        state_ = SstvRadiofaxAutoRxState::SearchingPhasing;
+                    }
+                }
+                // With an explicit 30-second profile and a verified IOC
+                // start, an isolated non-phasing row is not an image start.
+                continue;
+            }
             const auto candidate = start_->consume(&obs, 1U);
             if (!start_->valid()) {
                 replay_.clear();
                 state_ = SstvRadiofaxAutoRxState::Failed;
+            } else if (candidate && whiteEndCandidate_) {
+                start_->rejectCandidate();
             } else if (candidate) {
-                beginImage(*candidate);
+                bool accept = true;
+                if (config_.centeredPhasingWithWhiteEndLine) {
+                    const auto duration = std::uint64_t(config_.sampleRate) * 60U / lock_->linesPerMinute;
+                    std::size_t white = 0U, observed = 0U;
+                    for (const auto& item : replay_) {
+                        if (item.centreSample < *candidate || item.centreSample >= *candidate + duration
+                            || !item.valid() || !std::isfinite(item.correctedFrequencyHz)
+                            || !std::isfinite(item.confidence) || item.confidence < 0.2 || item.confidence > 1.0) continue;
+                        ++observed;
+                        const auto frequency = item.correctedFrequencyHz - offset_;
+                        if (frequency >= 2100.0 && frequency <= 2450.0) ++white;
+                    }
+                    accept = observed >= 8U && white * 5U >= observed * 3U;
+                }
+                if (accept && config_.centeredPhasingWithWhiteEndLine) {
+                    whiteEndCandidate_ = *candidate;
+                    start_->rejectCandidate();
+                } else if (accept) beginImage(*candidate);
+                else start_->rejectCandidate();
+            }
+            if (whiteEndCandidate_ && state_ == SstvRadiofaxAutoRxState::SearchingImage) {
+                const auto duration = std::uint64_t(config_.sampleRate) * 60U / lock_->linesPerMinute;
+                if (obs.centreSample >= *whiteEndCandidate_ + duration * 5U / 4U) {
+                    // Search around the nominal candidate: clock reacquisition
+                    // can shift it significantly relative to the white line.
+                    const auto begin = *whiteEndCandidate_ > duration / 4U
+                        ? *whiteEndCandidate_ - duration / 4U : 0U;
+                    std::array<std::size_t, 60> total {}, white {};
+                    for (const auto& item : replay_) {
+                        if (item.centreSample < begin || item.centreSample >= begin + duration * 3U / 2U
+                            || !item.valid() || !std::isfinite(item.correctedFrequencyHz)
+                            || !std::isfinite(item.confidence) || item.confidence < 0.2 || item.confidence > 1.0) continue;
+                        const auto bin = (item.centreSample - begin) * 40U / duration;
+                        if (bin >= total.size()) continue;
+                        ++total[bin];
+                        const auto f = item.correctedFrequencyHz - offset_;
+                        if (f >= 2100.0 && f <= 2450.0) ++white[bin];
+                    }
+                    bool confirmed = false;
+                    for (std::size_t first = 0; first <= 20U; ++first) {
+                        std::size_t n = 0U, w = 0U;
+                        for (std::size_t bin = first; bin < first + 40U; ++bin) {
+                            n += total[bin]; w += white[bin];
+                        }
+                        if (n >= 8U && w * 4U >= n * 3U) { confirmed = true; break; }
+                    }
+                    const auto saved = *whiteEndCandidate_;
+                    whiteEndCandidate_.reset();
+                    if (confirmed) beginImage(saved);
+                    else start_->rejectCandidate();
+                }
             }
         } else if (state_ == SstvRadiofaxAutoRxState::Receiving) {
             consumeImageObservation(obs);
@@ -331,6 +479,14 @@ std::optional<std::uint64_t> SstvRadiofaxAutoRx::imageStartSample() const noexce
 std::optional<SstvRadiofaxPhaseLock> SstvRadiofaxAutoRx::phasing() const noexcept { return lock_; }
 std::optional<std::uint64_t> SstvRadiofaxAutoRx::stopSample() const noexcept { return stopSample_; }
 std::optional<SstvRadiofaxClockEstimate> SstvRadiofaxAutoRx::imageClock() const noexcept { return clock_; }
+bool SstvRadiofaxAutoRx::imageClockProvisional() const noexcept { return imageClockProvisional_; }
+bool SstvRadiofaxAutoRx::usedWmoTimedPhasing() const noexcept { return usedWmoTimedPhasing_; }
+bool SstvRadiofaxAutoRx::wmoTimingArmed() const noexcept { return wmoLockedPhasingLines_.has_value(); }
+unsigned SstvRadiofaxAutoRx::ignoredIrregularPhasingPulses() const noexcept
+{ return priorIgnoredPhasingPulses_ + (clockTracker_ ? clockTracker_->ignoredIrregularPulses() : 0U); }
+bool SstvRadiofaxAutoRx::phasingClockTrackerValid() const noexcept
+{ return clockTracker_ && clockTracker_->valid(); }
+unsigned SstvRadiofaxAutoRx::phasingClockRestarts() const noexcept { return phasingClockRestarts_; }
 std::optional<SstvRadiofaxLevels> SstvRadiofaxAutoRx::imageLevels() const noexcept { return levels_; }
 bool SstvRadiofaxAutoRx::stopWasAudioTone() const noexcept { return stopWasAudioTone_; }
 std::size_t SstvRadiofaxAutoRx::bufferedObservations() const noexcept { return replay_.size() + pendingImage_.size(); }

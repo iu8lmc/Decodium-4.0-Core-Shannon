@@ -106,8 +106,354 @@ against explicitly configured encoders, exercise progressive RX for all twelve
 identities, and run full in-process Studio PCM loopbacks for all twelve modes, comparing
 the received image with the prepared raster (mean absolute RGB error below 35).
 Synthetic tests compare decoded rows against normal AVT24. Local two-instance
-virtual-audio evidence is detailed below. Independent application, physical
-audio device and RF validation remain pending; no interoperability is claimed.
+virtual-audio evidence is detailed below. A selected file-mediated A/B exchange
+with the separate Revenant codec is documented below; physical audio devices,
+RF and broad independent interoperability remain unverified.
+
+## AVT24 QRM A/B with the Revenant codec
+
+### AVT24 Narrow A/B without QRM interlacing
+
+The same pinned Revenant codec was also compared in the separate AVT24
+Narrow mode, VIS 65. Two Decodium process pairs sent detailed A/B colour
+patterns over BlackHole with complete coverage and no reported audio
+discontinuities: MAE 1.265/1.437 and p95 5/6. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-2ujmeqan` and
+`.../decodium-avt-two-app-avt-24-narrow-nw92osg_`.
+
+Revenant decoded their captured audio as AVT24 Narrow, 120 rows, with A/B
+MAE 0.896/1.052 and p95 10/13. In the reverse direction its generator encoded
+the prepared images; its own A/B controls passed at MAE 0.916/1.046, p95
+10/13. Replays into full Decodium receivers passed with complete images,
+no reported discontinuities, dropped chunks or processing failures, and MAE
+1.307/1.468, p95 3/6. Artifacts are
+`.../decodium-avt-interference-i79gqa3t` and
+`.../decodium-avt-interference-_pn_hpyw`; generated audio and decoder output
+are in `/tmp/decodium-avt24-narrow-independent`. These selected file-mediated
+comparisons use the codec adapter, not a live external GUI or RF channel.
+The two-app and replay helpers now also accept AVT Narrow mode IDs.
+
+A separately maintained open-source project,
+[Revenant](https://github.com/Locke-Werks/Revenant), provides AVT QRM
+transmit and receive code. At pinned commit
+`67da9f8767b2a250792a6f5a5b2a69f5bc992b6d`, its codec and signal generator
+were compiled unchanged with the small Decodium laboratory adapter
+`tests/sstv/tools/revenant_sstv_oracle.cpp`. The source comments cite the
+SSTV Handbook; shared specifications do not by themselves establish independent
+implementation provenance. The project codec was used through this adapter,
+not its complete GUI application. The codec source SHA-256 values for
+`core/decode/sstv.cpp` and `core/dsp/synth/sstv_mod.cpp` were
+`997cff83edd61da15bcf961a69810e825aa8faaeb7d3e9a284d5c34605735dc9` and
+`2dbecf44ff3cf67571fbf4aa37b40c5189a35f1e1c0d294cf55093eeb0a5a467`.
+
+As self-controls, the Revenant transmitter and receiver processed the two
+128×120 detailed prepared images. Both detected `AVT 24 QRM`, VIS 66,
+completed 120 rows, and passed the full-raster MAE 5 / p95 15 limits:
+A/B MAE was 0.943/1.087 and p95 was 10/13. This confirms the adapter and
+selected codec path on those inputs, not every supported mode.
+
+For Decodium TX to Revenant RX, two Decodium application pairs transmitted
+A and B through BlackHole with full reported coverage and no RX
+discontinuities. The unedited captured stereo audio was converted to mono
+and decoded by Revenant. Both outputs reported AVT24 QRM, VIS 66, complete
+120 rows and full-raster A/B MAE 0.931/1.087 and p95 11/13 against the
+Decodium TX-prepared images. Decodium's own A/B RX comparisons were
+1.211/1.387 MAE and 4/6 p95. Artifacts are
+`.../decodium-avt-two-app-avt-24-qrm-gfj3m9ar` and
+`.../decodium-avt-two-app-avt-24-qrm-y8u28_2q`; the separately decoded
+PPMs and converted audio are under `/tmp/decodium-revenant-avt-test`.
+
+For Revenant TX to Decodium RX, the independent generator encoded those same
+two prepared images. Its mono audio was duplicated to stereo and played at
+gain 0.8 through BlackHole into full Decodium receivers. Both A and B reached
+complete coverage without reported discontinuities, dropped chunks or
+processing failures; full-raster MAE was 1.300/1.429 and p95 3/6. Artifacts
+are `.../decodium-avt-interference-iknmd13t` and
+`.../decodium-avt-interference-nhayrh92`. The test used zero added tone.
+
+The exact source revision can be cloned separately and the adapter rebuilt
+with `tests/sstv/tools/build_revenant_sstv_oracle.sh REVENANT_DIR OUTPUT`;
+the script rejects a different commit or modified codec files. Render accepts
+raw RGB pixels and outputs 48 kHz float mono, while decode accepts float
+mono and writes PPM (colour) or PGM (grayscale): `OUTPUT render IMAGE.rgb AUDIO.f32 'AVT 24 QRM'` and
+`OUTPUT decode AUDIO.f32 IMAGE.ppm 'AVT 24 QRM'`. RGB input must match the
+mode dimensions. These are selected A/B, file-mediated codec comparisons on
+macOS with local audio playback; they are not live GUI-to-GUI, RF, physical
+audio or proof of the other QRM/Narrow variants; the AVT24 Narrow-QRM follow-up is below.
+`python3 tests/sstv/tools/test_revenant_sstv_oracle.py OUTPUT` runs two
+generated AVT24 QRM self-controls and rejects crossed-image and wrong-mode
+controls; the build wrapper also rejects an unexpected source revision.
+After extending the audio replay helper to Dayton FAX480, its AVT24 QRM A/B
+replays were repeated successfully: `.../decodium-avt-interference-8kfefzu7`
+and `.../decodium-avt-interference-fovb9k_y`.
+
+After adding the 10 ms terminal-tone hold described below, two fresh
+AVT24 QRM application pairs transmitted detailed A/B images. Decodium RX
+reported complete coverage and no discontinuities; MAE/p95 were 1.211/4 and
+1.387/6. A freshly rebuilt adapter from the pinned Revenant revision decoded
+the recorded audio, recognised VIS 66 and completed all 120 rows in each run.
+Against the TX reference, Revenant MAE/p95 were 0.940/10 and 1.084/13,
+respectively. Its A/B self-controls and crossed-image/wrong-mode negatives
+also passed. Application artifacts are
+`.../decodium-avt-two-app-avt-24-qrm-m591j5fm` and
+`.../decodium-avt-two-app-avt-24-qrm-nhe52s9y`; converted audio and decoded
+images are `/tmp/decodium-avt-qrm-current-hold-check`. This is a file-mediated
+independent codec check for the current TX path, not a live external GUI or
+proof of RF behaviour or every AVT variant.
+
+### AVT24 Narrow-QRM A/B with the same codec
+
+The same pinned Revenant codec and detailed A/B images were exercised in
+AVT24 Narrow QRM. Its self-generated and self-received images identified
+VIS 67, completed 120 rows, and measured A/B MAE 0.906/1.045 and p95 10/13.
+Decodium TX to Revenant RX, via separately captured unmodified audio
+converted from stereo to mono, also identified VIS 67 and completed 120
+rows; A/B MAE was 0.921/1.046 and p95 10/13. Decodium's own two-application
+RX comparisons on those transmissions measured 1.274/1.786 MAE and 5/7 p95,
+with complete coverage and no reported discontinuities. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-f2miizdk` and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-bxnqknqm`.
+
+In the reverse direction, the Revenant generator encoded both prepared
+images; its float audio was duplicated to stereo and replayed at gain 0.8
+through BlackHole into full Decodium RX. Both completed with no reported
+discontinuities, dropped chunks or processing failures. Full-raster A/B MAE
+was 1.321/1.512 and p95 was 3/6. Artifacts are
+`.../decodium-avt-interference-ezskabr1` and
+`.../decodium-avt-interference-labc_rze`; source audio and decoded PPMs are
+under `/tmp/decodium-revenant-avt-test`. The same 5 MAE / 15 p95 limits
+were used throughout. These are selected file-mediated A/B codec checks, not
+live GUI-to-GUI, RF, or evidence for AVT90/94 variants.
+
+### AVT90 Narrow A/B with different horizontal resolutions
+
+The separate AVT90 Narrow mode (VIS 69) was also checked A/B in both
+directions. Two Decodium session pairs exchanged 320x240 prepared images,
+with complete coverage and no reported audio discontinuities; MAE was
+0.638/0.736 and p95 1/3. The A maximum component error was 255, so the
+aggregate metric does not imply pixel-perfect output. Application artifacts
+are `.../decodium-avt-two-app-avt-90-narrow-8pprps1a` and
+`.../decodium-avt-two-app-avt-90-narrow-sfz3lgml`.
+
+The pinned Revenant decoder identified both captured signals as AVT90
+Narrow, producing complete 256x240 images. Against the explicitly bilinear
+resized Decodium references, MAE was 0.207/0.451 and p95 1/2. Its generator
+and decoder self-controls passed at MAE 0.249/0.303 and p95 2/3. Those
+generated signals were replayed to Decodium, with references resized back to
+320x240: both images completed with no reported discontinuities, dropped
+chunks or processing failures, MAE 0.665/0.732 and p95 2/4. RX artifacts are
+`.../decodium-avt-interference-t3vj4fen` and
+`.../decodium-avt-interference-o9fad7sd`; files are in
+`/tmp/decodium-avt90-narrow-independent`. These file-mediated codec tests
+include explicit resampling and do not prove native-width pixel equivalence,
+live GUI-to-GUI interoperability or RF operation.
+
+One earlier Decodium AVT90 Narrow A capture had a final blue component of
+255 where the prepared reference was 0, despite complete reported coverage.
+The TX coordinator now also appends the existing 10 ms final-tone hold to
+normal and Narrow AVT modes; the core encoder still defaults to no hold.
+All twelve AVT builder variants are compared with their direct encoders and
+the coordinator and core AVT suites pass.
+
+Two fresh process-pair tests used 320x240 images with the final blue
+component 0 and 255 respectively. Both received the exact terminal value,
+with complete coverage, no reported audio discontinuity and A/B MAE
+0.769/0.953, p95 1/1. Artifacts are
+`.../decodium-avt-two-app-avt-90-narrow-mwrsub3a` and
+`.../decodium-avt-two-app-avt-90-narrow-7l6yaclc`. The pinned Revenant
+decoder also completed both captures, VIS 69, with explicitly resized
+256x240 references: MAE 0.289/0.916, p95 1/2. The input images differ from
+the earlier failure and the runs are not sample-identical, so they do not
+prove the hold caused the improvement or cover all audio devices or RF.
+
+The original failing A input and its B control were subsequently retransmitted
+with the final-tone hold. Prepared-reference SHA-256 values matched their
+respective earlier runs. The final blue value in A was 0/0 received/reference
+instead of the earlier 255/0; B remained 0/0. Both passed the terminal error
+limit of 20, completed with zero reported discontinuities, and had MAE
+0.636/0.736 and p95 1/3. Artifacts are
+`.../decodium-avt-two-app-avt-90-narrow-d45x19ji` and
+`.../decodium-avt-two-app-avt-90-narrow-709popea`. These are separate
+real-time transmissions of identical prepared rasters, not sample-identical
+audio replays, so runtime timing differences remain a limitation.
+
+Revenant also decoded those same new A/B captures as VIS 69, with complete
+256x240 output and MAE 1.963/0.690, p95 3/2 against bilinearly resized
+references (`/tmp/decodium-avt90-identical-input-oracle`). To isolate the
+terminal effect, diagnostic copies of the two original recordings replaced
+only the first 10 ms at the measured black-to-VOX boundary with the preceding
+black tone. Byte comparisons confirmed every other sample remained unchanged.
+Full Decodium replays of original versus modified A produced last blue 255
+versus 0 (reference 0); B produced 0 in both cases. All four completed with
+no reported audio discontinuities. Artifacts in that order are
+`.../decodium-avt-interference-8dskxzye`,
+`.../decodium-avt-interference-ruq3di_f`,
+`.../decodium-avt-interference-u5u6vlhv` and
+`.../decodium-avt-interference-fi2scte5`. Playback timing still differs
+between real-time replays, and this selected manipulation is not an RF test.
+
+The replay helper now accepts the same optional
+`DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR` guard as the two-application helper.
+With a limit of 20, the modified-boundary A/B recordings were replayed again
+and both reported 0/0 for the last blue component while passing the complete
+image and audio checks. Artifacts are
+`.../decodium-avt-interference-vk8nmm7i` and
+`.../decodium-avt-interference-37opd1de`. The comparison helper's A/B negative
+controls for opposite terminal values also passed. This is a laboratory
+guard; it does not claim that every pixel is correct.
+
+### AVT90 QRM A/B with different horizontal resolutions
+
+The same independent codec was tested on AVT90 QRM. Decodium prepares 320×240
+pixels, while the pinned Revenant codec uses 256×240; both use the same
+125 ms per component. Therefore these comparisons require explicit bilinear
+resizing and do not establish pixel-for-pixel equivalence at native width.
+
+Decodium A/B transmissions through two local sessions completed without
+reported discontinuities, with full-raster MAE 0.630/0.996 and p95 1/3
+at 320×240. Revenant decoded both separately captured, mono-converted audio
+files as AVT90 QRM, VIS 70, with complete 256×240 images. Against the
+Decodium prepared references explicitly resized to 256×240, A/B MAE was
+0.973/0.155 and p95 2/1. Decodium artifacts are
+`.../decodium-avt-two-app-avt-90-qrm-w37bhgig` and
+`.../decodium-avt-two-app-avt-90-qrm-cu5qo074`.
+
+For the reverse direction, the 256×240 resized references were encoded by
+the Revenant generator; its own decoder completed both self-controls with
+MAE 0.257/0.310 and p95 2/3. The same generated audio was replayed via
+BlackHole into Decodium. Against the 256-pixel inputs explicitly resized to
+320 pixels, both images completed with A/B MAE 0.607/0.721 and p95 2/4,
+without reported audio discontinuities, dropped chunks or processing
+failures. Artifacts are `.../decodium-avt-interference-fzfti51s` and
+`.../decodium-avt-interference-vn60z7b5`; generated signals and PPMs are in
+`/tmp/decodium-revenant-avt-test`. Limits were MAE 5 and p95 15. These
+selected file-mediated checks do not cover RF, live GUI-to-GUI operation,
+or native-width image equivalence.
+
+### AVT90 Narrow-QRM A/B with different horizontal resolutions
+
+The same A/B comparison was repeated for AVT90 Narrow QRM, with the same
+explicit bilinear conversion between Decodium's 320 and Revenant's 256
+columns. Both Decodium-to-Decodium images completed with MAE 0.642/0.737 and
+p95 1/3. The separately captured audio was decoded by Revenant as AVT90
+Narrow QRM, VIS 71, with complete 256×240 images; against the references
+resized to 256 columns the A/B MAE was 0.206/0.451 and p95 1/2. Decodium
+artifacts are `.../decodium-avt-two-app-avt-90-narrow-qrm-e1gbtpja` and
+`.../decodium-avt-two-app-avt-90-narrow-qrm-ik63e0pv`.
+
+The independent generator and receiver self-controls completed A/B with MAE
+0.249/0.303 and p95 2/3. Its two signals then replayed through BlackHole into
+full Decodium RX with complete coverage, no reported discontinuities,
+dropped chunks or processing failures, and MAE 0.665/0.734, p95 2/4
+against the 256-column inputs resized to 320. Artifacts are
+`.../decodium-avt-interference-nm88vu59` and
+`.../decodium-avt-interference-zjrjb70e`; generated signals and PPMs are in
+`/tmp/decodium-revenant-avt-test`. These A/B results remain file-mediated,
+resized comparisons, not live GUI-to-GUI or RF evidence.
+
+### AVT94 QRM A/B at native 320×200 resolution
+
+Both Decodium-to-Decodium A/B transmissions completed at 320×200 with no
+reported discontinuities; MAE was 0.450/0.539 and p95 1/1. The independent
+Revenant decoder received both captured audio files as AVT94 QRM, VIS 74,
+and produced complete 320×200 images. Direct comparison against the prepared
+references gave MAE 0.964/1.103, p95 1/1 and maximum component errors 158/144.
+Thus the 5 MAE / 15 p95 gate passes, but it does not hide the large isolated
+errors. Decodium artifacts are `.../decodium-avt-two-app-avt-94-qrm-pgkeng1s`
+and `.../decodium-avt-two-app-avt-94-qrm-kanxirmz`.
+
+The large errors are concentrated at sharp transitions: 348/312 RGB
+components exceed 64, of which 312/305 are on odd image rows. Since QRM
+interlaces the image, those rows were transmitted in the later field. Mean
+error also rises through the transmitted fields. The same Revenant decoder's
+high-precision countdown period estimates were 1.00000350179/1.00000350178
+for these Decodium captures, compared with 0.999999861998 for both of its own
+generated-signal self-controls. For Decodium Narrow-QRM captures the estimated
+ratios were 1.00000025876/1.00000025876. The narrow adapter now prints the
+estimated ratio with 12 significant digits; its rebuilt output was byte-identical
+to the previous unmodified decoder output for both QRM captures.
+
+As an isolated A/B diagnostic, the independently maintained decoder was
+rebuilt with the `--nominal-avt-clock` option of
+`tests/sstv/tools/build_revenant_sstv_oracle.sh`. This applies
+`tests/sstv/fixtures/revenant-avt-nominal-clock-diagnostic.patch` to a
+temporary source copy, forcing nominal AVT raster period while leaving the
+recorded signals and the rest of the decoder unchanged. Its printed ratio is
+still the estimated countdown ratio, not the applied diagnostic period. On
+the same captured signals, MAE/p95/max became 0.288/1/29 and 0.356/2/34,
+with no components above 64. On Revenant's own A/B generated signals the
+nominal diagnostic gave MAE/p95/max 0.283/1/55 and 0.343/2/36, versus
+0.284/1/52 and 0.340/2/37 with the unmodified decoder. This ties the large
+errors in these comparisons to the period used by that receiver. It does not
+prove which transmitter or estimator causes the difference, establish RF
+clock accuracy, or justify forcing a nominal clock in production, where real
+clock error can occur. The unmodified codec's own A/B and negative controls
+passed after the adapter rebuild.
+
+Further controls isolate sensitivity to where the identical waveform starts
+in the decoder input. The Decodium core encoder generated AVT94 QRM directly
+at 48 kHz with 0.5 s of silence, using the same A/B RGB fixtures; the
+unmodified Revenant decoder estimated 0.999999793006 for both and produced
+MAE/p95/max 0.295/1/32 and 0.335/2/37, with no components above 64.
+`render_avt94_native`, built from
+`tests/sstv/tools/render_avt94_native.cpp`, reproduces these input files; its
+A/B output matched the initial direct render byte-for-byte and its
+existing-output and short-input controls rejected the requests.
+
+Keeping the generated waveform unchanged but inserting one additional silent
+48 kHz sample before it made the unmodified Revenant decoder estimate
+1.00000350179 in both A/B, with MAE/p95/max 0.964/1/158 and 1.115/1/144,
+and 348/310 components above 64. Three extra samples instead gave estimates
+0.999999792985 and restored max 32/37 and no components above 64. Four or
+256 extra samples repeated the one-sample result. Removing the captured
+application preamble while keeping its original sample position did not
+change the estimate; relocating either the captured or direct signal to the
+capture's original sample position reproduced the higher estimate. The
+input relocation controls preserve the waveform after the inserted silence.
+These observations demonstrate sensitivity to input sample alignment in this
+specific external decoder and setup, not that a receiver must use a fixed
+clock or that every implementation has the same issue. RF, independent
+hardware and live GUI-to-GUI operation remain untested.
+
+The same two direct A/B signals with one additional leading silent sample
+were converted to 48 kHz stereo and replayed through BlackHole to full
+Decodium receiver sessions without added interference. Both images were
+complete, with MAE/p95/max 0.398/1/42 and 0.476/1/41 and no reported RX
+discontinuities. Artifacts are `.../decodium-avt-interference-zcsjy5f9` and
+`.../decodium-avt-interference-7sgaftd6`. This verifies these application
+replays, but virtual-device buffering and resampling mean that the inserted
+sample does not prove identical internal demodulator alignment to the
+file-based Revenant test. The originating A/B TX/RX application captures
+remain the separate tests listed above.
+
+The Revenant generator/receiver self-controls completed both images with
+MAE 0.284/0.340 and p95 1/2. Replaying those independent signals through
+BlackHole into full Decodium RX produced complete A/B images with MAE
+0.454/0.552 and p95 1/1, and no reported discontinuities, dropped chunks or
+processing failures. Artifacts are `.../decodium-avt-interference-z40r__71`
+and `.../decodium-avt-interference-5il5cvgk`; source audio and PPMs are in
+`/tmp/decodium-revenant-avt-test`. These are selected file-mediated codec
+checks, not live GUI-to-GUI or RF evidence.
+
+### AVT94 Narrow-QRM A/B at native 320×200 resolution
+
+Both Decodium-to-Decodium A/B transmissions completed at 320×200 with no
+reported discontinuities; MAE was 0.463/0.547 and p95 1/1. The pinned
+Revenant decoder received both captured audio files as AVT94 Narrow QRM, VIS
+75, producing complete images with direct-reference MAE 0.578/0.940 and
+p95 1/2. Decodium artifacts are
+`.../decodium-avt-two-app-avt-94-narrow-qrm-rn_hc_la` and
+`.../decodium-avt-two-app-avt-94-narrow-qrm-blyziosd`.
+
+The Revenant generator and receiver self-controls completed both images
+with MAE 0.272/0.330 and p95 1/2. Replaying the independent A/B signals
+through BlackHole into full Decodium RX yielded complete images with MAE
+0.461/0.555 and p95 1/1; there were no reported discontinuities, dropped
+chunks or processing failures. Artifacts are
+`.../decodium-avt-interference-zf0jn7kc` and
+`.../decodium-avt-interference-4rf923up`; generated audio and PPMs are in
+`/tmp/decodium-revenant-avt-test`. Limits were MAE 5 and p95 15. This is
+selected file-mediated codec evidence, not live GUI-to-GUI or RF evidence.
 
 ## Native Decodium components
 
@@ -798,7 +1144,7 @@ PCM, the original receiver binary in the isolated bundle reached its own
 `/tmp/decodium-qsstv-pcmfix-avt24-{a,b}*`. The PCM correction and Qt isolation
 are diagnostic controls, not a proof of why AVT24 decoding fails in this
 environment. They do not establish incompatibility with Decodium or a general
-QSSTV defect; independent AVT/QRM exchange remains unresolved.
+QSSTV defect; independent exchange with unmodified QSSTV remains unresolved.
 
 Inspection of the same pinned QSSTV source found that its `sstvTx::sendImage`
 uses the generic preamble and one VIS before `transmitImage`, while its
@@ -1093,3 +1439,21 @@ relay errors were reported. Application artifacts are
 `.../decodium-avt-live-interference-v9jnauzv` in the macOS temporary directory.
 This checks the selected local QRM mode and signal, not independent receiver
 or RF interoperability.
+
+The same terminal-component guard was applied to two 320×240 AVT90 QRM
+transmissions through a 1900 Hz peak-0.10 interferer and the receiver's
+manual notch. The A input had blue 255 except for the final pixel at 0; B
+had blue 0 except for the final pixel at 255. Received final blue was 20/251,
+for errors 20/4 against the configured limit of 20. Thus A passed exactly at
+the threshold and should not be interpreted as a margin below it. Both
+images had full coverage, MAE 0.812/0.329, p95 5/1, and no reported audio
+discontinuities or relay errors. These are selected two-Decodium audio tests,
+not an independent receiver or RF result. Application artifacts are
+`.../decodium-avt-two-app-avt-90-qrm-59swfaje` and
+`.../decodium-avt-two-app-avt-90-qrm-2prpzbmp`; relay artifacts are
+`.../decodium-avt-live-interference-je64mvmu` and
+`.../decodium-avt-live-interference-ndi3h83a`. The input PPMs are
+`/tmp/decodium-avt90-terminal-current/{a,b}.ppm`. The laboratory command is
+`DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR=20 python3
+tests/sstv/tools/run_avt_two_app_interference_lab.py a IMAGE 1 1900
+avt-90-qrm`, repeated with B and its image.

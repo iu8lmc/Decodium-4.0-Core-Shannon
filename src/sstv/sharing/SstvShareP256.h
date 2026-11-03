@@ -9,7 +9,7 @@ namespace decodium::sstv::sharing {
 
 // Signing primitive only. A signature does not establish sender identity until
 // a caller authenticates and pins the public key and binds the full protocol
-// message. No production envelope uses this API yet.
+// message. Signed sharing envelopes authenticate that binding separately.
 struct SstvShareP256KeyPair final {
     QByteArray privateDer;
     QByteArray publicDer;

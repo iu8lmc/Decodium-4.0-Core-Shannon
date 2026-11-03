@@ -529,6 +529,48 @@ void testIndependentQsstvImageAssembly()
     }
 }
 
+void testTemporalPilotAllpassAB()
+{
+    constexpr double pi = 3.14159265358979323846;
+    const double omega = 2.0 * pi * 1500.0 / 12000.0;
+    const double alpha = std::sin(omega) / 4.0;
+    const double a0 = 1.0 + alpha, a1 = -2.0 * std::cos(omega), a2 = 1.0 - alpha;
+    HamDrmWaveformConfig config;
+    config.robustness = HamDrmRobustness::A;
+    config.occupiedBandwidth = HamDrmOccupiedBandwidth::Hz2300;
+    config.protection = HamDrmProtection::Normal;
+    config.interleaver = HamDrmInterleaver::Short;
+    HamDrmWaveformLimits limits;
+    limits.experimentalTemporalPilots = true;
+    limits.experimentalMultistagePacketRetry = true;
+    for (std::uint16_t id : {41U, 72U}) {
+        const auto group = makeMotGroup(id);
+        const auto clean = transmit(config, {group});
+        auto filtered = clean;
+        double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+        for (double& sample : filtered) {
+            const double x = sample;
+            const double y = (a2 * x + a1 * x1 + a0 * x2 - a1 * y1 - a2 * y2) / a0;
+            x2 = x1; x1 = x; y2 = y1; y1 = y; sample = y;
+        }
+        for (const auto* input : std::array<const std::vector<double>*, 2>{&clean, &filtered}) {
+            std::vector<std::vector<std::uint8_t>> groups;
+            receive(config, *input, 911U, groups, limits);
+            require(groups.size() == 1U && groups.front() == group,
+                    "temporal pilot A/B failed clean or phase-filtered loopback");
+        }
+    }
+    for (unsigned seed : {42U, 31415U}) {
+        std::mt19937 generator(seed);
+        std::uniform_real_distribution<double> noise(-0.2, 0.2);
+        std::vector<double> samples(8U * kHamDrmPcmSamplesPerFrame);
+        for (auto& sample : samples) sample = noise(generator);
+        HamDrmWaveformReceiver receiver(config, limits);
+        require(receiver.pushPcm(samples.data(), samples.size(), true).dataGroups.empty(),
+                "temporal pilot receiver emitted a group from noise");
+    }
+}
+
 void testCleanLongInterleaverLoopback()
 {
     HamDrmWaveformConfig config;
@@ -549,6 +591,134 @@ void testCleanLongInterleaverLoopback()
     require(batch.statistics.receivedFrames == 5U
                 && batch.statistics.validatedDataGroups == 1U,
             "clean loopback statistics mismatch");
+}
+
+void testFacInterleaverAcquisition()
+{
+    for (const auto transmitted : {HamDrmInterleaver::Short, HamDrmInterleaver::Long}) {
+        HamDrmWaveformConfig tx;
+        tx.interleaver = transmitted;
+        auto rx = tx;
+        rx.interleaver = transmitted == HamDrmInterleaver::Short
+            ? HamDrmInterleaver::Long : HamDrmInterleaver::Short;
+        for (const auto id : {51U, 52U}) {
+            const auto group = makeMotGroup(id);
+            const auto pcm = transmit(tx, {group});
+            std::vector<std::vector<std::uint8_t>> recovered;
+            const auto result = receive(rx, pcm, 911U, recovered);
+            require(result.status.ok() && recovered == std::vector<std::vector<std::uint8_t>> {group},
+                    "FAC interleaver acquisition did not recover the original group");
+            require(result.statistics.facFailures == 0U,
+                    "valid FAC was rejected during interleaver acquisition");
+            require(result.statistics.hasFacInterleaver
+                        && result.statistics.lastFacInterleaver == transmitted,
+                    "reported FAC interleaver did not match transmitted depth");
+        }
+    }
+    HamDrmWaveformConfig tx;
+    HamDrmWaveformReceiver receiver(tx);
+    HamDrmWaveformReceiver continuous(tx);
+    require(!receiver.statistics().hasFacInterleaver,
+            "receiver reported an interleaver before receiving a valid FAC");
+    for (const auto depth : {HamDrmInterleaver::Short, HamDrmInterleaver::Long,
+                              HamDrmInterleaver::Short}) {
+        tx.interleaver = depth;
+        const auto group = makeMotGroup(depth == HamDrmInterleaver::Short ? 53U : 54U);
+        const auto pcm = transmit(tx, {group});
+        receiver.reset();
+        require(!receiver.statistics().hasFacInterleaver,
+                "receiver reset retained a stale FAC diagnostic");
+        const auto result = receiver.pushPcm(pcm, true);
+        require(result.status.ok() && result.dataGroups == std::vector<std::vector<std::uint8_t>> {group},
+                "receiver reset retained an incorrect FAC interleaver depth");
+        const auto switched = continuous.pushPcm(pcm, true);
+        require(switched.status.ok() && switched.dataGroups == std::vector<std::vector<std::uint8_t>> {group},
+                "interleaver depth change retained partial data from a previous transmission");
+    }
+    auto wrong = tx;
+    wrong.constellation = HamDrmConstellation::Qam4;
+    std::vector<std::vector<std::uint8_t>> rejected;
+    const auto incompatible = receive(wrong, transmit(tx, {makeMotGroup(55U)}), 911U, rejected);
+    require(incompatible.statistics.facFailures > 0U && rejected.empty(),
+            "receiver accepted a different FAC constellation");
+    require(!incompatible.statistics.hasFacInterleaver,
+            "receiver reported an interleaver from an incompatible FAC");
+}
+
+void testInterruptedInterleaverChangeAB()
+{
+    HamDrmWaveformConfig longConfig;
+    auto shortConfig = longConfig;
+    shortConfig.interleaver = HamDrmInterleaver::Short;
+    for (const auto id : {61U, 62U}) {
+        const auto abandoned = makeMotGroup(id, 0x1111U);
+        const auto expected = makeMotGroup(id + 1U, 0x2222U);
+        auto interrupted = transmit(longConfig, {abandoned});
+        require(interrupted.size() >= 5U * kHamDrmPcmSamplesPerFrame,
+                "long transmission too short for interrupted interleaver test");
+        interrupted.resize(2U * kHamDrmPcmSamplesPerFrame);
+        interrupted.insert(interrupted.end(), kHamDrmPcmSamplesPerFrame, 0.0);
+        const auto next = transmit(shortConfig, {expected});
+        interrupted.insert(interrupted.end(), next.begin(), next.end());
+        std::vector<std::vector<std::uint8_t>> recovered;
+        const auto result = receive(longConfig, interrupted, 911U, recovered);
+        require(recovered == std::vector<std::vector<std::uint8_t>> {expected},
+                "interrupted interleaver emitted stale data or lost the next group");
+        require(result.statistics.validatedDataGroups == 1U,
+                "interrupted interleaver delivered an unexpected group count");
+        require(result.statistics.hasFacInterleaver
+                    && result.statistics.lastFacInterleaver == HamDrmInterleaver::Short,
+                "interrupted interleaver did not report the last accepted FAC");
+    }
+}
+
+void testReacquireAfterOutOfRangeFrequencyAB()
+{
+    HamDrmWaveformConfig receiverConfig;
+    receiverConfig.interleaver = HamDrmInterleaver::Short;
+    for (const double offset : {-35.0, 35.0}) {
+        auto invalidConfig = receiverConfig;
+        invalidConfig.carrierOffsetHz += offset;
+        const auto rejected = makeMotGroup(offset < 0 ? 63U : 64U, 0x1111U);
+        const auto expected = makeMotGroup(offset < 0 ? 65U : 66U, 0x2222U);
+        for (const std::size_t repeat : {1U, 5U}) {
+            const auto invalid = transmit(invalidConfig, {rejected});
+            std::vector<double> signal;
+            for (std::size_t n = 0; n < repeat; ++n)
+                signal.insert(signal.end(), invalid.begin(), invalid.end());
+            signal.insert(signal.end(), kHamDrmPcmSamplesPerFrame, 0.0);
+            const auto clean = transmit(receiverConfig, {expected});
+            signal.insert(signal.end(), clean.begin(), clean.end());
+            for (const std::size_t tail : {std::size_t {0U}, kHamDrmPcmSamplesPerFrame}) {
+                auto input = signal;
+                input.insert(input.end(), tail, 0.0);
+                for (const std::size_t chunk : {240U, 977U}) {
+                    std::vector<std::vector<std::uint8_t>> recovered;
+                    const auto result = receive(receiverConfig, input, chunk, recovered);
+                    require(result.statistics.synchronizationFailures > 0U,
+                            "out-of-range signal did not exercise frequency rejection");
+                    require(recovered == std::vector<std::vector<std::uint8_t>> {expected},
+                            "receiver failed to advance past out-of-range frequency: offset="
+                            + std::to_string(offset) + " repeat=" + std::to_string(repeat)
+                            + " tail=" + std::to_string(tail) + " chunk=" + std::to_string(chunk) + " groups="
+                            + std::to_string(recovered.size()) + " sync="
+                            + std::to_string(result.statistics.synchronizationFailures)
+                            + " pilot=" + std::to_string(result.statistics.pilotFailures)
+                            + " fac=" + std::to_string(result.statistics.facFailures));
+                    require(result.statistics.resourceFailures == 0U,
+                            "frequency rejection exhausted receive resources");
+                    if (tail == 0U && repeat == 1U && chunk == 977U) {
+                        auto incomplete = input;
+                        incomplete.pop_back();
+                        std::vector<std::vector<std::uint8_t>> truncated;
+                        receive(receiverConfig, incomplete, chunk, truncated);
+                        require(truncated.empty(),
+                                "truncated terminal frame emitted a data group");
+                    }
+                }
+            }
+        }
+    }
 }
 
 void testLiveAcquisitionAfterSilence()
@@ -640,6 +810,9 @@ void testNativeProfileMatrixLoopback()
     std::size_t impairedFlat = 0U, impairedAdaptive = 0U, adaptiveRegressions = 0U;
     std::size_t impairedFallback = 0U, fallbackRegressions = 0U, fallbackPackets = 0U;
     std::size_t impairedStaged = 0U, stagedPackets = 0U;
+    std::size_t temporalClean = 0U, temporalImpaired = 0U, temporalRegressions = 0U;
+    std::size_t trackingClean = 0U, trackingImpaired = 0U, trackingRegressions = 0U;
+    std::size_t earlyImpaired = 0U, earlyTrackedImpaired = 0U, earlyTrackingRegressions = 0U;
     const std::array<HamDrmRobustness, 6U> robustness {{
         HamDrmRobustness::A, HamDrmRobustness::A,
         HamDrmRobustness::B, HamDrmRobustness::B,
@@ -676,6 +849,17 @@ void testNativeProfileMatrixLoopback()
                         makeMotGroup(17U, static_cast<std::uint16_t>(0x7000U + index)),
                         makeMotGroup(29U, static_cast<std::uint16_t>(0x7100U + index))};
                     const auto pcm = transmit(config, expected, 4'800U);
+                    {
+                        HamDrmWaveformLimits limits;
+                        limits.experimentalFrameTimingTracking = true;
+                        limits.experimentalMultistagePacketRetry = true;
+                        std::vector<std::vector<std::uint8_t>> groups;
+                        receive(config, pcm, 977U, groups, limits);
+                        for (const auto& group : groups)
+                            require(std::find(expected.begin(), expected.end(), group) != expected.end(),
+                                    "tracking clean matrix emitted unexpected group");
+                        trackingClean += groups == expected;
+                    }
                     for (const bool adaptive : {false, true}) {
                         HamDrmWaveformLimits limits;
                         limits.experimentalAdaptiveEqualizer = adaptive;
@@ -687,6 +871,17 @@ void testNativeProfileMatrixLoopback()
                                     + std::to_string(index) + ": "
                                     + batch.status.detail);
                     }
+                    {
+                        HamDrmWaveformLimits limits;
+                        limits.experimentalTemporalPilots = true;
+                        limits.experimentalMultistagePacketRetry = true;
+                        std::vector<std::vector<std::uint8_t>> recovered;
+                        receive(config, pcm, 977U, recovered, limits);
+                        for (const auto& group : recovered)
+                            require(std::find(expected.begin(), expected.end(), group) != expected.end(),
+                                    "temporal clean matrix emitted unexpected group");
+                        temporalClean += recovered == expected;
+                    }
                     for (const double echoGain : {0.1, 0.3}) {
                         auto impaired = pcm;
                         for (std::size_t i = 0; i < pcm.size(); ++i)
@@ -694,13 +889,41 @@ void testNativeProfileMatrixLoopback()
                         std::vector<std::vector<std::uint8_t>> flatGroups, adaptiveGroups, fallbackGroups;
                         HamDrmWaveformLimits limits;
                         const auto flatBatch = receive(config, impaired, 4'800U, flatGroups, limits);
+                        HamDrmWaveformLimits trackingLimits;
+                        trackingLimits.experimentalFrameTimingTracking = true;
+                        trackingLimits.experimentalMultistagePacketRetry = true;
+                        std::vector<std::vector<std::uint8_t>> trackingGroups;
+                        receive(config, impaired, 4'800U, trackingGroups, trackingLimits);
+                        for (const auto& group : trackingGroups)
+                            require(std::find(expected.begin(), expected.end(), group) != expected.end(),
+                                    "tracking impaired matrix emitted unexpected group");
                         limits.experimentalAdaptiveEqualizer = true;
                         const auto adaptiveBatch = receive(config, impaired, 4'800U, adaptiveGroups, limits);
                         limits.experimentalFlatPacketFallback = true;
+                        {
+                            auto earlyLimits = limits;
+                            earlyLimits.experimentalEarlyTiming = true;
+                            earlyLimits.experimentalMultistagePacketRetry = true;
+                            std::vector<std::vector<std::uint8_t>> early, tracked;
+                            receive(config, impaired, 4'800U, early, earlyLimits);
+                            earlyLimits.experimentalFrameTimingTracking = true;
+                            receive(config, impaired, 4'800U, tracked, earlyLimits);
+                            for (const auto& group : tracked)
+                                require(std::find(expected.begin(), expected.end(), group) != expected.end(),
+                                        "early tracking impaired matrix emitted unexpected group");
+                            earlyImpaired += early == expected;
+                            earlyTrackedImpaired += tracked == expected;
+                            earlyTrackingRegressions += early == expected && tracked != expected;
+                        }
                         const auto fallbackBatch = receive(config, impaired, 4'800U, fallbackGroups, limits);
                         limits.experimentalMultistagePacketRetry = true;
                         std::vector<std::vector<std::uint8_t>> stagedGroups;
                         const auto stagedBatch = receive(config, impaired, 4'800U, stagedGroups, limits);
+                        HamDrmWaveformLimits temporalLimits;
+                        temporalLimits.experimentalTemporalPilots = true;
+                        temporalLimits.experimentalMultistagePacketRetry = true;
+                        std::vector<std::vector<std::uint8_t>> temporalGroups;
+                        receive(config, impaired, 4'800U, temporalGroups, temporalLimits);
                         for (const auto& group : flatGroups)
                             require(std::find(expected.begin(), expected.end(), group) != expected.end(),
                                     "flat impaired matrix emitted unexpected group");
@@ -713,7 +936,12 @@ void testNativeProfileMatrixLoopback()
                         for (const auto& group : stagedGroups)
                             require(std::find(expected.begin(), expected.end(), group) != expected.end(),
                                     "multistage impaired matrix emitted unexpected group");
+                        for (const auto& group : temporalGroups)
+                            require(std::find(expected.begin(), expected.end(), group) != expected.end(),
+                                    "temporal impaired matrix emitted unexpected group");
                         const bool flatComplete = flatGroups == expected;
+                        trackingImpaired += trackingGroups == expected;
+                        trackingRegressions += flatComplete && trackingGroups != expected;
                         const bool adaptiveComplete = adaptiveGroups == expected;
                         if (adaptiveComplete || flatComplete)
                             require(fallbackGroups == expected,
@@ -731,6 +959,8 @@ void testNativeProfileMatrixLoopback()
                         fallbackPackets += fallbackBatch.statistics.flatFallbackPacketRecoveries;
                         impairedStaged += stagedGroups == expected;
                         stagedPackets += stagedBatch.statistics.multistagePacketRecoveries;
+                        temporalImpaired += temporalGroups == expected;
+                        temporalRegressions += flatComplete && temporalGroups != expected;
                         if (flatComplete && !adaptiveComplete)
                             std::cout << "adaptive regression row=" << index
                                       << " qam=" << static_cast<int>(constellation)
@@ -757,6 +987,60 @@ void testNativeProfileMatrixLoopback()
               << " fallback_regressions=" << fallbackRegressions
               << " fallback_packets=" << fallbackPackets
               << " staged=" << impairedStaged << " staged_packets=" << stagedPackets << '\n';
+    std::cout << "temporal profile matrix clean=" << temporalClean << "/72 impaired="
+              << temporalImpaired << "/144 regressions_from_flat=" << temporalRegressions << '\n';
+    std::cout << "tracking profile matrix clean=" << trackingClean << "/72 impaired="
+              << trackingImpaired << "/144 regressions_from_flat=" << trackingRegressions << '\n';
+    std::cout << "early tracking matrix baseline=" << earlyImpaired << "/144 tracked="
+              << earlyTrackedImpaired << "/144 regressions=" << earlyTrackingRegressions << '\n';
+    require(temporalClean == 72U && temporalImpaired == 144U,
+            "temporal pilot profile matrix regressed");
+    require(trackingClean == 72U && trackingRegressions == 0U,
+            "frame timing tracking regressed the native profile matrix");
+    require(earlyTrackingRegressions == 0U,
+            "adaptive early timing tracking regressed the echo matrix");
+}
+
+void testTemporalVaryingChannelAB()
+{
+    constexpr double pi = 3.14159265358979323846;
+    for (const auto mode : {HamDrmRobustness::A, HamDrmRobustness::E}) {
+        HamDrmWaveformConfig config;
+        config.robustness = mode;
+        config.interleaver = HamDrmInterleaver::Short;
+        for (std::uint16_t id : {41U, 72U}) {
+            const auto group = makeMotGroup(id);
+            const auto clean = transmit(config, {group});
+            for (double rate : {0.1, 0.5, 2.0}) {
+                auto varying = clean;
+                for (std::size_t i = 0; i < varying.size(); ++i) {
+                    const double gain = 0.65 + 0.25 * std::sin(2.0 * pi * rate * double(i) / 12000.0);
+                    const double echo = 0.20 * std::cos(2.0 * pi * rate * double(i) / 12000.0);
+                    varying[i] = gain * clean[i] + (i >= 12U ? echo * clean[i - 12U] : 0.0);
+                }
+                HamDrmWaveformLimits limits;
+                limits.experimentalTemporalPilots = true;
+                limits.experimentalMultistagePacketRetry = true;
+                std::vector<std::vector<std::uint8_t>> groups;
+                receive(config, varying, 911U, groups, limits);
+                HamDrmWaveformLimits baseline;
+                baseline.experimentalMultistagePacketRetry = true;
+                std::vector<std::vector<std::uint8_t>> flatGroups;
+                receive(config, varying, 911U, flatGroups, baseline);
+                for (const auto& recovered : groups)
+                    require(recovered == group, "time-varying channel emitted unexpected group");
+                for (const auto& recovered : flatGroups)
+                    require(recovered == group, "baseline time-varying channel emitted unexpected group");
+                if (rate <= 0.5)
+                    require(groups.size() == 1U, "temporal estimator failed slow time-varying channel");
+                if (rate == 2.0)
+                    require(flatGroups.size() == 1U, "flat receiver failed fast time-varying control");
+                std::cout << "temporal varying mode=" << static_cast<int>(mode) << " id=" << id
+                          << " rate=" << rate << " exact=" << (groups.size() == 1U)
+                          << " flat=" << (flatGroups.size() == 1U) << '\n';
+            }
+        }
+    }
 }
 
 void testMultiFrameMotObjectGroups()
@@ -828,6 +1112,131 @@ void testCfoOffsetAndAwgnLoopback()
             "pilot-aided CFO estimate is outside deterministic tolerance: "
                 + std::to_string(
                     batch.statistics.estimatedFrequencyOffsetHz));
+}
+
+void testFrameTimingTrackingAB()
+{
+    for (unsigned id : {41U, 72U}) {
+        HamDrmWaveformConfig config;
+        config.interleaver = HamDrmInterleaver::Long;
+        std::vector<std::vector<std::uint8_t>> expected;
+        for (unsigned i = 0; i < 12U; ++i)
+            expected.push_back(makeMotGroup(id + i, 0x5050U + id));
+        const auto pcm = transmit(config, expected);
+        HamDrmWaveformLimits limits;
+        limits.experimentalFrameTimingTracking = true;
+        std::vector<std::vector<std::uint8_t>> terminalGroups;
+        const auto terminal = receive(config, pcm, 743U, terminalGroups, limits);
+        require(terminalGroups == expected && terminal.status.ok(),
+                "tracking failed an exact complete end-of-stream boundary");
+        auto truncated = pcm;
+        truncated.resize(truncated.size() - 100U);
+        std::vector<std::vector<std::uint8_t>> truncatedGroups;
+        const auto partial = receive(config, truncated, 743U, truncatedGroups, limits);
+        require(truncatedGroups.size() < expected.size()
+                    && std::equal(truncatedGroups.begin(), truncatedGroups.end(), expected.begin())
+                    && partial.status.code == HamDrmErrorCode::Incomplete,
+                "tracking accepted or misreported a substantially truncated final frame");
+        for (double ratio : {0.999875, 1.0, 1.000125}) {
+            std::vector<double> adjusted;
+            const auto length = static_cast<std::size_t>(pcm.size() * ratio);
+            adjusted.reserve(length);
+            for (std::size_t i = 0; i < length; ++i) {
+                const double position = static_cast<double>(i) / ratio;
+                const auto left = static_cast<std::size_t>(position);
+                const auto right = std::min(left + 1U, pcm.size() - 1U);
+                const double fraction = position - static_cast<double>(left);
+                adjusted.push_back(pcm[left] * (1.0 - fraction) + pcm[right] * fraction);
+            }
+            std::vector<std::vector<std::uint8_t>> recovered;
+            receive(config, adjusted, 743U, recovered, limits);
+            require(recovered == expected, "tracking changed A/B groups: id="
+                    + std::to_string(id) + " ratio=" + std::to_string(ratio)
+                    + " recovered=" + std::to_string(recovered.size()));
+        }
+    }
+}
+
+void testFrameTrackingNoiseFailClosedAB()
+{
+    for (unsigned seed : {0x12345678U, 0x9abcdef0U}) {
+        std::mt19937 generator(seed);
+        std::uniform_real_distribution<double> noise(-0.2, 0.2);
+        std::vector<double> samples(8U * kHamDrmPcmSamplesPerFrame);
+        for (auto& sample : samples) sample = noise(generator);
+        HamDrmWaveformConfig config;
+        HamDrmWaveformLimits limits;
+        limits.experimentalFrameTimingTracking = true;
+        limits.experimentalMultistagePacketRetry = true;
+        std::vector<std::vector<std::uint8_t>> recovered;
+        receive(config, samples, 743U, recovered, limits);
+        require(recovered.empty(), "frame tracking emitted data from noise");
+    }
+}
+
+void testAdaptiveEarlyTrackingWithFrequencyAB()
+{
+    for (unsigned id : {41U, 72U}) {
+        for (double offset : {-4.0, 4.0}) {
+            HamDrmWaveformConfig txConfig, rxConfig;
+            txConfig.interleaver = rxConfig.interleaver = HamDrmInterleaver::Long;
+            txConfig.carrierOffsetHz += offset;
+            std::vector<std::vector<std::uint8_t>> expected;
+            for (unsigned i = 0; i < 12U; ++i)
+                expected.push_back(makeMotGroup(id + i, 0x5050U + id));
+            const auto pcm = transmit(txConfig, expected);
+            for (double ratio : {0.999875, 1.0, 1.000125}) {
+                std::vector<double> adjusted;
+                const auto length = static_cast<std::size_t>(pcm.size() * ratio);
+                adjusted.reserve(length + 4800U);
+                for (std::size_t i = 0; i < length; ++i) {
+                    const double position = static_cast<double>(i) / ratio;
+                    const auto left = static_cast<std::size_t>(position);
+                    const auto right = std::min(left + 1U, pcm.size() - 1U);
+                    const double fraction = position - static_cast<double>(left);
+                    adjusted.push_back(pcm[left] * (1.0 - fraction) + pcm[right] * fraction);
+                }
+                adjusted.insert(adjusted.end(), 4800U, 0.0);
+                HamDrmWaveformLimits limits;
+                limits.experimentalAdaptiveEqualizer = true;
+                limits.experimentalFrequencySelective = true;
+                limits.experimentalFlatPacketFallback = true;
+                limits.experimentalMultistagePacketRetry = true;
+                limits.experimentalEarlyTiming = true;
+                limits.experimentalFrameTimingTracking = true;
+                std::vector<std::vector<std::uint8_t>> recovered;
+                receive(rxConfig, adjusted, 743U, recovered, limits);
+                require(recovered == expected, "adaptive early tracking with frequency/drift failed: id="
+                        + std::to_string(id) + " offset=" + std::to_string(offset)
+                        + " ratio=" + std::to_string(ratio)
+                        + " groups=" + std::to_string(recovered.size()));
+            }
+        }
+    }
+}
+
+void testFrameTrackingReacquisitionAB()
+{
+    for (unsigned seed : {0x12345678U, 0x9abcdef0U}) {
+        HamDrmWaveformConfig config;
+        config.interleaver = HamDrmInterleaver::Long;
+        const auto first = makeMotGroup(31U, static_cast<std::uint16_t>(seed));
+        const auto second = makeMotGroup(71U, static_cast<std::uint16_t>(seed));
+        auto stream = transmit(config, {first});
+        std::mt19937 generator(seed);
+        std::uniform_real_distribution<double> noise(-0.15, 0.15);
+        for (std::size_t i = 0; i < 8U * kHamDrmPcmSamplesPerFrame; ++i)
+            stream.push_back(noise(generator));
+        const auto subsequent = transmit(config, {second});
+        stream.insert(stream.end(), subsequent.begin(), subsequent.end());
+        HamDrmWaveformLimits limits;
+        limits.experimentalFrameTimingTracking = true;
+        limits.experimentalMultistagePacketRetry = true;
+        std::vector<std::vector<std::uint8_t>> recovered;
+        receive(config, stream, 743U, recovered, limits);
+        require(recovered == std::vector<std::vector<std::uint8_t>>({first, second}),
+                "frame tracking failed reacquisition after noise");
+    }
 }
 
 void testCorruptionDropAndFailClosed()
@@ -1082,7 +1491,9 @@ void testCancelResetAndBounds()
 
 int main()
 {
-    const std::array<std::pair<const char*, void (*)()>, 23U> tests {{
+    const std::array<std::pair<const char*, void (*)()>, 32U> tests {{
+        {"temporal varying channel A/B", testTemporalVaryingChannelAB},
+        {"temporal pilots all-pass A/B", testTemporalPilotAllpassAB},
         {"fractional delay chunking A/B", testFractionalDelayChunkingAB},
         {"packet framing", testPacketFraming},
         {"capacity and scheduling", testCapacityAndExactScheduling},
@@ -1093,6 +1504,9 @@ int main()
         {"QSSTV valid FAC superframes", testIndependentQsstvValidFac},
         {"QSSTV synthetic superframes", testIndependentQsstvSuperframesFailClosed},
         {"clean long loopback", testCleanLongInterleaverLoopback},
+        {"FAC interleaver acquisition", testFacInterleaverAcquisition},
+        {"interrupted interleaver change A/B", testInterruptedInterleaverChangeAB},
+        {"out-of-range frequency reacquisition A/B", testReacquireAfterOutOfRangeFrequencyAB},
         {"live acquisition after silence A/B", testLiveAcquisitionAfterSilence},
         {"partial frame reacquisition A/B", testReacquireAfterPartialFrame},
         {"live acquisition after noise A/B", testLiveAcquisitionAfterNoise},
@@ -1100,6 +1514,10 @@ int main()
         {"native profile matrix", testNativeProfileMatrixLoopback},
         {"multi-frame MOT object", testMultiFrameMotObjectGroups},
         {"CFO offset AWGN", testCfoOffsetAndAwgnLoopback},
+        {"frame timing tracking A/B", testFrameTimingTrackingAB},
+        {"frame tracking noise fail closed A/B", testFrameTrackingNoiseFailClosedAB},
+        {"adaptive early tracking frequency A/B", testAdaptiveEarlyTrackingWithFrequencyAB},
+        {"frame tracking reacquisition A/B", testFrameTrackingReacquisitionAB},
         {"corruption/drop fail closed", testCorruptionDropAndFailClosed},
         {"selective noise fail closed A/B", testSelectiveNoiseFailClosed},
         {"adaptive noise profile coverage A/B", testAdaptiveNoiseProfileCoverageAB},

@@ -4,6 +4,7 @@
 #ifdef DECODIUM_TEST_MAC_E2EE
 #include "src/security/MacKeychainBackend.h"
 #include "src/sstv/sharing/SstvShareSecureEnvelope.h"
+#include "src/sstv/sharing/SstvShareP256.h"
 #include "src/sstv/sharing/SstvLocalIntegrationShareProvider.h"
 #include <Security/Security.h>
 #include <QSettings>
@@ -12,6 +13,7 @@
 #include <QtTest/QtTest>
 
 #include <QFile>
+#include <QCryptographicHash>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQmlError>
@@ -140,14 +142,18 @@ private slots:
         QObject* inboxLocalId = child("sstvShareInboxLocalId");
         QObject* signUpload = child("sstvShareSignUpload");
         QObject* signingCreate = child("sstvShareCreateSigningIdentity");
+        QObject* signingRotate = child("sstvShareRotateSigningIdentity");
+        QObject* signingRotateDialog = child("sstvShareRotateSigningIdentityDialog");
         QObject* localId = child("sstvShareLocalId");
         QObject* senderId = child("sstvShareSenderId");
         QObject* senderKey = child("sstvShareSenderSigningKey");
         QObject* senderFingerprint = child("sstvShareSenderSigningFingerprint");
         QObject* senderConfirmed = child("sstvShareSenderFingerprintConfirmed");
         QObject* senderPin = child("sstvSharePinSenderSigningKey");
+        QObject* senderPrevious = child("sstvShareSenderPreviousFingerprint");
+        QObject* senderReplace = child("sstvShareReplaceSenderSigningKey");
         QVERIFY(senderPolicy && queueTabs && inboxIdentity && inboxCreate && inboxKey && inboxFingerprint && inboxLocalId);
-        QVERIFY(signUpload && signingCreate && localId && senderId && senderKey && senderFingerprint && senderConfirmed && senderPin);
+        QVERIFY(signUpload && signingCreate && signingRotate && signingRotateDialog && localId && senderId && senderKey && senderFingerprint && senderConfirmed && senderPin && senderPrevious && senderReplace);
         QVERIFY(!page->property("configurationExpanded").toBool());
         QVERIFY(!inboxIdentity->property("visible").toBool());
         queueTabs->setProperty("currentIndex", 1);
@@ -166,6 +172,27 @@ private slots:
         QCOMPARE(localId->property("text").toString(), QStringLiteral("station-local"));
         QVERIFY(QMetaObject::invokeMethod(signingCreate, "clicked"));
         QTRY_VERIFY_WITH_TIMEOUT(!page->property("signingPublicKey").toString().isEmpty(), 5000);
+        for (int index = 0; index < 2; ++index) {
+            const auto before = page->property("signingFingerprint").toString();
+            QVERIFY(signingRotate->property("enabled").toBool());
+            QVERIFY(QMetaObject::invokeMethod(signingRotate, "clicked"));
+            QTRY_VERIFY(signingRotateDialog->property("visible").toBool());
+            if (index == 0) {
+                QVERIFY(QMetaObject::invokeMethod(signingRotateDialog, "reject"));
+                QCOMPARE(page->property("signingFingerprint").toString(), before);
+                QVERIFY(QMetaObject::invokeMethod(signingRotate, "clicked"));
+            }
+            operations.clear();
+            QVERIFY(QMetaObject::invokeMethod(signingRotateDialog, "accept"));
+            QTRY_VERIFY_WITH_TIMEOUT(page->property("signingFingerprint").toString() != before, 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(!operations.isEmpty(), 5000);
+            QCOMPARE(operations.last().at(0).toString(), QStringLiteral("signing-rotate"));
+            QVERIFY(operations.last().at(1).toBool());
+            SstvShareKeyStore loaded(backend, QStringLiteral("STATION-LOCAL"));
+            const auto currentSigning = loaded.createOrLoadSigningPublicKey();
+            QVERIFY(currentSigning.ok());
+            QCOMPARE(sstvShareP256Fingerprint(*currentSigning.key), page->property("signingFingerprint").toString());
+        }
         senderId->setProperty("text", QStringLiteral("station-local"));
         senderKey->setProperty("text", page->property("signingPublicKey"));
         senderFingerprint->setProperty("text", page->property("signingFingerprint"));
@@ -174,8 +201,87 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(senderPin, "clicked"));
         QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
         QVERIFY(operations.last().at(1).toBool());
+        QTRY_VERIFY(!senderConfirmed->property("checked").toBool());
+        const auto senderService = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(QByteArrayLiteral("STATION-LOCAL"), QCryptographicHash::Sha256).toHex());
+        const auto senderAccount = QStringLiteral("sender-p256-")
+            + QString::fromLatin1(QCryptographicHash::hash(QByteArray("local-integration\0station-local", 31), QCryptographicHash::Sha256).toHex());
+        const auto originalSender = backend.lookup(senderService, senderAccount);
+        QVERIFY(originalSender.found);
+        QVERIFY(backend.remove(senderService, senderAccount));
+        QVERIFY(backend.store(senderService, senderAccount, QString::fromLatin1(QByteArray(91, '\0').toBase64())));
+        senderConfirmed->setProperty("checked", true);
+        operations.clear();
+        QVERIFY(QMetaObject::invokeMethod(senderPin, "clicked"));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QVERIFY(!operations.last().at(1).toBool());
+        QCOMPARE(operations.last().at(2).toString(), QStringLiteral("Stored sender key is corrupt"));
+        QTRY_COMPARE(page->property("noticeText").toString(), QStringLiteral("Stored sender key is corrupt"));
+        QVERIFY(page->property("noticeError").toBool());
+        QObject* notice = child("sstvShareOperationNotice");
+        QVERIFY(notice);
+        QCOMPARE(notice->property("text").toString(), QStringLiteral("Stored sender key is corrupt"));
+        QVERIFY(notice->property("visible").toBool());
+        auto* noticeItem = qobject_cast<QQuickItem*>(notice);
+        QVERIFY(noticeItem);
+        QObject* scroll = child("sstvShareScroll");
+        QVERIFY(scroll);
+        QObject* flickable = scroll->property("contentItem").value<QObject*>();
+        QVERIFY(flickable);
+        for (const QSize size : {QSize(1040, 900), QSize(800, 500)}) {
+            window.resize(size);
+            item->setSize(size);
+            QTRY_VERIFY(noticeItem->width() > 0);
+            for (const int offset : {0, 400}) {
+                QVERIFY(flickable->setProperty("contentY", offset));
+                QCoreApplication::processEvents();
+                const auto bounds = noticeItem->mapRectToItem(item, noticeItem->boundingRect());
+                QVERIFY(bounds.top() >= 0 && bounds.bottom() <= item->height());
+                QVERIFY(bounds.left() >= 0 && bounds.right() <= item->width());
+            }
+        }
+        window.resize(1040, 900);
+        item->setSize(QSizeF(1040, 900));
+        QVERIFY(backend.remove(senderService, senderAccount));
+        QVERIFY(backend.store(senderService, senderAccount, originalSender.value));
+        QString prior = page->property("signingFingerprint").toString();
+        const auto unconfirmedKey = sstvShareGenerateP256KeyPair();
+        QVERIFY(unconfirmedKey);
+        operations.clear();
+        QVERIFY(controller.replaceSenderSigningIdentity("station-local", prior,
+            QString::fromLatin1(unconfirmedKey->publicDer.toHex()), sstvShareP256Fingerprint(unconfirmedKey->publicDer), false));
+        QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sender-signing-replace"));
+        QVERIFY(!operations.last().at(1).toBool());
+        QCOMPARE(backend.lookup(senderService, senderAccount).value, originalSender.value);
+        for (int index = 0; index < 2; ++index) {
+            const auto replacement = sstvShareGenerateP256KeyPair();
+            QVERIFY(replacement);
+            const auto next = sstvShareP256Fingerprint(replacement->publicDer);
+            senderPrevious->setProperty("text", prior);
+            senderKey->setProperty("text", QString::fromLatin1(replacement->publicDer.toHex()));
+            senderFingerprint->setProperty("text", next);
+            QTRY_VERIFY(!senderConfirmed->property("checked").toBool());
+            QVERIFY(!senderReplace->property("enabled").toBool());
+            senderConfirmed->setProperty("checked", true);
+            QTRY_VERIFY(senderReplace->property("enabled").toBool());
+            operations.clear();
+            QVERIFY(QMetaObject::invokeMethod(senderReplace, "clicked"));
+            QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+            QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sender-signing-replace"));
+            QVERIFY(operations.last().at(1).toBool());
+            QTRY_VERIFY(!senderConfirmed->property("checked").toBool());
+            SstvShareKeyStore pinned(backend, QStringLiteral("STATION-LOCAL"));
+            QCOMPARE(pinned.pinnedSenderSigningKey("local-integration", "station-local").key,
+                     std::optional<QByteArray>{replacement->publicDer});
+            prior = next;
+        }
+        operations.clear();
         QVERIFY(QMetaObject::invokeMethod(create, "clicked"));
-        QTRY_VERIFY_WITH_TIMEOUT(!page->property("sharingPublicKey").toString().isEmpty(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!operations.isEmpty(), 5000);
+        QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-identity"));
+        QVERIFY(operations.last().at(1).toBool());
+        QVERIFY(!page->property("sharingPublicKey").toString().isEmpty());
         recipient->setProperty("text", QStringLiteral("station-local"));
         key->setProperty("text", page->property("sharingPublicKey"));
         fingerprint->setProperty("text", page->property("sharingFingerprint"));
@@ -185,6 +291,88 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
         QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-pin"));
         QVERIFY(operations.last().at(1).toBool());
+        const auto service = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(QByteArrayLiteral("STATION-LOCAL"), QCryptographicHash::Sha256).toHex());
+        const auto account = QStringLiteral("peer-")
+            + QString::fromLatin1(QCryptographicHash::hash(QByteArray("local-integration\0station-local", 31), QCryptographicHash::Sha256).toHex());
+        const auto originalPin = backend.lookup(service, account);
+        QVERIFY(originalPin.found);
+        int corruptCase = 0;
+        for (const auto& bad : {QByteArray(32, '\0'), QByteArray::fromHex("0100000000000000000000000000000000000000000000000000000000000000")}) {
+            QVERIFY(backend.remove(service, account));
+            QVERIFY(backend.store(service, account, QString::fromLatin1(bad.toBase64())));
+            verified->setProperty("checked", true);
+            operations.clear();
+            QVERIFY(QMetaObject::invokeMethod(pin, "clicked"));
+            QTRY_VERIFY_WITH_TIMEOUT(operations.count() >= 1, 5000);
+            QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-pin"));
+            QVERIFY(!operations.last().at(1).toBool());
+            QCOMPARE(operations.last().at(2).toString(), QStringLiteral("Stored recipient key is corrupt"));
+            QTRY_COMPARE(page->property("noticeText").toString(), QStringLiteral("Stored recipient key is corrupt"));
+            QVERIFY(page->property("noticeError").toBool());
+            QCOMPARE(notice->property("text").toString(), QStringLiteral("Stored recipient key is corrupt"));
+            QVERIFY(notice->property("visible").toBool());
+            const auto screenshotDir = qEnvironmentVariable("DECODIUM_SHARE_NOTICE_SCREENSHOT_DIR");
+            if (!screenshotDir.isEmpty()) {
+                QTest::qWait(100);
+                const auto rendered = window.grabWindow();
+                QVERIFY(!rendered.isNull());
+                QVERIFY(rendered.save(screenshotDir + QStringLiteral("/recipient-%1.png").arg(corruptCase)));
+            }
+            ++corruptCase;
+            QCOMPARE(backend.lookup(service, account).value, QString::fromLatin1(bad.toBase64()));
+            QVERIFY(backend.remove(service, account));
+            QVERIFY(backend.store(service, account, originalPin.value));
+        }
+        QObject* rotate = child("sstvShareRotateIdentity");
+        QObject* rotateDialog = child("sstvShareRotateIdentityDialog");
+        QObject* previousFingerprint = child("sstvSharePreviousPeerFingerprint");
+        QObject* replace = child("sstvShareReplaceRecipient");
+        QVERIFY(rotate && rotateDialog && previousFingerprint && replace);
+        for (int i = 0; i < 2; ++i) {
+            const auto oldFingerprint = page->property("sharingFingerprint").toString();
+            QVERIFY(rotate->property("enabled").toBool());
+            QVERIFY(QMetaObject::invokeMethod(rotate, "clicked"));
+            QTRY_VERIFY(rotateDialog->property("visible").toBool());
+            if (i == 0) {
+                QVERIFY(QMetaObject::invokeMethod(rotateDialog, "reject"));
+                QCOMPARE(page->property("sharingFingerprint").toString(), oldFingerprint);
+                QVERIFY(QMetaObject::invokeMethod(rotate, "clicked"));
+            }
+            operations.clear();
+            QVERIFY(QMetaObject::invokeMethod(rotateDialog, "accept"));
+            QTRY_VERIFY_WITH_TIMEOUT(page->property("sharingFingerprint").toString() != oldFingerprint, 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(!operations.isEmpty(), 5000);
+            QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-rotate"));
+            QVERIFY(operations.last().at(1).toBool());
+            key->setProperty("text", page->property("sharingPublicKey"));
+            fingerprint->setProperty("text", page->property("sharingFingerprint"));
+            previousFingerprint->setProperty("text", oldFingerprint);
+            QVERIFY(!replace->property("enabled").toBool());
+            verified->setProperty("checked", true);
+            QVERIFY(replace->property("enabled").toBool());
+            const QString newKey = key->property("text").toString();
+            const QString newFingerprint = fingerprint->property("text").toString();
+            const auto requireReconfirmation = [&](QObject* field, const QString& altered, const QString& original) {
+                field->setProperty("text", altered);
+                QVERIFY(!verified->property("checked").toBool());
+                QVERIFY(!replace->property("enabled").toBool());
+                field->setProperty("text", original);
+                verified->setProperty("checked", true);
+                QVERIFY(replace->property("enabled").toBool());
+            };
+            requireReconfirmation(recipient, QStringLiteral("station-other"), QStringLiteral("station-local"));
+            requireReconfirmation(key, QString(64, 'a'), newKey);
+            requireReconfirmation(fingerprint, QString(64, 'b'), newFingerprint);
+            requireReconfirmation(previousFingerprint, QString(64, 'c'), oldFingerprint);
+            operations.clear();
+            QVERIFY(QMetaObject::invokeMethod(replace, "clicked"));
+            QTRY_VERIFY_WITH_TIMEOUT(!operations.isEmpty(), 5000);
+            QCOMPARE(operations.last().at(0).toString(), QStringLiteral("sharing-replace-pin"));
+            QVERIFY(operations.last().at(1).toBool());
+            QTRY_VERIFY(!verified->property("checked").toBool());
+            QVERIFY(!replace->property("enabled").toBool());
+        }
         const QString imagePath = storage.filePath(QStringLiteral("image.png"));
         QImage image(32, 24, QImage::Format_RGB32); image.fill(Qt::red);
         QVERIFY(image.save(imagePath));

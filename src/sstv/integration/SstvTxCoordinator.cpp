@@ -1165,10 +1165,9 @@ SstvTxBuiltSource SstvTxSourceBuilder::build(
         encoder.clockErrorPpm = config.clockErrorPpm;
         encoder.level = config.level;
         encoder.headroom = config.headroom;
-        // Keep the final AVT-QRM component stable before a VOX hang tone or
+        // Keep the final AVT component stable before a VOX hang tone or
         // FSK ID starts, so the RX filter can finish measuring that pixel.
-        if (SstvAvtSyncCodec::isQrm(encoder.variant))
-            encoder.terminalHoldMs = 10U;
+        encoder.terminalHoldMs = 10U;
         image = makeAvtPcm16Source(pixels, encoder);
     } else if (const std::optional<SstvMmsstvMode> mode =
                    builderMmsstvMode(config.mode);

@@ -54,6 +54,10 @@ public:
                 {QStringLiteral("droppedChunks"), 0},
                 {QStringLiteral("discontinuities"), 0},
                 {QStringLiteral("revision"), 3},
+                {QStringLiteral("imageComplete"), true},
+                {QStringLiteral("imageMode"), QStringLiteral("hffax-experimental")},
+                {QStringLiteral("imageLinesPublished"), 120},
+                {QStringLiteral("imageRadiofaxClockProvisional"), m_provisionalClock},
                 {QStringLiteral("replayRetainedSamples"), 24'000},
                 {QStringLiteral("replayCapacitySamples"), 120'000},
                 {QStringLiteral("afcCorrectionHz"), 7.0},
@@ -69,6 +73,7 @@ public:
                 }}};
     }
     QVariantMap sstvRxControls() const { return m_controls; }
+    void setProvisionalClock(bool value) { m_provisionalClock = value; Q_EMIT rxChanged(); }
     QVariantList sstvRxModeChoices() const
     {
         return {
@@ -152,6 +157,20 @@ public:
         Q_EMIT rxChanged();
         return true;
     }
+    Q_INVOKABLE bool configureSstvRadiofaxRxAdvanced(bool enabled, int ioc, int width, int height,
+                                                       bool centered, bool dead, bool timed)
+    {
+        if (m_rxActive || m_replayActive || (centered && (timed || dead))) return false;
+        m_controls.insert(QStringLiteral("radiofaxEnabled"), enabled);
+        m_controls.insert(QStringLiteral("radiofaxIoc"), ioc);
+        m_controls.insert(QStringLiteral("radiofaxWidth"), width);
+        m_controls.insert(QStringLiteral("radiofaxHeight"), height);
+        m_controls.insert(QStringLiteral("radiofaxCenteredPhasing"), centered);
+        m_controls.insert(QStringLiteral("radiofaxWmoDeadSector"), dead);
+        m_controls.insert(QStringLiteral("radiofaxWmoTimedPhasing"), timed);
+        Q_EMIT rxChanged();
+        return true;
+    }
     Q_INVOKABLE bool configureSstvFax480Rx(bool enabled, const QString& profile)
     {
         if (m_rxActive || m_replayActive) return false;
@@ -188,6 +207,7 @@ public:
         return true;
     }
     Q_INVOKABLE bool saveSstvRxRawAudio() { ++rawSaveCount; return true; }
+    Q_INVOKABLE bool saveSstvRecentRxAudio() { ++recentSaveCount; return true; }
     Q_INVOKABLE void cancelSstvRxAudioJob() { m_audioBusy = false; Q_EMIT audioJobChanged(); }
     Q_INVOKABLE bool startSstvWavReplay(const QUrl&)
     {
@@ -208,6 +228,7 @@ public:
     int slantResetCount {0};
     int redecodeCount {0};
     int rawSaveCount {0};
+    int recentSaveCount {0};
     QString m_rawAudioPath;
     QString m_audioError;
 
@@ -218,6 +239,7 @@ Q_SIGNALS:
     void audioJobChanged();
 
 private:
+    bool m_provisionalClock {false};
     bool m_rxActive {true};
     bool m_replayActive {false};
     double m_progress {0.0};
@@ -283,6 +305,14 @@ private slots:
         QVERIFY2(object, qPrintable(qmlErrors(component.errors())));
         auto* page = qobject_cast<QQuickItem*>(object.data());
         QVERIFY(page);
+        auto* timing = page->findChild<QObject*>(QStringLiteral("sstvImageProgressLabel"));
+        QVERIFY(timing);
+        QVERIFY(timing->property("text").toString().contains(QStringLiteral("Complete")));
+        fixture.setProvisionalClock(true);
+        QTRY_VERIFY(timing->property("text").toString().contains(QStringLiteral("provisional timing")));
+        QCOMPARE(timing->property("color").value<QColor>(), page->property("warningColor").value<QColor>());
+        fixture.setProvisionalClock(false);
+        QTRY_VERIFY(timing->property("text").toString().contains(QStringLiteral("Complete")));
 
         // Regression #86: receive action buttons must not inherit a textured
         // platform/Material background that only becomes valid after hover.
@@ -323,6 +353,8 @@ private slots:
             QStringLiteral("sstvRxRedecodeRecent"));
         QObject* saveRaw = page->findChild<QObject*>(
             QStringLiteral("sstvRxSaveRawAudio"));
+        QObject* saveRecent = page->findChild<QObject*>(
+            QStringLiteral("sstvRxSaveRecentAudio"));
         QObject* imageFit = page->findChild<QObject*>(
             QStringLiteral("sstvRxImageFit"));
         QObject* imagePixel = page->findChild<QObject*>(
@@ -345,6 +377,7 @@ private slots:
         QVERIFY(slantReset);
         QVERIFY(redecode);
         QVERIFY(saveRaw);
+        QVERIFY(saveRecent);
         QVERIFY(imageFit);
         QVERIFY(imagePixel);
         QVERIFY(imageZoom);
@@ -388,6 +421,14 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(faxApply, "clicked"));
         QVERIFY(fixture.sstvRxControls().value(QStringLiteral("radiofaxWmoDeadSector")).toBool());
         QVERIFY(!fixture.sstvRxControls().value(QStringLiteral("radiofaxCenteredPhasing")).toBool());
+        auto* faxTimed = page->findChild<QObject*>(QStringLiteral("sstvRadiofaxWmoTimedPhasing"));
+        QVERIFY(faxTimed);
+        QVERIFY(faxTimed->setProperty("checked", true));
+        QVERIFY(QMetaObject::invokeMethod(faxApply, "clicked"));
+        QVERIFY(fixture.sstvRxControls().value(QStringLiteral("radiofaxWmoTimedPhasing")).toBool());
+        QVERIFY(fixture.sstvRxControls().value(QStringLiteral("radiofaxWmoDeadSector")).toBool());
+        QVERIFY(faxAlignment->setProperty("checked", true));
+        QVERIFY(!faxTimed->property("checked").toBool());
         auto* fax480Enabled=page->findChild<QObject*>(QStringLiteral("sstvFax480RxEnabled"));
         auto* fax480Profile=page->findChild<QObject*>(QStringLiteral("sstvFax480RxProfile"));
         auto* fax480Apply=page->findChild<QObject*>(QStringLiteral("sstvFax480RxApply"));
@@ -419,11 +460,13 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(slantReset, "clicked"));
         QVERIFY(QMetaObject::invokeMethod(redecode, "clicked"));
         QVERIFY(QMetaObject::invokeMethod(saveRaw, "clicked"));
+        QVERIFY(QMetaObject::invokeMethod(saveRecent, "clicked"));
         QCOMPARE(fixture.abortCount, 1);
         QCOMPARE(fixture.afcResetCount, 1);
         QCOMPARE(fixture.slantResetCount, 1);
         QCOMPARE(fixture.redecodeCount, 1);
         QCOMPARE(fixture.rawSaveCount, 1);
+        QCOMPARE(fixture.recentSaveCount, 1);
         QObject* audioResult = page->findChild<QObject*>(
             QStringLiteral("sstvRxAudioResult"));
         QVERIFY(audioResult);

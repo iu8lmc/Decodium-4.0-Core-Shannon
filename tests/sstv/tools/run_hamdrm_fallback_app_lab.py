@@ -32,6 +32,7 @@ def main():
                     'DECODIUM_LAB_EXPECT_FALLBACK_GROUPS'):
             env.pop(key, None)
         env.update(DECODIUM_LAB_HAMDRM_SELECTIVE='1', DECODIUM_HAMDRM_RX_TRACE='1',
+                   DECODIUM_LAB_HAMDRM_DISABLE_MULTISTAGE='1',
                    DECODIUM_HAMDRM_LAB_PROFILE=f'hamdrm-A-2500-normal-16-QAM-{depth}',
                    DECODIUM_HAMDRM_LAB_DURATION_MS='30000' if depth == 'short' else '35000')
         if enabled:
@@ -54,7 +55,8 @@ def main():
             rxlog = (Path(match.group(1)) / 'rx.log').read_text(errors='replace')
             rows = [json.loads(line.split(' RX diagnostics ', 1)[1]) for line in rxlog.splitlines()
                     if '[LAB][SSTV] RX diagnostics ' in line]
-            if (not rows or max(row.get('hamdrmDeliveredGroups', 0) for row in rows) != 0
+            if ('[LAB][HAMDRM] multistage packet retry disabled for comparison' not in rxlog
+                or not rows or max(row.get('hamdrmDeliveredGroups', 0) for row in rows) != 0
                 or 'HAMDRM channel CRC16 mismatch' not in rxlog):
                 raise RuntimeError('disabled control failed for a different reason; artifacts ' + str(root))
             print('PASS disabled control; artifacts', match.group(1), flush=True)

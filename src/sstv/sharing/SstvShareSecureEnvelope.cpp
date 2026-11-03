@@ -20,6 +20,23 @@ std::optional<QByteArray> signedManifestBytes(const SstvShareManifestV1& manifes
     return QByteArrayLiteral("Decodium-SSTV-sender-signature-v1\0") + canonical;
 }
 }
+std::optional<bool> sstvShareCheckStoredSender(const SstvShareKeyStore& keys,
+                                              const SstvShareManifestV1& manifest)
+{
+    const auto sender = keys.pinnedSenderSigningKey(manifest.providerId, manifest.senderId);
+    if (!sender.ok()) return std::nullopt;
+    const auto message = signedManifestBytes(manifest);
+    const auto signature = QByteArray::fromBase64(
+        manifest.encryption.senderSignatureBase64.toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
+    return message
+        && sstvShareP256Fingerprint(*sender.key) == manifest.encryption.senderKeyFingerprint
+        && sstvShareP256Verify(*sender.key, *message, signature);
+}
+bool sstvShareVerifyStoredSender(const SstvShareKeyStore& keys,
+                                 const SstvShareManifestV1& manifest)
+{
+    return sstvShareCheckStoredSender(keys, manifest).value_or(false);
+}
 std::function<std::optional<QByteArray>(const SstvShareManifestV1&, const QByteArray&)>
 sstvShareMakeStoredEnvelopeOpener(std::shared_ptr<const secure_settings::Backend> backend,
                                  QString profile, QString expectedProvider,
@@ -82,15 +99,8 @@ std::optional<QByteArray> sstvShareOpenStoredEnvelope(
         return std::nullopt;
     const bool hasSenderAuthentication = !manifest.encryption.senderAuthAlgorithm.isEmpty();
     if (requireSenderAuthentication && !hasSenderAuthentication) return std::nullopt;
-    if (hasSenderAuthentication) {
-        const auto sender = keys.pinnedSenderSigningKey(manifest.providerId, manifest.senderId);
-        const auto message = signedManifestBytes(manifest);
-        const QByteArray signature = QByteArray::fromBase64(
-            manifest.encryption.senderSignatureBase64.toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
-        if (!sender.ok() || !message || sstvShareP256Fingerprint(*sender.key) != manifest.encryption.senderKeyFingerprint
-            || !sstvShareP256Verify(*sender.key, *message, signature)) return std::nullopt;
-    }
-    auto identity = keys.loadPrivateKey();
+    if (hasSenderAuthentication && !sstvShareVerifyStoredSender(keys, manifest)) return std::nullopt;
+    auto identity = keys.loadPrivateKeyForFingerprint(manifest.encryption.recipientKeyFingerprint);
     if (!identity.ok()) return std::nullopt;
     auto plaintext = sstvShareDecryptForRecipient(manifest, *identity.key, payload);
     OPENSSL_cleanse(identity.key->data(), size_t(identity.key->size()));

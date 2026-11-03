@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from sstv_lab_rx_diagnostics import clean_hamdrm_rx_diagnostics
 
 
 class Info(c.Structure):
@@ -40,8 +41,14 @@ def main():
         raise SystemExit('invalid echo gain')
     noise_amplitude = float(os.environ.get('DECODIUM_LAB_NOISE_AMPLITUDE', '0'))
     tone_amplitude = float(os.environ.get('DECODIUM_LAB_TONE_AMPLITUDE', '0'))
+    varying_rate = float(os.environ.get('DECODIUM_LAB_VARYING_RATE_HZ', '0'))
+    allpass_q = float(os.environ.get('DECODIUM_LAB_ALLPASS_Q', '0'))
+    clock_ppm = float(os.environ.get('DECODIUM_LAB_CLOCK_PPM', '0'))
     if (not math.isfinite(noise_amplitude) or not 0 <= noise_amplitude <= 0.1
-        or not math.isfinite(tone_amplitude) or not 0 <= tone_amplitude <= 0.1):
+        or not math.isfinite(tone_amplitude) or not 0 <= tone_amplitude <= 0.1
+        or not math.isfinite(varying_rate) or not 0 <= varying_rate <= 2
+        or not math.isfinite(allpass_q) or not (allpass_q == 0 or 0.25 <= allpass_q <= 4)
+        or not math.isfinite(clock_ppm) or abs(clock_ppm) > 500):
         raise SystemExit('invalid noise or tone amplitude')
     selection = sys.argv[4] if len(sys.argv) == 5 else 'fallback'
     fallback_enabled = selection == 'fallback'
@@ -80,12 +87,22 @@ def main():
             delayed = [0.0] * 96
             position = 0
             noise_state, sample_index = 0x67901a2b, 0
+            clock_buffer = [0.0] * (2 * 2400)
+            clock_position = 0.0
+            clock_ratio = 1.0 + clock_ppm / 1_000_000.0
+            allpass_state = [[0.0, 0.0, 0.0, 0.0] for _ in range(2)]
+            if allpass_q:
+                omega = 2.0 * math.pi * 1500.0 / 48000.0
+                alpha = math.sin(omega) / (2.0 * allpass_q)
+                a0, a1, a2 = 1.0 + alpha, -2.0 * math.cos(omega), 1.0 - alpha
             try:
                 capture = (root / 'relay.f32').open('xb') if os.environ.get('DECODIUM_LAB_ECHO_CAPTURE') == '1' else None
                 try:
                     while not stop.is_set():
                         if pa.Pa_ReadStream(input_stream, source, 480):
                             errors.append('input overflow or failure'); break
+                        if clock_ppm:
+                            clock_buffer.extend(source)
                         for frame in range(480):
                             active = False
                             noise_state = (noise_state * 1664525 + 1013904223) & 0xffffffff
@@ -93,19 +110,43 @@ def main():
                             tone = tone_amplitude * math.sin(2.0 * math.pi * 1700.0 * sample_index / 48000.0)
                             sample_index += 1
                             for channel in (0, 1):
-                                value = float(source[2*frame+channel])
+                                if clock_ppm:
+                                    left = int(clock_position)
+                                    if 2 * (left + 1) + channel >= len(clock_buffer):
+                                        errors.append('clock relay buffer underrun'); return
+                                    fraction = clock_position - left
+                                    value = ((1.0 - fraction) * clock_buffer[2*left+channel]
+                                             + fraction * clock_buffer[2*(left+1)+channel])
+                                else:
+                                    value = float(source[2*frame+channel])
                                 if not math.isfinite(value):
                                     errors.append('non-finite input'); return
                                 active |= abs(value) > 0.005
                                 slot = 2*position+channel
-                                mixed = 0.5 * (value + echo * delayed[slot]) + noise + tone
+                                if varying_rate:
+                                    phase = 2.0 * math.pi * varying_rate * (sample_index - 1) / 48000.0
+                                    mixed = ((0.65 + 0.25 * math.sin(phase)) * value
+                                             + echo * math.cos(phase) * delayed[slot] + noise + tone)
+                                else:
+                                    mixed = 0.5 * (value + echo * delayed[slot]) + noise + tone
                                 delayed[slot] = value
+                                if allpass_q:
+                                    x1, x2, y1, y2 = allpass_state[channel]
+                                    filtered = (a2 * mixed + a1 * x1 + a0 * x2 - a1 * y1 - a2 * y2) / a0
+                                    allpass_state[channel] = [mixed, x1, filtered, y1]
+                                    mixed = filtered
                                 if abs(mixed) > 1.0:
                                     errors.append('clipped relay'); return
                                 stats['peak'] = max(stats['peak'], abs(mixed))
                                 output[2*frame+channel] = mixed
                             stats['active_frames'] += active
                             position = (position + 1) % 48
+                            if clock_ppm:
+                                clock_position += clock_ratio
+                        if clock_ppm:
+                            consumed = int(clock_position)
+                            del clock_buffer[:2*consumed]
+                            clock_position -= consumed
                         if pa.Pa_WriteStream(output_stream, output, 480):
                             errors.append('output underflow or failure'); break
                         if capture: capture.write(bytes(output))
@@ -136,10 +177,27 @@ def main():
         (root / 'two-app.log').write_text(run.stdout + run.stderr)
         stop.set(); worker.join(timeout=5)
         if worker.is_alive(): raise RuntimeError('audio relay did not stop; artifacts ' + str(root))
-        (root / 'relay.txt').write_text(repr({'echo_gain': echo, 'noise_amplitude': noise_amplitude,
+        (root / 'relay.txt').write_text(repr({'echo_gain': echo, 'allpass_q': allpass_q, 'varying_rate_hz': varying_rate, 'clock_ppm': clock_ppm, 'noise_amplitude': noise_amplitude,
                                                'tone_amplitude': tone_amplitude, **stats, 'errors': errors}))
         if errors or stats['active_frames'] < 4800:
             raise RuntimeError('relay failed or carried too little audio: ' + repr(errors) + '; artifacts ' + str(root))
+        if os.environ.get('DECODIUM_LAB_EXPECT_FLAT_NO_GROUPS') == '1':
+            if selection != 'flat' or env.get('DECODIUM_LAB_HAMDRM_TEMPORAL_PILOTS') == '1':
+                raise RuntimeError('flat no-groups control requires the ordinary receiver')
+            match = re.search(r'^RuntimeError: HAMDRM RX did not complete; artifacts (\S+)$',
+                              run.stderr, re.MULTILINE)
+            if run.returncode == 0 or not match:
+                raise RuntimeError('flat receiver did not fail as expected; artifacts ' + str(root))
+            app_root = Path(match.group(1))
+            rxlog = (app_root / 'rx.log').read_text(errors='replace')
+            txlog = (app_root / 'tx.log').read_text(errors='replace')
+            groups = [int(n) for n in re.findall(r'\[HAMDRM RX trace\][^\n]*\bgroups\s+(\d+)', rxlog)]
+            if ('[LAB][HAMDRM] TX state "Completed"' not in txlog or (app_root / 'received.jpg').exists()
+                or not groups or max(groups) != 0 or not clean_hamdrm_rx_diagnostics(rxlog)):
+                raise RuntimeError('flat receiver control failed for another reason; artifacts ' + str(root))
+            print('PASS expected flat no-groups control', variant, 'app artifacts', app_root,
+                  'relay artifacts', root, flush=True)
+            return
         if selection == 'off':
             match = re.search(r'^RuntimeError: HAMDRM RX did not complete; artifacts (\S+)$',
                               run.stderr, re.MULTILINE)

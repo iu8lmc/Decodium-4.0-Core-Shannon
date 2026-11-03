@@ -12,8 +12,10 @@ SstvPage {
     property bool configurationExpanded: false
     property string sharingPublicKey: ""
     property string sharingFingerprint: ""
+    property string pendingRotationFingerprint: ""
     property string signingPublicKey: ""
     property string signingFingerprint: ""
+    property string pendingSigningRotationFingerprint: ""
     property string noticeText: ""
     property bool noticeError: false
     property url selectedUpload: ""
@@ -167,6 +169,10 @@ SstvPage {
         }
 
         function onOperationFinished(operation, ok, message) {
+            if (ok && (operation === "sharing-pin" || operation === "sharing-replace-pin"))
+                fingerprintConfirmed.checked = false
+            if (ok && (operation === "sender-signing-pin" || operation === "sender-signing-replace"))
+                senderFingerprintConfirmed.checked = false
             root.showNotice(message, !ok)
         }
     }
@@ -200,6 +206,50 @@ SstvPage {
                 root.showNotice(qsTr("Save As could not be queued."), true)
         }
         onRejected: root.pendingSaveTransferId = ""
+    }
+
+    Dialog {
+        id: rotateSigningIdentityDialog
+        objectName: "sstvShareRotateSigningIdentityDialog"
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Rotate your signing key?")
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        Label {
+            width: Math.min(520, root.width - 80)
+            wrapMode: Text.WordWrap
+            color: root.primaryTextColor
+            text: qsTr("Recipients must independently verify your new signing fingerprint and update their saved sender key. Messages signed with the old key may no longer authenticate after they update it. Previous private keys remain in secure storage.")
+        }
+        onAccepted: {
+            if (root.sharing && root.pendingSigningRotationFingerprint.length === 64
+                    && !root.sharing.rotateSigningIdentity(root.pendingSigningRotationFingerprint))
+                root.showNotice(qsTr("Signing key rotation could not be queued."), true)
+            root.pendingSigningRotationFingerprint = ""
+        }
+        onRejected: root.pendingSigningRotationFingerprint = ""
+    }
+
+    Dialog {
+        id: rotateIdentityDialog
+        objectName: "sstvShareRotateIdentityDialog"
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Rotate your recipient key?")
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        Label {
+            width: Math.min(520, root.width - 80)
+            wrapMode: Text.WordWrap
+            color: root.primaryTextColor
+            text: qsTr("Your previous key remains available for older messages. Share the new public key and compare its fingerprint with your correspondents through a trusted channel.")
+        }
+        onAccepted: {
+            if (root.sharing && root.pendingRotationFingerprint.length === 64
+                    && !root.sharing.rotateSharingIdentity(root.pendingRotationFingerprint))
+                root.showNotice(qsTr("Key rotation could not be queued."), true)
+            root.pendingRotationFingerprint = ""
+        }
+        onRejected: root.pendingRotationFingerprint = ""
     }
 
     Dialog {
@@ -705,7 +755,11 @@ SstvPage {
     }
 
     ScrollView {
-        anchors.fill: parent
+        objectName: "sstvShareScroll"
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: noticeBar.visible ? noticeBar.top : parent.bottom
         clip: true
 
         ColumnLayout {
@@ -1122,6 +1176,15 @@ SstvPage {
                             text: root.sharingFingerprint
                             placeholderText: qsTr("Your fingerprint")
                         }
+                        Button {
+                            objectName: "sstvShareRotateIdentity"
+                            text: qsTr("Rotate my recipient key")
+                            enabled: root.sharing && root.sharing.encryptedSharingAvailable && root.sharingFingerprint.length === 64
+                            onClicked: {
+                                root.pendingRotationFingerprint = root.sharingFingerprint
+                                rotateIdentityDialog.open()
+                            }
+                        }
                         TextField {
                             id: peerPublicKey
                             objectName: "sstvSharePeerPublicKey"
@@ -1151,6 +1214,24 @@ SstvPage {
                             enabled: fingerprintConfirmed.checked && recipient.text.trim().length > 0
                             onClicked: root.sharing.pinSharingRecipient(recipient.text, peerPublicKey.text,
                                                                       peerFingerprint.text, fingerprintConfirmed.checked)
+                        }
+                        TextField {
+                            id: previousPeerFingerprint
+                            objectName: "sstvSharePreviousPeerFingerprint"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Previously verified recipient fingerprint")
+                            maximumLength: 64
+                            onTextChanged: fingerprintConfirmed.checked = false
+                        }
+                        Button {
+                            objectName: "sstvShareReplaceRecipient"
+                            text: qsTr("Replace recipient key with verified key")
+                            enabled: root.sharing && root.sharing.encryptedSharingAvailable
+                                     && fingerprintConfirmed.checked && recipient.text.trim().length > 0
+                                     && previousPeerFingerprint.text.trim().length === 64
+                            onClicked: root.sharing.replaceSharingRecipient(recipient.text, previousPeerFingerprint.text,
+                                                                           peerPublicKey.text, peerFingerprint.text,
+                                                                           fingerprintConfirmed.checked)
                         }
                     }
                     CheckBox {
@@ -1184,6 +1265,15 @@ SstvPage {
                             objectName: "sstvShareCreateSigningIdentity"
                             text: qsTr("Create or show my signing key")
                             onClicked: root.sharing.createSigningIdentity()
+                        }
+                        Button {
+                            objectName: "sstvShareRotateSigningIdentity"
+                            text: qsTr("Rotate my signing key")
+                            enabled: root.sharing && root.sharing.encryptedSharingAvailable && root.signingFingerprint.length === 64
+                            onClicked: {
+                                root.pendingSigningRotationFingerprint = root.signingFingerprint
+                                rotateSigningIdentityDialog.open()
+                            }
                         }
                         TextField { Layout.fillWidth: true; readOnly: true; selectByMouse: true; text: root.signingPublicKey; placeholderText: qsTr("Your signing public key") }
                         TextField { Layout.fillWidth: true; readOnly: true; selectByMouse: true; text: root.signingFingerprint; placeholderText: qsTr("Your signing fingerprint") }
@@ -1459,6 +1549,15 @@ SstvPage {
                     enabled: root.sharing && root.sharing.encryptedSharingAvailable
                     onClicked: root.sharing.createSharingIdentity()
                 }
+                Button {
+                    objectName: "sstvShareInboxRotateIdentity"
+                    text: qsTr("Rotate my recipient key")
+                    enabled: root.sharing && root.sharing.encryptedSharingAvailable && root.sharingFingerprint.length === 64
+                    onClicked: {
+                        root.pendingRotationFingerprint = root.sharingFingerprint
+                        rotateIdentityDialog.open()
+                    }
+                }
                 TextField {
                     objectName: "sstvShareInboxPublicKey"
                     Layout.fillWidth: true
@@ -1511,12 +1610,23 @@ SstvPage {
                 TextField { id: senderId; objectName: "sstvShareSenderId"; Layout.fillWidth: true; maximumLength: 128; placeholderText: qsTr("Sender ID"); onTextChanged: senderFingerprintConfirmed.checked = false }
                 TextField { id: senderSigningKey; objectName: "sstvShareSenderSigningKey"; Layout.fillWidth: true; maximumLength: 182; placeholderText: qsTr("Sender signing public key (182 lowercase hex characters)"); onTextChanged: senderFingerprintConfirmed.checked = false }
                 TextField { id: senderSigningFingerprint; objectName: "sstvShareSenderSigningFingerprint"; Layout.fillWidth: true; maximumLength: 64; placeholderText: qsTr("Independently verified fingerprint (64 lowercase hex characters)"); onTextChanged: senderFingerprintConfirmed.checked = false }
+                TextField { id: senderPreviousFingerprint; objectName: "sstvShareSenderPreviousFingerprint"; Layout.fillWidth: true; maximumLength: 64; placeholderText: qsTr("Previously verified sender fingerprint (for replacement)"); onTextChanged: senderFingerprintConfirmed.checked = false }
                 CheckBox { id: senderFingerprintConfirmed; objectName: "sstvShareSenderFingerprintConfirmed"; text: qsTr("I compared the sender fingerprint through a trusted channel"); palette.text: root.primaryTextColor }
+                Label { Layout.fillWidth: true; text: qsTr("Replacing the signing key stops trusting messages signed with the previous key."); color: root.secondaryTextColor; wrapMode: Text.WordWrap }
                 Button {
                     objectName: "sstvSharePinSenderSigningKey"
                     text: qsTr("Save verified sender signing key")
                     enabled: root.sharing && root.sharing.ready && senderFingerprintConfirmed.checked && senderId.text.trim().length > 0
                     onClicked: root.sharing.pinSenderSigningIdentity(senderId.text, senderSigningKey.text, senderSigningFingerprint.text, senderFingerprintConfirmed.checked)
+                }
+                Button {
+                    objectName: "sstvShareReplaceSenderSigningKey"
+                    text: qsTr("Replace verified sender signing key")
+                    enabled: root.sharing && root.sharing.ready && senderFingerprintConfirmed.checked
+                             && senderId.text.trim().length > 0 && senderPreviousFingerprint.text.length === 64
+                    onClicked: root.sharing.replaceSenderSigningIdentity(senderId.text, senderPreviousFingerprint.text,
+                                                                         senderSigningKey.text, senderSigningFingerprint.text,
+                                                                         senderFingerprintConfirmed.checked)
                 }
             }
 
@@ -1571,18 +1681,34 @@ SstvPage {
 
             Label {
                 Layout.fillWidth: true
-                visible: root.noticeText.length > 0
-                text: root.noticeText
-                color: root.noticeError ? "#ff7474" : "#67d391"
-                wrapMode: Text.WordWrap
-            }
-            Label {
-                Layout.fillWidth: true
                 visible: root.sharing && root.sharing.errorString.length > 0
                 text: root.sharing ? root.sharing.errorString : ""
                 color: "#ff7474"
                 wrapMode: Text.WordWrap
             }
+        }
+    }
+    Rectangle {
+        id: noticeBar
+        objectName: "sstvShareNoticeBar"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: noticeLabel.implicitHeight + 16
+        visible: root.noticeText.length > 0
+        color: root.panelColor
+        border.color: root.noticeError ? "#ff7474" : "#67d391"
+        Label {
+            id: noticeLabel
+            objectName: "sstvShareOperationNotice"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            text: root.noticeText
+            color: root.noticeError ? "#ff7474" : "#67d391"
+            wrapMode: Text.WordWrap
         }
     }
 }

@@ -740,9 +740,9 @@ SstvPage {
                     text: qsTr("Transmit Radiofax")
                     enabled: !!(root.engine && root.engine.sstvTxCanStart
                                  && !root.engine.sstvTxActive && !fskIdEnabled.checked)
-                    onClicked: root.engine.startSstvRadiofaxTxProfile(
+                    onClicked: root.engine.startSstvRadiofaxTxAdvanced(
                                    Number(faxTxIoc.currentText), Number(faxTxRate.currentText),
-                                   faxTxFldigi.checked, faxTxWmoDeadSector.checked)
+                                   faxTxFldigi.checked, faxTxWmoDeadSector.checked, faxTxSymmetric.checked)
                 }
                 Label {
                     Layout.fillWidth: true
@@ -759,16 +759,34 @@ SstvPage {
                     objectName: "sstvRadiofaxTxCenteredPhasing"
                     text: qsTr("Centered phasing (experimental)")
                     enabled: !!(root.engine && !root.engine.sstvTxActive)
-                    onToggled: if (checked) faxTxWmoDeadSector.checked = false
+                    onCheckedChanged: if (checked) { faxTxWmoDeadSector.checked = false; faxTxSymmetric.checked = false }
+                }
+                CheckBox {
+                    id: faxTxSymmetric
+                    objectName: "sstvRadiofaxTxSymmetricPhasing"
+                    text: qsTr("50% symmetric phasing")
+                    enabled: !!(root.engine && !root.engine.sstvTxActive)
+                    onCheckedChanged: if (checked) faxTxFldigi.checked = false
                 }
                 CheckBox {
                     id: faxTxWmoDeadSector
                     objectName: "sstvRadiofaxTxWmoDeadSector"
                     text: qsTr("WMO 4.5% dead sector")
                     enabled: !!(root.engine && !root.engine.sstvTxActive)
-                    onToggled: if (checked) faxTxFldigi.checked = false
+                    onCheckedChanged: if (checked) faxTxFldigi.checked = false
                 }
                 Item { Layout.fillWidth: true }
+            }
+
+            Label {
+                objectName: "sstvRadiofaxFldigiRateNotice"
+                Layout.fillWidth: true
+                visible: faxTxFldigi.checked && faxTxIoc.currentText === "576"
+                         && faxTxRate.currentText === "90"
+                text: qsTr("FLdigi 4.2.11 may receive IOC 576 at 120 lines/min even when 90 is transmitted. Check the receiving station's rate before sending.")
+                color: root.secondaryTextColor
+                font.pixelSize: 10
+                wrapMode: Text.Wrap
             }
 
             RowLayout {

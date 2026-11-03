@@ -38,6 +38,21 @@ constexpr qsizetype kFileHashReadBlockBytes = 256 * 1024;
 constexpr quint64 kMaximumDiagnosticsCounter =
     (quint64 {1U} << 53U) - 1U;
 
+std::optional<QByteArray> signedEnvelopeIdentity(const SstvShareManifestV1& manifest)
+{
+    if (manifest.encryption.mode != SstvShareEncryptionMode::EndToEnd
+        || manifest.encryption.senderAuthAlgorithm != QStringLiteral("ecdsa-p256-sha256-v1"))
+        return std::nullopt;
+    auto object = manifest.toJsonObject();
+    auto encryption = object.value(QStringLiteral("encryption")).toObject();
+    encryption.remove(QStringLiteral("senderSignatureBase64"));
+    object.insert(QStringLiteral("encryption"), encryption);
+    SstvShareValidationError error;
+    const auto canonical = canonicalJson(object, &error);
+    return error.ok() && !canonical.isEmpty()
+        ? std::optional<QByteArray>(canonical) : std::nullopt;
+}
+
 SstvManagedTransferState managedStateForCore(SstvShareTransferState state);
 
 bool fail(QString* error, const QString& detail)
@@ -1588,6 +1603,38 @@ bool SstvShareQueueStore::open(QString* error)
         close();
         return fail(error, QStringLiteral("share queue schema validation failed"));
     }
+    schemaCheck.finish();
+    // Additive indexes retain the v3 on-disk schema and existing identity
+    // keys, while bounding replay lookups to matching provider/key or hash.
+    // Avoid a write transaction on later opens when both already exist.
+    QSqlQuery replayIndexes(m_impl->database);
+    if (!replayIndexes.exec(QStringLiteral("PRAGMA index_list('sstv_share_transfers')"))) {
+        close();
+        return fail(error, QStringLiteral("could not inspect share queue indexes"));
+    }
+    bool haveReplayKey = false;
+    bool haveReplayPayload = false;
+    while (replayIndexes.next()) {
+        const auto name = replayIndexes.value(1).toString();
+        haveReplayKey = haveReplayKey || name == QStringLiteral("idx_sstv_share_replay_key");
+        haveReplayPayload = haveReplayPayload || name == QStringLiteral("idx_sstv_share_replay_payload");
+    }
+    replayIndexes.finish();
+    if (!haveReplayKey || !haveReplayPayload) {
+        if (!beginTransaction(m_impl->database, error)
+            || !execSql(m_impl->database,
+                QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sstv_share_replay_key "
+                               "ON sstv_share_transfers(direction,provider_id,idempotency_key,state)"), error)
+            || !execSql(m_impl->database,
+                QStringLiteral("CREATE INDEX IF NOT EXISTS idx_sstv_share_replay_payload "
+                               "ON sstv_share_transfers(direction,provider_id,payload_sha256,state)"), error)
+            || !commitTransaction(m_impl->database, m_impl->fault,
+                                  QStringLiteral("replay-indexes"), error)) {
+            m_impl->database.rollback();
+            close();
+            return false;
+        }
+    }
     m_impl->version = kShareQueueSchemaVersion;
     m_impl->opened = true;
     return true;
@@ -1766,6 +1813,55 @@ bool SstvShareQueueStore::insertDownloadTransferAndInbox(
             return fail(error, QStringLiteral("incoming envelope already queued or accepted"));
         }
         duplicate.finish();
+        // ECDSA permits several distinct valid low-S signatures of the same
+        // signed bytes. Compare those bytes, not the signature encoding, but
+        // leave persisted idempotency keys untouched for existing histories.
+        const auto incomingManifest = parseSstvShareManifestV1(record.canonicalManifestJson);
+        const auto identity = incomingManifest.ok()
+            ? signedEnvelopeIdentity(*incomingManifest.manifest) : std::nullopt;
+        if (!incomingManifest.ok()
+            || (incomingManifest.manifest->encryption.mode == SstvShareEncryptionMode::EndToEnd
+                && !incomingManifest.manifest->encryption.senderAuthAlgorithm.isEmpty() && !identity)) {
+            m_impl->database.rollback();
+            return fail(error, QStringLiteral("could not check duplicate incoming envelope"));
+        }
+        if (identity) {
+            QSqlQuery samePayload(m_impl->database);
+            samePayload.prepare(QStringLiteral(
+                "SELECT manifest_json FROM sstv_share_transfers WHERE direction=:direction "
+                "AND provider_id=:provider AND payload_sha256=:payload "
+                "AND state NOT IN ('Failed','Cancelled','Rejected','Expired')"));
+            samePayload.bindValue(QStringLiteral(":direction"),
+                                  static_cast<int>(SstvManagedTransferDirection::Download));
+            samePayload.bindValue(QStringLiteral(":provider"), record.providerId);
+            samePayload.bindValue(QStringLiteral(":payload"), record.payloadSha256);
+            if (!samePayload.exec()) {
+                m_impl->database.rollback();
+                return fail(error, QStringLiteral("could not check duplicate incoming envelope"));
+            }
+            while (samePayload.next()) {
+                const auto previous = parseSstvShareManifestV1(samePayload.value(0).toByteArray());
+                if (!previous.ok()) {
+                    samePayload.finish();
+                    m_impl->database.rollback();
+                    return fail(error, QStringLiteral("could not check duplicate incoming envelope"));
+                }
+                if (signedEnvelopeIdentity(*previous.manifest) == identity) {
+                    const auto checked = m_impl->config.verifyIncomingSender
+                        ? m_impl->config.verifyIncomingSender(*previous.manifest) : std::nullopt;
+                    if (!checked.has_value()) {
+                        samePayload.finish();
+                        m_impl->database.rollback();
+                        return fail(error, QStringLiteral("could not check duplicate incoming envelope"));
+                    }
+                    if (!*checked) continue;
+                    samePayload.finish();
+                    m_impl->database.rollback();
+                    return fail(error, QStringLiteral("incoming envelope already queued or accepted"));
+                }
+            }
+            samePayload.finish();
+        }
     }
     ReclaimedRowCounts reclaimed;
     if (!reclaimTerminalTransfersForInsert(
@@ -4135,13 +4231,17 @@ SstvShareOperationId SstvShareQueueManager::refreshInboxAsync(
     }
     const auto shareProvider = m_impl->provider(providerId);
     const QString key = QStringLiteral("inbox:") + providerId;
-    if (!shareProvider || !shareProvider->capabilities().incomingList
-        || m_impl->active.contains(key)
-        || !m_impl->hasCapacityFor(providerId)) {
+    if (!shareProvider || !shareProvider->capabilities().incomingList) {
         if (completion) {
             completion(SstvShareProviderResult::failure(
                 SstvShareProviderFailure::ProviderUnavailable,
-                QStringLiteral("inbox provider is unavailable or busy")));
+                QStringLiteral("inbox provider is unavailable")));
+        }
+        return 0U;
+    }
+    if (m_impl->active.contains(key) || !m_impl->hasCapacityFor(providerId)) {
+        if (completion) {
+            completion(SstvShareProviderResult::localCapacityBusy());
         }
         return 0U;
     }
@@ -4309,6 +4409,12 @@ QString SstvShareQueueManager::queueDownload(
         && (parsed.manifest->encryption.mode != SstvShareEncryptionMode::EndToEnd
             || parsed.manifest->encryption.senderAuthAlgorithm.isEmpty())) {
         fail(error, QStringLiteral("this download requires an authenticated sender"));
+        return {};
+    }
+    const auto& verifySender = m_impl->store.config().verifyIncomingSender;
+    if (!parsed.manifest->encryption.senderAuthAlgorithm.isEmpty()
+        && (!verifySender || !verifySender(*parsed.manifest).value_or(false))) {
+        fail(error, QStringLiteral("incoming sender signature could not be authenticated"));
         return {};
     }
     const auto destination = secureDestinationPath(

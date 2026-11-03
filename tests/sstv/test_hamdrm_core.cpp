@@ -3,13 +3,16 @@
 #include "src/sstv/digital/HamDrmBsrCodec.h"
 #include "src/sstv/digital/HamDrmCrc.h"
 #include "src/sstv/digital/HamDrmImageValidator.h"
+#include "src/sstv/digital/HamDrmHybridCodec.h"
 #include "src/sstv/digital/HamDrmMotCodec.h"
 #include "src/sstv/digital/HamDrmObjectAssembler.h"
 #include "src/sstv/digital/HamDrmProfileRegistry.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -184,6 +187,85 @@ void testDataGroupCodec()
     CHECK(!unsupportedResult.ok());
     CHECK(unsupportedResult.status.code
           == hamdrm::HamDrmErrorCode::UnsupportedFeature);
+}
+
+void testIndependentQsstvHybridServerAB()
+{
+    const hamdrm::HamDrmHybridServer servers[] = {
+        {"a.example.invalid", "operator-a", "dummy-A", "radio/a"},
+        {"b.example.invalid", "operator-b", "dummy-B-1234", "radio/b"},
+    };
+    for (unsigned i = 0; i < 2; ++i) {
+        const std::string path = std::string(DECODIUM_HAMDRM_FIXTURES_DIR)
+            + (i ? "/qsstv-hybrid-server-b.bin" : "/qsstv-hybrid-server-a.bin");
+        std::ifstream file(path, std::ios::binary);
+        const std::vector<std::uint8_t> reference((std::istreambuf_iterator<char>(file)), {});
+        CHECK(file.is_open() && !reference.empty());
+        const auto encoded = hamdrm::encodeHamDrmHybridServer(servers[i]);
+        CHECK(encoded.ok() && *encoded.value == reference);
+        const auto decoded = hamdrm::decodeHamDrmHybridServer(reference);
+        CHECK(decoded.ok());
+        if (decoded.ok()) {
+            CHECK(decoded.value->host == servers[i].host && decoded.value->user == servers[i].user);
+            CHECK(decoded.value->password == servers[i].password && decoded.value->directory == servers[i].directory);
+        }
+        auto corrupt = reference;
+        corrupt[0] ^= 1U;
+        CHECK(!hamdrm::decodeHamDrmHybridServer(corrupt).ok());
+        corrupt = reference; corrupt.pop_back();
+        CHECK(!hamdrm::decodeHamDrmHybridServer(corrupt).ok());
+        corrupt = reference; corrupt.insert(corrupt.end() - 2, 8, 0);
+        CHECK(!hamdrm::decodeHamDrmHybridServer(corrupt).ok());
+    }
+    CHECK(!hamdrm::encodeHamDrmHybridServer({"host", "u", "bad<password", "dir"}).ok());
+    CHECK(!hamdrm::encodeHamDrmHybridServer({"", "u", "p", ""}).ok());
+    CHECK(!hamdrm::encodeHamDrmHybridServer({"host", "u", std::string(1025, 'p'), ""}).ok());
+}
+
+void testIndependentTrxHybridHeadersAB()
+{
+    struct Case final { const char* fixture; const char* body; const char* filename; std::uint16_t transport; };
+    const Case cases[] = {
+        {"trxamadrm-3.6-hybrid-header-a.bin", "trxamadrm-3.6-hybrid-body-a.bin", "de_TEST1-1-image-a.jpg", 21808U},
+        {"trxamadrm-3.6-hybrid-header-b.bin", "trxamadrm-3.6-hybrid-body-b.bin", "de_TEST2-1-image-b.jpg", 64816U},
+    };
+    for (const auto& entry : cases) {
+        std::ifstream in(std::string(DECODIUM_HAMDRM_FIXTURES_DIR) + "/" + entry.fixture, std::ios::binary);
+        const std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), {});
+        CHECK(in.is_open() && data.size() == 50U);
+        const auto group = hamdrm::parseHamDrmMotDataGroup(data.data(), data.size());
+        CHECK(group.ok());
+        if (!group.ok()) continue;
+        CHECK(group.value->kind == hamdrm::HamDrmMotGroupKind::Header);
+        CHECK(group.value->transportId == entry.transport && group.value->lastSegment);
+        const auto header = hamdrm::parseHamDrmMotHeader(group.value->payload.data(),
+            group.value->payload.size(), group.value->transportId);
+        CHECK(header.ok());
+        if (header.ok()) {
+            CHECK(header.value->filename == entry.filename);
+            CHECK(header.value->bodySize == 16U && header.value->transportId == entry.transport);
+        }
+        std::ifstream bodyIn(std::string(DECODIUM_HAMDRM_FIXTURES_DIR) + "/" + entry.body, std::ios::binary);
+        const std::vector<std::uint8_t> body((std::istreambuf_iterator<char>(bodyIn)), {});
+        CHECK(bodyIn.is_open() && body.size() == 27U);
+        hamdrm::HamDrmObjectAssembler assembler(entry.transport);
+        CHECK(assembler.ingest(data.data(), data.size()).ok());
+        CHECK(assembler.ingest(body.data(), body.size()).ok());
+        const auto assembled = assembler.assembledObject();
+        CHECK(assembled.ok());
+        if (assembled.ok()) {
+            CHECK(assembled.value->metadata.filename == entry.filename);
+            CHECK(assembled.value->originalBytes == std::vector<std::uint8_t>({0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}));
+        }
+        auto corruptBody = body;
+        if (!corruptBody.empty()) {
+            corruptBody.back() ^= 1U;
+            CHECK(!hamdrm::parseHamDrmMotDataGroup(corruptBody.data(), corruptBody.size()).ok());
+        }
+        auto corrupt = data;
+        corrupt[corrupt.size() - 1U] ^= 1U;
+        CHECK(!hamdrm::parseHamDrmMotDataGroup(corrupt.data(), corrupt.size()).ok());
+    }
 }
 
 void testIndependentQsstvMotGroups()
@@ -615,6 +697,8 @@ int main()
 {
     testCrcAndProfiles();
     testDataGroupCodec();
+    testIndependentQsstvHybridServerAB();
+    testIndependentTrxHybridHeadersAB();
     testIndependentQsstvMotGroups();
     testIndependentQsstvSegmentedObject();
     testMotHeaderAndObjectAssembly();

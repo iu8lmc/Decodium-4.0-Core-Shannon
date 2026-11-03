@@ -3,6 +3,7 @@
 
 #include "SstvRadiofax.h"
 #include "../dsp/SstvFrequencyDemodulator.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -27,13 +28,41 @@ struct SstvRadiofaxClockEstimate final {
     std::uint64_t lines {0U};
 };
 
+// Detect a sustained IOC-select APT pattern before phasing. The returned
+// sample is the most recent observed white edge, not the image boundary.
+class SstvRadiofaxAptStartDetector final {
+public:
+    SstvRadiofaxAptStartDetector(std::uint32_t sampleRate, SstvFaxIoc ioc,
+                                 double frequencyOffsetHz = 0.0);
+    void consume(const SstvFrequencyObservation& observation) noexcept;
+    std::optional<std::uint64_t> lastAptWhiteEdge() const noexcept { return lastAptWhiteEdge_; }
+private:
+    std::uint32_t rate_;
+    double offset_;
+    double period_;
+    std::uint64_t lastSample_ {0U};
+    std::uint64_t lastWhiteEdge_ {0U};
+    unsigned consecutive_ {0U};
+    int tone_ {0};
+    bool haveSample_ {false};
+    bool haveWhiteEdge_ {false};
+    std::optional<std::uint64_t> lastAptWhiteEdge_;
+};
+
 class SstvRadiofaxClockTracker final {
 public:
     SstvRadiofaxClockTracker(std::uint32_t sampleRate, SstvRadiofaxPhaseLock lock,
                              double frequencyOffsetHz = 0.0);
     void consume(const SstvFrequencyObservation& observation) noexcept;
     std::optional<SstvRadiofaxClockEstimate> estimate() const noexcept;
+    // A short sequence can inform a provisional image clock after reacquisition;
+    // it is not a substitute for the longer independently confirmed estimate.
+    std::optional<SstvRadiofaxClockEstimate> provisionalEstimate() const noexcept;
+    // Optional acquisition hint; accepted pulses still build a fresh estimate.
+    void setPhaseReference(std::uint64_t edge, SstvRadiofaxClockEstimate clock) noexcept;
     bool valid() const noexcept { return valid_; }
+    unsigned ignoredIrregularPulses() const noexcept { return ignoredIrregularPulses_; }
+    std::uint64_t lastConfirmedWhiteEdge() const noexcept { return last_; }
 private:
     std::uint32_t rate_;
     SstvRadiofaxPhaseLock lock_;
@@ -44,9 +73,13 @@ private:
     std::uint64_t lines_ {0U};
     std::uint64_t lastObservation_ {0U};
     unsigned pulses_ {0U};
+    unsigned consecutiveIrregularPulses_ {0U};
+    unsigned ignoredIrregularPulses_ {0U};
     int tone_ {1};
     bool haveFirst_ {false};
     bool valid_ {true};
+    std::optional<SstvRadiofaxClockEstimate> phaseReference_;
+    std::uint64_t referenceEdge_ {0U};
 };
 
 // Recognises a stable phasing pattern, not the beginning or end of a fax.
@@ -74,6 +107,7 @@ private:
     std::uint16_t candidateRpm_ {0U};
     SstvFaxPhasePattern candidatePattern_ {SstvFaxPhasePattern::Symmetric};
     unsigned matches_ {0U};
+    std::array<std::uint64_t, 3> candidatePeriods_ {};
     std::optional<SstvRadiofaxPhaseLock> lock_;
 };
 
@@ -91,6 +125,7 @@ public:
     std::optional<std::uint64_t> consume(const SstvFrequencyObservation* data, std::size_t count);
     std::optional<std::uint64_t> consume(const std::vector<SstvFrequencyObservation>& data);
     void setClockEstimate(std::optional<SstvRadiofaxClockEstimate> estimate) noexcept;
+    void rejectCandidate() noexcept { result_.reset(); }
     bool valid() const noexcept;
 private:
     void finishLine();

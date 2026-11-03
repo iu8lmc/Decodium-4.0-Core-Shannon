@@ -1,5 +1,485 @@
 # Remote sharing E2EE: implementation in progress
 
+Two full Decodium application A/B tests now also exercise a provider that
+changes one bit of the 12-byte AES-GCM nonce in the manifest while retaining
+valid canonical Base64 and recalculating the manifest digest. The receiving
+application rejects each modified encrypted transfer as an authenticated-open
+failure; in the B case it first receives the unaffected A image. The local
+HTTPS fixture checks that its alteration occurred. The existing AEAD,
+ephemeral-key tampering and signed-transfer regressions also passed. Run
+`ctest --test-dir build --output-on-failure -R '^test_sstv_share_app_nonce_tamper_[ab]$'`.
+The provider and certificates are isolated test fixtures, and this checks
+the unsigned encrypted envelope rather than independently proving every
+provider behaviour or an external security audit.
+
+Signed encrypted A/B transfers were also tested against the same validly
+encoded nonce alteration. The receiver rejected the sender signature and the
+fixture recorded no request for the altered item's content. The fixture now
+checks this no-download condition for every signed manifest-tampering case;
+both existing signature-alteration controls passed with the new check.
+Separate signed A/B regressions confirmed invalid-then-valid handling and
+replay rejection after restart. Additional signed A/B app tests now combine
+the sequence: the local HTTPS fixture first supplies a copy whose only changed
+manifest field is a one-bit nonce alteration, retains the original ciphertext,
+and waits for the receiver to reject its signature. The laboratory then
+terminates and restarts that receiver with the same isolated settings,
+Keychain and provider, releases the original valid signed item, and compares
+both received images with the originals. No content was requested for the
+altered item. Each run also compares the recipient public key and fingerprint
+before and after restart and confirms that both valid manifests name that
+same fingerprint. The restart uses a process termination, not a simulated power
+failure, and the test uses a loopback fixture rather than a public provider.
+The existing invalid-then-valid and legacy-record A/B regressions also passed.
+
+Verified sender signing pins can now be replaced when a sender obtains a new
+P-256 key. The receiver requires the expected current fingerprint, the new
+public key and an independently confirmed new fingerprint. The successor is
+inserted atomically, the current chain is re-read, and stale, conflicting,
+invalid, cyclic or corrupt entries fail closed. Initial pin creation also
+rechecks the current chain tip after insertion. Replacement changes trust to
+the new key: old signatures no longer authenticate under the current pin,
+including messages still awaiting verification. Already imported images are
+not removed. The sharing page states this consequence, requires confirmation
+and clears it after success or edits.
+
+In-memory A/B tests reject stale or incorrect fingerprints and injected write
+failures, verify that old signed envelopes cease to authenticate, and decrypt
+new signed envelopes after replacement. They also reject invalid and cyclic
+successor records without overwriting them. A macOS temporary-Keychain QML
+test rejects unconfirmed replacement and performs two verified consecutive
+updates, checking confirmation is cleared. A full-application test first
+transferred signed images, then restarted the receiver using its existing
+profile and Keychain while a separate sender with a fresh Keychain published
+a new signing key. After controller-driven verified replacement, two fresh
+signed encrypted images were transferred over loopback HTTPS, decrypted and
+compared with the originals; manifests named the new fingerprint. The
+receiver replacement was driven by the lab controller, not a human QML click.
+The cryptographic, QML, controller, signed-transfer, replacement and existing
+recipient-rotation/restart CTests passed on macOS ARM64. This test uses an
+isolated HTTPS fixture, not a public provider. Whole-store rollback or deletion
+of a successor can still restore an older pin; the chain is not a monotonic
+trust anchor.
+
+The local P-256 signing identity can also be rotated through an explicit
+confirmation dialog. Rotation requires the displayed current fingerprint and
+atomically inserts a new private-key successor in the OS secure store. The
+previous private keys remain stored as part of the chain; this is not secure
+erasure of a compromised key. The dialog tells the operator to share and
+independently verify the new fingerprint with recipients, who must replace
+their sender pin before new signatures authenticate. Old messages may cease
+to authenticate once a recipient changes that pin. Missing or corrupted
+successors and whole-store rollback are not distinguishable from an older
+valid chain; there is no external monotonic anchor.
+
+In-memory A/B checks cover repeated rotations, stale fingerprints, injected
+storage failure, corrupted and cyclic private-key chains, and signed-envelope
+verification before and after the recipient updates its pin. Two concurrent
+helper processes against a temporary macOS Keychain attempted the same
+rotation; one succeeded and the other conflicted. The offscreen QML test
+cancelled a rotation and performed two confirmed rotations, checking the
+current key after each. In the full-application A/B test, the existing sender
+process profile and Keychain were restarted, the sender rotated its signing
+key, the receiver replaced its verified pin, and two fresh signed encrypted
+images were transferred and checked through the loopback HTTPS fixture. A
+further sender application restart loaded the new fingerprint. The lab drives
+controllers rather than a human QML interaction; it is not a public-provider
+test. The crypto, QML, controller, native Keychain and signed application
+regressions passed on macOS ARM64.
+
+The signing-key rotation test now also exercises old signatures in two full
+Decodium A/B sessions. After the receiver independently updates its pin, the
+isolated HTTPS fixture republishes the exact old-key A or B manifest and
+ciphertext under a fresh inbox ID. The receiver attempts that specific ID,
+rejects its sender signature before requesting content, and still downloads
+and decrypts both new-key images. The fixture checks that the replayed bytes
+are identical to the original and records zero content-download requests for
+the replay; the sender's rotated fingerprint also survives restart. The two
+`test_sstv_share_app_retired_signing_{a,b}` cases passed, as did the existing
+signed high-S replay A/B, sender-pin replacement and signing-rotation
+application regressions. This checks exact old-envelope replays through a
+local fixture; it does not model every possible newly forged old-key message,
+a public provider, secure deletion or rollback of the key store.
+
+The A/B application check was extended beyond exact replay. While the
+receiver was stopped and before the sender rotated its key, a restarted
+sender uploaded two additional signed encrypted images that the receiver had
+never seen. Their manifests and ciphertext differed from all initial
+transfers; OpenSSL independently verified each signature against the old
+public key. After the sender rotated and the receiver replaced its pin, the
+fixture presented one of those previously unseen old-key items. In each A/B
+run the receiver rejected the sender signature before any content download,
+then received and decrypted both freshly signed images using the new key.
+The two `test_sstv_share_app_unseen_old_signing_{a,b}` cases passed, as did
+the exact-replay, rotation and ordinary signed-transfer regressions. This
+uses an isolated loopback HTTPS provider and prepared pre-rotation messages;
+it does not establish behaviour against every possible malicious provider or
+repair secure-store rollback.
+
+Opening a stored envelope can select a previously archived X25519 identity by
+the recipient fingerprint in its manifest. The key's public fingerprint is
+recomputed before use; a mismatched or missing archived identity is rejected,
+and corrupt active identity storage is not bypassed. Signed A/B envelopes were
+opened in both directions using an in-memory archive, with corruption and
+missing-key controls. A separate macOS test created an isolated temporary
+Keychain, replaced its active identity and opened two earlier envelopes using
+the archived identity in separate receiver processes. The signed A/B transfer
+between two complete Decodium processes was also repeated using active keys.
+That application transfer did not exercise an archived identity. The key
+store now also provides an immutable, insert-if-absent archive operation: it
+checks the stored bytes and never overwrites an existing entry. A/B in-memory
+tests cover idempotency, a conflicting entry and a storage failure; the
+temporary macOS Keychain test uses the operation before its two receiver
+processes open earlier envelopes. A new internal rotation operation uses a
+fingerprint-confirmed, insert-only successor chain after archiving the prior
+identity. A/B in-memory tests rotate both recipients, open old signed
+envelopes, decrypt new envelopes and reject stale requests and cyclic chains.
+The isolated macOS Keychain test invokes this rotation and opens two older
+envelopes in receiver processes. This operation is not exposed in the UI:
+full application rotation, broader interruption and concurrency coverage,
+peer trust updates and rotation UI remain open.
+
+Two separate helper processes now race to rotate the same fingerprint in an
+isolated macOS Keychain: one succeeds, one reports a conflict, the winning
+public identity reloads, and receiver processes still open both old payloads.
+The A/B in-memory suite also injects a successor-write failure after archiving,
+checks that the previous identity remains active, and retries successfully.
+This models one interruption point; it is not a process-kill or power-loss
+test, nor a concurrent full-Decodium rotation test.
+
+The isolated macOS Keychain test now also starts two archiver processes
+concurrently against the same identity; both return the same public key and
+the archived key opens the two earlier encrypted payloads in receiver
+processes. A conflicting pre-existing archive is rejected without changing
+either the archive or the active item. This covers concurrent archive
+creation, independently of the subsequent concurrent rotation check above.
+The separate signed two-Decodium HTTPS test was repeated with active keys.
+
+The worker/controller now exposes an internal fingerprint-confirmed rotation
+call. In a signed loopback HTTPS laboratory run, the receiving Decodium
+process published its initial identity, rotated it through that controller,
+and then received and decrypted images A and B sent by a second Decodium
+process using the initial public key. The lab checks that rotation occurred
+before the sender is released. This proves old-key reception through the
+application queue after rotation; it does not exercise a user-facing rotation
+control or replacement of a peer's pinned key.
+
+The key store now has an internal verified recipient-pin replacement: it
+requires the expected current fingerprint and the independently verified new
+fingerprint, validates the new X25519 point and uses an insert-only successor
+entry. The A/B in-memory tests reject incorrect or stale fingerprints, then
+replace both pins and exchange signed envelopes to the new recipient keys.
+This primitive is not yet exposed by the controller or UI and has not yet
+been exercised between two complete Decodium processes; the application lab
+above still sends to the previous pin.
+
+The worker/controller now also exposes verified pin replacement. In the
+signed two-Decodium loopback HTTPS lab, the receiver rotates its identity,
+the sender transmits image A to the previously confirmed pin, explicitly
+replaces the pin through the controller, and transmits image B to the new
+pin. Both images are decrypted and their manifest fingerprints are checked
+against the old and new identities respectively. The test models independent
+confirmation in the isolated lab; user-facing confirmation and controls
+remain to be implemented and tested.
+
+The sharing page now provides a confirmation dialog for rotating the local
+recipient key and a verified pin-replacement control requiring the previous
+fingerprint and independent confirmation of the new one. A macOS offscreen
+QML/controller test using a temporary Keychain cancels one rotation, then
+performs two rotations and confirmed pin updates; it checks the replacement
+button is disabled before confirmation. The signed two-Decodium A/B old/new
+pin transfer was repeated successfully. That application test drives the
+controller laboratory, not the QML controls, and does not constitute a human
+verification of the fingerprint exchange or a packaged GUI test.
+
+The QML confirmation is now cleared after a successful pin or replacement, as
+well as when the recipient, either public key/fingerprint field, previous
+fingerprint or provider configuration changes. The isolated Keychain QML test
+checks the four editable fields in both rotation iterations and requires a
+fresh confirmation after each edit and successful replacement. The A/B
+two-Decodium signed transfer was repeated; it still drives the laboratory
+controller and does not validate human use of the interface.
+
+Two separate processes now attempt to replace the same recipient pin with
+different verified keys in an isolated macOS Keychain. Exactly one succeeds;
+the other reports a conflict, and the stored current pin matches the winner.
+The signed two-Decodium old/new-pin A/B transfer was repeated successfully.
+The insert-only chain does not detect rollback of secure storage: deleting a
+successor entry or restoring an older Keychain snapshot can make an earlier
+pin appear current. The native test deliberately removes its isolated test
+successor to restore its fixture, demonstrating that limitation. A monotonic
+trust anchor or equivalent rollback detection remains unresolved.
+
+Initial recipient pinning now reads the current successor-chain tip after
+insertion. Previously, a concurrent verified replacement between insertion
+and readback could leave a different key current while the initial pin call
+reported success for the old key. Two in-memory A/B controls inject the
+replacement at that point, require a conflict, and verify that the
+successor remains current; the first control failed before the change. The
+signed two-Decodium rotated-identity, pin-replacement and restart test passed
+after rebuilding, transferring and decrypting its A/B images. The full-app
+test does not inject the race, and the readback does not prevent a legitimate
+later rotation. This does not address whole-store rollback.
+
+The race is now also exercised A/B against a temporary macOS Keychain: a
+test wrapper pauses the initial pin immediately after the native insertion,
+starts a separate process that performs a verified replacement, then resumes
+the initial call. Both key orders report conflict and retain the replacement.
+Rebuilding with the previous root-only readback makes the native test fail;
+the corrected readback passes. The signed two-Decodium rotation/restart A/B
+transfer and in-memory cryptographic suite also passed after restoration.
+The race itself is between helper processes, not two full Decodium windows.
+
+Additional A/B in-memory controls corrupt a recipient successor with invalid
+encoding and a low-order X25519 point, and separately insert a cyclic link.
+Each corruption blocks signed envelope creation without replacing the stored
+record; restoring the fixture permits sealing again. These checks do not
+detect a missing successor or rollback of the whole secure store. The existing
+signed two-Decodium old/new-key exchange was repeated with valid storage.
+
+Following an identity successor now requires its predecessor's archived
+private key to exist and match the predecessor. Missing or mismatched archives
+fail closed rather than silently offering a current identity that cannot open
+older messages. In-memory A/B tests remove and substitute that archive, then
+restore it and successfully open the prior signed envelope. Two successive
+rotations in each direction also preserve signed envelopes addressed to the
+original and intermediate keys. The signed two-Decodium A/B transfer was
+repeated with valid storage. This is not a fix for deletion of a successor
+or rollback of the entire secure store, nor a full-application restart test.
+
+The signed two-Decodium old/new-pin A/B transfer now also restarts the
+recipient application with the same test profile and Keychain after both
+processes exit. The restarted application reports the same rotated public
+key and fingerprint. This checks persistence of the active recipient
+identity; it does not yet resend or decrypt the images after restart, or
+verify sender-pin persistence in a restarted application.
+
+The same test now restarts the sender with its existing profile, Keychain and
+provider configuration, explicitly skips pin creation/replacement, and uploads
+two additional signed images. The HTTPS fixture verifies both completed
+manifests target the rotated recipient fingerprint. The receiver identity is
+reloaded separately after restart; these additional uploads are not downloaded
+or decrypted by a restarted receiver in this test.
+
+The restarted receiver now also downloads and decrypts those two additional
+signed uploads using its existing profile, Keychain and sender-signing pin.
+The lab compares both resulting images against their original RGB pixels.
+The sender and receiver run sequentially after their initial restart, using
+the loopback HTTPS fixture; no provider interoperability or human fingerprint
+comparison is implied.
+
+Stored X25519 recipient pins are now revalidated on read, as sender signing
+pins already were. A correctly encoded but unusable low-order stored point is
+reported as corrupt rather than returned as a usable recipient key. Two
+low-order-point controls modify only an in-memory test backend, verify
+rejection, then restore and reload the valid pin. The cryptographic component
+suite passed, as did the signed A/B two-Decodium transfer test using isolated
+Keychain identities and loopback HTTPS after rebuilding the application.
+This does not implement key rotation or establish public-provider behaviour.
+
+The component suite now also corrupts the stored recipient pin in both
+directions independently. Unsigned and signed envelope creation both fail
+without changing the test key store; after restoring each valid pin, a signed
+envelope is created and opened by the other identity. These are in-memory
+key-store controls. The preceding two-application test exercised valid pins,
+not an operating-system keychain containing a corrupt pin.
+
+Attempting to pin a valid recipient over either of the two unusable stored
+points now reports corrupt storage rather than a normal key conflict, without
+overwriting the existing record. The A/B in-memory controls check the error
+and absence of writes. The signed two-process A/B transfer with valid pins
+was repeated after rebuilding and passed; a corrupt OS-keychain application
+test remains open.
+
+The macOS Keychain component test now uses a newly created temporary file
+keychain to insert each of two unusable X25519 public pins. In each case it
+checks corrupt status, refusal to replace or seal with the pin, and byte-for-
+byte preservation of the invalid test record. After restoring the valid pin,
+two encrypted payloads are opened by separate receiver processes. The test
+passed and deletes its temporary Keychain. These are native Keychain and
+separate helper-process checks, not a corrupt-pin test through the complete
+Decodium GUI or remote-sharing provider.
+
+The controller now reports corrupt recipient and sender pins distinctly from
+invalid confirmation or an ordinary key conflict; unavailable secure storage
+also has its own error. Sender-pin insertion revalidates an existing stored
+P256 key before classifying a conflict. An offscreen QML/controller test
+uses a temporary macOS Keychain, clicks the pin controls with two corrupt
+recipient fixtures and one corrupt sender fixture, checks the respective
+operation messages and restores the original test pins. The QML, crypto and
+signed two-Decodium A/B transfer tests passed together. The corrupt-pin QML
+test uses an in-process local provider; the two-process transfer uses valid
+pins, so it does not prove a corrupt-pin provider exchange.
+
+The operation notice is now in a fixed footer outside the scrolling content,
+so the pin result need not be sought at the end of a long page. Offscreen
+QML checks place the sender error inside both 1040x900 and 800x500 page bounds
+at two scroll offsets; recipient error text is also checked for two corrupt
+pins. The signed two-Decodium A/B transfer passed after rebuilding. These
+are geometric QML checks on this Mac, not a visual survey of all window sizes
+or a full GUI corrupt-pin exchange with a remote provider.
+
+The two corrupt-recipient cases were subsequently rendered with the QML
+software backend at 1040x900. Both saved window images show the error notice
+at the bottom and the sharing controls above it; they were visually inspected
+on this Mac. The optional test-only screenshot directory is selected with
+`DECODIUM_SHARE_NOTICE_SCREENSHOT_DIR`. This is an offscreen rendering using
+the test style, not a visual inspection of the packaged application on every
+desktop environment.
+
+The offscreen QML regression also checks that the corrupt sender and recipient
+errors reach the page's visible notice label with error state. This checks
+the QML object properties, not whether a scrolled viewport places the label
+onscreen or a human can see it on every window size. The signed A/B
+two-Decodium transfer with valid pins was repeated and passed.
+
+The REST OpenAPI `Encryption` schema now admits the three optional sender
+authentication fields as an all-or-none group and limits their combination to
+end-to-end AES-256-GCM. Previously `additionalProperties: false` rejected
+actual signed manifests, and the description incorrectly said no envelope was
+implemented. The schema remains a structural contract: canonical signature
+encoding, key pinning and cryptographic verification are client checks.
+
+Two Decodium processes transferred and decrypted images A and B over the
+verified loopback HTTPS fixture, first with signed envelopes and then with
+unsigned envelopes. In each run, Python jsonschema Draft 2020-12 validated the
+two actual manifests against `ManifestV1`; for each signed manifest, removing
+any one sender-authentication field or changing its mode or encryption
+algorithm was rejected. Image A/B mean RGB error was 0.3333, maximum 1, in
+both runs. The optional laboratory check uses `DECODIUM_LAB_VALIDATE_OPENAPI=1`
+and requires separately installed Python `jsonschema` and PyYAML; ordinary
+application tests have no such dependency. An initial CTest invocation used
+the system Python with a module installed for a different Python version and
+failed at import after successful image transfer; the successful runs used the
+matching interpreter. These results do not establish interoperability with a
+deployed provider or an independent cryptographic audit.
+
+The OpenAPI schema also enforces the mode-dependent encryption fields and
+the relationship between the mode and `providerCanReadContent`. For each of
+the real signed and unsigned A/B manifests in repeated two-application HTTPS
+transfers, the schema accepted the original and rejected altered nonce,
+empty key ID or recipient fingerprint, missing authenticated-data binding,
+and a claim that the provider can read E2EE content. Converted TLS-only
+structural A/B controls were accepted, while inconsistent TLS-only nonce,
+key ID, authenticated-data binding or provider visibility were rejected.
+The TLS-only controls were derived from the received E2EE manifests; they
+were not separate TLS-only application transfers. Schema validation still
+does not prove encryption or key authenticity.
+
+Replay lookups now use two additive SQLite indexes on direction, provider,
+and respectively manifest identity or payload hash. Existing schema-v3
+queues acquire them transactionally on open without changing the schema
+version, stored manifests or idempotency keys. Later opens check for existing
+indexes before taking a writer transaction. A/B queue tests start from v3
+databases without these indexes, simulate a failed index-creation commit and
+verify rollback plus preservation of the existing transfer, reopen to create
+the indexes, check SQLite's query plans and reopen while a separate writer
+transaction holds a lock. Both variants pass.
+
+A synthetic in-memory SQLite comparison of 30,000 same-provider rows on this
+Mac found about 2.8 ms per exact-key or payload-hash lookup with the former
+provider index, versus about 0.004–0.005 ms with the composite indexes. This
+microbenchmark is not a full-application latency or memory measurement. Two
+Decodium A/B tests also removed the indexes from an isolated existing v3
+queue after an accepted signed transfer, restarted the receiver, verified
+both indexes were restored and the accepted image retained, and confirmed a
+re-signed replay was rejected before content download. Tests
+`test_sstv_share_app_signed_replay_index_upgrade_a` and `_b` passed using
+temporary Keychains and loopback HTTPS; this does not establish production
+provider performance or an independent security audit.
+
+The receiver now verifies signed incoming manifests against the pinned sender
+key before adding them to the download queue. An absent verifier, unpinned
+key, wrong fingerprint or invalid signature rejects the operation without
+requesting content. This prevents a newly presented invalid signature from
+reserving a signed-envelope duplicate identity and blocking a subsequent
+valid signature. The worker performs this check, and authenticated opening
+still checks the signature again before decryption; pin changes can therefore
+invalidate a queued item. Unsigned E2EE follows the existing sender policy.
+
+Two-process A/B HTTPS tests present a signature-altered copy first and the
+genuine signed envelope afterwards, with identical ciphertext and all other
+manifest fields unchanged. The fake is rejected before any content request;
+both genuine images are then decrypted and compared, with mean RGB error
+0.3333 and maximum 1. The queue test also verifies A/B failure with no
+verifier and with an independently signed forgery before admitting the
+valid envelope. These tests use isolated identities and a local fixture.
+At that stage, pre-existing invalid queued records from an older build had
+not been separately verified.
+
+The duplicate comparison now rechecks the signature of a matching older
+signed record. A cryptographically invalid prior signature does not block a
+valid incoming envelope; a valid prior signature still blocks the replay. If
+the pinned-key store cannot be read reliably, the operation fails closed and
+the SQLite transaction is rolled back. No previous record is deleted or
+modified by this check. A/B queue tests simulate a pre-upgrade invalid queued
+record, an unavailable verifier, the later valid arrival, and restart; the
+crypto suite separately distinguishes valid, invalid and unavailable-key
+results for both signing directions.
+
+Two further application A/B tests use isolated Decodium processes, Keychain
+and loopback HTTPS. After a fake signature is rejected, the harness inserts a
+paused, invalid-signature legacy record into that test session's SQLite queue
+and confirms it remains present. The same signed fields and ciphertext with
+the legitimate signature are then admitted and both images are decrypted
+and compared. The simulated record is inserted directly into a guarded
+Qt-test storage directory; this is not a migration from an installed older
+release. The key-store-unavailable case is covered by component tests, not by
+the two-process fixture. These results do not establish public-provider or
+RF interoperability or an independent security audit.
+
+On 2026-11-03 signed-envelope replay detection was extended beyond exact
+signature bytes. ECDSA can produce different valid low-S signatures for the
+same signed manifest, so the queue now compares the canonical signed fields
+with the signature omitted against active or accepted signed downloads from
+the same provider with the same ciphertext hash. The comparison is inside
+the existing insertion transaction, before content download and history
+reclamation. Existing persisted idempotency keys and schema are unchanged.
+Failed, cancelled, rejected and expired records remain retryable; a distinct
+signed manifest remains eligible. This is a duplicate check, not signature
+verification. At that stage an unverified queued entry with matching signed
+fields could temporarily block another; the pre-queue signature check above
+now addresses newly queued items, while opening retains its own check.
+
+An A/B queue regression generated two different valid low-S P-256 signatures
+over exactly the same signed bytes and independently verified both. It failed
+before the change and now rejects the second entry both while the first is
+queued and after acceptance plus queue restart. The test also signs a distinct
+manifest and verifies that a cancelled entry can be retried with another
+valid signature. Its queue uses a fake payload-opening fixture, so it is not
+an end-to-end cryptographic transfer test.
+
+Two Decodium applications then transferred signed encrypted A/B images through
+the verified local HTTPS fixture. After acceptance and receiver restart, a
+replayed envelope with the mathematically equivalent high-S signature was
+rejected as a duplicate before content download; the accepted image and
+Gallery inventory remained unchanged. Both A/B cases, exact-replay controls,
+and separate high-S authentication-rejection A/B controls passed. At that
+stage the latter had no previously queued equivalent and reached
+cryptographic opening; the pre-queue check described above now rejects them
+before the content request.
+The high-S replay tests no longer exercise the earlier delayed-download busy
+path described below because the duplicate is now rejected before download.
+At that stage, valid-low-S re-signing had only been tested at queue level.
+These checks do not establish a public-provider
+deployment, an independent key-verification ceremony or a security audit.
+
+Two subsequent full Decodium application tests now cover that valid re-signing
+case for A and B. In isolated test mode the sender uses its temporary Keychain
+identity to make a second low-S signature over the original canonical signed
+bytes; it verifies both signatures and writes only the second public signature
+to the laboratory directory. On macOS the harness also verifies both
+signatures separately with the OpenSSL command-line tool and the sender's
+published public key. The fixture re-presents the same ciphertext and signed
+fields with the new signature and a fresh inbox ID after the receiver has
+accepted the original and restarted. Both tests require rejection before any
+replay content request and check that the accepted transfer and Gallery files
+remain unchanged. The test hook rejects operation outside test mode and its
+output path outside the isolated laboratory directory. The A/B tests are
+`test_sstv_share_app_signed_replay_resigned_a` and `_b`; they use a simulated
+trusted-key exchange and loopback HTTPS, not a public provider or independent
+security audit. The isolated-Keychain helper experiment was denied access by
+Keychain; no private key was exported to that helper or to the fixture.
+
 The coordinated create-only backend now rejects an inconsistent lookup that
 reports a missing item while returning a nonempty value, including the lookup
 performed under its cross-process lock. Previously that response could trigger
@@ -852,3 +1332,150 @@ manifest and ciphertext. `test_sstv_share_app_signed_replay_a` and `_b` cover
 these cases. This checks exact replays while the queue retains its evidence;
 it is not a general proof against every replay, a public-provider test, an
 independent key-verification ceremony or a security audit.
+
+A further signed-envelope A/B application test now restarts the receiver
+before replay. Two isolated Decodium processes first transfer both images over
+the verified loopback HTTPS fixture; after both exit, the same receiver
+settings, identity and provider are reopened, and the fixture presents the
+unchanged signed manifest and ciphertext under a fresh inbox ID. For both A
+and B, the restarted receiver rejects the duplicate without requesting its
+content. The fixture checks equality of the manifest and ciphertext, and the
+application must report the duplicate and complete its resumed session.
+`test_sstv_share_app_signed_replay_restart_a` and `_b` passed on macOS ARM64;
+the existing signed and unsigned transfer and replay application tests also
+passed. The first laboratory attempt tried to reconfigure the provider with
+active pending transfers and was correctly rejected; the revised test-only
+session reuses the existing provider instead. The tests use a simulated local
+trusted-key exchange and retained queue history: they do not establish
+behaviour after history expiry, a public provider, RF, other platforms or an
+independent security review.
+
+The restart replay check was extended to accepted signed images. In each A/B
+case, two Decodium processes transfer both images over the loopback HTTPS
+fixture, and the receiver accepts the selected image. The harness checks the
+persistent queue state is `Accepted` and that exactly one corresponding
+Gallery image exists before restarting the receiver with the same settings and
+identity. The fixture then re-presents the unchanged signed envelope and
+ciphertext under a new inbox ID. Both cases reject it before requesting the
+content; the other pending image remains available. The two new
+`test_sstv_share_app_signed_replay_accepted_restart_{a,b}` cases passed on
+macOS ARM64, as did the existing accepted-restart and signed replay tests.
+The key exchange was simulated, the queue history was retained, and this does
+not establish behaviour after history expiry, on a public provider or after
+independent security review.
+
+Two further full-application A/B tests exercise ECDSA signature malleability
+over the loopback HTTPS fixture. The sender publishes a valid signed encrypted
+image; the fixture changes only its canonical DER signature from low S to
+`order - S` and updates the manifest representation and advertised digest.
+This signature has a different manifest identity but is mathematically
+equivalent under ECDSA. The receiver rejects the altered envelope during
+authenticated opening; in the B case it also receives the preceding unchanged
+A image. `test_sstv_share_app_signed_senderSignatureHighS_{a,b}` passed on
+macOS ARM64, as did the signed-transfer control, HTTPS fixture and crypto
+tests. The fixture conversion was checked against two known P-256 vectors;
+OpenSSL independently verified both low- and high-S forms for each vector.
+This is an authentication rejection test with a simulated trusted key
+exchange, not an accepted-image replay test, public-provider interoperability
+or independent security audit.
+
+The high-S case was subsequently tested as an actual replay after acceptance
+and receiver restart. For A and B, two Decodium processes first transferred
+both signed images; the receiver accepted the selected image, and the harness
+verified its persistent `Accepted` state and Gallery file. After restarting
+the same receiver identity and settings, the fixture presented the same
+ciphertext and manifest fields under a fresh provider inbox ID, changing only
+the signature to its equivalent high-S representation. The altered manifest
+has a different identity, so content was requested; authenticated opening
+then failed. The harness confirmed that the original transfer stayed accepted
+and the complete imported-PNG inventory and hashes were unchanged. Both
+`test_sstv_share_app_signed_replay_high_s_{a,b}` passed on macOS ARM64, as
+did the exact-replay-after-acceptance A/B and valid signed-transfer controls.
+
+The first two attempts instead exposed a laboratory scheduling race: a new
+inbox poll was started while the fixture's provider slot was occupied, and
+the session stopped on the temporary busy response before testing the altered
+envelope. The test-only session now retries that specific response within its
+existing 90-second deadline; both successful A/B tests reached the required
+authenticated-open failure. This is not proof against every replay strategy,
+an independent key-verification ceremony, a public provider or a security
+audit.
+
+Inbox refresh now reports a missing or unsupported provider separately from
+a provider whose operation slots are busy. Both retain the existing
+`ProviderUnavailable` failure category; this change makes the diagnostic
+distinct and does not add automatic retry to the production UI. Queue A/B
+tests cover an existing inbox refresh and an active upload occupying the
+single provider slot, check that an unknown provider reports unavailable in
+both cases, and confirm that another refresh succeeds once the slot is free.
+The test-only sharing session retries only the explicit busy diagnostic,
+within its existing deadline, rather than also retrying missing providers.
+
+For full-application A/B controls, the loopback fixture delayed each altered
+high-S replay content response for 3.5 seconds, forcing a concurrent inbox
+poll while the download slot was occupied. Both resumed laboratory sessions
+reported the busy retry and subsequently rejected the altered envelope during
+authenticated opening, while retaining the accepted Gallery image. The
+signed transfer and exact-replay-after-acceptance A/B regressions also passed
+on macOS ARM64. The retry belongs to the isolated laboratory session; this
+does not establish public-provider behaviour or an independent security audit.
+
+The Windows SSTV workflow's inventory gate previously required an exact
+count of six sharing tests, although the current CMake declarations contain
+20. It now checks the CTest JSON inventory for all 20 named requirements and
+allows additional tests; missing or malformed inventories fail the gate.
+Local A/B controls verified the declared names against the CMake block,
+accepted extra tests and rejected missing A/B replay cases and malformed
+input. The sharing queue test and two full-application high-S replay A/B
+regressions also passed on macOS. No GitHub runner was started or monitored
+for this change, and it is not evidence of a Windows build or runtime pass.
+
+### Inbox refresh while a provider slot is occupied
+
+The application worker now defers an inbox refresh when the queue manager
+reports its specific local `inbox provider is busy` condition. It coalesces
+pending retries, waits 250 ms between attempts and stops after 40 retries;
+an unavailable provider and other failures are still reported immediately.
+Disabling sharing or rebuilding the provider invalidates scheduled retries
+using the provider generation and a retry token. This changes refresh
+scheduling only; it does not weaken encryption, signature or acceptance
+checks. The earlier statement that retries were laboratory-only describes
+the implementation before this change.
+
+Two-process signed A/B HTTPS fixture tests held the download slot for 3.5
+seconds while polling the inbox. Both exercised the worker retry, decrypted
+the expected A/B images and completed without the laboratory poller's own
+busy-error retry. Further A/B tests held the slot for 12 seconds: the
+worker's bounded attempts ended with the busy result, the laboratory poller
+resumed later, and both transfers still completed. This longer test proves
+the bounded worker result; its eventual additional poll belongs to the test
+session, not an unbounded production retry. Controller tests also exercised
+two concurrent refreshes and disabling/re-enabling sharing while a retry
+was pending; manager tests retained the distinction between busy and missing
+providers. The sharing QML, signed transfer and both signed high-S replay
+regressions passed on this Mac. These are local HTTPS tests with simulated
+key exchange, not a public-provider trial or an independent security audit.
+
+The queue manager now marks its own capacity-busy result explicitly; the
+worker no longer identifies it by comparing a provider diagnostic string.
+The public failure category remains `ProviderUnavailable` for compatibility.
+A/B manager checks confirm the local marker is present for occupied inbox
+and upload slots, absent for a missing provider, and absent when a generic
+provider failure merely repeats the same diagnostic text. Both signed
+two-process busy-refresh and bounded-exhaustion A/B tests, plus the controller
+and queue tests, passed after this change. The marker is internal process
+state, not a new remote protocol field or proof about arbitrary providers.
+
+Both Windows workflows that compile the pinned Hamlib 4.7.0 archive now
+verify SHA-256 and apply `tests/sstv/fixtures/hamlib-4.7.0-windows-assert.patch`.
+The original Windows timer branch calls `assert` without including
+`<assert.h>`; the patch adds that standard header only to the Windows branch.
+`test_hamlib_windows_assert_patch.py` applied the patch to the official
+archive's extracted source and compiled the isolated branch against a minimal
+Windows API stub: with assertions enabled and with `NDEBUG`, an undeclared
+`assert` failed before the patch and the patched branch compiled. The test
+also rejects a second patch application. The local inventory test and two
+full Decodium signed-replay A/B regressions passed on macOS. This is a
+targeted compiler simulation, not a Windows Hamlib build, application runtime
+or evidence that all CI failures are resolved. No runner was started or
+monitored.

@@ -213,13 +213,19 @@ public:
     // Public keys are exchanged out of band; the caller confirms a fingerprint
     // independently before pinning. Existing pins are never replaced silently.
     Q_INVOKABLE bool createSharingIdentity();
+    Q_INVOKABLE bool rotateSharingIdentity(const QString& expectedFingerprint);
     Q_INVOKABLE bool createSigningIdentity();
+    Q_INVOKABLE bool rotateSigningIdentity(const QString& expectedFingerprint);
     Q_INVOKABLE bool pinSenderSigningIdentity(const QString& senderId, const QString& publicKeyHex,
                                               const QString& verifiedFingerprint, bool independentlyConfirmed);
+    Q_INVOKABLE bool replaceSenderSigningIdentity(const QString& senderId, const QString& expectedFingerprint,
+        const QString& publicKeyHex, const QString& verifiedFingerprint, bool independentlyConfirmed);
     Q_INVOKABLE bool pinSharingRecipient(const QString& recipientId,
                                           const QString& publicKeyHex,
                                           const QString& verifiedFingerprint,
                                           bool independentlyConfirmed);
+    Q_INVOKABLE bool replaceSharingRecipient(const QString& recipientId, const QString& expectedFingerprint,
+        const QString& publicKeyHex, const QString& verifiedFingerprint, bool independentlyConfirmed);
     Q_INVOKABLE bool refreshInbox();
     Q_INVOKABLE bool download(const QString& incomingId,
                               const QString& destinationFileName);

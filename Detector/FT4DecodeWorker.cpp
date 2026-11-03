@@ -23,9 +23,11 @@
 #include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSet>
 #include <QStandardPaths>
 #include <QThread>
+#include <QTimer>
 
 #include "Logger.hpp"
 #include "commons.h"
@@ -51,6 +53,10 @@ extern "C"
 namespace
 {
   std::atomic_bool g_hashSeedShutdownRequested {false};
+  std::atomic_bool g_hashSeedWorkEnabled {true};
+  std::atomic<quint64> g_hashSeedGeneration {0};
+  thread_local bool g_isHashSeedWorker = false;
+  thread_local quint64 g_hashSeedWorkerGeneration = 0;
 
   constexpr int kFt4SampleCount {72576};
   constexpr int kFt4MaxLines {100};
@@ -186,7 +192,9 @@ namespace
   bool hash_seed_shutdown_requested ()
   {
     return g_hashSeedShutdownRequested.load (std::memory_order_acquire)
-           || QCoreApplication::closingDown ();
+           || QCoreApplication::closingDown ()
+           || (g_isHashSeedWorker
+               && g_hashSeedWorkerGeneration != g_hashSeedGeneration.load (std::memory_order_acquire));
   }
 
   struct HashSeedCallAccumulator
@@ -250,11 +258,44 @@ namespace
       }
     QByteArray const data = file.readAll ().toUpper ();
     QString const text = QString::fromLatin1 (data.constData (), data.size ());
+    const bool traceLifecycle = qEnvironmentVariableIntValue ("DECODIUM_HASH_LIFECYCLE_DIAGNOSTICS") > 0;
+    QElapsedTimer scanTimer;
+    int scannedTokens = 0;
+    if (traceLifecycle)
+      {
+        scanTimer.start ();
+        qInfo ().noquote () << "[HASHLIFE] mode=FT4 scan_begin bytes=" << data.size ();
+      }
+    static std::atomic_bool labSwitchRequested {false};
+    if (QStandardPaths::isTestModeEnabled () && data.size () >= 8 * 1024 * 1024
+        && qEnvironmentVariableIntValue ("DECODIUM_LAB_SWITCH_DURING_FT4_HASH") > 0
+        && !labSwitchRequested.exchange (true))
+      {
+        if (auto* app = QCoreApplication::instance ())
+          QMetaObject::invokeMethod (app, [app] {
+            QObject* bridge = app->property ("decodiumHashLabBridge").value<QObject*> ();
+            if (!bridge) return;
+            qInfo ().noquote () << "[HASHLIFE] lab_switch_begin FT4->FT8";
+            bool const changed = bridge->setProperty ("mode", QStringLiteral ("FT8"));
+            qInfo ().noquote () << "[HASHLIFE] lab_switch_end ok=" << int (changed)
+                                << "mode=" << bridge->property ("mode").toString ();
+            QTimer::singleShot (6000, bridge, [bridge] {
+              bool const restored = bridge->setProperty ("mode", QStringLiteral ("FT4"));
+              qInfo ().noquote () << "[HASHLIFE] lab_restore_end ok=" << int (restored)
+                                  << "mode=" << bridge->property ("mode").toString ();
+            });
+          }, Qt::QueuedConnection);
+      }
+    auto const scanTrace = qScopeGuard ([&] {
+      if (traceLifecycle)
+        qInfo ().noquote () << "[HASHLIFE] mode=FT4 scan_end cancelled="
+                            << int (hash_seed_shutdown_requested ())
+                            << "tokens=" << scannedTokens << "elapsed_ms=" << scanTimer.elapsed ();
+    });
     static QRegularExpression const tokenRx {
       QStringLiteral (R"((?:<[A-Z0-9/]{3,13}>|[A-Z0-9/]{3,13}))")
     };
     auto it = tokenRx.globalMatch (text);
-    int scannedTokens = 0;
     while (it.hasNext ())
       {
         if ((++scannedTokens & 0x3ff) == 0 && hash_seed_shutdown_requested ())
@@ -719,7 +760,8 @@ namespace
           }
       }
     snapshot.calls = accumulator.to_list ();
-    merge_into_hash_seed_cache (snapshot.calls, snapshot.sourcePaths);
+    if (!hash_seed_shutdown_requested ())
+      merge_into_hash_seed_cache (snapshot.calls, snapshot.sourcePaths);
     snapshot.elapsedMs = timer.elapsed ();
     return snapshot;
   }
@@ -750,7 +792,8 @@ namespace
           }
       }
     snapshot.calls = accumulator.to_list ();
-    merge_into_hash_seed_cache (snapshot.calls, snapshot.sourcePaths);
+    if (!hash_seed_shutdown_requested ())
+      merge_into_hash_seed_cache (snapshot.calls, snapshot.sourcePaths);
     snapshot.elapsedMs = timer.elapsed ();
     return snapshot;
   }
@@ -791,6 +834,7 @@ namespace
       }
     state.workerStarted = true;
     state.worker = std::thread ([&state] {
+      g_isHashSeedWorker = true;
       QThread::currentThread ()->setObjectName (QStringLiteral ("FT4HashSeedWorker"));
       QThread::currentThread ()->setPriority (QThread::LowPriority);
 
@@ -808,6 +852,7 @@ namespace
               {
                 break;
               }
+            g_hashSeedWorkerGeneration = g_hashSeedGeneration.load (std::memory_order_acquire);
             if (state.initialRequested)
               {
                 state.initialRequested = false;
@@ -824,15 +869,21 @@ namespace
             {
               HashSeedSnapshot snapshot = collect_initial_hash_seed_snapshot ();
               std::lock_guard<std::mutex> lock {state.mutex};
-              state.initialCompleted = std::move (snapshot);
-              state.initialReady = true;
+              if (g_hashSeedWorkerGeneration == g_hashSeedGeneration.load (std::memory_order_acquire))
+                {
+                  state.initialCompleted = std::move (snapshot);
+                  state.initialReady = true;
+                }
             }
           else if (collectRefresh)
             {
               HashSeedSnapshot snapshot = collect_hash_seed_refresh_snapshot ();
               std::lock_guard<std::mutex> lock {state.mutex};
-              state.refreshCompleted = std::move (snapshot);
-              state.refreshReady = true;
+              if (g_hashSeedWorkerGeneration == g_hashSeedGeneration.load (std::memory_order_acquire))
+                {
+                  state.refreshCompleted = std::move (snapshot);
+                  state.refreshReady = true;
+                }
             }
         }
     });
@@ -840,6 +891,12 @@ namespace
 
   void shutdown_hash_seed_worker ()
   {
+    const bool traceLifecycle = qEnvironmentVariableIntValue ("DECODIUM_HASH_LIFECYCLE_DIAGNOSTICS") > 0;
+    QElapsedTimer shutdownTimer;
+    if (traceLifecycle) {
+        shutdownTimer.start ();
+        qInfo ().noquote () << "[HASHLIFE] mode=FT4 shutdown_begin";
+    }
     g_hashSeedShutdownRequested.store (true, std::memory_order_release);
     HashSeedAsyncState& state = hash_seed_async_state ();
     std::thread worker;
@@ -855,6 +912,8 @@ namespace
       {
         worker.join ();
       }
+    if (traceLifecycle)
+      qInfo ().noquote () << "[HASHLIFE] mode=FT4 shutdown_end elapsed_ms=" << shutdownTimer.elapsed ();
   }
 
   void seed_hash_calls (QStringList const& calls)
@@ -869,12 +928,13 @@ namespace
 
   void start_ft4_pack77_hash_seed_collection_once ()
   {
-    if (hash_seed_shutdown_requested ())
+    if (hash_seed_shutdown_requested () || !g_hashSeedWorkEnabled.load (std::memory_order_acquire))
       {
         return;
       }
     HashSeedAsyncState& state = hash_seed_async_state ();
     std::lock_guard<std::mutex> lock {state.mutex};
+    if (!g_hashSeedWorkEnabled.load (std::memory_order_acquire)) return;
     if (state.initialStarted)
       {
         return;
@@ -928,13 +988,14 @@ namespace
 
   void start_ft4_hash_context_refresh_from_recent_logs ()
   {
-    if (hash_seed_shutdown_requested ())
+    if (hash_seed_shutdown_requested () || !g_hashSeedWorkEnabled.load (std::memory_order_acquire))
       {
         return;
       }
     qint64 const nowMs = QDateTime::currentMSecsSinceEpoch ();
     HashSeedAsyncState& state = hash_seed_async_state ();
     std::lock_guard<std::mutex> lock {state.mutex};
+    if (!g_hashSeedWorkEnabled.load (std::memory_order_acquire)) return;
     if (!state.initialApplied || !state.pendingCalls.empty ()
         || state.refreshRequested || state.refreshReady)
       {
@@ -1126,6 +1187,28 @@ void shutdownHashSeedWorker ()
   shutdown_hash_seed_worker ();
 }
 
+void setHashSeedWorkEnabled (bool enabled)
+{
+  HashSeedAsyncState& state = hash_seed_async_state ();
+  std::lock_guard<std::mutex> lock {state.mutex};
+  if (g_hashSeedWorkEnabled.exchange (enabled, std::memory_order_acq_rel) == enabled)
+    return;
+  if (!enabled)
+    {
+      g_hashSeedGeneration.fetch_add (1, std::memory_order_release);
+      state.initialRequested = false;
+      if (!state.initialApplied)
+        {
+          state.initialStarted = false;
+          state.initialReady = false;
+          state.initialCompleted = {};
+        }
+      state.refreshRequested = false;
+      state.refreshReady = false;
+      state.lastRefreshStartMs = 0;
+    }
+}
+
 FT4DecodeWorker::FT4DecodeWorker (QObject * parent)
   : QObject {parent}
 {
@@ -1202,6 +1285,37 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
 
   QElapsedTimer decodeTimer;
   decodeTimer.start ();
+  const bool traceLifecycle = QStandardPaths::isTestModeEnabled ()
+      && qEnvironmentVariableIntValue ("DECODIUM_HASH_LIFECYCLE_DIAGNOSTICS") > 0;
+  if (traceLifecycle)
+    qInfo ().noquote () << "[HASHLIFE] mode=FT4 decoder_begin serial=" << request.serial;
+  static std::atomic_bool labDecodeRequested {false};
+  if (QStandardPaths::isTestModeEnabled ()
+      && qEnvironmentVariableIntValue ("DECODIUM_LAB_SWITCH_DURING_FT4_DECODE") > 0
+      && request.serial >= 5
+      && !labDecodeRequested.exchange (true))
+    {
+      if (auto* app = QCoreApplication::instance ())
+        QMetaObject::invokeMethod (app, [app] {
+          QObject* bridge = app->property ("decodiumHashLabBridge").value<QObject*> ();
+          if (!bridge || bridge->property ("mode").toString () != QStringLiteral ("FT4")) {
+            labDecodeRequested.store (false);
+            return;
+          }
+          qInfo ().noquote () << "[HASHLIFE] lab_ft4_decoder_switch_begin";
+          QElapsedTimer timer;
+          timer.start ();
+          bool const changed = bridge->setProperty ("mode", QStringLiteral ("FT8"));
+          qInfo ().noquote () << "[HASHLIFE] lab_ft4_decoder_switch_end ok=" << int (changed)
+                              << "mode=" << bridge->property ("mode").toString ()
+                              << "elapsed_ms=" << timer.elapsed ();
+          QTimer::singleShot (6000, bridge, [bridge] {
+            bool const restored = bridge->setProperty ("mode", QStringLiteral ("FT4"));
+            qInfo ().noquote () << "[HASHLIFE] lab_ft4_restore_end ok=" << int (restored)
+                                << "mode=" << bridge->property ("mode").toString ();
+          });
+        }, Qt::QueuedConnection);
+    }
   ftx_ft4_decode_c (iwave, &nqsoprogress, &nfqso, &nfa, &nfb,
                     &ndepth, &lapcqonly, &ncontest, mycall.data (), hiscall.data (),
                     &syncs[0], &snrs[0], &dts[0], &freqs[0], &naps[0], &quals[0],
@@ -1210,6 +1324,9 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
                     static_cast<fortran_charlen_t> (12),
                     static_cast<fortran_charlen_t> (kFt4MaxLines * kDecodedChars));
   qint64 const decodeMs = decodeTimer.elapsed ();
+  if (traceLifecycle)
+    qInfo ().noquote () << "[HASHLIFE] mode=FT4 decoder_end serial=" << request.serial
+                        << "elapsed_ms=" << decodeMs;
 
   latestSerial = m_latestDecodeSerial.load (std::memory_order_relaxed);
   if (m_shuttingDown.load (std::memory_order_relaxed)

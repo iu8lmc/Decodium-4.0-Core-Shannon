@@ -22,7 +22,8 @@ contains no `servers` entry and records an empty production-endpoint list.
 | Validated handoff to Gallery storage | `DecodiumBridge` connects `SstvShareController::incomingHandoffReady` to `SstvStorageWorker::importValidatedIncomingHandoff` on the storage worker thread. The importer strictly parses schema v1, reopens, re-hashes and fully decodes the private normalized PNG, preserves its exact bytes in the existing imported-image layout, commits SQLite and only then removes staging. UUID/hash replay is idempotent and focused tests cover the exact controller signal/slot contract. | This proves the in-process lifecycle and local persistence path, not any production sharing endpoint or Internet interoperability. |
 | Generic HTTP recipient/inbox/download/decision mapping | Implemented fail-closed by `SstvGenericRestShareProvider`, including authenticated capability discovery, recipient lookup, bounded metadata list/range GET, idempotent acknowledge/reject/incoming-delete and sender block. | No production endpoint has been named, audited or tested. Delete/block are additive optional v1 capabilities and default false when absent. |
 | Credentials | `SstvShareController` uses `secure_settings::Backend` directly for namespaced Bearer/Basic secrets, creates opaque credential leases and fails closed instead of persisting a secret through ordinary settings. Focused tests cover successful store/remove on the worker and scan the test `QSettings` file for the submitted secret. | Backend-unavailable and lookup/store/remove failure paths, platform stores and diagnostic/log surfaces still require complete release evidence. |
-| Peer/relay, local integration and E2EE | `SstvLocalIntegrationShareProvider` is a deterministic bounded process-local contract adapter exercised through the queue/controller in developer tests. Production peer/relay and E2EE remain explicit unavailable states. | The local adapter opens no socket, persists no credential and is available only by explicit test injection. No relay, peer discovery, direct listener, key exchange, encrypted envelope or production endpoint is shipped. |
+| E2EE and sender authentication | The client implements experimental X25519/HKDF-SHA256 and AES-256-GCM envelopes, with optional pinned P-256 sender signatures. Local two-application HTTPS tests are recorded in [E2EE_IMPLEMENTATION.md](E2EE_IMPLEMENTATION.md). | Sender authentication requires independently verified keys. The protocol has not received an independent security audit and no compatible production provider has been verified. |
+| Peer/relay and local integration | `SstvLocalIntegrationShareProvider` is a deterministic bounded process-local contract adapter exercised through the queue/controller in developer tests. Production peer/relay remains unavailable. | The local adapter opens no socket, persists no credential and is available only by explicit test injection. No relay, peer discovery, direct listener or production endpoint is shipped. |
 
 `qml/decodium/components/sstv/SstvSharePage.qml` is now connected through
 `DecodiumBridge::sstvShare` to the worker-owned controller. Sharing defaults
@@ -147,9 +148,12 @@ never stored as an SSTV mode or media source.
 
 Transport-TLS manifests require `algorithm: none`, empty key/nonce fields,
 `manifestBoundAsAuthenticatedData: false` and
-`providerCanReadContent: true`. The schema also validates the shape of future
-`end-to-end` envelopes, but schema acceptance is not an E2EE implementation or
-availability claim.
+`providerCanReadContent: true`. The schema describes both `end-to-end`
+envelopes and optional sender authentication. Its structural checks do not
+verify signatures, authenticated encryption, independent key pins or provider
+availability; the native client performs its own validation and cryptographic
+checks. The implementation and its current evidence are described in
+[E2EE_IMPLEMENTATION.md](E2EE_IMPLEMENTATION.md).
 
 ## Provider contract and errors
 

@@ -23,9 +23,16 @@ expected_sha256=os.environ.get('QSSTV_EXPERIMENTAL_SHA256',
 if hashlib.sha256(qsstv.read_bytes()).hexdigest()!=expected_sha256:
     raise RuntimeError('QSSTV-Experimental binary does not match the expected SHA-256')
 root=Path(tempfile.mkdtemp(prefix='decodium-qsstv-exp-app-'+str(variant)+'-'))
-with (root/'reference.pgm').open('wb') as ref:
-    ref.write(b'P5\n512 500\n255\n')
-    ref.write(bytes(((((x//64)+(y//80)+variant*2)%4)*60+35) for y in range(500) for x in range(512)))
+reference_override=os.environ.get('QSSTV_REFERENCE_IMAGE')
+if reference_override:
+    if not os.environ.get('QSSTV_EXISTING_WAV'):
+        raise SystemExit('QSSTV_REFERENCE_IMAGE requires QSSTV_EXISTING_WAV')
+    reference=Path(reference_override).resolve(strict=True)
+else:
+    reference=root/'reference.pgm'
+    with reference.open('wb') as ref:
+        ref.write(b'P5\n512 500\n255\n')
+        ref.write(bytes(((((x//64)+(y//80)+variant*2)%4)*60+35) for y in range(500) for x in range(512)))
 encodeEnv=os.environ.copy()
 encodeEnv['QT_QPA_PLATFORM']=os.environ.get('QSSTV_QPA_PLATFORM','cocoa')
 existing=os.environ.get('QSSTV_EXISTING_WAV')
@@ -35,7 +42,7 @@ if existing:
     shutil.copyfile(existing,root/'source.wav')
 else:
     with (root/'qsstv-encode.log').open('wb') as log:
-        subprocess.run([str(qsstv),'--encode',str(root/'reference.pgm'),'--mode','FAX480',
+        subprocess.run([str(qsstv),'--encode',str(reference),'--mode','FAX480',
                         '--wav-out',str(root/'source.wav')],env=encodeEnv,stdout=log,stderr=subprocess.STDOUT,
                        check=True,timeout=240)
 subprocess.run(['ffmpeg','-v','error','-i',str(root/'source.wav'),
@@ -82,10 +89,12 @@ try:
     log=(root/'rx.log').read_text(errors='replace')
     rows=[json.loads(line.split(' RX diagnostics ',1)[1]) for line in log.splitlines()
           if '[LAB][SSTV] RX diagnostics ' in line]
-    if not rows or not rows[-1]['imageComplete'] or rows[-1]['processingFailures']:
+    if (not rows or not rows[-1]['imageComplete'] or rows[-1]['imageCoverage'] != 1.0
+            or any(row['processingFailures'] or row['discontinuities'] or row['droppedChunks']
+                   for row in rows)):
         raise RuntimeError('RX not complete; artifacts '+str(root))
     subprocess.run([sys.executable,str(repo/'tests/sstv/tools/compare_sstv_lab_images.py'),
-        str(root/'reference.pgm'),str(root/'received.png'),'--max-mae','8','--max-p95','10'],check=True,timeout=30)
+        str(reference),str(root/'received.png'),'--max-mae','8','--max-p95','10'],check=True,timeout=30)
     print('PASS QSSTV-Experimental variant',variant,'coverage',rows[-1]['imageCoverage'],
           'discontinuities',rows[-1]['discontinuities'],'artifacts',root,flush=True)
 finally:

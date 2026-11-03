@@ -139,7 +139,9 @@ HamDrmStatus validateHamDrmFilename(const std::string& filename,
         return HamDrmStatus::failure(HamDrmErrorCode::UnsafeFilename,
                                      "HAMDRM filename length is invalid");
     }
-    if (filename == "." || filename == ".." || filename.front() == '.') {
+    // Legacy hybrid uses .de; it is still a single filename, not a path.
+    const bool legacyHybridName = filename.size() > 3U && filename.rfind(".de", 0) == 0;
+    if (filename == "." || filename == ".." || (filename.front() == '.' && !legacyHybridName)) {
         return HamDrmStatus::failure(HamDrmErrorCode::UnsafeFilename,
                                      "hidden or relative filename rejected");
     }

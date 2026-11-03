@@ -31,7 +31,7 @@ void SstvFax480AutoRx::observe(const SstvFrequencyObservation& obs)
     if (haveLast_ && obs.centreSample==last_) return;
     if (!receiver_ && haveLast_ && obs.centreSample-last_>rate_/50U) {
         replay_.clear(); header_=false; inSync_=false; transitions_=0; tone_=0;
-        vis_.reset(); visFrequency_=0.0;
+        vis_.reset(); visFrequency_=0.0; visPendingFrequency_=0.0;
     }
     last_=obs.centreSample;haveLast_=true;
     if (complete_) return;
@@ -41,11 +41,15 @@ void SstvFax480AutoRx::observe(const SstvFrequencyObservation& obs)
            || obs.centreSample-replay_.front().centreSample>rate_)) replay_.pop_front();
     if (!obs.valid() || !std::isfinite(obs.correctedFrequencyHz) || !std::isfinite(obs.confidence) || obs.confidence<0.2) {
         inSync_=false;
+        visPendingFrequency_=0.0;
         // A carrier before a silent gap must not extend a later VIS leader.
         // Brief demodulator dropouts are tolerated as in observeVis().
+        // A short dropout can split a leader or a 30 ms VIS symbol. Longer
+        // missing intervals reset acquisition rather than inventing a bit.
+        const auto visGapLimit = visFrequency_==1900.0 ? rate_*15U/1000U : rate_*12U/1000U;
         if (profile_==SstvFax480Profile::LibsstvVis480 && visFrequency_
-            && obs.centreSample-visRunEnd_>=rate_/500U) {
-            vis_.reset(); visFrequency_=0.0;
+            && obs.centreSample-visRunEnd_>=visGapLimit) {
+            vis_.reset(); visFrequency_=0.0; visPendingFrequency_=0.0;
         }
         return;
     }
@@ -91,14 +95,29 @@ void SstvFax480AutoRx::observeVis(const SstvFrequencyObservation& obs)
         const double d=std::abs(obs.correctedFrequencyHz-tone);
         if (d<distance) { distance=d; selected=tone; }
     }
-    if (!selected && (!visFrequency_ || obs.centreSample-visRunEnd_<rate_/500U)) return;
+    const auto unknownGapLimit = visFrequency_==1900.0 ? rate_*15U/1000U : rate_*12U/1000U;
+    if (!selected) {
+        visPendingFrequency_=0.0;
+        if (!visFrequency_ || obs.centreSample-visRunEnd_<unknownGapLimit) return;
+    }
     if (!visFrequency_) {
         visFrequency_=selected;visRunStart_=visRunEnd_=obs.centreSample;return;
     }
-    if (selected==visFrequency_) { visRunEnd_=obs.centreSample;return; }
+    if (selected==visFrequency_) { visRunEnd_=obs.centreSample;visPendingFrequency_=0.0;return; }
+    // Ignore sub-millisecond classified spikes without splitting a leader or
+    // symbol. Confirm a different tone before handing its boundary to VIS.
+    if (selected!=0.0) {
+        if (visPendingFrequency_!=selected) {
+            visPendingFrequency_=selected;visPendingStart_=obs.centreSample;return;
+        }
+        if (obs.centreSample-visPendingStart_<rate_/1000U) return;
+    }
+    const auto nextStart=selected!=0.0 && visPendingFrequency_==selected
+        ? visPendingStart_ : obs.centreSample;
+    visPendingFrequency_=0.0;
     const auto duration=visRunEnd_-visRunStart_+rate_/2000U;
     if (duration<rate_/1000U) {
-        visFrequency_=selected; visRunStart_=visRunEnd_=obs.centreSample;
+        visFrequency_=selected; visRunStart_=nextStart; visRunEnd_=obs.centreSample;
         return;
     }
     const auto runEnd=visRunEnd_+rate_/2000U;
@@ -110,7 +129,7 @@ void SstvFax480AutoRx::observeVis(const SstvFrequencyObservation& obs)
                                  eventDuration*1'000'000U/rate_,visFrequency_,1.0};
     const auto results=vis_.consume(&event,1);
     const auto prior=visFrequency_;
-    visFrequency_=selected;visRunStart_=visRunEnd_=obs.centreSample;
+    visFrequency_=selected;visRunStart_=nextStart;visRunEnd_=obs.centreSample;
     for (const auto& result:results) {
         if (!result.valid() || result.codecResult.primary.payload!=85U || prior!=1200.0) continue;
         const auto endOffset=std::uint64_t(rate_)*915'120U/1'000'000U;

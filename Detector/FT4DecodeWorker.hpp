@@ -15,6 +15,8 @@ namespace ft4
 
 // Stops the asynchronous hash-seed worker before Qt application teardown.
 void shutdownHashSeedWorker ();
+// Suspend background log scanning on mode changes; the worker can resume.
+void setHashSeedWorkEnabled (bool enabled);
 
 struct DecodeRequest
 {

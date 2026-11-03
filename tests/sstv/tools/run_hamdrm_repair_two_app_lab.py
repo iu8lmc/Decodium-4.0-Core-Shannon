@@ -197,6 +197,10 @@ try:
     if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
             and '[HAMDRM] operator selected experimental adaptive dual timing' not in tx):
         raise RuntimeError('sender did not use selected adaptive timing; artifacts '+str(root))
+    if (os.environ.get('DECODIUM_LAB_HAMDRM_USER_TIMING') == '1'
+            and ('[HAMDRM] operator selected temporal pilot candidate' not in tx
+                 or '[HAMDRM] operator selected temporal pilot candidate' not in rx)):
+        raise RuntimeError('temporal candidate missing from repair session; artifacts '+str(root))
     rx_marker = '[LAB][REPAIR] live partial received' if live else '[LAB][REPAIR] RX partial seeded'
     if '[LAB][REPAIR] TX started true' not in tx or rx_marker not in rx:
         raise RuntimeError('repair path not confirmed; artifacts ' + str(root))

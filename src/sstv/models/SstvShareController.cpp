@@ -6,6 +6,7 @@
 #ifdef DECODIUM_SSTV_E2EE
 #include "src/sstv/sharing/SstvShareSecureEnvelope.h"
 #include "src/sstv/sharing/SstvShareP256.h"
+#include <openssl/crypto.h>
 #if defined(Q_OS_MACOS)
 #include "src/security/MacKeychainBackend.h"
 #elif defined(Q_OS_WIN) || defined(Q_OS_LINUX)
@@ -65,6 +66,8 @@ public:
 constexpr qsizetype kUiQueryLimit = 100;
 constexpr quint64 kRestChunkBytes = 1024U * 1024U;
 constexpr int kQueueTickMs = 750;
+constexpr int kInboxBusyRetryDelayMs = 250;
+constexpr int kInboxBusyRetryLimit = 40;
 constexpr qsizetype kMaximumCredentialCharacters = 4'096;
 
 struct UploadPrivacyOptions final
@@ -1163,6 +1166,39 @@ public slots:
                 publishSnapshot();
                 return;
             }
+            const auto* application = QCoreApplication::instance();
+            const QString resignTarget = labSigned && signSender && application
+                ? application->property("decodiumLabShareResignTarget").toString() : QString {};
+            if (!resignTarget.isEmpty()
+                && QFileInfo(sourcePath).fileName() == QStringLiteral("image-") + resignTarget + QStringLiteral(".jpg")) {
+                auto object = encrypted->manifest.toJsonObject();
+                auto encryption = object.value(QStringLiteral("encryption")).toObject();
+                encryption.remove(QStringLiteral("senderSignatureBase64"));
+                object.insert(QStringLiteral("encryption"), encryption);
+                SstvShareValidationError validation;
+                const QByteArray message = QByteArrayLiteral("Decodium-SSTV-sender-signature-v1\0")
+                    + canonicalJson(object, &validation);
+                auto privateKey = keys.loadSigningPrivateKey();
+                const auto publicKey = privateKey.ok() ? sstvShareP256PublicKey(*privateKey.key) : std::nullopt;
+                const auto signature = privateKey.ok() && validation.ok()
+                    ? sstvShareP256Sign(*privateKey.key, message) : std::nullopt;
+                if (privateKey.ok()) OPENSSL_cleanse(privateKey.key->data(), std::size_t(privateKey.key->size()));
+                const auto original = QByteArray::fromBase64(encrypted->manifest.encryption.senderSignatureBase64.toLatin1());
+                const QString path = application->property("decodiumLabShareResignOutput").toString();
+                const bool verified = publicKey && signature && *signature != original
+                    && sstvShareP256Fingerprint(*publicKey) == encrypted->manifest.encryption.senderKeyFingerprint
+                    && sstvShareP256Verify(*publicKey, message, original)
+                    && sstvShareP256Verify(*publicKey, message, *signature);
+                QSaveFile output(path);
+                const QByteArray publicSignature = signature ? signature->toBase64() + '\n' : QByteArray {};
+                if (!verified || path.isEmpty() || QFileInfo::exists(path) || QFileInfo(path).isSymLink()
+                    || !output.open(QIODevice::WriteOnly) || output.write(publicSignature) != publicSignature.size()
+                    || !output.commit()) {
+                    failOperation(QStringLiteral("upload"), tr("Laboratory re-signing failed"));
+                    publishSnapshot();
+                    return;
+                }
+            }
             manifest = std::move(encrypted->manifest);
             *payload = std::move(encrypted->bytes);
         }
@@ -1206,6 +1242,30 @@ public slots:
         failOperation(QStringLiteral("sharing-identity"), tr("Could not access secure sharing identity"));
     }
 
+    void rotateSharingIdentity(QString fingerprint)
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+#ifdef DECODIUM_SSTV_E2EE
+        if (m_initialized && m_identityBackend) {
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            const auto result = keys.rotateIdentity(fingerprint.trimmed());
+            if (result.ok()) {
+                emit sharingIdentityResult(QString::fromLatin1(result.key->toHex()),
+                                           sstvShareX25519Fingerprint(*result.key));
+                finishOperation(QStringLiteral("sharing-rotate"), true, tr("Sharing identity rotated"));
+                return;
+            }
+            if (result.error == SstvShareKeyStoreError::Conflict) {
+                failOperation(QStringLiteral("sharing-rotate"), tr("Sharing identity changed; show and confirm the current key"));
+                return;
+            }
+        }
+#else
+        Q_UNUSED(fingerprint)
+#endif
+        failOperation(QStringLiteral("sharing-rotate"), tr("Could not rotate secure sharing identity"));
+    }
+
     void createSigningIdentity()
     {
         Q_ASSERT(QThread::currentThread() == thread());
@@ -1221,6 +1281,29 @@ public slots:
         }
 #endif
         failOperation(QStringLiteral("signing-identity"), tr("Could not access secure signing identity"));
+    }
+
+    void rotateSigningIdentity(QString fingerprint)
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+#ifdef DECODIUM_SSTV_E2EE
+        if (m_initialized && m_identityBackend) {
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            const auto result = keys.rotateSigningIdentity(fingerprint.trimmed());
+            if (result.ok()) {
+                emit signingIdentityResult(QString::fromLatin1(result.key->toHex()), sstvShareP256Fingerprint(*result.key));
+                finishOperation(QStringLiteral("signing-rotate"), true, tr("Signing identity rotated"));
+                return;
+            }
+            if (result.error == SstvShareKeyStoreError::Conflict) {
+                failOperation(QStringLiteral("signing-rotate"), tr("Signing identity changed; show and confirm the current key"));
+                return;
+            }
+        }
+#else
+        Q_UNUSED(fingerprint)
+#endif
+        failOperation(QStringLiteral("signing-rotate"), tr("Could not rotate secure signing identity"));
     }
 
     void pinSenderSigningIdentity(QString sender, QString keyHex, QString fingerprint, bool confirmed)
@@ -1239,6 +1322,14 @@ public slots:
             }
             if (result == SstvShareKeyStoreError::Conflict) {
                 failOperation(QStringLiteral("sender-signing-pin"), tr("Sender key conflicts with an existing pin"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Corrupt) {
+                failOperation(QStringLiteral("sender-signing-pin"), tr("Stored sender key is corrupt"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Unavailable || result == SstvShareKeyStoreError::StorageFailure) {
+                failOperation(QStringLiteral("sender-signing-pin"), tr("Secure key storage is unavailable"));
                 return;
             }
         }
@@ -1270,6 +1361,14 @@ public slots:
                 failOperation(QStringLiteral("sharing-pin"), tr("Recipient key conflicts with an existing pin"));
                 return;
             }
+            if (result == SstvShareKeyStoreError::Corrupt) {
+                failOperation(QStringLiteral("sharing-pin"), tr("Stored recipient key is corrupt"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Unavailable || result == SstvShareKeyStoreError::StorageFailure) {
+                failOperation(QStringLiteral("sharing-pin"), tr("Secure key storage is unavailable"));
+                return;
+            }
         }
 #else
         Q_UNUSED(recipient)
@@ -1278,6 +1377,74 @@ public slots:
         Q_UNUSED(confirmed)
 #endif
         failOperation(QStringLiteral("sharing-pin"), tr("Recipient key or independent confirmation is invalid"));
+    }
+
+    void replaceSenderSigningIdentity(QString sender, QString expected, QString keyHex, QString fingerprint, bool confirmed)
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+#ifdef DECODIUM_SSTV_E2EE
+        const QByteArray encoded = keyHex.trimmed().toLatin1();
+        const QByteArray key = QByteArray::fromHex(encoded);
+        if (m_initialized && m_identityBackend && confirmed && encoded.size() == 182
+            && key.size() == 91 && key.toHex() == encoded) {
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            const auto result = keys.replacePinnedSenderSigningKey(m_configuration.providerId, sender.trimmed(),
+                                                                   expected.trimmed(), key, fingerprint.trimmed());
+            if (result == SstvShareKeyStoreError::None) {
+                finishOperation(QStringLiteral("sender-signing-replace"), true, tr("Verified sender signing key updated"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Conflict) {
+                failOperation(QStringLiteral("sender-signing-replace"), tr("Sender key changed or previous fingerprint does not match"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Corrupt) {
+                failOperation(QStringLiteral("sender-signing-replace"), tr("Stored sender signing key is corrupt"));
+                return;
+            }
+        }
+#else
+        Q_UNUSED(sender)
+        Q_UNUSED(expected)
+        Q_UNUSED(keyHex)
+        Q_UNUSED(fingerprint)
+        Q_UNUSED(confirmed)
+#endif
+        failOperation(QStringLiteral("sender-signing-replace"), tr("Could not update verified sender signing key"));
+    }
+
+    void replaceSharingRecipient(QString recipient, QString expected, QString keyHex, QString fingerprint, bool confirmed)
+    {
+        Q_ASSERT(QThread::currentThread() == thread());
+#ifdef DECODIUM_SSTV_E2EE
+        const QByteArray encoded = keyHex.trimmed().toLatin1();
+        const QByteArray key = QByteArray::fromHex(encoded);
+        if (m_initialized && m_identityBackend && confirmed && encoded.size() == 64
+            && key.size() == 32 && key.toHex() == encoded) {
+            const SstvShareKeyStore keys(*m_identityBackend, m_profile);
+            const auto result = keys.replacePinnedRecipient(m_configuration.providerId, recipient.trimmed(),
+                                                             expected.trimmed(), key, fingerprint.trimmed());
+            if (result == SstvShareKeyStoreError::None) {
+                finishOperation(QStringLiteral("sharing-replace-pin"), true, tr("Verified recipient key updated"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Conflict) {
+                failOperation(QStringLiteral("sharing-replace-pin"), tr("Recipient key changed or previous fingerprint does not match"));
+                return;
+            }
+            if (result == SstvShareKeyStoreError::Corrupt) {
+                failOperation(QStringLiteral("sharing-replace-pin"), tr("Stored recipient key is corrupt"));
+                return;
+            }
+        }
+#else
+        Q_UNUSED(recipient)
+        Q_UNUSED(expected)
+        Q_UNUSED(keyHex)
+        Q_UNUSED(fingerprint)
+        Q_UNUSED(confirmed)
+#endif
+        failOperation(QStringLiteral("sharing-replace-pin"), tr("Could not update verified recipient key"));
     }
 
     void refreshInbox()
@@ -1293,17 +1460,42 @@ public slots:
         performInboxRefresh(true);
     }
 
-    void performInboxRefresh(bool reportOperation)
+    void performInboxRefresh(bool reportOperation, int busyRetries = 0)
     {
         const quint64 generation = m_providerGeneration;
         const QPointer<SstvShareWorker> guard(this);
         m_manager->refreshInboxAsync(
             m_configuration.providerId,
-            [guard, generation, reportOperation](
+            [guard, generation, reportOperation, busyRetries](
                 SstvShareProviderResult result) {
                 if (!guard || guard->m_shutdown
                     || guard->m_providerGeneration != generation
                     || !guard->m_manager) {
+                    return;
+                }
+                // The manager reports a distinct local capacity condition.
+                // A concurrent download/upload is temporary; keep the UI
+                // operation pending and coalesce retries rather than asking
+                // the operator to refresh again. Missing providers and all
+                // other errors retain their existing failure behaviour.
+                if (!result.ok() && result.isLocalCapacityBusy()
+                    && busyRetries < kInboxBusyRetryLimit) {
+                    guard->m_inboxRetryReport |= reportOperation;
+                    if (!guard->m_inboxRetryScheduled) {
+                        guard->m_inboxRetryScheduled = true;
+                        const quint64 retryToken = ++guard->m_inboxRetryToken;
+                        if (busyRetries == 0)
+                            qInfo() << "[SHARE] inbox refresh deferred while provider busy";
+                        QTimer::singleShot(kInboxBusyRetryDelayMs, guard, [guard, generation, retryToken, busyRetries]() {
+                            if (!guard || guard->m_inboxRetryToken != retryToken) return;
+                            guard->m_inboxRetryScheduled = false;
+                            const bool report = guard->m_inboxRetryReport;
+                            guard->m_inboxRetryReport = false;
+                            if (!guard->m_shutdown && guard->m_enabled && guard->m_manager
+                                && guard->m_providerGeneration == generation)
+                                guard->performInboxRefresh(report, busyRetries + 1);
+                        });
+                    }
                     return;
                 }
                 if (reportOperation) {
@@ -1997,6 +2189,9 @@ private:
     bool rebuildManager(bool withProvider, QString* error)
     {
         ++m_providerGeneration;
+        ++m_inboxRetryToken;
+        m_inboxRetryScheduled = false;
+        m_inboxRetryReport = false;
         m_emittedIncomingHandoffs.clear();
         m_manager.reset();
         m_provider.reset();
@@ -2090,6 +2285,13 @@ private:
             if (!identityBackend) return std::nullopt;
             const SstvShareKeyStore keys(*identityBackend, profile);
             return sstvShareOpenStoredEnvelope(keys, providerId, recipientId, manifest, payload, senderPolicy->load());
+        };
+        configuration.verifyIncomingSender = [identityBackend, profile, providerId, recipientId](
+            const SstvShareManifestV1& manifest) -> std::optional<bool> {
+            if (!identityBackend || manifest.providerId != providerId || manifest.recipientId != recipientId)
+                return std::nullopt;
+            const SstvShareKeyStore keys(*identityBackend, profile);
+            return sstvShareCheckStoredSender(keys, manifest);
         };
 #endif
         const auto incomingSenderPolicy = m_senderAuthenticationPolicy;
@@ -2428,6 +2630,9 @@ private:
     std::shared_ptr<std::atomic_bool> m_senderAuthenticationPolicy {std::make_shared<std::atomic_bool>(false)};
     bool m_shutdown {false};
     bool m_capabilityDiscoveryActive {false};
+    bool m_inboxRetryScheduled {false};
+    bool m_inboxRetryReport {false};
+    quint64 m_inboxRetryToken {0U};
     quint64 m_providerGeneration {0U};
     QSet<QString> m_emittedIncomingHandoffs;
 };
@@ -2670,6 +2875,13 @@ bool SstvShareController::createSharingIdentity()
     return queueWorkerCall([](SstvShareWorker* worker) { worker->createSharingIdentity(); });
 }
 
+bool SstvShareController::rotateSharingIdentity(const QString& expectedFingerprint)
+{
+    return queueWorkerCall([expectedFingerprint](SstvShareWorker* worker) {
+        worker->rotateSharingIdentity(expectedFingerprint);
+    });
+}
+
 bool SstvShareController::createSigningIdentity()
 {
     return queueWorkerCall([](SstvShareWorker* worker) { worker->createSigningIdentity(); });
@@ -2681,12 +2893,33 @@ bool SstvShareController::pinSenderSigningIdentity(const QString& senderId, cons
         worker->pinSenderSigningIdentity(senderId, publicKeyHex, fingerprint, confirmed);
     });
 }
+bool SstvShareController::rotateSigningIdentity(const QString& expectedFingerprint)
+{
+    return queueWorkerCall([expectedFingerprint](SstvShareWorker* worker) {
+        worker->rotateSigningIdentity(expectedFingerprint);
+    });
+}
+bool SstvShareController::replaceSenderSigningIdentity(const QString& senderId, const QString& expectedFingerprint,
+    const QString& publicKeyHex, const QString& verifiedFingerprint, bool independentlyConfirmed)
+{
+    return queueWorkerCall([senderId, expectedFingerprint, publicKeyHex, verifiedFingerprint, independentlyConfirmed](SstvShareWorker* worker) {
+        worker->replaceSenderSigningIdentity(senderId, expectedFingerprint, publicKeyHex, verifiedFingerprint, independentlyConfirmed);
+    });
+}
 
 bool SstvShareController::pinSharingRecipient(const QString& recipientId, const QString& publicKeyHex,
                                                const QString& verifiedFingerprint, bool independentlyConfirmed)
 {
     return queueWorkerCall([recipientId, publicKeyHex, verifiedFingerprint, independentlyConfirmed](SstvShareWorker* worker) {
         worker->pinSharingRecipient(recipientId, publicKeyHex, verifiedFingerprint, independentlyConfirmed);
+    });
+}
+
+bool SstvShareController::replaceSharingRecipient(const QString& recipientId, const QString& expectedFingerprint,
+    const QString& publicKeyHex, const QString& verifiedFingerprint, bool independentlyConfirmed)
+{
+    return queueWorkerCall([recipientId, expectedFingerprint, publicKeyHex, verifiedFingerprint, independentlyConfirmed](SstvShareWorker* worker) {
+        worker->replaceSharingRecipient(recipientId, expectedFingerprint, publicKeyHex, verifiedFingerprint, independentlyConfirmed);
     });
 }
 

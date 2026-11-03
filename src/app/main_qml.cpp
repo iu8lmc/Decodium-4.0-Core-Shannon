@@ -1813,6 +1813,43 @@ int main(int argc, char* argv[])
                 && QFileInfo(cert).isAbsolute() && cert.open(QIODevice::ReadOnly) && cert.size() <= 64 * 1024
                 && QDir::isAbsolutePath(field("identity")) && QDir::isAbsolutePath(field("result"))
                 && (role == QStringLiteral("sender") || role == QStringLiteral("receiver"));
+            if (earlyLabShareConfig.value(QStringLiteral("rotateRecipient")).toBool())
+                valid = valid && role == QStringLiteral("receiver")
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+            if (earlyLabShareConfig.value(QStringLiteral("replaceRecipient")).toBool())
+                valid = valid && role == QStringLiteral("sender")
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+            if (earlyLabShareConfig.value(QStringLiteral("reuseExistingPin")).toBool())
+                valid = valid && role == QStringLiteral("sender")
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+            if (earlyLabShareConfig.value(QStringLiteral("restartImagesOnly")).toBool())
+                valid = valid && role == QStringLiteral("receiver")
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+            if (!field("oldSigningFingerprint").isEmpty())
+                valid = valid && (role == QStringLiteral("receiver")
+                                   || (role == QStringLiteral("sender") && earlyLabShareConfig.value(QStringLiteral("rotateSenderSigning")).toBool()))
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1
+                    && QRegularExpression(QStringLiteral("^[0-9a-f]{64}$")).match(field("oldSigningFingerprint")).hasMatch();
+            if (earlyLabShareConfig.value(QStringLiteral("rotateSenderSigning")).toBool())
+                valid = valid && role == QStringLiteral("sender") && !field("oldSigningFingerprint").isEmpty()
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+            if (earlyLabShareConfig.value(QStringLiteral("signingIdentityOnly")).toBool())
+                valid = valid && role == QStringLiteral("sender")
+                    && !earlyLabShareConfig.value(QStringLiteral("rotateSenderSigning")).toBool()
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
+            if (!field("replayIncomingIdFile").isEmpty()) {
+                const QFileInfo replayFile(field("replayIncomingIdFile"));
+                const QFileInfo identity(field("identity"));
+                valid = valid && role == QStringLiteral("receiver")
+                    && earlyLabShareConfig.value(QStringLiteral("restartImagesOnly")).toBool()
+                    && earlyLabShareConfig.value(QStringLiteral("replayExpectInvalidSignature")).toBool()
+                    && (field("replayTarget") == QStringLiteral("a") || field("replayTarget") == QStringLiteral("b"))
+                    && replayFile.isAbsolute() && !replayFile.isSymLink()
+                    && replayFile.absolutePath() == identity.absolutePath();
+            }
+            if (earlyLabShareConfig.value(QStringLiteral("retiredUnseen")).toBool())
+                valid = valid && role == QStringLiteral("receiver") && !field("replayIncomingIdFile").isEmpty()
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
             if (qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1) {
                 const QFileInfo identity(field("identity"));
                 for (const auto* name : {"signingIdentity", "signingReady"}) {
@@ -1830,12 +1867,30 @@ int main(int argc, char* argv[])
                     valid = valid && image.isAbsolute() && image.isFile();
                 }
                 valid = valid && !field("recipient").isEmpty();
+                if (!field("resignTarget").isEmpty() || !field("resignOutput").isEmpty()) {
+                    const QFileInfo target(field("resignOutput"));
+                    const QFileInfo identity(field("identity"));
+                    valid = valid && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1
+                        && (field("resignTarget") == QStringLiteral("a") || field("resignTarget") == QStringLiteral("b"))
+                        && target.isAbsolute() && !target.exists() && !target.isSymLink()
+                        && target.dir().canonicalPath() == identity.dir().canonicalPath();
+                }
             } else if (valid) {
+                valid = valid && field("resignTarget").isEmpty() && field("resignOutput").isEmpty();
                 const QFileInfo output(field("outputDir"));
-                valid = output.isAbsolute() && output.isDir();
+                valid = valid && output.isAbsolute() && output.isDir();
+                if (!field("invalidSignatureMarker").isEmpty()) {
+                    const QFileInfo marker(field("invalidSignatureMarker"));
+                    valid = valid && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1
+                        && marker.isAbsolute() && !marker.exists() && !marker.isSymLink()
+                        && marker.dir().canonicalPath() == output.dir().canonicalPath();
+                }
                 valid = valid && (field("replayTarget").isEmpty()
                     || field("replayTarget") == QStringLiteral("a")
                     || field("replayTarget") == QStringLiteral("b"));
+                const auto expectedCopies=earlyLabShareConfig.value(QStringLiteral("expectedCopies"));
+                valid = valid && (expectedCopies.isUndefined()
+                    || (expectedCopies.isDouble() && (expectedCopies.toInt(-1)==1 || expectedCopies.toInt(-1)==2)));
                 valid = valid && (field("acceptTarget").isEmpty()
                     || field("acceptTarget") == QStringLiteral("a")
                     || field("acceptTarget") == QStringLiteral("b"));
@@ -2456,10 +2511,10 @@ int main(int argc, char* argv[])
         QStringLiteral("path"));
     QCommandLineOption const labSstvFaxRxOption(
         QStringList {} << "lab-sstv-fax-rx",
-        QStringLiteral("Test-only Radiofax RX profile: IOC,width,height[,centered-phasing-0-or-1[,wmo-dead-sector-0-or-1]]."), QStringLiteral("profile"));
+        QStringLiteral("Test-only Radiofax RX profile: IOC,width,height[,centered-phasing-0-or-1[,wmo-dead-sector-0-or-1[,wmo-timed-phasing-0-or-1]]]."), QStringLiteral("profile"));
     QCommandLineOption const labSstvFaxTxOption(
         QStringList {} << "lab-sstv-fax-tx",
-        QStringLiteral("Test-only Radiofax TX profile: IOC,lines-per-minute[,centered-phasing-0-or-1[,wmo-dead-sector-0-or-1]]."), QStringLiteral("profile"));
+        QStringLiteral("Test-only Radiofax TX profile: IOC,lines-per-minute[,centered-phasing-0-or-1[,wmo-dead-sector-0-or-1[,symmetric-phasing-0-or-1]]]."), QStringLiteral("profile"));
     QCommandLineOption const labSstvFax480RxOption(
         QStringList {} << "lab-sstv-fax480-rx",
         QStringLiteral("Test-only FAX480 RX profile: dayton-480 or qsstv-500."), QStringLiteral("profile"));
@@ -2963,6 +3018,10 @@ int main(int argc, char* argv[])
         app.setProperty("decodiumLabShareKeychain", keychain.canonicalFilePath());
         if (labShareSession) {
             labShareConfig = earlyLabShareConfig;
+            if (!labShareConfig.value(QStringLiteral("resignTarget")).toString().isEmpty()) {
+                app.setProperty("decodiumLabShareResignTarget", labShareConfig.value(QStringLiteral("resignTarget")).toString());
+                app.setProperty("decodiumLabShareResignOutput", labShareConfig.value(QStringLiteral("resignOutput")).toString());
+            }
             if (!labShareConfig.value(QStringLiteral("expiryMarker")).toString().isEmpty())
                 app.setProperty("decodiumLabShareExpiryMarker", labShareConfig.value(QStringLiteral("expiryMarker")).toString());
             const QSslCertificate testCa(earlyLabShareCa);
@@ -3009,10 +3068,14 @@ int main(int argc, char* argv[])
     };
     if ((!labFaxRx.isEmpty() && !(numericProfile(labFaxRx, 3)
           || (numericProfile(labFaxRx, 4) && (labFaxRx[3] == "0" || labFaxRx[3] == "1"))
-          || (numericProfile(labFaxRx, 5) && labFaxRx[3] == "0" && (labFaxRx[4] == "0" || labFaxRx[4] == "1"))))
+          || (numericProfile(labFaxRx, 5) && labFaxRx[3] == "0" && (labFaxRx[4] == "0" || labFaxRx[4] == "1"))
+          || (numericProfile(labFaxRx, 6) && labFaxRx[3] == "0" && (labFaxRx[4] == "0" || labFaxRx[4] == "1")
+              && (labFaxRx[5] == "0" || labFaxRx[5] == "1"))))
         || (!labFaxTx.isEmpty() && !(numericProfile(labFaxTx, 2)
           || (numericProfile(labFaxTx, 3) && (labFaxTx[2] == "0" || labFaxTx[2] == "1"))
-          || (numericProfile(labFaxTx, 4) && labFaxTx[2] == "0" && (labFaxTx[3] == "0" || labFaxTx[3] == "1"))))) {
+          || (numericProfile(labFaxTx, 4) && labFaxTx[2] == "0" && (labFaxTx[3] == "0" || labFaxTx[3] == "1"))
+          || (numericProfile(labFaxTx, 5) && labFaxTx[2] == "0" && (labFaxTx[3] == "0" || labFaxTx[3] == "1")
+              && (labFaxTx[4] == "0" || labFaxTx[4] == "1"))))) {
         qCritical() << "Invalid Radiofax lab profile";
         return -1;
     }
@@ -3386,6 +3449,25 @@ int main(int argc, char* argv[])
 
     L("bridge constructing");
     DecodiumBridge bridge;
+    if (parser.isSet(testOption)
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_SDR_LIFECYCLE") > 0) {
+        for (const auto step : {std::pair<int, bool>{8000, true}, {15000, false},
+                                {25000, true}, {35000, false}, {45000, true}}) {
+            QTimer::singleShot(step.first, &bridge, [&bridge, enabled = step.second]() {
+                qInfo() << "[SDRLIFE] request enabled=" << enabled;
+                bridge.setSetting(QStringLiteral("RtlSdrEnabled"), enabled);
+            });
+        }
+    }
+    // Expose the isolated lab bridge only for the deterministic hash-scan
+    // mode-switch test. Never publish it in an operator session.
+    if (parser.isSet(testOption)
+        && (qEnvironmentVariableIntValue("DECODIUM_LAB_SWITCH_DURING_FT8_HASH") > 0
+            || qEnvironmentVariableIntValue("DECODIUM_LAB_SWITCH_DURING_FT4_HASH") > 0
+            || qEnvironmentVariableIntValue("DECODIUM_LAB_SWITCH_DURING_FT4_DECODE") > 0
+            || qEnvironmentVariableIntValue("DECODIUM_LAB_SWITCH_DURING_FT8_DECODE") > 0)) {
+        app.setProperty("decodiumHashLabBridge", QVariant::fromValue<QObject*>(&bridge));
+    }
 #if DECODIUM_HAS_SSTV && (defined(Q_OS_MACOS) || defined(Q_OS_LINUX))
     if (labShareSession) {
         auto* sharing = qobject_cast<decodium::sstv::SstvShareController*>(bridge.sstvShare());
@@ -3728,6 +3810,11 @@ int main(int argc, char* argv[])
             return false;
         }
         QVariantMap payload = diagnostics;
+        if (QStandardPaths::isTestModeEnabled()
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_HAMDRM_GALLERY") == 1) {
+            payload.insert(QStringLiteral("labStorageRoot"), QDir(QStandardPaths::writableLocation(
+                QStandardPaths::AppDataLocation)).absoluteFilePath(QStringLiteral("sstv")));
+        }
         payload.insert(QStringLiteral("readyUtc"),
                        QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
         const QByteArray json = QJsonDocument::fromVariant(payload).toJson(
@@ -3758,10 +3845,11 @@ int main(int argc, char* argv[])
                 if (!configured) return;
             }
             if (!labFaxRx.isEmpty()) {
-                const bool configured = bridge.configureSstvRadiofaxRxProfile(
+                const bool configured = bridge.configureSstvRadiofaxRxAdvanced(
                     true, labFaxRx[0].toInt(), labFaxRx[1].toInt(), labFaxRx[2].toInt(),
                     labFaxRx.size() >= 4 && labFaxRx[3] == "1",
-                    labFaxRx.size() == 5 && labFaxRx[4] == "1");
+                    labFaxRx.size() >= 5 && labFaxRx[4] == "1",
+                    labFaxRx.size() == 6 && labFaxRx[5] == "1");
                 qInfo() << "[LAB][SSTV] Radiofax RX configured" << configured;
                 if (!configured) return;
             }
@@ -3819,6 +3907,16 @@ int main(int argc, char* argv[])
                         }
                         QSaveFile file(labSstvRxImageFile);
                         const auto& bytes = object.value->originalBytes;
+                        if (QStandardPaths::isTestModeEnabled()
+                            && !qEnvironmentVariable("DECODIUM_LAB_HAMDRM_STRUCTURAL_ONLY").isEmpty()) {
+                            qInfo() << "[LAB][HAMDRM] image structural-only" << digital->selectedImageStructuralOnly();
+                        }
+                        if (QStandardPaths::isTestModeEnabled()
+                            && qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_HAMDRM_SAVE") == 1) {
+                            const bool saved = digital->saveCompletedImage(
+                                id, QUrl::fromLocalFile(labSstvRxImageFile + QStringLiteral(".user-saved")));
+                            qInfo() << "[LAB][HAMDRM] completed image saved by controller" << saved;
+                        }
                         if (!file.open(QIODevice::WriteOnly)
                             || file.write(reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size())) != qsizetype(bytes.size())
                             || !file.commit()) {
@@ -3843,6 +3941,63 @@ int main(int argc, char* argv[])
                             });
                         }
                     });
+                if (QStandardPaths::isTestModeEnabled()
+                    && !qEnvironmentVariable("DECODIUM_LAB_HAMDRM_HYBRID").isEmpty()) {
+                    QObject::connect(digital, &decodium::sstv::hamdrm::HamDrmController::hybridReferenceReceived,
+                        &bridge, [digital, labSstvRxImageFile, &bridge](quint16 id, const QString&) {
+                            const auto object = digital->completedObject(id);
+                            if (!object.ok() || labSstvRxImageFile.isEmpty()) return;
+                            QSaveFile file(labSstvRxImageFile);
+                            const auto& bytes = object.value->originalBytes;
+                            if (file.open(QIODevice::WriteOnly)
+                                && file.write(reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size())) == qsizetype(bytes.size())
+                                && file.commit()) {
+                                qInfo() << "[LAB][HAMDRM] hybrid reference saved" << bytes.size();
+                                if (qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT") > 0) {
+                                    const auto destination = QUrl::fromLocalFile(labSstvRxImageFile + QStringLiteral(".download"));
+                                    QString referenceToken;
+                                    for (const auto& entry : digital->inbox()) {
+                                        const auto row = entry.toMap();
+                                        if (row.value(QStringLiteral("transportId")).toInt() == id) {
+                                            referenceToken = row.value(QStringLiteral("hybridReferenceToken")).toString();
+                                            break;
+                                        }
+                                    }
+                                    qInfo() << "[LAB][HAMDRM] hybrid FTP started"
+                                            << digital->downloadHybridIfUnchanged(id, destination, referenceToken);
+                                    if (qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_REDOWNLOAD") == 1) {
+                                        QTimer::singleShot(2500, digital, [digital, id, labSstvRxImageFile, referenceToken] {
+                                            const auto second = QUrl::fromLocalFile(labSstvRxImageFile + QStringLiteral(".download2"));
+                                            qInfo() << "[LAB][HAMDRM] hybrid FTP second download"
+                                                    << digital->downloadHybridIfUnchanged(id, second, referenceToken);
+                                        });
+                                    }
+                                    if (qEnvironmentVariableIntValue("DECODIUM_LAB_CANCEL_HYBRID_DOWNLOAD") == 1) {
+                                        QTimer::singleShot(750, digital, [digital] {
+                                            qInfo() << "[LAB][HAMDRM] hybrid download cancelAll" << digital->cancelAll();
+                                        });
+                                    }
+                                }
+                                if (qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_LEGACY_RESTORE") == 1
+                                    || qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_MONITOR_OFF") == 1) {
+                                    QTimer::singleShot(250, &bridge, [digital, &bridge]() {
+                                        const qint64 restoreStartedMs = QDateTime::currentMSecsSinceEpoch();
+                                        const bool cancelled = digital->cancelRx();
+                                        bridge.stopSstvRx();
+                                        QTimer::singleShot(4000, &bridge, [cancelled, restoreStartedMs, &bridge]() {
+                                            auto diagnostics = bridge.sstvRxDiagnostics();
+                                            diagnostics.insert(QStringLiteral("legacyTestRestoreStartedMs"), restoreStartedMs);
+                                            qInfo().noquote() << "[LAB][HAMDRM] legacy restore"
+                                                << "cancelled=" << cancelled
+                                                << QJsonDocument::fromVariant(diagnostics).toJson(QJsonDocument::Compact);
+                                        });
+                                    });
+                                }
+                            }
+                        });
+                    QObject::connect(digital, &decodium::sstv::hamdrm::HamDrmController::hybridDownloadFinished,
+                        &bridge, [](bool success) { qInfo() << "[LAB][HAMDRM] hybrid FTP finished" << success; });
+                }
                 const QString rsRecoveryTrigger = QStandardPaths::isTestModeEnabled()
                     ? qEnvironmentVariable("DECODIUM_LAB_RS_RECOVERY_TRIGGER") : QString {};
                 if (!rsRecoveryTrigger.isEmpty()) {
@@ -4071,14 +4226,32 @@ int main(int argc, char* argv[])
         const auto labRxSavedAcquisition = std::make_shared<qulonglong>(0);
         const bool labRxImageSequence = QStandardPaths::isTestModeEnabled()
             && qEnvironmentVariableIntValue("DECODIUM_LAB_RX_IMAGE_SEQUENCE") == 1;
+        const bool labFaxPartialSnapshot = QStandardPaths::isTestModeEnabled()
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_FAX_PARTIAL_SNAPSHOT") == 1;
+        const QString labRecentAudioRequest = QStandardPaths::isTestModeEnabled()
+            ? qEnvironmentVariable("DECODIUM_LAB_SAVE_RECENT_AUDIO_REQUEST") : QString {};
         QObject::connect(sstvRxTraceTimer, &QTimer::timeout, &bridge,
-                         [&bridge, labSstvRxImageFile, labRxImageSaved, labRxSavedAcquisition, labRxImageSequence, labHamDrm]() {
+                         [&bridge, labSstvRxImageFile, labRxImageSaved, labRxSavedAcquisition, labRxImageSequence, labFaxPartialSnapshot, labHamDrm, labRecentAudioRequest]() {
+            if (!labRecentAudioRequest.isEmpty() && QFile::exists(labRecentAudioRequest)
+                && QFile::remove(labRecentAudioRequest)) {
+                qInfo() << "[LAB][SSTV] recent audio export requested"
+                        << bridge.saveSstvRecentRxAudio();
+            }
+            if (!labRecentAudioRequest.isEmpty() && !bridge.sstvRxRawAudioPath().isEmpty()) {
+                qInfo().noquote() << "[LAB][SSTV] recent audio export path" << bridge.sstvRxRawAudioPath();
+            }
             const QVariantMap diagnostics = bridge.sstvRxDiagnostics();
             const qulonglong acquisition = diagnostics.value(QStringLiteral("imageAcquisitionId")).toULongLong();
-            if (!labHamDrm && (!*labRxImageSaved || (labRxImageSequence && acquisition != 0
+            const bool terminalRxImage = diagnostics.value(QStringLiteral("imageComplete")).toBool()
+                || diagnostics.value(QStringLiteral("imageRadiofaxStopDetected")).toBool();
+            const bool partialFaxSnapshot = labFaxPartialSnapshot && acquisition != 0
+                && !terminalRxImage
+                && diagnostics.value(QStringLiteral("imageMode")).toString() == QStringLiteral("hffax-experimental")
+                && diagnostics.value(QStringLiteral("imageLinesPublished")).toUInt() > 0U;
+            if (!labHamDrm && (partialFaxSnapshot || !*labRxImageSaved || (labRxImageSequence && acquisition != 0
                                  && acquisition != *labRxSavedAcquisition)) && !labSstvRxImageFile.isEmpty()
-                && (diagnostics.value(QStringLiteral("imageComplete")).toBool()
-                    || diagnostics.value(QStringLiteral("imageRadiofaxStopDetected")).toBool()
+                && (terminalRxImage
+                    || partialFaxSnapshot
                     || (diagnostics.value(QStringLiteral("imageMode")).toString() == QStringLiteral("fax480-experimental")
                         && diagnostics.value(QStringLiteral("imagePartial")).toBool()))) {
                 DecodiumSstvImageProvider provider(&bridge);
@@ -4107,9 +4280,9 @@ int main(int argc, char* argv[])
                 QSaveFile file(destination);
                 if (!image.isNull() && file.open(QIODevice::WriteOnly)
                     && image.save(&file, "PNG") && file.commit()) {
-                    *labRxImageSaved = true;
+                    *labRxImageSaved = !partialFaxSnapshot;
                     *labRxSavedAcquisition = acquisition;
-                    qInfo().noquote() << "[LAB][SSTV] terminal RX PNG saved" << destination;
+                    qInfo().noquote() << (partialFaxSnapshot ? "[LAB][SSTV] partial RX PNG snapshot saved" : "[LAB][SSTV] terminal RX PNG saved") << destination;
                 } else {
                     qWarning().noquote() << "[LAB][SSTV] RX PNG save failed" << labSstvRxImageFile;
                 }
@@ -4359,8 +4532,19 @@ int main(int argc, char* argv[])
                 const int rsLevel = QStandardPaths::isTestModeEnabled()
                     ? qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_RS_LEVEL") : 0;
                 qInfo() << "[LAB][HAMDRM] RS level" << rsLevel;
-                const bool started = digital->startTxWithRs(
-                    QUrl::fromLocalFile(QFileInfo(labSstvImage).absoluteFilePath()), rsLevel);
+                const auto imageUrl = QUrl::fromLocalFile(QFileInfo(labSstvImage).absoluteFilePath());
+                const bool hybridUploadLab = QStandardPaths::isTestModeEnabled()
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_UPLOAD") == 1;
+                const bool started = hybridUploadLab
+                    ? digital->startHybridTx(imageUrl, QStringLiteral("TEST1"), QStringLiteral("127.0.0.1"),
+                                             QStringLiteral("operator"), QStringLiteral("dummy"), QStringLiteral("radio"))
+                    : digital->startTxWithRs(imageUrl, rsLevel);
+                if (hybridUploadLab) qInfo() << "[LAB][HAMDRM] hybrid upload and TX started" << started;
+                if (hybridUploadLab && started && qEnvironmentVariableIntValue("DECODIUM_LAB_CANCEL_HYBRID_UPLOAD") == 1) {
+                    QTimer::singleShot(750, digital, [digital] {
+                        qInfo() << "[LAB][HAMDRM] hybrid upload cancelAll" << digital->cancelAll();
+                    });
+                }
                 qInfo() << "[LAB][HAMDRM] TX started" << started << digital->selectedProfileId() << digital->error();
                 return;
             }
@@ -4413,9 +4597,10 @@ int main(int argc, char* argv[])
                         << "output=" << bridge.audioOutputDevice();
                     const bool accepted = !labFax480Tx.isEmpty() ? bridge.startSstvFax480Tx(labFax480Tx)
                         : (labFaxTx.isEmpty() ? bridge.startSstvTx()
-                        : bridge.startSstvRadiofaxTxProfile(labFaxTx[0].toInt(), labFaxTx[1].toInt(),
+                        : bridge.startSstvRadiofaxTxAdvanced(labFaxTx[0].toInt(), labFaxTx[1].toInt(),
                                                           labFaxTx.size() >= 3 && labFaxTx[2] == "1",
-                                                          labFaxTx.size() == 4 && labFaxTx[3] == "1"));
+                                                          labFaxTx.size() >= 4 && labFaxTx[3] == "1",
+                                                          labFaxTx.size() == 5 && labFaxTx[4] == "1"));
                     qInfo().noquote()
                         << "[LAB][SSTV] TX requested accepted=" << accepted
                         << "mode=" << studio->modeId()

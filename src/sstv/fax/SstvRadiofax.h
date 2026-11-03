@@ -33,6 +33,9 @@ struct SstvFaxConfig final {
     // When selected, the first 4.5% of each scan line is a white dead
     // sector; width describes the active image, excluding this sector.
     bool wmoDeadSector {false};
+    // Receiver option: with a detected IOC start signal, use the standard
+    // 30-second phasing duration to anchor image start; default is heuristic.
+    bool wmoTimedPhasing {false};
 };
 
 struct SstvFaxPosition final {

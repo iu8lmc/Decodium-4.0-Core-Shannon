@@ -22,6 +22,8 @@ namespace ft8
 // The worker uses Qt containers and regular expressions and must not outlive
 // the Qt runtime.
 void shutdownHashSeedWorker ();
+// Suspend background log scanning on mode changes; the worker can resume.
+void setHashSeedWorkEnabled (bool enabled);
 
 // Live MyCall hypotheses need recent message TX, not an armed Auto TX,
 // tuning, or a stale selected partner. File decoding keeps explicit AP use.

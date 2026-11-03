@@ -847,7 +847,77 @@ components:
             - $ref: '#/components/schemas/Sha256'
             - type: string
               const: ''
-      description: End-to-end envelope fields are schema-defined but no audited E2EE implementation is shipped.
+        senderAuthAlgorithm:
+          const: ecdsa-p256-sha256-v1
+        senderKeyFingerprint:
+          $ref: '#/components/schemas/Sha256'
+        senderSignatureBase64:
+          type: string
+          minLength: 12
+          maxLength: 96
+          pattern: '^[A-Za-z0-9+/]+={0,2}$'
+      dependentRequired:
+        senderAuthAlgorithm: [senderKeyFingerprint, senderSignatureBase64]
+        senderKeyFingerprint: [senderAuthAlgorithm, senderSignatureBase64]
+        senderSignatureBase64: [senderAuthAlgorithm, senderKeyFingerprint]
+      allOf:
+        - if:
+            required: [senderAuthAlgorithm]
+          then:
+            properties:
+              mode:
+                const: end-to-end
+              algorithm:
+                const: aes-256-gcm
+        - if:
+            properties:
+              mode:
+                const: transport-tls
+          then:
+            properties:
+              algorithm:
+                const: none
+              keyId:
+                const: ''
+              recipientKeyFingerprint:
+                const: ''
+              nonceBase64:
+                const: ''
+              manifestBoundAsAuthenticatedData:
+                const: false
+          else:
+            properties:
+              algorithm:
+                enum: [aes-256-gcm, xchacha20-poly1305]
+              keyId:
+                minLength: 1
+              recipientKeyFingerprint:
+                $ref: '#/components/schemas/Sha256'
+              manifestBoundAsAuthenticatedData:
+                const: true
+        - if:
+            properties:
+              algorithm:
+                const: aes-256-gcm
+          then:
+            properties:
+              nonceBase64:
+                pattern: '^[A-Za-z0-9+/]{16}$'
+        - if:
+            properties:
+              algorithm:
+                const: xchacha20-poly1305
+          then:
+            properties:
+              nonceBase64:
+                pattern: '^[A-Za-z0-9+/]{32}$'
+      description: |
+        The native client implements an experimental X25519/HKDF-SHA256 and
+        AES-256-GCM envelope. Sender authentication is optional and requires
+        the three sender fields together plus an independently pinned P-256
+        key. Schema validation does not verify a signature, a key pin or the
+        canonical encoding of the signature; the client performs those checks.
+        The protocol has not received an independent security audit.
     Privacy:
       type: object
       additionalProperties: false
@@ -1017,6 +1087,25 @@ components:
           type: integer
           minimum: 1
           maximum: 8192
+      allOf:
+        - if:
+            properties:
+              encryption:
+                properties:
+                  mode:
+                    const: end-to-end
+          then:
+            properties:
+              transport:
+                properties:
+                  providerCanReadContent:
+                    const: false
+          else:
+            properties:
+              transport:
+                properties:
+                  providerCanReadContent:
+                    const: true
       description: |
         Width times height must not exceed 16,777,216 pixels. For transmission,
         expiry must still be in the future and privacy.recipientConfirmed must
@@ -1024,7 +1113,9 @@ components:
         no authenticated-data binding and providerCanReadContent true.
         End-to-end mode requires an allowed algorithm, verified key metadata,
         exact nonce length, authenticated-data binding and providerCanReadContent
-        false; the shipped client does not yet implement that envelope.
+        false. The native client implements an experimental AES-256-GCM
+        envelope; unsigned envelopes do not authenticate the sender. See
+        E2EE_IMPLEMENTATION.md for key verification and current evidence.
     Error:
       type: object
       additionalProperties: false

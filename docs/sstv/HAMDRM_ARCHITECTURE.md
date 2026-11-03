@@ -1,5 +1,76 @@
 # Native HAMDRM architecture
 
+## Hybrid save-selection identity
+
+The same token is now retained through the FTP operation and checked again
+after the completion notification and before validation or saving. A handler
+of that notification can synchronously remove the original inbox record and
+create another with the same transport ID; the downloaded bytes must not then
+be attached to the replacement. A/B controller tests force exactly that
+sequence at completion and verify failure, no saved file, no Gallery event and
+an unchanged replacement. These tests simulate the reentrant sequence; they
+do not claim it was observed in an ordinary user session.
+
+After rebuilding, normal A/B hybrid transfers between two Decodium pairs over
+BlackHole and an independent local pyftpdlib FTP server still downloaded the
+corresponding 225-byte image exactly. Seven RX snapshots per run reported
+zero discontinuities, dropped/rejected chunks, queue overflows and processing
+failures. Artifacts are `.../decodium-hamdrm-two-app-a-dv7j2ukn` and
+`.../decodium-hamdrm-two-app-b-7f2ys5ky`. The complete hybrid FTP suite passed.
+
+The Digital page now snapshots an ephemeral token for the selected hybrid
+inbox record when opening its save dialog. The guarded download checks both
+the transport ID and token before initiating FTP. If the original record was
+discarded and the ID reused while the dialog was open, the stale selection is
+rejected rather than starting a download for the replacement. The token is
+generated per in-memory inbox record and is not an authentication credential.
+The existing direct controller method remains available to callers that
+already hold a current record; the page and application laboratory now use
+the guarded method.
+
+Controller A/B tests discard and recreate a hybrid record with the same ID,
+verify the old and empty tokens cannot start a connection, then download the
+image successfully with the new token. QML A/B tests verify that the page
+snapshots the token and retains it after replacement; these invoke the page's
+preparation function directly rather than operating a native file dialog.
+The first attempt to locate an offscreen list delegate timed out because the
+delegate was not created while outside the viewport; the revised QML suite
+passes, as does the hybrid FTP suite.
+
+Two full Decodium pairs then transmitted A/B hybrid references over BlackHole
+and used the guarded laboratory path to upload and download each exact
+225-byte image through a local pyftpdlib server. Seven diagnostic snapshots per
+run had zero discontinuities, dropped/rejected chunks, queue overflows and
+processing failures. Artifacts are
+`.../decodium-hamdrm-two-app-a-76t88dqs` and
+`.../decodium-hamdrm-two-app-b-zf94cvlt`. This does not constitute a manual
+native-file-dialog test, a live EasyPal/QSSTV exchange or RF verification.
+
+## Hybrid FTP control reply bounds
+
+The hybrid FTP client now caps Qt's control-socket read buffer at 16,385
+bytes and checks the available bytes against the remaining 16,384-byte reply
+budget before reading. One extra byte allows the client to reject an oversized
+reply without first copying the entire reply into its parser buffer. The limit
+applies to the Qt control socket and parser buffer, not to all operating-system
+network buffers. A/B component controls sent an unterminated greeting of
+16,385 bytes and a 2 MiB greeting; both were rejected before USER and without
+returning a payload. The full `test_hamdrm_hybrid_ftp` suite passed, including
+normal transfers and timeout cases. The older implementation also rejected
+oversized replies after reading them; these tests exercise rejection behavior,
+not a measured before/after peak-memory comparison.
+
+After rebuilding, two local Decodium application pairs sent hybrid references
+over BlackHole and used an independently implemented pyftpdlib 2.1.0 loopback
+FTP server to upload and retrieve the respective 225-byte image. Both images
+matched exactly; seven RX snapshots per run reported zero discontinuities,
+dropped/rejected chunks, queue overflows and processing failures. Application
+artifacts are `.../decodium-hamdrm-two-app-a-kgbg238a` and
+`.../decodium-hamdrm-two-app-b-uroz24ce`; isolated FTP roots are
+`.../decodium-real-hybrid-ftp-w9kerskz` and
+`.../decodium-real-hybrid-ftp-0g081roh`. These results cover local FTP and
+Decodium virtual audio, not unmodified QSSTV/EasyPal or RF interoperability.
+
 Status: active implementation record, 2026-08-24.
 
 HAMDRM is a digital image-transfer subsystem inside the Decodium4 process. It
@@ -56,6 +127,12 @@ index. The current narrow amateur profile space is the Cartesian product of:
 - high and normal protection;
 - 4-, 16- and 64-QAM;
 - long and short interleaving.
+
+On receive, a CRC-validated FAC selects short or long interleaving even if
+the initially selected profile specifies the other depth. A depth change
+clears partial packet and deinterleaver state. Bandwidth, constellation,
+protection and packet ID must still match the selected profile; this is not
+blind profile acquisition.
 
 This yields 72 stable IDs. Payload bytes per 400 ms frame and compatibility
 codes are registry data. Amateur robustness E is not advertised as current
@@ -961,7 +1038,7 @@ Artifacts: `.../decodium-hamdrm-repair-a-soe0sugu` and
 `.../decodium-hamdrm-repair-audio-loss-fczx3cbr`. This uses automatic form
 selection and Decodium repair, a diagnostic QSSTV build and virtual audio.
 
-Variant B remains open: in two consecutive attempts QSSTV received one of
+At this stage variant B remained open: in two consecutive attempts QSSTV received one of
 three segments, generated the same 24-byte compact BSR, transmitted it and
 returned to RX, but Decodium did not report a received BSR or repair within
 the harness timeout. The PulseAudio bridge reported zero output underflows in
@@ -980,7 +1057,8 @@ segments in the same cut, but reported no saved image for the BSR. Its log is
 synchronize and decode data in the recording; it does not prove the precise
 reason Decodium failed or independently verify the BSR's saved contents.
 The independent replay and original failures are negative evidence, not a
-successful compact-BSR repair. The diagnostic runner is
+successful compact-BSR repair; the subsequent default-timing A/B result is
+documented under “Standard acquisition retry” below. The diagnostic runner is
 `tests/sstv/tools/run_qsstv_upstream_forward_repair_lab.py`; it requires the
 separately prepared isolated QSSTV binary and PulseAudio server. The server
 was stopped after the runs.
@@ -1056,6 +1134,32 @@ it saved the correct 24-byte BSR, with no reported RX discontinuities, dropped
 or rejected chunks, overflows or processing failures. Its artifacts are
 `.../decodium-qsstv-drm-app-vkv72v1b`.
 
+The same upstream A/B recordings were also checked offline with 1, 7, 37 and
+120 silent samples prepended. Each reconstructed the corresponding BSR
+byte-for-byte with zero ingest errors in the standard receiver; the test is
+part of `test_hamdrm_upstream_bsr_timing`. This checks selected start offsets,
+not clock drift, RF fading, live EasyPal or every QSSTV profile.
+Separate current-build two-Decodium virtual-audio controls transferred BSR
+fixtures A and B byte-for-byte (41 and 25 bytes respectively); artifacts are
+`.../decodium-hamdrm-two-app-a-zpi05z3o` and
+`.../decodium-hamdrm-two-app-b-u86oylis`. Those exchanges do not inject the
+offline sample offsets or constitute an external-peer test.
+
+The same upstream A/B BSR recordings were frequency-shifted offline by -15,
+-5, 0, +5 and +15 Hz using a whole-recording analytic FFT, and the ordinary
+flat receiver reconstructed the corresponding BSR exactly in all ten cases.
+The zero-shift transform reproduced both original PCM inputs sample-for-sample.
+The -15 Hz A and +15 Hz B WAVs were additionally replayed over BlackHole into
+full Decodium receivers, yielding the exact 39- and 24-byte BSRs with clean
+audio diagnostics. Their artifacts are `.../decodium-qsstv-drm-app-0t4tmyji`
+and `.../decodium-qsstv-drm-app-tq7750md`. The WAV SHA-256 hashes are
+`d04b2c8556adade21f74910590378de73a38e296efb5e78ffc0e28b853bf2eb7`
+and `6269ebd27d7c090e962eb85d12b05dbaad3b6024bc0cb12e06a34aaca0ad240a`.
+`tests/sstv/tools/prepare_hamdrm_frequency_shift.py` reproduces the shift and
+requires NumPy; A/B checks confirmed zero-shift identity, byte-identical
+shifted WAV output and overwrite protection. The transform is a controlled
+offline modification of recordings, not live RF or a general tolerance limit.
+
 The full upstream-QSSTV receive/request/receive-again experiment was then
 repeated A/B with default Decodium timing and a three-second initial audio
 mute. Both BSRs were received over audio, QSSTV and Decodium reconstructed the
@@ -1071,3 +1175,14 @@ RF, EasyPal, every QSSTV version or every channel. The earlier two failed
 compact-BSR runs are retained above as pre-fix evidence.
 The standard A/B BSR regression and the full waveform suite also passed in
 the macOS ARM64 ASan/UBSan build after this fallback (leak detection disabled).
+
+After the later laboratory snapshot and FAX changes, both retained upstream
+BSR captures were independently replayed over BlackHole into full Decodium
+application sessions with the default E/2.5/high/16-QAM/long receiver. A and
+B were identified as BSR and matched their 39- and 24-byte reference files
+exactly; every checked diagnostic reported the expected source and zero
+discontinuities, dropped or rejected chunks, queue overflows and processing
+failures. Artifacts are `.../decodium-qsstv-drm-app-v9iuvu9h` and
+`.../decodium-qsstv-drm-app-kohyc84u`. The standard/early timing A/B and
+crossed-reference CTest also passed. These are replays of retained signals,
+not fresh live QSSTV transmissions, complete repair exchanges or RF tests.

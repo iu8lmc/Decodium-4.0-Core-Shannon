@@ -4,3 +4,4 @@
 /lib/fsk4hf	export-ignore
 /robots		export-ignore
 /plots		export-ignore
+/tests/sstv/fixtures/*.bin binary

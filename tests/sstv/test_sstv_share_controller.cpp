@@ -2,6 +2,7 @@
 
 #include "src/security/SecureSettings.hpp"
 #include "src/sstv/models/SstvShareController.h"
+#include "src/sstv/sharing/SstvLocalIntegrationShareProvider.h"
 
 #include <QFile>
 #include <QDir>
@@ -420,6 +421,56 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!controller.configuration().value(
             QStringLiteral("credentialStored")).toBool(), 5'000);
         controller.shutdown();
+    }
+
+    void busyInboxRetryAndDisableAB()
+    {
+        using decodium::sstv::sharing::SstvLocalIntegrationShareProvider;
+        for (bool disableWhileBusy : {false, true}) {
+            QSettings settings;
+            settings.clear();
+            settings.sync();
+            QTemporaryDir storage;
+            QVERIFY(storage.isValid());
+            FakeSecureBackend backend;
+            SstvLocalIntegrationShareProvider::Config config;
+            config.completionDelayMs = 1000;
+            auto provider = std::make_shared<SstvLocalIntegrationShareProvider>(config);
+            QVERIFY(provider->isConfigurationValid());
+            decodium::sstv::SstvShareController controller(&backend, provider);
+            QSignalSpy operations(&controller, &decodium::sstv::SstvShareController::operationFinished);
+            controller.setStorageRoot(storage.path(), QStringLiteral("station-local"));
+            QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 5000);
+            QVERIFY(controller.setEnabled(true));
+            QTRY_VERIFY_WITH_TIMEOUT(controller.enabled(), 5000);
+            operations.clear();
+            QVERIFY(controller.refreshInbox());
+            QVERIFY(controller.refreshInbox());
+            if (disableWhileBusy) {
+                QVERIFY(controller.setEnabled(false));
+                QTRY_VERIFY_WITH_TIMEOUT(!controller.enabled(), 5000);
+                QTest::qWait(1400);
+                for (const auto& operation : operations)
+                    QVERIFY(operation.at(0).toString() != QStringLiteral("refresh-inbox"));
+                operations.clear();
+                QVERIFY(controller.setEnabled(true));
+                QTRY_VERIFY_WITH_TIMEOUT(controller.enabled(), 5000);
+                operations.clear();
+                QVERIFY(controller.refreshInbox());
+            }
+            const int expected = disableWhileBusy ? 1 : 2;
+            QTRY_VERIFY_WITH_TIMEOUT([&] {
+                int successes = 0;
+                for (const auto& operation : operations) {
+                    if (operation.at(0).toString() == QStringLiteral("refresh-inbox")) {
+                        if (!operation.at(1).toBool()) return false;
+                        ++successes;
+                    }
+                }
+                return successes >= expected;
+            }(), 7000);
+            controller.shutdown();
+        }
     }
 
 private:

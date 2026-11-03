@@ -10100,31 +10100,6 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_mediaDevices = new QMediaDevices(this);
     m_rtlSdrInput = new RtlSdrInput(this);
     m_rtlSdrRetuneTimer = new QTimer(this);
-    m_rtlSdrAudioThread = new QThread(this);
-    m_rtlSdrAudioThread->setObjectName(QStringLiteral("RtlSdrAudioOutput"));
-    m_rtlSdrAudioOutput = new RtlSdrAudioOutput;
-    m_rtlSdrAudioOutput->moveToThread(m_rtlSdrAudioThread);
-    connect(m_rtlSdrAudioThread, &QThread::finished,
-            m_rtlSdrAudioOutput, &QObject::deleteLater);
-    connect(m_rtlSdrAudioOutput, &RtlSdrAudioOutput::statusChanged,
-            this, [this](const QString& message) {
-        if (m_rtlSdrStatus != message) {
-            m_rtlSdrStatus = message;
-            emit rtlSdrStatusChanged();
-        }
-        emit statusMessage(message);
-    }, Qt::QueuedConnection);
-    connect(m_rtlSdrAudioOutput, &RtlSdrAudioOutput::error,
-            this, [this](const QString& message) {
-        m_rtlSdrAudioPlaybackRequested = false;
-        m_rtlSdrAudioPlaybackDeviceId.clear();
-        m_rtlSdrAudioPlaybackSampleRate = 0;
-        m_rtlSdrAudioRetryAfterMs = QDateTime::currentMSecsSinceEpoch() + 3000;
-        m_rtlSdrStatus = message;
-        emit rtlSdrStatusChanged();
-        emit errorMessage(message);
-    }, Qt::QueuedConnection);
-    m_rtlSdrAudioThread->start(QThread::HighPriority);
     m_rtlSdrRetuneTimer->setSingleShot(true);
     connect(m_rtlSdrRetuneTimer, &QTimer::timeout, this, [this]() {
         if (!m_monitoring
@@ -11890,12 +11865,6 @@ DecodiumBridge::~DecodiumBridge()
     m_pendingDecodeReleaseQueue.clear();
     stopRx();
     teardownAudioCapture();
-    if (m_rtlSdrAudioOutput && m_rtlSdrAudioThread
-        && m_rtlSdrAudioThread->isRunning()) {
-        QMetaObject::invokeMethod(m_rtlSdrAudioOutput,
-                                  &RtlSdrAudioOutput::shutdown,
-                                  Qt::BlockingQueuedConnection);
-    }
     // Ferma TX/Tune prima di distruggere tutto
     if (m_txAudioSink || m_txPcmBuffer) {
         retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("bridge-dtor"));
@@ -17794,6 +17763,13 @@ void DecodiumBridge::resetFtxDecodeWorkersForModeChange(const QString& previousM
         return;
     }
 
+    // Stop hash-log work belonging to the old mode without terminating the
+    // reusable worker or discarding hashes already applied to the decoder.
+    if (previousMode == QStringLiteral("FT8")) decodium::ft8::setHashSeedWorkEnabled(false);
+    if (previousMode == QStringLiteral("FT4")) decodium::ft4::setHashSeedWorkEnabled(false);
+    if (nextMode == QStringLiteral("FT8")) decodium::ft8::setHashSeedWorkEnabled(true);
+    if (nextMode == QStringLiteral("FT4")) decodium::ft4::setHashSeedWorkEnabled(true);
+
     bridgeLog(QStringLiteral("mode-change decoder worker reset: %1 -> %2").arg(previousMode, nextMode));
 
     m_asyncDecodePending = false;
@@ -19834,7 +19810,9 @@ bool DecodiumBridge::rtlSdrDirectSamplingAvailable(int deviceIndex) const
 
 bool DecodiumBridge::rtlSdrEnabled() const
 {
-    return getSetting(QStringLiteral("RtlSdrEnabled"), false).toBool();
+    return m_rtlSdrEnabledCache.value(decodium::activeSettingsProfileName(), [this]() {
+        return getSetting(QStringLiteral("RtlSdrEnabled"), false).toBool();
+    });
 }
 
 bool DecodiumBridge::rtlSdrGeneralReceiverConfigured() const
@@ -33487,6 +33465,9 @@ void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
         }
     }
 
+    if (key == QStringLiteral("RtlSdrEnabled")) {
+        m_rtlSdrEnabledCache.invalidate();
+    }
     if (key.startsWith(QStringLiteral("RtlSdr"))) {
         // Coalesce QML field edits onto the next event-loop pass.  Changing a
         // frequency or gain never performs USB I/O synchronously in the UI.
@@ -54566,10 +54547,14 @@ void DecodiumBridge::onRtlSdrIqSamplesReady(const QVector<short>& samples,
 
 void DecodiumBridge::startRtlSdrAudioPlayback(int sampleRate)
 {
+    if (m_rtlSdrAudioStopping) {
+        if (m_rtlSdrAudioThread && !m_rtlSdrAudioThread->wait(0)) return;
+        delete m_rtlSdrAudioThread;
+        m_rtlSdrAudioThread = nullptr;
+        m_rtlSdrAudioOutput = nullptr;
+        m_rtlSdrAudioStopping = false;
+    }
     if (sampleRate != RtlSdrDsp::kReceiverAudioSampleRate
-        || !m_rtlSdrAudioOutput
-        || !m_rtlSdrAudioThread
-        || !m_rtlSdrAudioThread->isRunning()
         || QDateTime::currentMSecsSinceEpoch() < m_rtlSdrAudioRetryAfterMs) {
         return;
     }
@@ -54604,6 +54589,38 @@ void DecodiumBridge::startRtlSdrAudioPlayback(int sampleRate)
         return;
     }
 
+    if (!m_rtlSdrAudioThread) {
+        m_rtlSdrAudioThread = new QThread(this);
+        m_rtlSdrAudioThread->setObjectName(QStringLiteral("RtlSdrAudioOutput"));
+        m_rtlSdrAudioOutput = new RtlSdrAudioOutput;
+        m_rtlSdrAudioOutput->moveToThread(m_rtlSdrAudioThread);
+        connect(m_rtlSdrAudioThread, &QThread::finished,
+                m_rtlSdrAudioOutput, &QObject::deleteLater);
+        connect(m_rtlSdrAudioOutput, &RtlSdrAudioOutput::statusChanged,
+                this, [this, outputGuard = QPointer<RtlSdrAudioOutput>(m_rtlSdrAudioOutput)](const QString& message) {
+            if (!outputGuard || outputGuard.data() != m_rtlSdrAudioOutput) return;
+            if (m_rtlSdrStatus != message) {
+                m_rtlSdrStatus = message;
+                emit rtlSdrStatusChanged();
+            }
+            emit statusMessage(message);
+        }, Qt::QueuedConnection);
+        connect(m_rtlSdrAudioOutput, &RtlSdrAudioOutput::error,
+                this, [this, outputGuard = QPointer<RtlSdrAudioOutput>(m_rtlSdrAudioOutput)](const QString& message) {
+            if (!outputGuard || outputGuard.data() != m_rtlSdrAudioOutput) return;
+            m_rtlSdrAudioPlaybackRequested = false;
+            m_rtlSdrAudioPlaybackDeviceId.clear();
+            m_rtlSdrAudioPlaybackSampleRate = 0;
+            m_rtlSdrAudioRetryAfterMs = QDateTime::currentMSecsSinceEpoch() + 3000;
+            m_rtlSdrStatus = message;
+            emit rtlSdrStatusChanged();
+            emit errorMessage(message);
+        }, Qt::QueuedConnection);
+        m_rtlSdrAudioThread->start(QThread::HighPriority);
+    }
+    if (!m_rtlSdrAudioThread->isRunning()) {
+        return;
+    }
     m_rtlSdrAudioPlaybackRequested = true;
     m_rtlSdrAudioPlaybackDeviceId = output.id();
     m_rtlSdrAudioPlaybackSampleRate = sampleRate;
@@ -54624,16 +54641,30 @@ void DecodiumBridge::stopRtlSdrAudioPlayback(const QString& reason)
     m_rtlSdrAudioPlaybackRequested = false;
     m_rtlSdrAudioPlaybackDeviceId.clear();
     m_rtlSdrAudioPlaybackSampleRate = 0;
-    if (!m_rtlSdrAudioOutput || !m_rtlSdrAudioThread
-        || !m_rtlSdrAudioThread->isRunning()) {
+    if (!m_rtlSdrAudioThread) {
         return;
     }
-    QPointer<RtlSdrAudioOutput> audioOutput(m_rtlSdrAudioOutput);
-    QMetaObject::invokeMethod(m_rtlSdrAudioOutput, [audioOutput, reason]() {
-        if (audioOutput) {
-            audioOutput->stop(reason);
-        }
-    }, Qt::QueuedConnection);
+    if (m_rtlSdrAudioThread->isRunning() && !m_rtlSdrAudioStopping) {
+        m_rtlSdrAudioStopping = true;
+        QPointer<RtlSdrAudioOutput> audioOutput(m_rtlSdrAudioOutput);
+        QMetaObject::invokeMethod(m_rtlSdrAudioOutput, [audioOutput, reason]() {
+            static std::atomic_bool labDelayUsed {false};
+            int const labDelay = QStandardPaths::isTestModeEnabled()
+                ? qBound(0, qEnvironmentVariableIntValue("DECODIUM_LAB_SDR_STOP_DELAY_MS"), 10000)
+                : 0;
+            if (labDelay && !labDelayUsed.exchange(true)) QThread::msleep(labDelay);
+            if (audioOutput) audioOutput->stop(reason);
+            QThread::currentThread()->quit();
+        }, Qt::QueuedConnection);
+    }
+    if (!m_rtlSdrAudioThread->wait(3000)) {
+        qWarning() << "RTL-SDR audio thread did not stop; retaining it for shutdown";
+        return;
+    }
+    delete m_rtlSdrAudioThread;
+    m_rtlSdrAudioThread = nullptr;
+    m_rtlSdrAudioOutput = nullptr;
+    m_rtlSdrAudioStopping = false;
 }
 
 void DecodiumBridge::onRtlSdrAudioSamplesReady(const QVector<short>& samples, int sampleRate)

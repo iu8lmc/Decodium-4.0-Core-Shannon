@@ -67,7 +67,9 @@ bool limitsValid(const HamDrmWaveformLimits& limits,
         && limits.maximumCorruptedPilotFraction >= 0.0
         && limits.maximumCorruptedPilotFraction <= 1.0
         && (!limits.experimentalFlatPacketFallback
-            || limits.experimentalAdaptiveEqualizer);
+            || limits.experimentalAdaptiveEqualizer)
+        && (!limits.experimentalTemporalPilots
+            || (!limits.experimentalAdaptiveEqualizer && !limits.experimentalFlatPacketFallback));
 }
 
 struct WaveformProfile final
@@ -205,7 +207,6 @@ bool facMatchesConfig(const channel::HamDrmFacDecodeResult& decoded,
                       const HamDrmWaveformConfig& config) noexcept
 {
     return decoded.parameters.occupiedBandwidth == config.occupiedBandwidth
-        && decoded.parameters.interleaver == config.interleaver
         && decoded.parameters.mscConstellation == config.constellation
         && decoded.parameters.protection == config.protection
         && decoded.parameters.packetId == config.packetId;
@@ -844,6 +845,17 @@ public:
                 }
                 const auto acquisition = acquire();
                 if (!acquisition.ok()) {
+                    if (rejectedFrequencyCandidate.has_value()) {
+                        // The estimate rejected this timing candidate (for
+                        // example due to too few pilots or excessive offset).
+                        // Keep the later candidates, including partial frames.
+                        ++statistics.synchronizationFailures;
+                        recordFirstFailure(batch.status, acquisition.status);
+                        discardPcm(*rejectedFrequencyCandidate + 1U);
+                        rejectedFrequencyCandidate.reset();
+                        progress = true;
+                        continue;
+                    }
                     if (acquisition.status.code == HamDrmErrorCode::Incomplete
                             && !end) {
                         // Every candidate for which a full frame is available
@@ -868,6 +880,17 @@ public:
                 locked = true;
                 progress = true;
             }
+            // A sample-rate mismatch can leave the last frame a few samples
+            // shorter at a finite end-of-stream. Only the experimental
+            // tracker pads this tiny suffix; pilot, FAC and packet CRC checks
+            // still decide whether any decoded data may be emitted.
+            if (locked && end && limits.experimentalFrameTimingTracking
+                && frameStart <= pcm.size()
+                && profile.capacity.samplesPerFrame > pcm.size() - frameStart) {
+                const auto missing = profile.capacity.samplesPerFrame
+                    - (pcm.size() - frameStart);
+                if (missing <= 4U) pcm.insert(pcm.end(), missing, 0.0);
+            }
             if (locked && frameStart <= pcm.size()
                     && profile.capacity.samplesPerFrame
                         <= pcm.size() - frameStart) {
@@ -879,6 +902,35 @@ public:
                                 "HAMDRM receive frame limit exceeded"));
                     break;
                 }
+                if (limits.experimentalFrameTimingTracking) {
+                    const std::size_t predicted = frameStart;
+                    const std::size_t first = frameStart > 2U ? frameStart - 2U : 0U;
+                    const std::size_t last = std::min(frameStart + 2U,
+                        pcm.size() - profile.capacity.samplesPerFrame);
+                    double best = std::numeric_limits<double>::infinity();
+                    for (std::size_t candidate = first; candidate <= last; ++candidate) {
+                        const double score = leastSquaresPilotScore(candidate)
+                            + leastSquaresPilotScore(candidate,
+                                profile.capacity.symbolsPerFrame - 1U);
+                        if (score < best) {
+                            best = score;
+                            frameStart = candidate;
+                        }
+                    }
+                    if (limits.experimentalEarlyTiming) {
+                        // Keep the early candidate stationary unless the
+                        // nominal pilot score improves materially; small
+                        // channel-dependent changes otherwise cause jitter.
+                        const std::size_t nominal = std::min(predicted + 1U, last);
+                        const double current = leastSquaresPilotScore(nominal)
+                            + leastSquaresPilotScore(nominal, profile.capacity.symbolsPerFrame - 1U);
+                        if (best < current * 0.95 && frameStart > first)
+                            --frameStart;
+                        else
+                            frameStart = predicted;
+                    }
+                    statistics.lastFrameStartSample = frameStart;
+                }
                 const std::size_t previousPilotFailures = statistics.pilotFailures;
                 const std::size_t previousPacketFailures = statistics.packetCrcFailures;
                 const std::size_t previousMotFailures = statistics.motCrcFailures;
@@ -889,10 +941,14 @@ public:
                 // timing candidate and search the remaining samples again.
                 const bool rejectedCandidate = !frameStatus.ok()
                     && statistics.pilotFailures != previousPilotFailures;
-                const std::size_t consumed = frameStart + (rejectedCandidate
+                std::size_t consumed = frameStart + (rejectedCandidate
                     ? 1U : profile.capacity.samplesPerFrame);
+                const std::size_t retained = limits.experimentalFrameTimingTracking
+                    && !rejectedCandidate && !(end && consumed == pcm.size())
+                    ? std::min<std::size_t>(2U, consumed) : 0U;
+                consumed -= retained;
                 discardPcm(consumed);
-                frameStart = 0U;
+                frameStart = retained;
                 progress = true;
                 if (!frameStatus.ok()) {
                     recordFirstFailure(batch.status, frameStatus);
@@ -937,6 +993,7 @@ public:
 
     HamDrmValueResult<std::size_t> acquire()
     {
+        rejectedFrequencyCandidate.reset();
         if (pcm.size() < profile.capacity.samplesPerFrame) {
             return {std::nullopt,
                     failure(HamDrmErrorCode::Incomplete,
@@ -1006,6 +1063,7 @@ public:
             }
         }
         if (!estimated.ok()) {
+            rejectedFrequencyCandidate = bestCandidate;
             return {std::nullopt, estimated.status};
         }
         statistics.lastCyclicPrefixMetric = prefixMetricCache[bestCandidate];
@@ -1040,16 +1098,18 @@ public:
             ? correlation * correlation / denominator : 0.0;
     }
 
-    double leastSquaresPilotScore(std::size_t candidate) const
+    double leastSquaresPilotScore(std::size_t candidate,
+                                  std::size_t symbol = 0U) const
     {
-        const std::size_t usefulStart = candidate + profile.guardSamples;
+        const std::size_t usefulStart = candidate + profile.guardSamples
+            + symbol * profile.capacity.samplesPerSymbol;
         const auto carriers = nominalDemodulator.demodulate(
             pcm.data() + usefulStart);
-        const auto* descriptors = profile.cellPlan.symbolCells(0U);
+        const auto* descriptors = profile.cellPlan.symbolCells(symbol);
         if (descriptors == nullptr) {
             return std::numeric_limits<double>::infinity();
         }
-        const auto gain = pilotGain(profile, 0U, carriers);
+        const auto gain = pilotGain(profile, symbol, carriers);
         double error = 0.0;
         double observedEnergy = 0.0;
         std::size_t count = 0U;
@@ -1161,20 +1221,113 @@ public:
         double pilotErrorSum = 0.0;
         std::size_t pilotCount = 0U;
         std::size_t corruptedPilots = 0U;
+        std::vector<std::vector<phy::HamDrmComplex>> temporalRaw;
+        std::vector<phy::HamDrmComplex> temporalRotation, temporalGain;
+        std::vector<unsigned> temporalCount;
+        if (limits.experimentalTemporalPilots) {
+            const auto symbols = profile.capacity.symbolsPerFrame;
+            temporalRaw.reserve(symbols);
+            for (std::size_t s = 0; s < symbols; ++s)
+                temporalRaw.push_back(demodulator->demodulate(pcm.data() + start
+                    + s * profile.capacity.samplesPerSymbol + profile.guardSamples));
+            const auto carriers = temporalRaw.front().size();
+            temporalRotation.resize(symbols, {1.0, 0.0});
+            temporalGain.resize(carriers);
+            temporalCount.resize(carriers);
+            const auto* firstDesc = profile.cellPlan.symbolCells(0);
+            for (std::size_t s = 1; s < symbols; ++s) {
+                const auto* desc = profile.cellPlan.symbolCells(s);
+                phy::HamDrmComplex correlation {};
+                for (std::size_t i = 0; i < carriers; ++i) {
+                    if (channel::hamDrmCellHas(firstDesc[i].kind, channel::HamDrmCellKind::FrequencyPilot)
+                        && channel::hamDrmCellHas(desc[i].kind, channel::HamDrmCellKind::FrequencyPilot))
+                        correlation += (temporalRaw[s][i] / desc[i].pilotValue)
+                            * std::conj(temporalRaw[0][i] / firstDesc[i].pilotValue);
+                }
+                if (std::abs(correlation) > 1e-12) temporalRotation[s] = correlation / std::abs(correlation);
+            }
+            for (std::size_t s = 0; s < symbols; ++s) {
+                const auto* desc = profile.cellPlan.symbolCells(s);
+                for (std::size_t i = 0; i < carriers; ++i) {
+                    if (isPilot(desc[i].kind) && std::norm(desc[i].pilotValue) > 1e-12) {
+                        temporalGain[i] += temporalRaw[s][i] / desc[i].pilotValue / temporalRotation[s];
+                        ++temporalCount[i];
+                    }
+                }
+            }
+            for (std::size_t i = 0; i < carriers; ++i)
+                if (temporalCount[i]) temporalGain[i] /= double(temporalCount[i]);
+        }
         for (std::size_t symbol = 0U;
              symbol < profile.capacity.symbolsPerFrame; ++symbol) {
             const std::size_t usefulStart = start
                 + symbol * profile.capacity.samplesPerSymbol
                 + profile.guardSamples;
-            const auto raw = demodulator->demodulate(pcm.data()
-                                                      + usefulStart);
+            const auto raw = limits.experimentalTemporalPilots ? temporalRaw[symbol]
+                : demodulator->demodulate(pcm.data() + usefulStart);
             auto equalized = (limits.experimentalFrequencySelective
                               || limits.experimentalAdaptiveEqualizer)
                 ? channel::hamDrmEqualizeInterpolatedPilotChannel(
                     profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold)
                 : channel::hamDrmEqualizeFlatPilotChannel(
                     profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold);
-            if (limits.experimentalAdaptiveEqualizer) {
+            if (limits.experimentalTemporalPilots) {
+                channel::HamDrmPilotEqualizationResult result;
+                result.carriers.resize(raw.size());
+                const auto* desc = profile.cellPlan.symbolCells(symbol);
+                double error = 0.0, energy = 0.0;
+                bool valid = true;
+                for (std::size_t i = 0; i < raw.size(); ++i) {
+                    std::size_t left = i, right = i;
+                    while (left > 0 && !temporalCount[left]) --left;
+                    while (right + 1 < raw.size() && !temporalCount[right]) ++right;
+                    if (!temporalCount[left]) left = right;
+                    if (!temporalCount[right]) right = left;
+                    if (!temporalCount[left] || !temporalCount[right]) { valid = false; break; }
+                    const double t = right == left ? 0.0 : (double(i) - double(left)) / double(right - left);
+                    const auto gain = (temporalGain[left] * (1.0 - t) + temporalGain[right] * t) * temporalRotation[symbol];
+                    if (!finite(gain.real()) || !finite(gain.imag()) || std::abs(gain) < 1e-10) { valid = false; break; }
+                    result.carriers[i] = raw[i] / gain;
+                    if (isPilot(desc[i].kind)) {
+                        phy::HamDrmComplex predicted;
+                        if (temporalCount[i] > 1U) {
+                            predicted = (temporalGain[i] * double(temporalCount[i])
+                                - raw[i] / desc[i].pilotValue / temporalRotation[symbol])
+                                / double(temporalCount[i] - 1U);
+                        } else {
+                            std::size_t before = i, after = i;
+                            while (before > 0U && !temporalCount[--before]) {}
+                            while (after + 1U < raw.size() && !temporalCount[++after]) {}
+                            if (before == i || !temporalCount[before]) before = after;
+                            if (after == i || !temporalCount[after]) after = before;
+                            if (before == i || after == i || !temporalCount[before] || !temporalCount[after]) {
+                                valid = false; break;
+                            }
+                            const double weight = before == after ? 0.0
+                                : (double(i) - double(before)) / double(after - before);
+                            predicted = temporalGain[before] * (1.0 - weight) + temporalGain[after] * weight;
+                        }
+                        const auto expected = predicted * temporalRotation[symbol] * desc[i].pilotValue;
+                        const double reference = std::norm(desc[i].pilotValue);
+                        const double denominator = std::max(std::norm(raw[i]), std::norm(expected));
+                        if (!finite(denominator) || denominator <= 1e-12) { valid = false; break; }
+                        const double e = std::norm(raw[i] - expected) / denominator * reference;
+                        if (!finite(e) || !finite(error + e)) { valid = false; break; }
+                        error += e; energy += reference;
+                        ++result.pilotCells;
+                        if (e > limits.corruptedPilotSquaredErrorThreshold) ++result.corruptedPilotCells;
+                    }
+                }
+                if (valid && energy > 0) {
+                    result.normalizedPilotSquaredError = error / energy;
+                    equalized = {std::move(result), HamDrmStatus::success()};
+                } else {
+                    ++statistics.pilotFailures;
+                    return failure(HamDrmErrorCode::Incomplete,
+                                   "HAMDRM temporal pilot estimate is singular");
+                }
+            }
+            if (limits.experimentalAdaptiveEqualizer && !limits.experimentalTemporalPilots) {
                 auto flat = channel::hamDrmEqualizeCrossValidatedFlatPilotChannel(
                     profile.cellPlan, symbol, raw, limits.corruptedPilotSquaredErrorThreshold);
                 if (flatFrameUsable) {
@@ -1244,6 +1397,21 @@ public:
                           "HAMDRM FAC profile does not match configured receiver")
                 : fac.status;
         }
+        // The validated FAC is authoritative for interleaver depth. Other
+        // profile parameters still have to match the configured receiver.
+        if (fac.value->parameters.interleaver != activeInterleaver) {
+            const auto depth = fac.value->parameters.interleaver
+                    == HamDrmInterleaver::Long ? 5U : 1U;
+            interleaver = channel::HamDrmSymbolInterleaverDecoder(
+                profile.capacity.usefulMscCellsPerFrame, depth);
+            if (flatInterleaver) {
+                *flatInterleaver = channel::HamDrmSymbolInterleaverDecoder(
+                    profile.capacity.usefulMscCellsPerFrame, depth);
+            }
+            packetReassembler.reset();
+            haveFrameIdentity = false;
+            activeInterleaver = fac.value->parameters.interleaver;
+        }
         const std::size_t identity = fac.value->parameters.frameIdentity;
         if (haveFrameIdentity
                 && identity != (lastFrameIdentity + 1U)
@@ -1254,6 +1422,8 @@ public:
         }
         haveFrameIdentity = true;
         lastFrameIdentity = identity;
+        statistics.hasFacInterleaver = true;
+        statistics.lastFacInterleaver = fac.value->parameters.interleaver;
 
         std::optional<std::vector<phy::HamDrmComplex>> logicalMsc;
         std::optional<std::vector<phy::HamDrmComplex>> flatLogicalMsc;
@@ -1404,6 +1574,7 @@ public:
     HamDrmWaveformLimits limits;
     WaveformProfile profile;
     channel::HamDrmSymbolInterleaverDecoder interleaver;
+    HamDrmInterleaver activeInterleaver {config.interleaver};
     std::unique_ptr<channel::HamDrmSymbolInterleaverDecoder> flatInterleaver;
     HamDrmPacketReassembler packetReassembler;
     RealToneLeastSquares nominalDemodulator;
@@ -1414,6 +1585,7 @@ public:
     std::vector<double> pilotScoreCache;
     std::vector<double> prefixMetricCache;
     std::size_t frameStart {0U};
+    std::optional<std::size_t> rejectedFrequencyCandidate;
     std::size_t lastFrameIdentity {0U};
     bool haveFrameIdentity {false};
     bool locked {false};

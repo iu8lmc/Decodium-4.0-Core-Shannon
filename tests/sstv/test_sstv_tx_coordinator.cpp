@@ -990,11 +990,11 @@ avtFamilySourceBuilderUsesProtectedHeaderAndSelectedSpecs()
         QCOMPARE(built.width, spec.width);
         QCOMPARE(built.height, spec.height);
         QCOMPARE(built.headerFrames, std::uint64_t {96'510U});
-        QCOMPARE(built.imageEndFrame, item.imageEndFramesAt12k);
-        QCOMPARE(built.totalFrames, item.imageEndFramesAt12k);
+        QCOMPARE(built.imageEndFrame, item.imageEndFramesAt12k + 120U);
+        QCOMPARE(built.totalFrames, item.imageEndFramesAt12k + 120U);
         QCOMPARE(built.fskIdFrames, std::uint64_t {0U});
         QCOMPARE(built.source->sampleRate(), std::uint32_t {12'000U});
-        QCOMPARE(built.source->totalSamples(), item.imageEndFramesAt12k);
+        QCOMPARE(built.source->totalSamples(), item.imageEndFramesAt12k + 120U);
         QCOMPARE(built.source->producedSamples(), std::uint64_t {0U});
         std::array<std::int16_t, 257U> scratch {};
         QCOMPARE(built.source->pullPcm16(scratch.data(), scratch.size()),
@@ -1023,13 +1023,16 @@ void TestSstvTxCoordinator::avtVariantBuildersMatchDirectEncoders()
         SstvAvtMode mode;
         SstvAvtVariant variant;
     } cases[] {
+        {"avt-24", SstvAvtMode::Avt24, SstvAvtVariant::Normal},
         {"avt-24-narrow", SstvAvtMode::Avt24, SstvAvtVariant::Narrow},
         {"avt-24-qrm", SstvAvtMode::Avt24, SstvAvtVariant::Qrm},
         {"avt-24-narrow-qrm", SstvAvtMode::Avt24, SstvAvtVariant::NarrowQrm},
         {"avt-90-narrow", SstvAvtMode::Avt90, SstvAvtVariant::Narrow},
+        {"avt-90", SstvAvtMode::Avt90, SstvAvtVariant::Normal},
         {"avt-90-qrm", SstvAvtMode::Avt90, SstvAvtVariant::Qrm},
         {"avt-90-narrow-qrm", SstvAvtMode::Avt90, SstvAvtVariant::NarrowQrm},
         {"avt-94-narrow", SstvAvtMode::Avt94, SstvAvtVariant::Narrow},
+        {"avt-94", SstvAvtMode::Avt94, SstvAvtVariant::Normal},
         {"avt-94-qrm", SstvAvtMode::Avt94, SstvAvtVariant::Qrm},
         {"avt-94-narrow-qrm", SstvAvtMode::Avt94, SstvAvtVariant::NarrowQrm},
     };
@@ -1055,13 +1058,12 @@ void TestSstvTxCoordinator::avtVariantBuildersMatchDirectEncoders()
         directConfig.sampleRate = config.sampleRate;
         directConfig.level = config.level;
         directConfig.headroom = config.headroom;
-        const bool qrm = SstvAvtSyncCodec::isQrm(item.variant);
         SstvAvtEncoder baseline(SstvTxSourceBuilder::pixelsFromImage(image, *coordinatorMode),
                                 directConfig);
-        directConfig.terminalHoldMs = qrm ? 10U : 0U;
+        directConfig.terminalHoldMs = 10U;
         SstvAvtEncoder direct(SstvTxSourceBuilder::pixelsFromImage(image, *coordinatorMode),
                               directConfig);
-        QCOMPARE(built.totalFrames, baseline.totalSamples() + (qrm ? 120U : 0U));
+        QCOMPARE(built.totalFrames, baseline.totalSamples() + 120U);
         std::array<std::int16_t, 4096U> actual {};
         std::array<std::int16_t, 4096U> expected {};
         while (!direct.complete()) {

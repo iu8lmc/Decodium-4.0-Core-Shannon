@@ -22,7 +22,7 @@ using namespace decodium::sstv::hamdrm::waveform;
 int main(int argc, char** argv)
 {
     if (argc < 8 || argc > 11) {
-        std::cerr << "usage: analyze_hamdrm_capture PCM.s16 A|B|E 2300|2500 4|16|64 pilot-limit corrupt-fraction expected-object [short|long] [flat|flat-multistage|flat-timing-hybrid|selective|adaptive|adaptive-fallback|adaptive-multistage|hybrid|timing-hybrid|half-hybrid|sinc-hybrid] [high|normal]\n";
+        std::cerr << "usage: analyze_hamdrm_capture PCM.s16 A|B|E 2300|2500 4|16|64 pilot-limit corrupt-fraction expected-object [short|long] [flat|flat-multistage|flat-timing-hybrid|selective|adaptive|adaptive-fallback|adaptive-multistage|adaptive-early|hybrid|timing-hybrid|half-hybrid|sinc-hybrid] [high|normal]\n";
         return 2;
     }
     try {
@@ -49,17 +49,24 @@ int main(int argc, char** argv)
         bool sincHybrid = false;
         if (argc >= 10) {
             const std::string equalizer = argv[9];
-            if (equalizer != "flat" && equalizer != "flat-multistage" && equalizer != "flat-timing-hybrid" && equalizer != "selective" && equalizer != "adaptive" && equalizer != "adaptive-fallback" && equalizer != "adaptive-multistage" && equalizer != "hybrid" && equalizer != "timing-hybrid" && equalizer != "half-hybrid" && equalizer != "sinc-hybrid") return 2;
+            if (equalizer != "flat" && equalizer != "flat-multistage" && equalizer != "flat-timing-hybrid" && equalizer != "selective" && equalizer != "adaptive" && equalizer != "adaptive-fallback" && equalizer != "adaptive-multistage" && equalizer != "adaptive-early" && equalizer != "hybrid" && equalizer != "timing-hybrid" && equalizer != "half-hybrid" && equalizer != "sinc-hybrid") return 2;
             limits.experimentalFrequencySelective = equalizer != "flat" && equalizer != "flat-multistage" && equalizer != "flat-timing-hybrid";
-            limits.experimentalAdaptiveEqualizer = equalizer == "adaptive" || equalizer == "adaptive-fallback" || equalizer == "adaptive-multistage" || equalizer == "timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
-            limits.experimentalFlatPacketFallback = equalizer == "adaptive-fallback" || equalizer == "adaptive-multistage" || equalizer == "timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
-            limits.experimentalMultistagePacketRetry = equalizer == "adaptive-multistage" || equalizer == "timing-hybrid" || equalizer == "flat-multistage" || equalizer == "flat-timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
+            limits.experimentalAdaptiveEqualizer = equalizer == "adaptive" || equalizer == "adaptive-fallback" || equalizer == "adaptive-multistage" || equalizer == "adaptive-early" || equalizer == "timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
+            limits.experimentalFlatPacketFallback = equalizer == "adaptive-fallback" || equalizer == "adaptive-multistage" || equalizer == "adaptive-early" || equalizer == "timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
+            limits.experimentalMultistagePacketRetry = equalizer == "adaptive-multistage" || equalizer == "adaptive-early" || equalizer == "timing-hybrid" || equalizer == "flat-multistage" || equalizer == "flat-timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
+            limits.experimentalEarlyTiming = equalizer == "adaptive-early";
             hybrid = equalizer == "hybrid";
             timingHybrid = equalizer == "timing-hybrid" || equalizer == "flat-timing-hybrid" || equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
             halfHybrid = equalizer == "half-hybrid" || equalizer == "sinc-hybrid";
             sincHybrid = equalizer == "sinc-hybrid";
         }
         limits.maximumNormalizedPilotSquaredError = std::stod(argv[5]);
+        limits.experimentalTemporalPilots = std::getenv("DECODIUM_HAMDRM_TEMPORAL_PILOTS") != nullptr;
+        limits.experimentalFrameTimingTracking = std::getenv("DECODIUM_HAMDRM_FRAME_TRACKING") != nullptr;
+        if (limits.experimentalTemporalPilots) {
+            limits.experimentalAdaptiveEqualizer = false;
+            limits.experimentalFlatPacketFallback = false;
+        }
         limits.maximumCorruptedPilotFraction = std::stod(argv[6]);
         if (!std::isfinite(limits.maximumNormalizedPilotSquaredError)
             || limits.maximumNormalizedPilotSquaredError < 0.0 || limits.maximumNormalizedPilotSquaredError > 10.0
@@ -74,6 +81,17 @@ int main(int argc, char** argv)
         input.seekg(0); expectedFile.seekg(0);
         const std::vector<std::uint8_t> expected((std::istreambuf_iterator<char>(expectedFile)), {});
         HamDrmWaveformReceiver receiver(config, limits);
+        std::unique_ptr<HamDrmWaveformReceiver> temporalReceiver;
+        if (std::getenv("DECODIUM_HAMDRM_TEMPORAL_MERGE") != nullptr) {
+            if (limits.experimentalTemporalPilots) return 2;
+            auto temporalLimits = limits;
+            temporalLimits.experimentalFrequencySelective = false;
+            temporalLimits.experimentalAdaptiveEqualizer = false;
+            temporalLimits.experimentalFlatPacketFallback = false;
+            temporalLimits.experimentalEarlyTiming = false;
+            temporalLimits.experimentalTemporalPilots = true;
+            temporalReceiver = std::make_unique<HamDrmWaveformReceiver>(config, temporalLimits);
+        }
         std::unique_ptr<HamDrmWaveformReceiver> flatReceiver;
         if (hybrid) flatReceiver = std::make_unique<HamDrmWaveformReceiver>(config);
         if (timingHybrid) {
@@ -107,6 +125,10 @@ int main(int argc, char** argv)
                 pcm[i] = double(sample) / 32768.0;
             }
             auto batch = receiver.pushPcm(pcm);
+            if (temporalReceiver) {
+                auto temporalBatch = temporalReceiver->pushPcm(pcm);
+                batch.dataGroups.insert(batch.dataGroups.end(), temporalBatch.dataGroups.begin(), temporalBatch.dataGroups.end());
+            }
             if (flatReceiver) {
                 auto flatBatch = flatReceiver->pushPcm(pcm);
                 batch.dataGroups.insert(batch.dataGroups.end(), flatBatch.dataGroups.begin(), flatBatch.dataGroups.end());
@@ -139,8 +161,14 @@ int main(int argc, char** argv)
                           << " msc_failures=" << batch.statistics.mscFailures << '\n';
             }
             if (batch.status.detail == "HAMDRM pilot validation rejected the frame"
-                && std::isfinite(batch.statistics.lastNormalizedPilotSquaredError))
+                && std::isfinite(batch.statistics.lastNormalizedPilotSquaredError)) {
                 rejectedPilotErrors.push_back(batch.statistics.lastNormalizedPilotSquaredError);
+                if (trace) std::cerr << "rejected_sample=" << inputSamples
+                    << " cfo=" << batch.statistics.estimatedFrequencyOffsetHz
+                    << " start=" << batch.statistics.lastFrameStartSample
+                    << " cp=" << batch.statistics.lastCyclicPrefixMetric
+                    << " pilot=" << batch.statistics.lastNormalizedPilotSquaredError << '\n';
+            }
             for (const auto& bytesGroup : batch.dataGroups) {
                 const auto group = parseHamDrmMotDataGroup(bytesGroup.data(), bytesGroup.size());
                 if (!group.ok()) { ++ingestErrors; continue; }

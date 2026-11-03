@@ -18,7 +18,9 @@ public:
     bool online {true};
     bool privateStorage {true};
     bool failStore {false};
+    QString failAccountPrefix;
     bool inconsistentLookup {false};
+    QByteArray successorOnInsert;
     mutable unsigned insertCalls {0};
     mutable QHash<QString, QString> values;
     bool available() const override { return online; }
@@ -32,10 +34,17 @@ public:
     }
     secure_settings::InsertResult store_if_absent(const QString& service, const QString& account, const QString& value) const override {
         ++insertCalls;
-        if (failStore) return secure_settings::InsertResult::Error;
+        if (failStore || (!failAccountPrefix.isEmpty() && account.startsWith(failAccountPrefix)))
+            return secure_settings::InsertResult::Error;
         const auto key = service + QLatin1Char('/') + account;
         if (values.contains(key)) return secure_settings::InsertResult::AlreadyExists;
-        values.insert(key, value); return secure_settings::InsertResult::Created;
+        values.insert(key, value);
+        if (!successorOnInsert.isEmpty() && account.startsWith(QStringLiteral("peer-"))) {
+            const auto original = QByteArray::fromBase64(value.toLatin1());
+            const auto nextAccount = account + QStringLiteral("-next-") + sstvShareX25519Fingerprint(original);
+            values.insert(service + QLatin1Char('/') + nextAccount, QString::fromLatin1(successorOnInsert.toBase64()));
+        }
+        return secure_settings::InsertResult::Created;
     }
     bool store(const QString& service, const QString& account, const QString& value, QString*) const override {
         if (failStore) return false;
@@ -125,6 +134,18 @@ int main() {
     const auto aliceIdentity = aliceStore.createOrLoadPublicKey();
     const auto bobIdentity = bobStore.createOrLoadPublicKey();
     check(aliceIdentity.ok() && bobIdentity.ok() && *aliceIdentity.key != *bobIdentity.key, "isolated identities failed");
+    for (int direction = 0; direction < 2; ++direction) {
+        MemoryBackend racingBackend;
+        SstvShareKeyStore racingStore(racingBackend, QStringLiteral("race"));
+        const QByteArray original = direction == 0 ? *aliceIdentity.key : *bobIdentity.key;
+        const QByteArray successor = direction == 0 ? *bobIdentity.key : *aliceIdentity.key;
+        racingBackend.successorOnInsert = successor;
+        check(racingStore.pinRecipient("provider", "peer", original, sstvShareX25519Fingerprint(original))
+                  == SstvShareKeyStoreError::Conflict,
+              "initial pin reported success after concurrent replacement");
+        check(racingStore.pinnedRecipient("provider", "peer").key == successor,
+              "concurrent successor did not remain current");
+    }
     check(aliceReload.createOrLoadPublicKey().key == aliceIdentity.key, "identity changed on reload");
     const auto aliceSigning = aliceStore.createOrLoadSigningPublicKey();
     const auto bobSigning = bobStore.createOrLoadSigningPublicKey();
@@ -167,6 +188,27 @@ int main() {
     const auto pinnedBob = sstvShareX25519Fingerprint(*bobIdentity.key);
     check(aliceStore.pinRecipient("provider", "bob", *bobIdentity.key, pinnedBob) == SstvShareKeyStoreError::None, "pin failed");
     check(aliceReload.pinnedRecipient("provider", "bob").key == bobIdentity.key, "pin reload failed");
+    const auto recipientStorage = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+        + QString::fromLatin1(QCryptographicHash::hash(QByteArrayLiteral("alice"), QCryptographicHash::Sha256).toHex())
+        + QStringLiteral("/peer-")
+        + QString::fromLatin1(QCryptographicHash::hash(QByteArray("provider\0bob", 12), QCryptographicHash::Sha256).toHex());
+    check(backend.values.contains(recipientStorage), "recipient pin fixture missing");
+    const auto savedRecipient = backend.values.value(recipientStorage);
+    for (const auto& invalid : {QByteArray(32, '\0'), QByteArray::fromHex("0100000000000000000000000000000000000000000000000000000000000000")}) {
+        backend.values[recipientStorage] = QString::fromLatin1(invalid.toBase64());
+        check(aliceReload.pinnedRecipient("provider", "bob").error == SstvShareKeyStoreError::Corrupt,
+              "corrupted low-order stored recipient key accepted");
+        const auto storedCorrupt = backend.values;
+        const auto writesBefore = backend.insertCalls;
+        check(aliceReload.pinRecipient("provider", "bob", *bobIdentity.key, pinnedBob)
+                  == SstvShareKeyStoreError::Corrupt,
+              "corrupt recipient pin reported as an ordinary key conflict");
+        check(backend.values == storedCorrupt && backend.insertCalls == writesBefore,
+              "corrupt recipient pin was modified during pin attempt");
+    }
+    backend.values[recipientStorage] = savedRecipient;
+    check(aliceReload.pinnedRecipient("provider", "bob").key == bobIdentity.key,
+          "valid recipient pin not recovered after corruption control");
     const auto storedBeforeInconsistentLookup = backend.values;
     const auto insertCallsBeforeInconsistentLookup = backend.insertCalls;
     backend.inconsistentLookup = true;
@@ -234,7 +276,7 @@ int main() {
     check(pinOnly.pinnedSenderSigningKey("provider", "alice").error == SstvShareKeyStoreError::Corrupt,
           "corrupt P256 sender pin accepted");
     check(pinOnly.pinSenderSigningKey("provider", "alice", *aliceSigning.key, aliceSigningFingerprint)
-              == SstvShareKeyStoreError::Conflict, "corrupt P256 sender pin silently replaced");
+              == SstvShareKeyStoreError::Corrupt, "corrupt P256 sender pin silently replaced or misclassified");
     const QByteArray key(32, '\0');
     // NIST AES-256-GCM zero key/IV/plaintext known-answer vector.
     SstvShareAeadEnvelope known {QByteArray(12, '\0'),
@@ -300,12 +342,226 @@ int main() {
     auto reverse = manifest;
     reverse.transferId = QUuid::createUuid();
     reverse.senderId = QStringLiteral("bob"); reverse.recipientId = QStringLiteral("alice");
+    const auto reverseStorage = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+        + QString::fromLatin1(QCryptographicHash::hash(QByteArrayLiteral("bob"), QCryptographicHash::Sha256).toHex())
+        + QStringLiteral("/peer-")
+        + QString::fromLatin1(QCryptographicHash::hash(QByteArray("provider\0alice", 14), QCryptographicHash::Sha256).toHex());
+    for (const bool forward : {true, false}) {
+        const auto account = forward ? recipientStorage : reverseStorage;
+        check(backend.values.contains(account), "directional recipient pin missing");
+        const auto saved = backend.values.value(account);
+        backend.values[account] = QString::fromLatin1(QByteArray(32, '\0').toBase64());
+        const auto corrupted = backend.values;
+        const auto& store = forward ? aliceStore : bobStore;
+        const auto& outbound = forward ? manifest : reverse;
+        check(!sstvShareSealPinnedEnvelope(store, outbound, data)
+              && !sstvShareSealSignedEnvelope(store, outbound, data),
+              "corrupt recipient pin permitted envelope creation");
+        check(backend.values == corrupted, "failed envelope creation modified key storage");
+        backend.values[account] = saved;
+        const auto recovered = sstvShareSealSignedEnvelope(store, outbound, data);
+        check(bool(recovered), "valid recipient pin did not recover envelope creation");
+        const auto& receiver = forward ? bobStore : aliceStore;
+        check(sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                          recovered->manifest, recovered->bytes, true) == data,
+              "restored recipient pin did not complete signed transfer");
+    }
     const auto signedA = sstvShareSealSignedEnvelope(aliceStore, manifest, QByteArrayLiteral("signed image A"));
     const auto signedB = sstvShareSealSignedEnvelope(bobStore, reverse, QByteArrayLiteral("signed image B"));
     check(signedA && signedB, "signed envelope A/B seal failed");
+    for (bool forward : {true, false}) {
+        MemoryBackend replacementBackend;
+        replacementBackend.values = backend.values;
+        SstvShareKeyStore verifier(replacementBackend, forward ? QStringLiteral("bob") : QStringLiteral("alice"));
+        SstvShareKeyStore replacementSigner(replacementBackend, forward ? QStringLiteral("new-alice") : QStringLiteral("new-bob"));
+        const auto newSigning = replacementSigner.createOrLoadSigningPublicKey();
+        const auto target = forward ? bobIdentity.key : aliceIdentity.key;
+        const QString peer = forward ? QStringLiteral("bob") : QStringLiteral("alice");
+        const QString sender = forward ? QStringLiteral("alice") : QStringLiteral("bob");
+        const auto& oldEnvelope = forward ? *signedA : *signedB;
+        const auto& outbound = forward ? manifest : reverse;
+        check(newSigning.ok() && target.has_value()
+              && replacementSigner.pinRecipient("provider", peer, *target, sstvShareX25519Fingerprint(*target))
+                  == SstvShareKeyStoreError::None,
+              "replacement signer setup failed");
+        const auto newEnvelope = sstvShareSealSignedEnvelope(replacementSigner, outbound, QByteArrayLiteral("new signed image"));
+        check(newEnvelope && sstvShareCheckStoredSender(verifier, oldEnvelope.manifest) == std::optional<bool>{true}
+              && sstvShareCheckStoredSender(verifier, newEnvelope->manifest) == std::optional<bool>{false},
+              "initial signing pin did not authenticate only old sender");
+        const auto oldFingerprint = oldEnvelope.manifest.encryption.senderKeyFingerprint;
+        const auto newFingerprint = sstvShareP256Fingerprint(*newSigning.key);
+        check(verifier.replacePinnedSenderSigningKey("provider", sender, QString(64, '0'), *newSigning.key, newFingerprint)
+                  == SstvShareKeyStoreError::Conflict
+              && verifier.replacePinnedSenderSigningKey("provider", sender, oldFingerprint, *newSigning.key, QString(64, '0'))
+                  == SstvShareKeyStoreError::InvalidInput,
+              "unverified signing pin replacement accepted");
+        replacementBackend.failStore = true;
+        check(verifier.replacePinnedSenderSigningKey("provider", sender, oldFingerprint, *newSigning.key, newFingerprint)
+                  == SstvShareKeyStoreError::StorageFailure
+              && sstvShareCheckStoredSender(verifier, oldEnvelope.manifest) == std::optional<bool>{true},
+              "failed signing pin replacement altered trust");
+        replacementBackend.failStore = false;
+        check(verifier.replacePinnedSenderSigningKey("provider", sender, oldFingerprint, *newSigning.key, newFingerprint)
+                  == SstvShareKeyStoreError::None
+              && verifier.pinnedSenderSigningKey("provider", sender).key == newSigning.key
+              && sstvShareCheckStoredSender(verifier, oldEnvelope.manifest) == std::optional<bool>{false}
+              && sstvShareOpenStoredEnvelope(verifier, "provider", peer, newEnvelope->manifest, newEnvelope->bytes, true)
+                  == QByteArrayLiteral("new signed image"),
+              "verified signing pin replacement did not enforce new key");
+        check(verifier.replacePinnedSenderSigningKey("provider", sender, oldFingerprint, *newSigning.key, newFingerprint)
+                  == SstvShareKeyStoreError::Conflict,
+              "stale signing pin replacement accepted");
+        const auto oldKey = forward ? aliceSigning.key : bobSigning.key;
+        check(verifier.replacePinnedSenderSigningKey("provider", sender, newFingerprint, *oldKey, oldFingerprint)
+                  == SstvShareKeyStoreError::Conflict,
+              "cyclic signing pin replacement accepted");
+        const auto receiverProfile = forward ? QByteArrayLiteral("bob") : QByteArrayLiteral("alice");
+        const auto accountHash = QCryptographicHash::hash(QByteArrayLiteral("provider") + '\0' + sender.toUtf8(), QCryptographicHash::Sha256).toHex();
+        const auto account = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(receiverProfile, QCryptographicHash::Sha256).toHex())
+            + QStringLiteral("/sender-p256-") + QString::fromLatin1(accountHash);
+        const auto link = account + QStringLiteral("-next-") + oldFingerprint;
+        const auto saved = replacementBackend.values.value(link);
+        check(!saved.isEmpty(), "sender signing successor missing");
+        for (const auto& bad : {QStringLiteral("invalid-base64"), QString::fromLatin1(QByteArray(91, '\0').toBase64())}) {
+            replacementBackend.values[link] = bad;
+            check(verifier.pinnedSenderSigningKey("provider", sender).error == SstvShareKeyStoreError::Corrupt
+                  && !sstvShareCheckStoredSender(verifier, newEnvelope->manifest).has_value()
+                  && verifier.replacePinnedSenderSigningKey("provider", sender, oldFingerprint, *newSigning.key, newFingerprint)
+                      == SstvShareKeyStoreError::Corrupt
+                  && replacementBackend.values.value(link) == bad,
+                  "corrupt signing successor accepted or changed");
+        }
+        replacementBackend.values[link] = saved;
+        const auto backLink = account + QStringLiteral("-next-") + newFingerprint;
+        replacementBackend.values[backLink] = replacementBackend.values.value(account);
+        check(verifier.pinnedSenderSigningKey("provider", sender).error == SstvShareKeyStoreError::Corrupt,
+              "cyclic signing successor chain accepted");
+        replacementBackend.values.remove(backLink);
+        check(sstvShareCheckStoredSender(verifier, newEnvelope->manifest) == std::optional<bool>{true},
+              "signing pin did not recover after corruption removed");
+        check(replacementSigner.rotateSigningIdentity(QString(64, '0')).error == SstvShareKeyStoreError::Conflict,
+              "stale local signing rotation accepted");
+        replacementBackend.failStore = true;
+        check(replacementSigner.rotateSigningIdentity(newFingerprint).error == SstvShareKeyStoreError::StorageFailure
+              && replacementSigner.createOrLoadSigningPublicKey().key == newSigning.key,
+              "failed local signing rotation changed identity");
+        replacementBackend.failStore = false;
+        const auto rotated = replacementSigner.rotateSigningIdentity(newFingerprint);
+        check(rotated.ok() && rotated.key != newSigning.key
+              && replacementSigner.createOrLoadSigningPublicKey().key == rotated.key,
+              "signing identity rotation did not persist");
+        const auto rotatedEnvelope = sstvShareSealSignedEnvelope(replacementSigner, outbound, QByteArrayLiteral("rotated image"));
+        check(rotatedEnvelope && sstvShareCheckStoredSender(verifier, rotatedEnvelope->manifest) == std::optional<bool>{false}
+              && verifier.replacePinnedSenderSigningKey("provider", sender, newFingerprint, *rotated.key,
+                    sstvShareP256Fingerprint(*rotated.key)) == SstvShareKeyStoreError::None
+              && sstvShareOpenStoredEnvelope(verifier, "provider", peer, rotatedEnvelope->manifest, rotatedEnvelope->bytes, true)
+                    == QByteArrayLiteral("rotated image")
+              && sstvShareCheckStoredSender(verifier, newEnvelope->manifest) == std::optional<bool>{false},
+              "rotated sender and independently updated pin failed signed exchange");
+        check(replacementSigner.rotateSigningIdentity(newFingerprint).error == SstvShareKeyStoreError::Conflict,
+              "old fingerprint permitted repeated local signing rotation");
+        const auto third = replacementSigner.rotateSigningIdentity(sstvShareP256Fingerprint(*rotated.key));
+        check(third.ok() && third.key != rotated.key
+              && replacementSigner.createOrLoadSigningPublicKey().key == third.key,
+              "second signing identity rotation failed");
+        const auto signingProfile = forward ? QByteArrayLiteral("new-alice") : QByteArrayLiteral("new-bob");
+        const auto signingService = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(signingProfile, QCryptographicHash::Sha256).toHex()) + QLatin1Char('/');
+        const auto signingLink = signingService + QStringLiteral("identity-p256-v1-next-") + newFingerprint;
+        const auto savedSigningLink = replacementBackend.values.value(signingLink);
+        check(!savedSigningLink.isEmpty(), "private signing successor missing");
+        for (const auto& bad : {QStringLiteral("invalid-base64"), QString::fromLatin1(QByteArray(91, '\0').toBase64())}) {
+            replacementBackend.values[signingLink] = bad;
+            check(replacementSigner.loadSigningPrivateKey().error == SstvShareKeyStoreError::Corrupt
+                  && replacementSigner.createOrLoadSigningPublicKey().error == SstvShareKeyStoreError::Corrupt
+                  && !sstvShareSealSignedEnvelope(replacementSigner, outbound, data)
+                  && replacementBackend.values.value(signingLink) == bad,
+                  "corrupt private signing successor accepted or changed");
+        }
+        replacementBackend.values[signingLink] = savedSigningLink;
+        const auto signingBackLink = signingService + QStringLiteral("identity-p256-v1-next-") + sstvShareP256Fingerprint(*third.key);
+        replacementBackend.values[signingBackLink] = replacementBackend.values.value(signingService + QStringLiteral("identity-p256-v1"));
+        check(replacementSigner.loadSigningPrivateKey().error == SstvShareKeyStoreError::Corrupt,
+              "cyclic private signing chain accepted");
+        replacementBackend.values.remove(signingBackLink);
+        check(replacementSigner.createOrLoadSigningPublicKey().key == third.key,
+              "private signing chain did not recover after test corruption removed");
+    }
+    for (const bool forward : {true, false}) {
+        const auto& receiver = forward ? bobStore : aliceStore;
+        const auto& envelope = forward ? *signedA : *signedB;
+        const QByteArray profile = forward ? QByteArrayLiteral("bob") : QByteArrayLiteral("alice");
+        const auto service = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(profile, QCryptographicHash::Sha256).toHex());
+        const auto activeAccount = service + QStringLiteral("/identity-x25519-v1");
+        const auto archiveAccount = service + QStringLiteral("/identity-x25519-v1-archive-")
+            + envelope.manifest.encryption.recipientKeyFingerprint;
+        check(backend.values.contains(activeAccount), "active recipient identity missing");
+        const auto original = backend.values.value(activeAccount);
+        const auto replacement = sstvShareGenerateX25519KeyPair();
+        check(bool(replacement), "replacement identity generation failed");
+        backend.failStore = true;
+        check(receiver.archiveCurrentIdentity().error == SstvShareKeyStoreError::StorageFailure
+              && !backend.values.contains(archiveAccount) && backend.values.value(activeAccount) == original,
+              "archive storage failure modified active identity");
+        backend.failStore = false;
+        backend.values[archiveAccount] = QString::fromLatin1(replacement->privateKey.toBase64());
+        check(receiver.archiveCurrentIdentity().error == SstvShareKeyStoreError::Corrupt
+              && backend.values.value(archiveAccount) == QString::fromLatin1(replacement->privateKey.toBase64()),
+              "archive operation overwrote a conflicting entry");
+        backend.values.remove(archiveAccount);
+        const auto archivedPublic = receiver.archiveCurrentIdentity();
+        check(archivedPublic.ok()
+              && sstvShareX25519Fingerprint(*archivedPublic.key) == envelope.manifest.encryption.recipientKeyFingerprint
+              && backend.values.value(archiveAccount) == original
+              && receiver.archiveCurrentIdentity().key == archivedPublic.key,
+              "archive operation did not preserve identity idempotently");
+        backend.values[activeAccount] = QString::fromLatin1(replacement->privateKey.toBase64());
+        const auto selected = receiver.loadPrivateKeyForFingerprint(envelope.manifest.encryption.recipientKeyFingerprint);
+        check(selected.ok() && QString::fromLatin1(selected.key->toBase64()) == original,
+              "archived identity did not match recipient fingerprint");
+        const auto expected = forward ? QByteArrayLiteral("signed image A") : QByteArrayLiteral("signed image B");
+        check(sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                          envelope.manifest, envelope.bytes, true) == expected,
+              "archived recipient identity did not decrypt signed envelope");
+        check(receiver.loadPrivateKeyForFingerprint(QString(64, 'g')).error
+                  == SstvShareKeyStoreError::InvalidInput,
+              "invalid fingerprint accepted for archived identity");
+        backend.values[activeAccount] = QStringLiteral("invalid-private-key");
+        check(receiver.loadPrivateKeyForFingerprint(envelope.manifest.encryption.recipientKeyFingerprint).error
+                  == SstvShareKeyStoreError::Corrupt
+              && !sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                              envelope.manifest, envelope.bytes, true),
+              "corrupt active identity bypassed through archive");
+        backend.values[activeAccount] = QString::fromLatin1(replacement->privateKey.toBase64());
+        backend.values[archiveAccount] = QString::fromLatin1(replacement->privateKey.toBase64());
+        check(receiver.loadPrivateKeyForFingerprint(envelope.manifest.encryption.recipientKeyFingerprint).error
+                  == SstvShareKeyStoreError::Corrupt
+              && !sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                              envelope.manifest, envelope.bytes, true),
+              "mismatched archived identity accepted");
+        backend.values.remove(archiveAccount);
+        check(receiver.loadPrivateKeyForFingerprint(envelope.manifest.encryption.recipientKeyFingerprint).error
+                  == SstvShareKeyStoreError::Missing,
+              "missing archived identity accepted");
+        backend.values[activeAccount] = original;
+    }
     for (const auto* envelope : {&*signedA, &*signedB}) {
         const bool forward = envelope == &*signedA;
         const auto& receiver = forward ? bobStore : aliceStore;
+        check(sstvShareCheckStoredSender(receiver, envelope->manifest) == std::optional<bool> {true},
+              "valid sender signature was not verified");
+        auto invalidSender = envelope->manifest;
+        auto badSignature = QByteArray::fromBase64(invalidSender.encryption.senderSignatureBase64.toLatin1());
+        badSignature[badSignature.size() - 1] ^= 1;
+        invalidSender.encryption.senderSignatureBase64 = QString::fromLatin1(badSignature.toBase64());
+        check(sstvShareCheckStoredSender(receiver, invalidSender) == std::optional<bool> {false},
+              "invalid signature was not distinguished from a key-store failure");
+        backend.online = false;
+        check(!sstvShareCheckStoredSender(receiver, envelope->manifest).has_value(),
+              "unavailable key store was treated as a signature result");
+        backend.online = true;
         const QString recipient = forward ? QStringLiteral("bob") : QStringLiteral("alice");
         const QByteArray expected = forward ? QByteArrayLiteral("signed image A") : QByteArrayLiteral("signed image B");
         const auto serialized = envelope->manifest.toCanonicalJson();
@@ -435,6 +691,114 @@ int main() {
     changedManifest = encryptedA->manifest;
     changedManifest.encryption.mode = SstvShareEncryptionMode::TransportTls;
     check(!sstvShareDecryptPayload(changedManifest, *recipientKey, encryptedA->bytes), "downgrade accepted");
+    for (const bool forward : {true, false}) {
+        const auto& receiver = forward ? bobStore : aliceStore;
+        const auto& envelope = forward ? *signedA : *signedB;
+        const auto oldFingerprint = envelope.manifest.encryption.recipientKeyFingerprint;
+        backend.failAccountPrefix = QStringLiteral("identity-x25519-v1-next-");
+        check(receiver.rotateIdentity(oldFingerprint).error == SstvShareKeyStoreError::StorageFailure
+              && receiver.createOrLoadPublicKey().ok()
+              && sstvShareX25519Fingerprint(*receiver.createOrLoadPublicKey().key) == oldFingerprint,
+              "interrupted rotation changed active identity");
+        backend.failAccountPrefix.clear();
+        const auto next = receiver.rotateIdentity(oldFingerprint);
+        check(next.ok() && sstvShareX25519Fingerprint(*next.key) != oldFingerprint,
+              "identity rotation failed");
+        check(receiver.rotateIdentity(oldFingerprint).error == SstvShareKeyStoreError::Conflict,
+              "stale rotation request accepted");
+        const auto expected = forward ? QByteArrayLiteral("signed image A") : QByteArrayLiteral("signed image B");
+        check(sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                          envelope.manifest, envelope.bytes, true) == expected,
+              "rotation lost old signed envelope");
+        const auto nextFingerprint = sstvShareX25519Fingerprint(*next.key);
+        const auto nextPrivate = receiver.loadPrivateKeyForFingerprint(nextFingerprint);
+        const auto fresh = sstvShareEncryptForRecipient(envelope.manifest, *next.key, nextFingerprint, expected);
+        check(nextPrivate.ok() && fresh && sstvShareDecryptForRecipient(fresh->manifest, *nextPrivate.key, fresh->bytes) == expected,
+              "rotated identity cannot decrypt new envelope");
+        const QByteArray profile = forward ? QByteArrayLiteral("bob") : QByteArrayLiteral("alice");
+        const auto service = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(profile, QCryptographicHash::Sha256).toHex());
+        const auto archive = service + QStringLiteral("/identity-x25519-v1-archive-") + oldFingerprint;
+        const auto savedArchive = backend.values.value(archive);
+        check(!savedArchive.isEmpty(), "rotated identity archive missing");
+        backend.values.remove(archive);
+        check(receiver.loadPrivateKey().error == SstvShareKeyStoreError::Corrupt
+              && !sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                              envelope.manifest, envelope.bytes, true),
+              "missing prior identity archive accepted");
+        backend.values[archive] = QString::fromLatin1(QByteArray(32, 'x').toBase64());
+        check(receiver.loadPrivateKey().error == SstvShareKeyStoreError::Corrupt,
+              "mismatched prior identity archive accepted");
+        backend.values[archive] = savedArchive;
+        check(sstvShareOpenStoredEnvelope(receiver, "provider", forward ? "bob" : "alice",
+                                          envelope.manifest, envelope.bytes, true) == expected,
+              "old envelope did not recover after archive restoration");
+        const auto cycle = service + QStringLiteral("/identity-x25519-v1-next-") + nextFingerprint;
+        backend.values[cycle] = backend.values.value(service + QStringLiteral("/identity-x25519-v1"));
+        check(receiver.loadPrivateKey().error == SstvShareKeyStoreError::Corrupt,
+              "cyclic identity rotation accepted");
+        backend.values.remove(cycle);
+    }
+    for (const bool forward : {true, false}) {
+        const auto& sender = forward ? aliceStore : bobStore;
+        const auto& receiver = forward ? bobStore : aliceStore;
+        const auto& outbound = forward ? manifest : reverse;
+        const auto& oldEnvelope = forward ? *signedA : *signedB;
+        const auto peer = forward ? QStringLiteral("bob") : QStringLiteral("alice");
+        const auto next = receiver.createOrLoadPublicKey();
+        check(next.ok(), "rotated recipient identity unavailable");
+        const auto nextFingerprint = sstvShareX25519Fingerprint(*next.key);
+        const auto oldFingerprint = oldEnvelope.manifest.encryption.recipientKeyFingerprint;
+        check(sender.replacePinnedRecipient("provider", peer, oldFingerprint, *next.key, QString(64, '0'))
+                  == SstvShareKeyStoreError::InvalidInput,
+              "unverified replacement recipient accepted");
+        check(sender.replacePinnedRecipient("provider", peer, QString(64, '0'), *next.key, nextFingerprint)
+                  == SstvShareKeyStoreError::Conflict,
+              "replacement ignored previous fingerprint");
+        check(sender.replacePinnedRecipient("provider", peer, oldFingerprint, *next.key, nextFingerprint)
+                  == SstvShareKeyStoreError::None
+              && sender.pinnedRecipient("provider", peer).key == next.key,
+              "verified replacement recipient failed");
+        check(sender.replacePinnedRecipient("provider", peer, oldFingerprint, *next.key, nextFingerprint)
+                  == SstvShareKeyStoreError::Conflict,
+              "stale recipient replacement accepted");
+        const auto fresh = sstvShareSealSignedEnvelope(sender, outbound, data);
+        check(fresh && fresh->manifest.encryption.recipientKeyFingerprint == nextFingerprint
+              && sstvShareOpenStoredEnvelope(receiver, "provider", peer, fresh->manifest, fresh->bytes, true) == data,
+              "newly pinned recipient did not receive signed envelope");
+        const QByteArray senderProfile = forward ? QByteArrayLiteral("alice") : QByteArrayLiteral("bob");
+        const auto service = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(senderProfile, QCryptographicHash::Sha256).toHex());
+        const auto account = QStringLiteral("peer-") + QString::fromLatin1(QCryptographicHash::hash(
+            QByteArrayLiteral("provider") + '\0' + peer.toUtf8(), QCryptographicHash::Sha256).toHex());
+        const auto link = service + QLatin1Char('/') + account + QStringLiteral("-next-") + oldFingerprint;
+        const auto savedLink = backend.values.value(link);
+        check(!savedLink.isEmpty(), "recipient successor missing in corruption test");
+        for (const auto& corrupt : {QStringLiteral("invalid-base64"), QString::fromLatin1(QByteArray(32, '\0').toBase64())}) {
+            backend.values[link] = corrupt;
+            check(sender.pinnedRecipient("provider", peer).error == SstvShareKeyStoreError::Corrupt
+                  && !sstvShareSealSignedEnvelope(sender, outbound, data)
+                  && backend.values.value(link) == corrupt,
+                  "corrupt successor accepted or changed");
+        }
+        backend.values[link] = savedLink;
+        const auto backLink = service + QLatin1Char('/') + account + QStringLiteral("-next-") + nextFingerprint;
+        const auto initialPin = backend.values.value(service + QLatin1Char('/') + account);
+        backend.values[backLink] = initialPin;
+        check(sender.pinnedRecipient("provider", peer).error == SstvShareKeyStoreError::Corrupt
+              && !sstvShareSealSignedEnvelope(sender, outbound, data),
+              "cyclic recipient pin chain accepted");
+        backend.values.remove(backLink);
+        check(sender.pinnedRecipient("provider", peer).key == next.key
+              && bool(sstvShareSealSignedEnvelope(sender, outbound, data)),
+              "recipient pin did not recover after repairing test corruption");
+        const auto secondRotation = receiver.rotateIdentity(nextFingerprint);
+        check(secondRotation.ok()
+              && sstvShareOpenStoredEnvelope(receiver, "provider", peer, oldEnvelope.manifest, oldEnvelope.bytes, true)
+                  == (forward ? QByteArrayLiteral("signed image A") : QByteArrayLiteral("signed image B"))
+              && sstvShareOpenStoredEnvelope(receiver, "provider", peer, fresh->manifest, fresh->bytes, true) == data,
+              "multiple rotations lost an older signed envelope");
+    }
     std::cout << "AES-256-GCM known-answer and tamper tests passed\n";
     return 0;
  } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

@@ -1,0 +1,10 @@
+--- a/lib/precise_time.c
++++ b/lib/precise_time.c
+@@ -87,6 +87,7 @@
+ #elif defined(__WIN32__)
+ // On Windows, use QueryPerformanceCounter and QueryPerformanceFrequency.
+ 
++#include <assert.h>
+ #include <windows.h>
+ 
+ static double PCFreq = 0.0;

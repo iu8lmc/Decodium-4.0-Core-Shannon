@@ -7,6 +7,13 @@
 #include <memory>
 
 namespace decodium::sstv::sharing {
+// Verify a signed manifest against the already pinned sender key. Does not
+// authenticate or decrypt the payload; opening must still be performed.
+bool sstvShareVerifyStoredSender(const SstvShareKeyStore& keys,
+                                 const SstvShareManifestV1& manifest);
+// nullopt means the pinned-key store could not be read reliably.
+std::optional<bool> sstvShareCheckStoredSender(const SstvShareKeyStore& keys,
+                                              const SstvShareManifestV1& manifest);
 // The returned hook retains its backend and only loads an existing identity.
 std::function<std::optional<QByteArray>(const SstvShareManifestV1&, const QByteArray&)>
 sstvShareMakeStoredEnvelopeOpener(std::shared_ptr<const secure_settings::Backend> backend,

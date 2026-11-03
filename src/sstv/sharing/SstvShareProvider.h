@@ -265,8 +265,12 @@ public:
         SstvShareProviderFailure category,
         const QString& diagnostic,
         qint64 retryAfterMs = 0);
+    // Local queue capacity is not a remote provider error. Only the queue
+    // manager should create this result for its own occupied slot.
+    static SstvShareProviderResult localCapacityBusy();
 
     bool ok() const noexcept { return m_ok; }
+    bool isLocalCapacityBusy() const noexcept { return m_localCapacityBusy; }
     SstvShareProviderFailure category() const noexcept { return m_category; }
     qint64 retryAfterMs() const noexcept { return m_retryAfterMs; }
     const QString& redactedDiagnostic() const noexcept { return m_diagnostic; }
@@ -275,6 +279,7 @@ public:
 
 private:
     bool m_ok {false};
+    bool m_localCapacityBusy {false};
     SstvShareProviderFailure m_category {
         SstvShareProviderFailure::PermanentProviderFailure};
     qint64 m_retryAfterMs {0};
@@ -413,6 +418,14 @@ inline SstvShareProviderResult SstvShareProviderResult::success(
     result.m_category = SstvShareProviderFailure::None;
     result.m_handle = std::move(handle);
     result.m_payload = std::move(boundedPayload);
+    return result;
+}
+
+inline SstvShareProviderResult SstvShareProviderResult::localCapacityBusy()
+{
+    auto result = failure(SstvShareProviderFailure::ProviderUnavailable,
+                          QStringLiteral("inbox provider is busy"));
+    result.m_localCapacityBusy = true;
     return result;
 }
 

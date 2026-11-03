@@ -43,6 +43,7 @@
 #include <QMutexLocker>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QJsonDocument>
 #include <QThread>
 #include <QTimer>
 #include <QUuid>
@@ -1892,27 +1893,49 @@ void DecodiumBridge::initialiseSstvTx()
 void DecodiumBridge::queueHamDrmTransmittedImage(
     QImage image,
     QString profileId,
-    int occupiedBandwidthHz)
+    int occupiedBandwidthHz,
+    bool received,
+    bool hybrid,
+    QDateTime eventAtUtc)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     const QPointer<decodium::sstv::SstvStorageWorker> worker
         = m_sstvStorageWorker;
-    if (!m_sstvStorageReady || !worker || !worker->isInitialized()
-        || image.isNull() || profileId.trimmed().isEmpty()) {
-        emit statusMessage(tr(
-            "HAMDRM TX was accepted, but Gallery storage is not ready; "
-            "the transmitted image was not archived"));
+    if (image.isNull() || profileId.trimmed().isEmpty()) return;
+    if (received && !m_sstvStorageReady && worker && m_sstvStorageInitializationPending) {
+        constexpr qint64 maxPendingBytes = 64LL * 1024LL * 1024LL;
+        const qint64 bytes = image.sizeInBytes();
+        if (bytes > 0 && bytes <= maxPendingBytes - m_pendingHamDrmGalleryBytes
+            && m_pendingHamDrmGalleryImages.size() < 8U) {
+            m_pendingHamDrmGalleryBytes += bytes;
+            m_pendingHamDrmGalleryImages.push_back({std::move(image), std::move(profileId),
+                                                   occupiedBandwidthHz, hybrid,
+                                                   eventAtUtc.isValid() ? eventAtUtc : QDateTime::currentDateTimeUtc()});
+            if (QStandardPaths::isTestModeEnabled()
+                && qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_HAMDRM_GALLERY") == 1)
+                qInfo() << "[LAB][HAMDRM] Gallery deferred until storage initialization";
+            return;
+        }
+        emit statusMessage(tr("HAMDRM image received, but the pending Gallery queue is full"));
+        return;
+    }
+    if (!m_sstvStorageReady || !worker || !worker->isInitialized()) {
+        emit statusMessage(received
+            ? tr("HAMDRM image received, but Gallery storage is not ready; the image was not archived")
+            : tr("HAMDRM TX was accepted, but Gallery storage is not ready; the transmitted image was not archived"));
         return;
     }
 
     decodium::sstv::SstvTxGalleryArchiveContext context;
-    context.eventAtUtc = QDateTime::currentDateTimeUtc();
+    context.eventAtUtc = eventAtUtc.isValid() ? eventAtUtc : QDateTime::currentDateTimeUtc();
     context.mode = profileId.trimmed().left(64);
     context.localCallsign = m_callsign.trimmed().left(64);
     context.localGrid = m_grid.trimmed().left(16);
     context.source = QStringLiteral("hamdrm");
     context.digital = true;
-    context.note = QStringLiteral("HAMDRM transmission accepted");
+    context.note = received ? (hybrid ? QStringLiteral("HAMDRM hybrid image received")
+                                      : QStringLiteral("HAMDRM image received"))
+                            : QStringLiteral("HAMDRM transmission accepted");
     context.frequencyHz = std::isfinite(m_frequency)
             && m_frequency > 0.0
             && m_frequency
@@ -1925,7 +1948,8 @@ void DecodiumBridge::queueHamDrmTransmittedImage(
     context.qualityMetrics = {
         {QStringLiteral("occupiedBandwidthHz"),
          static_cast<double>(std::max(0, occupiedBandwidthHz))},
-        {QStringLiteral("txAccepted"), 1.0},
+        {received ? QStringLiteral("rxComplete") : QStringLiteral("txAccepted"), 1.0},
+        {QStringLiteral("hybrid"), hybrid ? 1.0 : 0.0},
     };
     context.fileNameTemplate = getSetting(
         QStringLiteral("SSTV/ImageNamingTemplate"),
@@ -1935,7 +1959,8 @@ void DecodiumBridge::queueHamDrmTransmittedImage(
     const auto archive = decodium::sstv::makeSstvTxGalleryArchiveRequest(
         image, decodium::sstv::SstvImageCategory::Transmitted, context);
     if (!archive.has_value()) {
-        emit errorMessage(tr("The accepted HAMDRM TX image could not be archived"));
+        emit errorMessage(received ? tr("The received HAMDRM image could not be archived")
+                                   : tr("The accepted HAMDRM TX image could not be archived"));
         return;
     }
 
@@ -1946,17 +1971,19 @@ void DecodiumBridge::queueHamDrmTransmittedImage(
     const auto archiveImage = std::make_shared<const QImage>(
         std::move(image));
     decodium::sstv::SstvImageSaveRequest request = *archive;
+    if (received) request.record.category = decodium::sstv::SstvImageCategory::Received;
     if (!worker->enqueueDatabaseOperation(
             [archiveImage, request = std::move(request), requestId](
                 decodium::sstv::SstvStorageWorker& storage) mutable {
                 request.image = *archiveImage;
                 storage.storeAndInsertImage(std::move(request), requestId);
             })) {
-        emit errorMessage(tr("Could not queue the accepted HAMDRM TX image for Gallery storage"));
+        emit errorMessage(received ? tr("Could not queue the received HAMDRM image for Gallery storage")
+                                   : tr("Could not queue the accepted HAMDRM TX image for Gallery storage"));
         return;
     }
     m_sstvTxGallerySaveRequests.insert(requestId,
-                                       QStringLiteral("transmitted"));
+                                       received ? QStringLiteral("received") : QStringLiteral("transmitted"));
 }
 
 decodium::sstv::SstvTxCoordinatorResult
@@ -2198,6 +2225,11 @@ bool DecodiumBridge::startSstvRadiofaxTxAligned(int ioc, int linesPerMinute, boo
 
 bool DecodiumBridge::startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, bool centeredPhasing, bool wmoDeadSector)
 {
+    return startSstvRadiofaxTxAdvanced(ioc, linesPerMinute, centeredPhasing, wmoDeadSector, false);
+}
+
+bool DecodiumBridge::startSstvRadiofaxTxAdvanced(int ioc, int linesPerMinute, bool centeredPhasing, bool wmoDeadSector, bool symmetricPhasing)
+{
 #if DECODIUM_HAS_SSTV
     Q_ASSERT(QThread::currentThread() == thread());
     if (!m_sstvTxCoordinator) initialiseSstvTx();
@@ -2213,6 +2245,8 @@ bool DecodiumBridge::startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, boo
         || (linesPerMinute != 60 && linesPerMinute != 90
             && linesPerMinute != 120 && linesPerMinute != 240))
         return reject(tr("Invalid Radiofax IOC or line rate"));
+    if (centeredPhasing && symmetricPhasing)
+        return reject(tr("Centered and symmetric Radiofax phasing cannot be combined"));
     const auto prepared = m_sstvStudioController->preparedSnapshot();
     if (!prepared || prepared->isNull())
         return reject(tr("Prepare an image before transmitting Radiofax"));
@@ -2228,6 +2262,8 @@ bool DecodiumBridge::startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, boo
     decodium::sstv::SstvFaxConfig config;
     config.ioc = ioc == 288 ? decodium::sstv::SstvFaxIoc::Ioc288 : decodium::sstv::SstvFaxIoc::Ioc576;
     config.linesPerMinute = static_cast<std::uint16_t>(linesPerMinute);
+    config.phasing = symmetricPhasing ? decodium::sstv::SstvFaxPhasePattern::Symmetric
+                                      : decodium::sstv::SstvFaxPhasePattern::WhiteFivePercent;
     config.centeredPhasingWithWhiteEndLine = centeredPhasing;
     config.wmoDeadSector = wmoDeadSector;
     config.sampleRate = 48'000U;
@@ -2282,7 +2318,7 @@ bool DecodiumBridge::startSstvRadiofaxTxProfile(int ioc, int linesPerMinute, boo
     emit statusMessage(tr("Experimental Radiofax TX accepted"));
     return true;
 #else
-    Q_UNUSED(ioc) Q_UNUSED(linesPerMinute) Q_UNUSED(centeredPhasing) Q_UNUSED(wmoDeadSector)
+    Q_UNUSED(ioc) Q_UNUSED(linesPerMinute) Q_UNUSED(centeredPhasing) Q_UNUSED(wmoDeadSector) Q_UNUSED(symmetricPhasing)
     emit errorMessage(tr("This Decodium build has no native SSTV support"));
     return false;
 #endif
@@ -2661,6 +2697,7 @@ QVariantMap DecodiumBridge::sstvRxControls() const
     result.insert(QStringLiteral("radiofaxWidth"), fax ? int(fax->width) : 1809);
     result.insert(QStringLiteral("radiofaxCenteredPhasing"), fax && fax->centeredPhasingWithWhiteEndLine);
     result.insert(QStringLiteral("radiofaxWmoDeadSector"), fax && fax->wmoDeadSector);
+    result.insert(QStringLiteral("radiofaxWmoTimedPhasing"), fax && fax->wmoTimedPhasing);
     result.insert(QStringLiteral("radiofaxHeight"), fax ? int(fax->height) : 1000);
     result.insert(QStringLiteral("modeControl"),
                   sstvRxModeControlName(controls.settings.modeControl));
@@ -2842,6 +2879,8 @@ QVariantMap DecodiumBridge::sstvRxDiagnostics() const
     result.insert(QStringLiteral("imageAvailable"), snapshot.image.available);
     result.insert(QStringLiteral("imageComplete"), snapshot.image.complete);
     result.insert(QStringLiteral("imageRadiofaxStopDetected"), snapshot.image.radiofaxStopDetected);
+    result.insert(QStringLiteral("imageRadiofaxClockProvisional"), snapshot.image.radiofaxClockProvisional);
+    result.insert(QStringLiteral("imageRadiofaxTimedPhasing"), snapshot.image.radiofaxTimedPhasing);
     result.insert(QStringLiteral("imagePartial"), snapshot.image.partial);
     result.insert(QStringLiteral("imageCancelled"), snapshot.image.cancelled);
     result.insert(QStringLiteral("imageGeneration"),
@@ -3198,6 +3237,14 @@ void DecodiumBridge::initialiseSstvRuntime()
                     queueHamDrmTransmittedImage(
                         std::move(image), profileId, occupiedBandwidthHz);
                 });
+        connect(m_hamDrmController,
+                &decodium::sstv::hamdrm::HamDrmController::receivedImageReady,
+                this, [this](QImage image, const QString& profileId, bool hybrid) {
+                    const auto* profile = decodium::sstv::hamdrm::HamDrmProfileRegistry::findById(profileId.toStdString());
+                    queueHamDrmTransmittedImage(std::move(image), profileId,
+                                               profile ? static_cast<int>(profile->occupiedBandwidthHz) : 0,
+                                               true, hybrid);
+                });
     }
 #endif
     initialiseSstvStorage();
@@ -3432,13 +3479,21 @@ void DecodiumBridge::initialiseSstvRuntime()
                    const QString& error) {
                 if (ok) {
                     m_sstvRxRawAudioPath = path;
-                    m_sstvRxRawAudioAcquisitionId = acquisitionId;
+                    const auto current = m_sstvRxRuntime->snapshot();
+                    m_sstvRxRawAudioAcquisitionId = acquisitionId != 0U
+                        && acquisitionId == m_sstvRxRawAudioPendingRetainedId
+                        && current.image.acquisitionId == m_sstvRxRawAudioPendingImageId
+                        && (acquisitionId >> 32U) == (current.image.generation & 0xffff'ffffULL)
+                        && current.replay.mostRecentAcquisitionId == acquisitionId
+                        ? m_sstvRxRawAudioPendingImageId : 0U;
                     emit statusMessage(tr(
                         "Raw SSTV diagnostic audio saved: %1").arg(path));
                 } else if (!error.isEmpty()) {
                     emit errorMessage(tr(
                         "Raw SSTV audio save failed: %1").arg(error));
                 }
+                m_sstvRxRawAudioPendingImageId = 0U;
+                m_sstvRxRawAudioPendingRetainedId = 0U;
                 emit sstvRxAudioJobChanged();
             });
     connect(m_sstvRxAudioJobController,
@@ -3608,6 +3663,12 @@ void DecodiumBridge::initialiseSstvStorage()
                 }
                 const bool readyChanged = m_sstvStorageReady != ok;
                 m_sstvStorageReady = ok;
+#if DECODIUM_HAS_HAMDRM
+                m_sstvStorageInitializationPending = false;
+                auto pendingHamDrm = std::move(m_pendingHamDrmGalleryImages);
+                m_pendingHamDrmGalleryImages.clear();
+                m_pendingHamDrmGalleryBytes = 0;
+#endif
                 if (ok) {
                     m_sstvGalleryModel->setStorageWorker(worker);
                     // The QSO dialog must never cold-parse the active ADIF
@@ -3633,10 +3694,22 @@ void DecodiumBridge::initialiseSstvStorage()
                         setSstvRxSaveStatus(QStringLiteral("idle"));
                     }
                     maybeAutoSaveSstvRxImage();
+#if DECODIUM_HAS_HAMDRM
+                    for (auto& pending : pendingHamDrm)
+                        queueHamDrmTransmittedImage(std::move(pending.image), std::move(pending.profileId),
+                                                    pending.occupiedBandwidthHz, true, pending.hybrid, pending.eventAtUtc);
+#endif
                 } else {
                     m_sstvGalleryModel->setUnavailableError(
                         QStringLiteral("SSTV gallery storage: %1").arg(error));
                     setSstvRxSaveStatus(QStringLiteral("unavailable"), error);
+#if DECODIUM_HAS_HAMDRM
+                    if (!pendingHamDrm.empty())
+                        emit statusMessage(tr("Received HAMDRM images could not be archived because Gallery storage failed to start"));
+                    if (!pendingHamDrm.empty() && QStandardPaths::isTestModeEnabled()
+                        && qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_HAMDRM_GALLERY") == 1)
+                        qInfo() << "[LAB][HAMDRM] deferred Gallery storage failed";
+#endif
                 }
                 if (readyChanged) {
                     emit sstvStorageStateChanged();
@@ -3655,16 +3728,33 @@ void DecodiumBridge::initialiseSstvStorage()
                 if (archive != m_sstvTxGallerySaveRequests.end()) {
                     const QString category = archive.value();
                     m_sstvTxGallerySaveRequests.erase(archive);
+                    if (QStandardPaths::isTestModeEnabled()
+                        && qEnvironmentVariableIntValue("DECODIUM_LAB_VERIFY_HAMDRM_GALLERY") == 1
+                        && category == QLatin1String("received")) {
+                        const QVariantMap detail {
+                            {QStringLiteral("ok"), ok},
+                            {QStringLiteral("id"), record.id},
+                            {QStringLiteral("imagePath"), record.imagePath},
+                            {QStringLiteral("storageRoot"), worker->storageRoot()},
+                        };
+                        qInfo().noquote() << "[LAB][HAMDRM] received Gallery result"
+                                          << QJsonDocument::fromVariant(detail).toJson(QJsonDocument::Compact);
+                    }
                     if (ok) {
                         emit statusMessage(
-                            category == QLatin1String("draft")
+                            category == QLatin1String("received")
+                                ? tr("Received HAMDRM image saved in Gallery: %1").arg(record.mode)
+                                : category == QLatin1String("draft")
                                 ? tr("Prepared SSTV Studio image saved in Gallery: %1")
                                       .arg(record.mode)
                                 : tr("Transmitted SSTV image saved in Gallery: %1")
                                       .arg(record.mode));
                     } else {
                         emit errorMessage(
-                            category == QLatin1String("draft")
+                            category == QLatin1String("received")
+                                ? tr("Received HAMDRM image save failed: %1")
+                                      .arg(error.isEmpty() ? tr("The SSTV image could not be saved") : error)
+                                : category == QLatin1String("draft")
                                 ? tr("Prepared SSTV Studio image save failed: %1")
                                       .arg(error.isEmpty()
                                            ? tr("The SSTV image could not be saved")
@@ -3891,9 +3981,23 @@ void DecodiumBridge::initialiseSstvStorage()
                                       .arg(operation));
             }, Qt::QueuedConnection);
     m_sstvStorageThread->start();
-    if (!QMetaObject::invokeMethod(
+#if DECODIUM_HAS_HAMDRM
+    m_sstvStorageInitializationPending = true;
+#endif
+    const int labStorageDelay = QStandardPaths::isTestModeEnabled()
+        ? qBound(0, qEnvironmentVariableIntValue("DECODIUM_LAB_SSTV_STORAGE_DELAY_MS"), 30000) : 0;
+    bool queued = true;
+    if (labStorageDelay > 0) {
+        QTimer::singleShot(labStorageDelay, worker, [worker] { worker->initialize(); });
+    } else {
+        queued = QMetaObject::invokeMethod(
             worker, &decodium::sstv::SstvStorageWorker::initialize,
-            Qt::QueuedConnection)) {
+            Qt::QueuedConnection);
+    }
+    if (!queued) {
+#if DECODIUM_HAS_HAMDRM
+        m_sstvStorageInitializationPending = false;
+#endif
         const QString error = QStringLiteral(
             "could not queue SSTV storage initialization");
         m_sstvGalleryModel->setUnavailableError(error);
@@ -4941,6 +5045,11 @@ void DecodiumBridge::shutdownSstvStorage()
     m_sstvStorageWorker = nullptr;
     m_sstvRxSaveRequests.clear();
     m_sstvTxGallerySaveRequests.clear();
+#if DECODIUM_HAS_HAMDRM
+    m_pendingHamDrmGalleryImages.clear();
+    m_pendingHamDrmGalleryBytes = 0;
+    m_sstvStorageInitializationPending = false;
+#endif
     m_sstvIncomingImportHandoffs.clear();
     m_sstvIncomingImportRetryCounts.clear();
     m_sstvRxPendingSaveKeys.clear();
@@ -5652,6 +5761,14 @@ bool DecodiumBridge::configureSstvRadiofaxRxAligned(bool enabled, int ioc, int w
 bool DecodiumBridge::configureSstvRadiofaxRxProfile(bool enabled, int ioc, int width, int height,
                                                     bool centeredPhasingWithWhiteEndLine, bool wmoDeadSector)
 {
+    return configureSstvRadiofaxRxAdvanced(enabled, ioc, width, height,
+                                           centeredPhasingWithWhiteEndLine, wmoDeadSector, false);
+}
+
+bool DecodiumBridge::configureSstvRadiofaxRxAdvanced(bool enabled, int ioc, int width, int height,
+                                                     bool centeredPhasingWithWhiteEndLine, bool wmoDeadSector,
+                                                     bool wmoTimedPhasing)
+{
 #if DECODIUM_HAS_SSTV
     initialiseSstvRuntime();
     if (!m_sstvRxRuntime || m_sstvRxRequested || m_sstvRedecodeActive
@@ -5666,12 +5783,13 @@ bool DecodiumBridge::configureSstvRadiofaxRxProfile(bool enabled, int ioc, int w
         config->height = static_cast<std::uint32_t>(height);
         config->centeredPhasingWithWhiteEndLine = centeredPhasingWithWhiteEndLine;
         config->wmoDeadSector = wmoDeadSector;
+        config->wmoTimedPhasing = wmoTimedPhasing;
     }
     const bool accepted = m_sstvRxRuntime->setRadiofaxConfig(config);
     if (accepted) emit sstvRxSnapshotChanged();
     return accepted;
 #else
-    Q_UNUSED(enabled) Q_UNUSED(ioc) Q_UNUSED(width) Q_UNUSED(height) Q_UNUSED(centeredPhasingWithWhiteEndLine) Q_UNUSED(wmoDeadSector)
+    Q_UNUSED(enabled) Q_UNUSED(ioc) Q_UNUSED(width) Q_UNUSED(height) Q_UNUSED(centeredPhasingWithWhiteEndLine) Q_UNUSED(wmoDeadSector) Q_UNUSED(wmoTimedPhasing)
     return false;
 #endif
 }
@@ -5802,6 +5920,16 @@ bool DecodiumBridge::redecodeRecentSstv(
 
 bool DecodiumBridge::saveSstvRxRawAudio()
 {
+    return saveSstvRxRawAudioImpl(false);
+}
+
+bool DecodiumBridge::saveSstvRecentRxAudio()
+{
+    return saveSstvRxRawAudioImpl(true);
+}
+
+bool DecodiumBridge::saveSstvRxRawAudioImpl(bool recentBuffer)
+{
 #if DECODIUM_HAS_SSTV
     initialiseSstvRuntime();
     if (!m_sstvStorageReady || !m_sstvStorageWorker
@@ -5810,9 +5938,15 @@ bool DecodiumBridge::saveSstvRxRawAudio()
         return false;
     }
     const SstvRxRuntime::Snapshot snapshot = m_sstvRxRuntime->snapshot();
-    const quint64 acquisitionId = snapshot.image.acquisitionId != 0U
-        ? snapshot.image.acquisitionId
-        : snapshot.replay.mostRecentAcquisitionId;
+    const quint64 retainedId = snapshot.replay.mostRecentAcquisitionId;
+    const bool currentImageMatches = snapshot.image.acquisitionId != 0U
+        && snapshot.image.acquisitionId <= 0xffff'ffffULL
+        && (retainedId >> 32U) == (snapshot.image.generation & 0xffff'ffffULL)
+        && (retainedId & 0xffff'ffffULL) == snapshot.image.acquisitionId;
+    // A newer image (including Radiofax) may not have a retained descriptor.
+    // Never attach an older image's recording to that newer image.
+    recentBuffer = recentBuffer || !currentImageMatches;
+    const quint64 acquisitionId = recentBuffer ? 0U : retainedId;
     if (snapshot.replay.retainedSamples == 0U) {
         emit errorMessage(tr("No retained SSTV audio is available to save"));
         return false;
@@ -5821,6 +5955,8 @@ bool DecodiumBridge::saveSstvRxRawAudio()
     // The worker falls back to the bounded recent-audio buffer for ID zero.
     m_sstvRxRawAudioPath.clear();
     m_sstvRxRawAudioAcquisitionId = 0U;
+    m_sstvRxRawAudioPendingImageId = acquisitionId != 0U ? snapshot.image.acquisitionId : 0U;
+    m_sstvRxRawAudioPendingRetainedId = acquisitionId;
     const decodium::sstv::SstvStorageLayout layout(
         m_sstvStorageWorker->storageRoot());
     const QString token = QDateTime::currentDateTimeUtc().toString(
@@ -5828,12 +5964,13 @@ bool DecodiumBridge::saveSstvRxRawAudio()
     const QString path = QDir(layout.wavExportRoot()).absoluteFilePath(
         QStringLiteral("rx-%1-%2.wav").arg(token).arg(acquisitionId));
     const bool started = m_sstvRxAudioJobController->exportRawAudio(
-        QUrl::fromLocalFile(path), acquisitionId);
+        QUrl::fromLocalFile(path), acquisitionId, recentBuffer);
     if (started) {
         emit sstvRxAudioJobChanged();
     }
     return started;
 #else
+    Q_UNUSED(recentBuffer)
     return false;
 #endif
 }

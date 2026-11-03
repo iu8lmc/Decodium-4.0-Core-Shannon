@@ -3,6 +3,7 @@
 #include "HamDrmController.h"
 
 #include "HamDrmBsrCodec.h"
+#include "HamDrmHybridCodec.h"
 #include "HamDrmRsCodec.h"
 #include "src/sstv/diagnostics/SstvDiagnosticLogging.h"
 
@@ -13,9 +14,12 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QMetaObject>
+#include <QRegularExpression>
 #include <QStandardPaths>
+#include <QSaveFile>
 #include <QStringList>
 #include <QThread>
+#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
@@ -49,10 +53,16 @@ struct HamDrmController::InboxRecord final
     // assembler's potentially large segment buffers have been released.
     std::map<std::pair<HamDrmMotGroupKind, std::uint16_t>, std::pair<bool, QByteArray>> completedSegments;
     std::optional<HamDrmImageInfo> imageInfo;
+    QImage galleryImage;
+    QString receivedProfileId;
+    const QString referenceToken {QUuid::createUuid().toString(QUuid::WithoutBraces)};
     QString error;
     bool persisted {false};
     bool rejected {false};
     bool jpeg2000Decoded {false};
+    bool imageDecoded {false};
+    bool hybridReference {false};
+    bool hybridDownloaded {false};
     bool bsrRollover {false};
 };
 
@@ -251,6 +261,94 @@ HamDrmController::HamDrmController(HamDrmControllerConfig config,
         ? OperationState::Idle : OperationState::Unavailable;
     txState_ = waveformTxAvailable()
         ? OperationState::Idle : OperationState::Unavailable;
+    connect(&hybridFtp_, &HamDrmHybridFtp::finished, this,
+            [this](bool success, const QByteArray& bytes, const QString& failure) {
+        const int id = hybridDownloadId_;
+        const QString token = hybridDownloadToken_;
+        const QUrl destination = hybridDownloadDestination_;
+        hybridDownloadId_ = -1;
+        hybridDownloadToken_.clear();
+        hybridDownloadDestination_ = QUrl();
+        emit hybridDownloadBusyChanged();
+        auto* record = recordFor(id);
+        if (!success || !record || !record->hybridReference || !record->metadata
+            || token.isEmpty() || record->referenceToken != token) {
+            setError(success ? tr("Hybrid reference no longer exists") : failure);
+            emit hybridDownloadFinished(false);
+            return;
+        }
+        auto metadata = *record->metadata;
+        metadata.bodySize = static_cast<std::uint32_t>(bytes.size());
+        const auto image = validateHamDrmImage(metadata,
+            reinterpret_cast<const std::uint8_t*>(bytes.constData()), static_cast<std::size_t>(bytes.size()), config_.limits);
+        QImage galleryImage;
+        if (image.ok() && image.value->format == HamDrmImageFormat::Jpeg2000 && backends_.jpeg2000) {
+            try {
+                const auto jp2 = backends_.jpeg2000->decode(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                                            static_cast<std::size_t>(bytes.size()), config_.limits);
+                if (jp2.ok() && jp2.value->width == image.value->width && jp2.value->height == image.value->height)
+                    galleryImage = galleryImageFromRgba(*jp2.value, config_.limits);
+            } catch (...) { galleryImage = {}; }
+        } else if (image.ok()) {
+            galleryImage = decodeGalleryImage(bytes, *image.value, config_.limits);
+        }
+        if (!image.ok() || galleryImage.isNull()) {
+            setError(tr("Downloaded hybrid file is not a valid image"));
+            emit hybridDownloadFinished(false);
+            return;
+        }
+        QSaveFile file(destination.toLocalFile());
+        if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+            setError(tr("Could not save the downloaded hybrid image"));
+            emit hybridDownloadFinished(false);
+            return;
+        }
+        const bool archive = !record->hybridDownloaded;
+        const QString profileId = record->receivedProfileId;
+        record->hybridDownloaded = true;
+        clearError();
+        publishInbox(static_cast<std::uint16_t>(id));
+        if (archive) emit receivedImageReady(galleryImage, profileId, true);
+        emit hybridDownloadFinished(true);
+    });
+    connect(&hybridUploadFtp_, &HamDrmHybridFtp::finished, this,
+            [this](bool success, const QByteArray&, const QString& failure) {
+        if (!hybridUpload_) return;
+        auto pending = std::move(*hybridUpload_);
+        hybridUpload_.reset();
+        if (!success) {
+            if (hybridUploadCancelRequested_) {
+                hybridUploadCancelRequested_ = false;
+                setTxState(OperationState::Cancelled, 0.0);
+            } else {
+                setTxState(OperationState::Error, 0.0);
+                setError(failure);
+            }
+            return;
+        }
+        const auto* profile = HamDrmProfileRegistry::findById(pending.profileId.toStdString());
+        if (!profile || !backends_.waveformTx) {
+            setTxState(OperationState::Error, 0.0);
+            setError(tr("Hybrid upload succeeded, but the radio backend is unavailable"));
+            return;
+        }
+        pendingRepairSource_ = RepairSource {pending.object,
+            std::min(config_.txBodySegmentBytes, static_cast<std::size_t>(pending.object.metadata.bodySize)), pending.profileId};
+        txSessionId_ = nextSessionId();
+        const auto session = txSessionId_;
+        HamDrmStatus status;
+        try { status = backends_.waveformTx->start(*profile, pending.object, session, *this); }
+        catch (...) { status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, "hybrid waveform backend failed"); }
+        if (!status.ok()) {
+            pendingRepairSource_.reset(); txSessionId_ = 0;
+            setTxState(OperationState::Error, 0.0);
+            setError(tr("Hybrid upload succeeded, but radio transmission failed"));
+            return;
+        }
+        if (txSessionId_ == session && txState_ == OperationState::Starting)
+            setTxState(OperationState::Active, 0.0);
+        emit txImageAccepted(pending.image, pending.profileId, pending.occupiedBandwidthHz);
+    });
 }
 
 HamDrmController::~HamDrmController()
@@ -601,10 +699,10 @@ QVariantList HamDrmController::inbox() const
         QString state = QStringLiteral("partial");
         if (record.rejected) {
             state = QStringLiteral("rejected");
+        } else if (record.hybridReference) {
+            state = QStringLiteral("hybrid-reference");
         } else if (record.completedObject.has_value()) {
-            state = record.imageInfo.has_value()
-                    && record.imageInfo->format == HamDrmImageFormat::Jpeg2000
-                    && !record.jpeg2000Decoded
+            state = record.imageInfo.has_value() && !record.imageDecoded
                 ? QStringLiteral("complete-structural")
                 : QStringLiteral("complete");
         }
@@ -640,6 +738,13 @@ QVariantList HamDrmController::inbox() const
         row.insert(QStringLiteral("missingCount"),
                    static_cast<qulonglong>(missing));
         row.insert(QStringLiteral("persisted"), record.persisted);
+        row.insert(QStringLiteral("hybridReference"), record.hybridReference);
+        row.insert(QStringLiteral("hybridDownloaded"), record.hybridDownloaded);
+        if (record.hybridReference && record.completedObject) {
+            row.insert(QStringLiteral("hybridReferenceToken"), record.referenceToken);
+            const auto decoded = decodeHamDrmHybridServer(record.completedObject->originalBytes);
+            if (decoded.ok()) row.insert(QStringLiteral("hybridHost"), QString::fromStdString(decoded.value->host));
+        }
         row.insert(QStringLiteral("error"), record.error);
         row.insert(QStringLiteral("filename"),
                    record.metadata.has_value()
@@ -651,6 +756,7 @@ QVariantList HamDrmController::inbox() const
                        : QString {});
         row.insert(QStringLiteral("imageStructurallyValidated"),
                    record.imageInfo.has_value());
+        row.insert(QStringLiteral("imageFullyDecoded"), record.imageDecoded);
         row.insert(QStringLiteral("jpeg2000Decoded"),
                    record.jpeg2000Decoded);
         if (record.imageInfo.has_value()) {
@@ -1237,6 +1343,54 @@ bool HamDrmController::startTx(const QUrl& localImage)
     return startTxWithRs(localImage, 0);
 }
 
+bool HamDrmController::startHybridTx(const QUrl& localImage, const QString& callsign,
+                                     const QString& host, const QString& user,
+                                     const QString& password, const QString& directory)
+{
+    if (!ownerThread() || busy()) return false;
+    const auto call = callsign.trimmed().toUpper();
+    static const QRegularExpression callPattern(QStringLiteral("^[A-Z0-9_]{1,16}$"));
+    if (!callPattern.match(call).hasMatch())
+        return reject(QStringLiteral("hybrid-tx"), tr("Enter a valid callsign using letters, digits or underscore"));
+    const HamDrmHybridServer server{host.toStdString(), user.toStdString(), password.toStdString(), directory.toStdString()};
+    const auto reference = encodeHamDrmHybridServer(server);
+    if (!reference.ok()) return reject(QStringLiteral("hybrid-tx"), tr("Invalid hybrid server settings"));
+    const auto* profile = currentProfile();
+    if (!profile || !backends_.waveformTx || !txCapability().completeBackend)
+        return reject(QStringLiteral("hybrid-tx"), tr("HAMDRM waveform TX is unavailable"));
+    const auto candidate = readTxImage(localImage, true);
+    if (!candidate.ok() || candidate.value->galleryImage.isNull())
+        return reject(QStringLiteral("hybrid-tx"), tr("Select a valid, decodable image"));
+    const QString original = QString::fromStdString(candidate.value->metadata.filename);
+    const int dot = original.lastIndexOf('.');
+    if (dot <= 0) return reject(QStringLiteral("hybrid-tx"), tr("Invalid image filename"));
+    const QString prefix = QStringLiteral("de_%1-1-%2-").arg(call, QUuid::createUuid().toString(QUuid::Id128).left(16));
+    const QString extension = original.mid(dot);
+    const int available = static_cast<int>(config_.limits.maximumFilenameBytes) - prefix.size() - extension.size();
+    if (available < 1) return reject(QStringLiteral("hybrid-tx"), tr("Hybrid image filename is too long"));
+    const QString filename = prefix + original.left(dot).left(available) + extension;
+    HamDrmMotObjectMetadata metadata;
+    metadata.filename = filename.toStdString();
+    const auto object = encodeHamDrmObject(metadata, *reference.value, config_.txBodySegmentBytes, config_.limits);
+    if (!object.ok()) return reject(QStringLiteral("hybrid-tx"), tr("Unable to encode hybrid reference"));
+    hybridUpload_ = HybridUpload{*object.value, candidate.value->galleryImage, selectedProfileId_,
+                                 static_cast<int>(profile->occupiedBandwidthHz)};
+    hybridUploadCancelRequested_ = false;
+    quint16 uploadPort = config_.hybridFtpPort;
+    if (QStandardPaths::isTestModeEnabled()) {
+        bool ok = false;
+        const int port = qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT", &ok);
+        if (ok && port > 0 && port <= 65535) uploadPort = static_cast<quint16>(port);
+    }
+    if (!hybridUploadFtp_.upload(server, filename, candidate.value->bytes, uploadPort)) {
+        hybridUpload_.reset();
+        return reject(QStringLiteral("hybrid-tx"), tr("Unable to start hybrid upload"));
+    }
+    clearError();
+    setTxState(OperationState::Starting, 0.0);
+    return true;
+}
+
 bool HamDrmController::startTxWithRs(const QUrl& localImage, int level)
 {
     if (!ownerThread()) {
@@ -1281,6 +1435,44 @@ bool HamDrmController::startTxWithRs(const QUrl& localImage, int level)
 
     auto metadata = candidate.value->metadata;
     auto body = byteVector(candidate.value->bytes);
+    const QString structuralLab = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_HAMDRM_STRUCTURAL_ONLY") : QString {};
+    if (structuralLab == QStringLiteral("a") || structuralLab == QStringLiteral("b")) {
+        const bool b = structuralLab == QStringLiteral("b");
+        const auto width = static_cast<std::uint8_t>(b ? 17 : 16);
+        body = {0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, width,
+                0x00, width, 0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00,
+                0x03, 0x11, 0x00, 0xff, 0xd9};
+        body.resize(160U, 0);
+        metadata.filename = b ? "structural-b.jpg" : "structural-a.jpg";
+        metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+        metadata.bodySize = static_cast<std::uint32_t>(body.size());
+        metadata.contentType = 0U; metadata.contentSubtype = 0U; metadata.mimeType.clear();
+        qInfo("[LAB][HAMDRM] structural-only image fixture selected");
+    }
+    const QString hybridLab = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_HAMDRM_HYBRID") : QString {};
+    if (hybridLab == QStringLiteral("a") || hybridLab == QStringLiteral("b")) {
+        const bool b = hybridLab == QStringLiteral("b");
+        const bool localFtpLab = qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT") > 0;
+        const HamDrmHybridServer server {
+            localFtpLab ? "127.0.0.1" : (b ? "b.example.invalid" : "a.example.invalid"),
+            b ? "operator-b" : "operator-a",
+            b ? "dummy-B-1234" : "dummy-A", b ? "radio/b" : "radio/a"};
+        const auto encodedHybrid = encodeHamDrmHybridServer(server);
+        if (!encodedHybrid.ok()) return reject(QStringLiteral("tx"), tr("Hybrid lab fixture failed"));
+        body = *encodedHybrid.value;
+        const bool dotName = qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_HYBRID_DOT") == 1;
+        metadata.filename = dotName
+            ? (b ? ".de_TEST2-1-image-b.jpg" : ".de_TEST1-1-image-a.jpg")
+            : (b ? "de_TEST2-1-image-b.jpg" : "de_TEST1-1-image-a.jpg");
+        metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+        metadata.bodySize = static_cast<std::uint32_t>(body.size());
+        metadata.contentType = 0U;
+        metadata.contentSubtype = 0U;
+        metadata.mimeType.clear();
+        qInfo("[LAB][HAMDRM] synthetic hybrid reference selected");
+    }
     if (QStandardPaths::isTestModeEnabled()
         && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_PNG_AS_JP2") == 1
         && level == 0 && metadata.mimeType == "image/png") {
@@ -1389,6 +1581,11 @@ bool HamDrmController::cancelRx()
 
 bool HamDrmController::cancelTx()
 {
+    if (ownerThread() && hybridUpload_) {
+        hybridUploadCancelRequested_ = true;
+        hybridUploadFtp_.cancel();
+        return true;
+    }
     if (!ownerThread()) {
         return false;
     }
@@ -1417,9 +1614,10 @@ bool HamDrmController::cancelAll()
     if (activeState(rxState_) && rxSessionId_ != 0U) {
         cancelled = cancelRx() || cancelled;
     }
-    if (activeState(txState_) && txSessionId_ != 0U) {
+    if (activeState(txState_) && (txSessionId_ != 0U || hybridUpload_)) {
         cancelled = cancelTx() || cancelled;
     }
+    if (hybridDownloadBusy()) cancelled = cancelHybridDownload() || cancelled;
     return cancelled
         ? true
         : reject(QStringLiteral("cancel"),
@@ -1538,10 +1736,15 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
     if (!assembled.ok()) {
         return assembled.status;
     }
-    if (assembled.value->metadata.mimeType == "application/x-hamdrm-bsr") {
-        const auto parsed = parseHamDrmBsr(assembled.value->originalBytes.data(),
-                                            assembled.value->originalBytes.size(), config_.limits, true);
-        if (!parsed.ok()) return parsed.status;
+    const auto& name = assembled.value->metadata.filename;
+    const bool hybridReference = (name.rfind("de_", 0) == 0 || name.rfind(".de", 0) == 0)
+        && decodeHamDrmHybridServer(assembled.value->originalBytes).ok();
+    if (assembled.value->metadata.mimeType == "application/x-hamdrm-bsr" || hybridReference) {
+        if (!hybridReference) {
+            const auto parsed = parseHamDrmBsr(assembled.value->originalBytes.data(),
+                                                assembled.value->originalBytes.size(), config_.limits, true);
+            if (!parsed.ok()) return parsed.status;
+        }
         const std::size_t size = assembled.value->originalBytes.size();
         if (completedObjects_ >= config_.maximumCompletedObjects
             || size > config_.maximumCompletedBytes - completedBytes_) {
@@ -1562,7 +1765,9 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
         }
         record.progress = record.assembler->progress();
         record.metadata = assembled.value->metadata;
+        record.receivedProfileId = selectedProfileId_;
         record.persisted = false;
+        record.hybridReference = hybridReference;
         record.completedObject = std::move(*assembled.value);
         record.completedSegments = std::move(fingerprints);
         record.assembler.reset();
@@ -1616,6 +1821,7 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
     }
 
     bool jpegDecoded = false;
+    QImage galleryImage;
     if (image.value->format == HamDrmImageFormat::Jpeg2000
         && jpeg2000DecodeAvailable() && backends_.jpeg2000) {
         HamDrmValueResult<HamDrmRgbaImage> decoded;
@@ -1641,6 +1847,11 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
                 "decoded JPEG2000 dimensions differ from MOT image metadata");
         }
         jpegDecoded = true;
+        galleryImage = galleryImageFromRgba(*decoded.value, config_.limits);
+    } else if (image.value->format != HamDrmImageFormat::Jpeg2000) {
+        const QByteArray encoded = QByteArray::fromRawData(
+            reinterpret_cast<const char*>(object.originalBytes.data()), static_cast<qsizetype>(object.originalBytes.size()));
+        galleryImage = decodeGalleryImage(encoded, *image.value, config_.limits);
     }
 
     const std::size_t objectBytes = assembled.value->originalBytes.size();
@@ -1670,6 +1881,9 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
     record.progress = record.assembler->progress();
     record.metadata = assembled.value->metadata;
     record.imageInfo = *image.value;
+    record.imageDecoded = !galleryImage.isNull();
+    record.galleryImage = std::move(galleryImage);
+    record.receivedProfileId = selectedProfileId_;
     record.jpeg2000Decoded = jpegDecoded;
     record.persisted = false;
     record.completedObject = std::move(*assembled.value);
@@ -1733,7 +1947,11 @@ bool HamDrmController::tryRsRecovery(int transportId)
     }
     clearError();
     publishInbox(static_cast<std::uint16_t>(transportId));
-    emit objectCompleted(static_cast<std::uint16_t>(transportId), QString::fromStdString(record->metadata->filename));
+    const QImage galleryImage = std::move(record->galleryImage);
+    const QString profile = record->receivedProfileId;
+    const QString filename = QString::fromStdString(record->metadata->filename);
+    if (!galleryImage.isNull()) emit receivedImageReady(galleryImage, profile, false);
+    emit objectCompleted(static_cast<std::uint16_t>(transportId), filename);
     return true;
 }
 
@@ -1921,8 +2139,14 @@ HamDrmStatus HamDrmController::ingestMotGroup(
                 }
                 emit bsrReceived(transportId, parsedBsr.value->transportId);
             }
+        } else if (record.hybridReference) {
+            emit hybridReferenceReceived(transportId, QString::fromStdString(record.metadata->filename));
         } else {
-            emit objectCompleted(transportId, QString::fromStdString(record.metadata->filename));
+            const QImage galleryImage = std::move(record.galleryImage);
+            const QString profile = record.receivedProfileId;
+            const QString filename = QString::fromStdString(record.metadata->filename);
+            if (!galleryImage.isNull()) emit receivedImageReady(galleryImage, profile, false);
+            emit objectCompleted(transportId, filename);
         }
         return HamDrmStatus::success();
     }
@@ -2189,6 +2413,7 @@ bool HamDrmController::discardObject(int transportId)
         return reject(QStringLiteral("discard"),
                       tr("HAMDRM transport ID is outside 0…65535"));
     }
+    if (hybridDownloadId_ == transportId) cancelHybridDownload();
     const std::uint16_t id = static_cast<std::uint16_t>(transportId);
     if (partialStore_) {
         const HamDrmStatus removed = partialStore_->remove(id);
@@ -2218,6 +2443,83 @@ bool HamDrmController::discardObject(int transportId)
     clearError();
     publishInbox(id);
     return true;
+}
+
+bool HamDrmController::downloadHybridIfUnchanged(int transportId, const QUrl& destination,
+                                                   const QString& referenceToken)
+{
+    if (!ownerThread()) return false;
+    const auto* record = recordFor(transportId);
+    if (!record || !record->hybridReference || referenceToken.isEmpty()
+        || record->referenceToken != referenceToken)
+        return reject(QStringLiteral("hybrid-download"), tr("Hybrid reference changed; select it again"));
+    return downloadHybrid(transportId, destination);
+}
+
+bool HamDrmController::downloadHybrid(int transportId, const QUrl& destination)
+{
+    if (!ownerThread() || hybridDownloadBusy() || !destination.isLocalFile()
+        || destination.toLocalFile().isEmpty()) return false;
+    const auto* record = recordFor(transportId);
+    if (!record || !record->hybridReference || !record->completedObject || !record->metadata)
+        return reject(QStringLiteral("hybrid-download"), tr("Select a valid hybrid reference"));
+    const auto server = decodeHamDrmHybridServer(record->completedObject->originalBytes);
+    if (!server.ok()) return reject(QStringLiteral("hybrid-download"), tr("Invalid hybrid server reference"));
+    hybridDownloadId_ = transportId;
+    hybridDownloadToken_ = record->referenceToken;
+    hybridDownloadDestination_ = destination;
+    quint16 port = config_.hybridFtpPort;
+    if (QStandardPaths::isTestModeEnabled()) {
+        bool ok = false;
+        const int testPort = qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT", &ok);
+        if (ok && testPort > 0 && testPort <= 65535) port = static_cast<quint16>(testPort);
+    }
+    if (!hybridFtp_.download(*server.value, QString::fromStdString(record->metadata->filename), port,
+                             static_cast<qsizetype>(std::min<std::size_t>(config_.limits.maximumObjectBytes, 16U * 1024U * 1024U)))) {
+        hybridDownloadId_ = -1;
+        hybridDownloadToken_.clear();
+        hybridDownloadDestination_ = QUrl();
+        return reject(QStringLiteral("hybrid-download"), tr("Unable to start hybrid download"));
+    }
+    clearError();
+    emit hybridDownloadBusyChanged();
+    return true;
+}
+
+bool HamDrmController::cancelHybridDownload()
+{
+    if (!ownerThread() || !hybridDownloadBusy()) return false;
+    hybridFtp_.cancel();
+    return true;
+}
+
+bool HamDrmController::saveCompletedImage(int transportId, const QUrl& destination)
+{
+    if (!ownerThread() || !destination.isLocalFile() || destination.toLocalFile().isEmpty())
+        return false;
+    const auto* record = recordFor(transportId);
+    if (!record || !record->completedObject || !record->imageInfo || record->hybridReference)
+        return reject(QStringLiteral("save-image"), tr("Select a completed HAMDRM image"));
+    const auto& data = record->completedObject->originalBytes;
+    QSaveFile output(destination.toLocalFile());
+    if (!output.open(QIODevice::WriteOnly)
+        || output.write(reinterpret_cast<const char*>(data.data()), static_cast<qint64>(data.size())) != static_cast<qint64>(data.size())
+        || !output.commit())
+        return reject(QStringLiteral("save-image"), tr("Could not save the HAMDRM image"));
+    clearError();
+    return true;
+}
+
+bool HamDrmController::canSaveSelectedImage() const noexcept
+{
+    const auto* record = recordFor(selectedTransportId_);
+    return record && record->completedObject && record->imageInfo && !record->hybridReference;
+}
+
+bool HamDrmController::selectedImageStructuralOnly() const noexcept
+{
+    const auto* record = recordFor(selectedTransportId_);
+    return record && record->completedObject && record->imageInfo && !record->imageDecoded;
 }
 
 HamDrmValueResult<HamDrmAssembledObject>

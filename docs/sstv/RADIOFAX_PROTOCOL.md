@@ -1,5 +1,1057 @@
 # Experimental radiofax core
 
+## Additional independent automatic-decoder observation
+
+The unmodified [WEFAX Decoder](https://github.com/televisualarts-cloud/wefax_decoder)
+at commit `99bfc22824dc970276d7c70b984df578bb7b6b11` was run offline on
+the two previously recorded full-Decodium WMO 5%-white captures
+`/tmp/decodium-fax90-independent/wmo-{a,b}.wav` (IOC 576, 90 LPM). Both
+automatically detected the start and stop tones, IOC 576 and 90 LPM, and
+produced a raw 1810 x 121 image from a 128 x 120 reference. No image height,
+IOC or LPM was supplied to the decoder. This confirms automatic acquisition
+on these two recordings, but not accurate unassisted image alignment.
+
+Comparing the raw PNGs with the corresponding reference after resizing only
+their width to 128 yielded full-raster direct MAE/p95 of 24.47/154 (A) and
+23.48/135 (B); cross-image MAE was approximately 94. A diagnostic search
+using reference pixels found a one-row offset and three-pixel circular shift
+for both images, giving MAE/p95 16.98/70 and 12.26/40 respectively. These
+post-hoc fits are exploratory, not successful automatic-alignment tests. The
+audio was recorded from Decodium app pairs, but the independent decoder was
+run on the saved files, not as a live peer. Neither off-air reception nor
+general interoperability follows from these observations.
+
+The runs used Python 3.10, NumPy 1.26.4, SciPy 1.12.0 and OpenCV
+5.0.0.93 in an isolated environment. SciPy 1.15.3 failed to load on this
+macOS installation. For each capture, the command was `OPENBLAS_NUM_THREADS=1
+python wefax_decoder.py --wav INPUT --out OUTPUT --port PORT --no-browser
+--no-ml --exit`. Logs, metadata and raw outputs are in
+`/tmp/decodium-wefax-test-{a,b}`; reference paths are recorded in
+`/tmp/decodium-fax90-independent/wmo-compare-{a,b}-{a,b}.json`. The
+post-hoc diagnostic is `tests/sstv/tools/analyze_radiofax_partial_alignment.py`
+with `--first-row 0 --rows 120 --column-step 1`.
+
+Replaying the same A/B files with the independent decoder's explicit
+`--align center` option, while still allowing it to determine IOC, LPM and
+image boundaries, yielded exactly 120 raw lines for both captures. Full-image
+direct MAE/p95 were 16.89/70 and 12.32/37. Most of the remaining error is
+at the horizontal margins: these Decodium captures use a 4.5% dead sector,
+whereas the independent raw output retains that sector rather than expanding
+the 95.5% active picture. The center setting puts approximately half of the
+dead sector at each edge. Sampling the active sector from column 41 of 1810
+(round(1810 * 0.045 / 2)), at row zero and without searching reference
+pixels, gives A/B MAE/p95/max 6.006/22/31 and 4.392/11/24. Crossed-reference
+MAE is 94.367 and 93.532. This is an offline, source-informed geometry
+comparison of the full active picture, not a claim that the third-party UI
+removes the dead sector automatically. Logs and raw images are under
+`/tmp/decodium-wefax-test-{a,b}-center`; the measurement uses
+`analyze_radiofax_dead_sector.py REFERENCE RAW --row 0 --start 41`.
+The decoder's default `--align end` and alternative `--align start` use
+different phasing conventions. Selecting center was an explicit configuration
+change; its successful geometry must not be presented as default behaviour.
+
+A further A/B replay used the two captured 240 LPM, 5%-white, dead-sector
+Decodium transmissions with three phase-like initial image rows mentioned
+below (IOC 576 A, IOC 288 B). The original `capture.f32` files are stereo
+48 kHz float audio; each was downmixed and resampled to mono 12 kHz WAV with
+FFmpeg before feeding the same unmodified decoder with `--align center`.
+Its front end reported both start and stop for both captures and selected the
+correct IOC; its decode stage reported `stop=no`, acquired 240 LPM, and
+produced 180 rows instead of the 120-row reference. Direct comparison of the
+first 120 rows gave MAE/p95 22.34/138 and 25.17/170. A reference-driven
+alignment search reduced this to 17.69/118 and 15.88/101, and remains only
+an exploratory result. These cases therefore do not establish correct page
+termination or geometry in the independent decoder. Outputs and logs are in
+`/tmp/decodium-wefax-stereo-a-snpiwv50` and
+`/tmp/decodium-wefax-stereo-b-egj91avv`.
+
+The independent decoder's `segment_tones` ignores stop runs whose beginning
+is not **strictly later** than 60 seconds after the classified end of the
+start tone. On the complete 12 kHz recordings, its own classifier found a
+stop run at 75.50–80.75 seconds for A against a 75.75-second threshold, and
+74.25–79.50 seconds for B against a 74.50-second threshold. Thus these
+correctly classified stop runs are rejected because their first blocks fall
+0.25 seconds before that threshold; the separate frontend uses a different
+elapsed-time check. This explains why its frontend said `stop tone` while
+the decoder reported `stop=no` for these short pages.
+
+As a controlled diagnostic, one second of image audio was duplicated near
+the end of each mono recording, moving the unchanged stop waveform across the
+threshold. With the same unmodified decoder and `--align center`, the decoder
+then reported `stop=yes` in both cases and produced 121 rows for each
+124-row modified page instead of 180. A reference-driven search of the first
+90 rows after the first three original image rows matches candidate row zero
+in both results (MAE/p95 13.25/63 A and 12.18/42 B). This is consistent
+with the deliberately phasing-like initial three rows being removed as
+phasing; it is a diagnostic inference, not proof that every remaining row
+was recovered. The inserted audio was not transmitted by Decodium, and this
+experiment must not be counted as a live A/B interoperability pass. See
+`/tmp/decodium-wefax-long-{a-snpiwv50,b-egj91avv}` for logs and outputs.
+
+Two additional unmodified 240 LPM, 256-line Decodium transmissions were
+recorded from full application pairs, using timed WMO phasing and dead sector:
+IOC 576 A had MAE/p95/max 0.340/0/45, IOC 288 B 0.266/0/45, with full
+coverage and zero reported audio discontinuities. Artifacts are
+`.../decodium-radiofax-centered-a-lg3ito10` and
+`.../decodium-radiofax-centered-b-dbm6e773`. An offline replay to the same
+independent decoder with `--align center` identified both IOC values, 240
+LPM, start and stop. It returned 257 rows for A, but just 58 for B; for B it
+reported 300 phasing lines and then removed 19 additional lines as phasing.
+The laboratory's default images vary horizontally but have identical rows,
+making them poor evidence for vertical alignment and, in B, ambiguous with
+phasing. Consequently these observations do not demonstrate independent
+recovery of complete image geometry. Independent logs are in
+`/tmp/decodium-wefax-long-real-{a,b}`.
+
+A stronger A/B repeated those 256-line transmissions with vertically varying
+images, using distinct input PNGs derived from the earlier A/B phase-like
+fixtures (nearest-neighbour resized to 320 x 256 and the first ten rows
+replaced by row 20). The full Decodium pairs both completed with zero
+reported audio discontinuities, timed WMO phasing and complete coverage:
+IOC 576 A had MAE/p95/max 0.726/1/61; IOC 288 B 0.316/1/61. Captures,
+reference and received images are in
+`.../decodium-radiofax-centered-a-ib1t2yu9` and
+`.../decodium-radiofax-centered-b-3esjrqjo`.
+
+Offline replay of their original audio to the independent decoder with
+`--align center` detected both IOC values, 240 LPM, start and stop, and
+returned 256 rows in each case. Sampling the active sector from column 41 of
+1810 for A and column 20 of 905 for B, both at row zero, produced full-image
+MAE/p95/max 3.606/6/255 and 5.059/11/255. Crossed-reference MAE was 92.406
+and 94.107. The maximum error shows that some pixels still differ sharply;
+the results are not lossless or evidence of RF performance. The independent
+decoder runs on saved recordings and requires explicit center alignment;
+its output retains the dead sector, which the comparison removes according
+to the transmitted profile, without a reference-driven alignment search.
+Logs and outputs are `/tmp/decodium-wefax-detail-{a,b}`.
+
+Two further full Decodium pairs tested IOC 288 / 90 LPM, 5%-white WMO
+phasing, the 4.5% dead sector and timed acquisition with distinct structured
+128 x 120 patterns. Both received all 120 rows, detected stop, used timed
+phasing and reported no audio discontinuities; A/B MAE/p95/max were
+0.117/0/8 and 0.083/0/8. Artifacts are
+`.../decodium-radiofax-centered-a-5_feozzh` and
+`.../decodium-radiofax-centered-b-w1bhynzl`.
+
+The unmodified independent WEFAX Decoder described above replayed each
+captured stereo stream after downmixing and resampling to 12 kHz mono. With
+`--align center` selected and no IOC, LPM or image height supplied, both runs
+reported IOC 288, 90 LPM, start and stop and returned exactly 120 rows.
+Full-active-sector sampling from column 20 of its 905-column raw image,
+at row zero and without a reference-driven alignment search, gave A/B
+MAE/p95/max 6.001/22/31 and 3.254/7/21. The crossed-reference MAEs were
+94.357 and 92.673. A's p95 exceeds the separate 15-level Decodium image
+gate; no claim of identical pixels or universal interoperability follows.
+The independent results are offline, and explicit center alignment and
+source-informed dead-sector sampling are necessary. Logs and raw images are
+in `/tmp/decodium-wefax-ioc288-90-{a,b}`.
+
+For these two recordings, further diagnostics identify the independent
+decoder's adaptive contrast as the principal source of the residual image
+error. Its `level_scale` estimates a time-varying deviation from local tone
+histograms; during approximately image rows 10–30 its estimate for A was
+about 303–313 Hz, while B remained near 378 Hz. The transmitted black/white
+deviation is 400 Hz. In a separate **modified-decoder diagnostic**, a
+wrapper substituted a fixed 400 Hz level in memory, with the external source
+unchanged. With the same row-zero, column-20 active-sector sampling, A/B
+MAE/p95/max improved to 0.070/0/14 and 0.055/0/14. This supports the contrast
+explanation for these clean known-level inputs; it does not prove that fixed
+levels are appropriate for noisy RF, nor does it change the unmodified
+decoder results above. Reproduce with
+`tests/sstv/tools/run_wefax_fixed_level_diagnostic.py CHECKOUT` followed by
+the same decoder arguments; the diagnostic outputs are in
+`/tmp/decodium-wefax-ioc288-90-{a,b}-fixedlevel-verified`.
+
+## Direct independent transmitter to Decodium receiver
+
+Unmodified FLdigi 4.2.11 transmitted two distinct structured 128 x 120
+images directly through BlackHole to a concurrently running Decodium
+receiver, using IOC 576, 120 LPM and the explicit centered-phasing profile.
+The receiver was ready before the independent transmitter started; this was
+a live virtual-audio transfer, not a replay. Both cases saved 120 lines,
+detected stop and reported no audio discontinuities, dropped chunks or
+processing failures. Direct image MAE/p95/max was 0.460/1/9 for A and
+0.576/1/13 for B. Crossed references gave MAE 43.622 and 43.794, confirming
+the two patterns are distinguishable. The configured 150-line canvas
+includes 30 unused rows. No radio or physical PTT was used.
+
+Repeat on a Mac with BlackHole and isolated FLdigi using
+`python3 tests/sstv/tools/run_fldigi_tx_live_decodium_lab.py a` and `b`
+sequentially. The harness starts Decodium first, runs the existing isolated
+FLdigi transmitter/capture tool, and checks RX diagnostics and image quality.
+Artifacts are `.../decodium-fldigi-tx-live-tv4xtib0` and
+`.../decodium-fldigi-tx-live-24nhrp2x`; their `tx.log` files identify the
+corresponding independent audio captures. This proves the stated direction
+and profile, not all Radiofax variants or reception over RF.
+
+## Live Decodium transmitter to independent WEFAX receiver
+
+The unmodified WEFAX Decoder at commit
+`99bfc22824dc970276d7c70b984df578bb7b6b11` was also run as a live audio
+receiver on BlackHole 2ch, concurrently with the Decodium transmitter and
+receiver. Two separate 128 x 120, 5%-white WMO-dead-sector transmissions
+used distinct vertically varying patterns, IOC 576 and 120 LPM. Both
+Decodium pairs received all rows, detected stop and reported zero input
+discontinuities; A/B MAE/p95/max were 0.155/0/11 and 0.111/0/11.
+
+The independent receiver detected the start, IOC, 120 LPM and stop in each
+live transfer and saved 120 rows. Its metadata reported zero audio overflows
+and no inserted gaps. It was launched with `--device 'BlackHole 2ch'
+--align center --no-browser --no-ml`; IOC, LPM and page height were not
+supplied. The decoder retains the dead sector in its 1810-column raw image;
+sampling the active sector at row zero and column 41, as derived from the
+profile and without a reference-driven search, gave A/B MAE/p95/max
+1.200/3/15 and 4.001/9/19. Crossed-reference MAEs were 91.214 and 93.246.
+The explicit center selection and geometric sampling are part of the test;
+they are not automatic dead-sector removal by the independent application.
+The Decodium artifacts are `.../decodium-radiofax-centered-a-m55a2yci` and
+`.../decodium-radiofax-centered-b-x7fkbh8v`, and independent outputs and logs
+are `/tmp/decodium-wefax-live-{a,b}`. This is live virtual audio with
+independent software, not an RF or physical PTT test.
+
+The same live test is now repeatable with
+`python3 tests/sstv/tools/run_wefax_live_two_app_lab.py a PYTHON` and then
+`b PYTHON`, where PYTHON is the isolated independent decoder environment.
+The harness checks that the external checkout is clean and pinned, waits for
+its live BlackHole input before launching the Decodium pair, checks the
+independent start/stop/IOC/LPM/row and audio-overflow metadata, and enforces
+the active-sector MAE 8 / p95 15 gate. The repeated A/B runs passed with
+MAE/p95/max 1.601/4/16 and 5.070/11/24; crossed-reference MAEs were 91.496
+and 94.038. Artifacts are `.../decodium-wefax-live-lab-a-er6xfnpo` and
+`.../decodium-wefax-live-lab-b-hymss2xl`. The first harness launch failed
+because resolving the virtual-environment Python symlink discarded its
+environment; preserving its original executable path fixed that setup error.
+
+The receive page offers an opt-in **30-second WMO phasing after IOC start**
+mode. WMO No. 386 describes an IOC-selection signal followed by 30 seconds
+of phasing; either symmetric or 5%-white phasing is permitted. When the
+selected IOC's start signal is recognised and phasing locks shortly afterward,
+the receiver counts the standard phasing lines and anchors image start at the
+expected boundary. This preserves initial image lines that resemble phasing.
+The selection is off by default and cannot be combined with the centered
+white-end-line convention. Without a recognised IOC start it falls back to
+the existing heuristic. With the option selected, non-standard phasing
+durations can yield an incorrect boundary. A recent confirmed or provisional
+phasing clock is required at the deadline; if the signal vanished, the timer
+is discarded and acquisition is restarted without publishing an image.
+
+The core A/B tests cover both IOC signals, both phasing patterns, 60/90/120/
+240 LPM at nominal and approximately ±0.3% line periods, phase-like initial image rows, wrong-IOC and 450 Hz
+negative controls, early false image content, missing IOC and signal loss.
+Two full Decodium application pairs used symmetric phasing with three initial
+image rows matching phasing, at 240 LPM: IOC 576 A and IOC 288 B both used
+the WMO timer, received all 120 rows, detected stop, reported no audio
+discontinuities and achieved MAE/p95/max 0.3091/0/21 and 0.1592/0/21.
+Artifacts are `.../decodium-radiofax-centered-a-s95p52r1` and
+`.../decodium-radiofax-centered-b-lgewzi22`. On the same earlier A/B audio,
+an offline native acquisition diagnostic without the timer started 9000
+samples, or three lines, later; the timed diagnostic started at the expected
+boundary. Those offline starts do not substitute for the full application
+tests.
+
+Two additional full Decodium pairs exercised the timed option at 90 LPM with
+the same three phase-like first rows: IOC 576 A and IOC 288 B both used the
+timer, received 120 complete lines and detected stop without reported audio
+discontinuities. A/B MAE/p95/max were 0.1066/0/7 and 0.0569/0/7. On the same
+captures the offline diagnostic again started three lines later without the
+timed option. Artifacts are `.../decodium-radiofax-centered-a-xnxfv47y` and
+`.../decodium-radiofax-centered-b-h8fn9qhk`. Synthetic IOC signal tests also
+cover approximately ±1% start-modulation frequency, in addition to wrong IOC
+and stop-frequency controls. These rates and tolerances are not a guarantee of
+reception over RF or of automatic alignment in independent software.
+
+Before the final missing-signal guard, two full Decodium pairs also tested
+the 5%-white profile with WMO dead sector and phase-like first rows, IOC 576 A
+and IOC 288 B; both used timed phasing, achieved 120 lines and stop without
+reported discontinuities, and had MAE/p95/max 0.3201/0/22 and 0.2311/0/22.
+Artifacts are `.../decodium-radiofax-centered-a-snpiwv50` and
+`.../decodium-radiofax-centered-b-egj91avv`. Offline comparisons of those
+same recordings again found the ordinary heuristic three lines later than the
+timed path. After the guard, A/B application replays which retained the start
+and first 15 seconds of phasing but replaced the remainder with silence both
+logged that the timer was armed and produced no image; artifacts are
+`.../decodium-fldigi-radiofax-replay-jq8vqe89` and
+`.../decodium-fldigi-radiofax-replay-bc2s6qqp`. The altered inputs are
+`/tmp/decodium-fax90-independent/wmo-signal-loss-{a,b}.f32`.
+
+Two further full receiver replays with eight broad false-white disturbances
+within the 5%-white phasing before the final missing-signal guard completed
+120 lines with stop and no reported audio loss; A/B MAE/p95/max were
+0.3201/0/22 and 0.2311/0/22. Artifacts are
+`.../decodium-fldigi-radiofax-replay-2or2mhts` and
+`.../decodium-fldigi-radiofax-replay-jpe32zkb`. These are controlled edited
+recordings, not RF results. The runtime's consecutive-image A/B regression
+passed with and without timed phasing; the receive-page offscreen test covers
+the new control. All application evidence above is local virtual audio and
+does not establish independent-peer or arbitrary-interference performance.
+
+The transmit page now exposes the existing 50%-white symmetric phasing
+profile, which was previously implemented in the encoder but inaccessible
+there. It is mutually exclusive with centered 5%-white phasing and may be
+combined with the explicit WMO dead sector. The previous four-argument bridge
+entry point continues to select 5%-white phasing. The offscreen Studio QML
+test checks both selections, mutual exclusion and the dead-sector combination;
+invalid centered/symmetric and invalid boolean test-only profiles are rejected.
+
+Two full Decodium application pairs exchanged distinct 128×120 grayscale
+patterns at IOC 576 / 240 LPM with symmetric phasing over BlackHole. Both
+detected stop, reported complete coverage and no audio discontinuities or
+dropped chunks; A/B MAE/p95/max were 0.3104/0/21 and 0.1577/0/21. A coarse
+10 ms block analysis of ten seconds of each recorded phasing signal found
+48% and 52% white-dominant blocks, consistent with the selected symmetric
+profile but not an exact duty-cycle measurement. Artifacts, including the
+recorded stereo audio, are `.../decodium-radiofax-centered-a-iyvjr_25` and
+`.../decodium-radiofax-centered-b-a4hp0r16`. Reproduce with
+`DECODIUM_LAB_RADIOFAX_SYMMETRIC=1` and
+`run_radiofax_centered_two_app_lab.py a 240`, then `b 240`; set
+`DECODIUM_LAB_FAX_CAPTURE=1` and `DECODIUM_LAB_RADIOFAX_REQUIRE_STOP=1` to
+retain audio and enforce the stop check.
+
+The selectable combination of symmetric phasing and the WMO 4.5% dead sector
+was also exercised between two full Decodium sessions for both patterns at
+IOC 576 / 240 LPM. Both detected stop and reported complete coverage without
+audio discontinuities or dropped chunks; A/B MAE/p95/max were 0.3181/0/22
+and 0.2256/0/22. Artifacts are
+`.../decodium-radiofax-centered-a-aakdd6sv` and
+`.../decodium-radiofax-centered-b-jpjlpcv0`. Set both
+`DECODIUM_LAB_RADIOFAX_SYMMETRIC=1` and
+`DECODIUM_LAB_RADIOFAX_WMO_DEAD_SECTOR=1` in the same two-app harness. This
+local A/B test does not establish independent-peer or RF interoperability.
+
+The independent `radio_fax_decoder` build described below also decoded both
+recordings offline with 240 LPM explicitly supplied. It logged start, a
+phasing estimate and stop and produced 403/402 rows including headers. After
+discarding 80 leading rows and searching the next 100 rows and horizontal
+offsets post hoc, the diagnostic compared only the centre half of each image:
+matching A/B MAE/p95 were 2.34/2 and 2.02/2, versus crossed MAE 76.79/80.48.
+Direct full-raster comparisons before the search were 118.74 and 118.43 MAE.
+This confirms recognisable A/B content in that offline decoder, not automatic
+image-boundary alignment, full-width quality, live peer or RF interoperability.
+Outputs and comparison JSON are under
+`/tmp/decodium-fax90-independent/symmetric-auto-{a,b}` and
+`/tmp/decodium-fax90-independent/symmetric-{compare,cross}-*.json`.
+
+After the later white-line acquisition change, the previously intermittent
+IOC 576 / 90 LPM centered profile was repeated with two Decodium application
+pairs and recorded virtual audio. A and B each recovered 120 rows with full
+coverage and stop detected; both reported zero discontinuities and processing
+failures. MAE/p95/max were 0.0602/0/3 and 0.0313/0/2. The terminal clock
+estimate was 320,000 samples over 40 lines in each run with no tracker
+restarts. Artifacts, including PCM captures, are
+`.../decodium-radiofax-centered-a-1_ra3osr` and
+`.../decodium-radiofax-centered-b-floh3r6o`. The current FAX480 and Radiofax
+component CTests also passed. These two successful attempts do not determine
+the cause or eliminate the earlier intermittent failure, nor establish RF
+or independent-peer interoperability.
+
+Those two IOC 576 / 90 LPM captures were replayed into an isolated unmodified
+FLdigi 4.2.11 receiver with automatic centering off. Both logs recorded 44
+phasing lines identified as 90 LPM, but each of 11 logged four-line
+transitions applied 120 LPM. Neither produced a PNG; both reported discarding
+an image for low correlation. A logged receipt of the 450 Hz APT stop while
+receiving; B did not log that same event. These are failed independent-peer
+tests, not a visual quality pass. The installed binary was not built from
+the source during this experiment. The current public
+[FLdigi WEFAX source](https://raw.githubusercontent.com/w1hkj/fldigi/master/src/wefax/wefax.cxx)
+sets a default of 120 LPM for IOC 576 and uses the default on transition to
+image reception, consistent with but not proof of the installed binary's
+exact implementation. Manual 90 LPM selection has not been tested here.
+`analyze_fldigi_lpm.py` reports detected and applied rates, stop and
+low-correlation markers, and exits nonzero for a mismatch or absent evidence;
+its synthetic 90/120, mixed-rate and missing-evidence controls pass. Logs
+are `.../decodium-fldigi-phase-ch2ympq7` and
+`.../decodium-fldigi-phase-9tu5kr__` in the macOS temporary directory.
+
+The same two Decodium recordings were also decoded offline with the independent
+[radio_fax_decoder](https://github.com/darauble/radio_fax_decoder) at commit
+`c5321bcb2e196bf33bf34c11cd3a4c86b0bd5358`. Its unmodified source was built
+with `clang++ -std=c++20 -O2 -include cstdlib src/fax.cpp src/avg.cpp
+src/FaxDecoder.cpp`; the forced standard header supplies declarations needed by
+this macOS build. Recordings were converted from stereo float 48 kHz to mono
+16-bit 12 kHz WAV and decoded with `--lpm 90 --pixels 1809 -n`. The `-n`
+option disables automatic phasing: this is a manually configured offline
+decode, not evidence of automatic acquisition or a live independent receiver.
+
+The 1809-pixel-wide output includes the preamble. The diagnostic
+`analyze_radiofax_2d_alignment.py --max-rows 100 --max-columns 32` resized its
+width to 128 and searched offsets after decoding, scoring only the middle 64
+columns of the 120 reference rows. The best A-to-A and B-to-B MAEs were 1.01
+and 2.00 on the 0–255 scale; crossed A-to-B and B-to-A comparisons were 50.25
+and 49.53. As negative rate controls, decoding the same recordings at 120 LPM
+yielded best MAEs 6.24 and 5.08. These values are diagnostic, not full-image
+quality measurements: the images are simple, half the width was excluded,
+and B's best 90 LPM horizontal shift reached the search boundary. Unaligned
+full-raster MAEs at 90 LPM were 65.32 and 45.87 because preamble and alignment
+remain in the output. The result supports manual-rate waveform decoding but
+does not resolve FLdigi's automatic-rate mismatch, establish 90 LPM automatic
+independent reception, or prove RF interoperability. Inputs, PGM output,
+decoder logs and comparison JSON are in `/tmp/decodium-fax90-independent`;
+the original two-app captures are identified above.
+
+With `-n` removed, the same independent decoder also logged start, a phasing
+estimate and stop for both captures at the explicitly configured 90 LPM.
+It wrote 224 and 223 rows, including headers and trailing samples. The same
+post-hoc search gave A-to-A/B-to-B MAE 1.01/2.00 versus crossed MAE
+50.25/49.81; direct full-raster MAE was 60.64/43.16. Repeating with
+`--no_header --auto_stop` produced 151/152 rows and best matching MAE
+2.03/4.07, but both best row offsets hit the 30-row search boundary and the
+direct full-raster MAE was 32.76/23.33. The logs demonstrate detected events,
+not correctly bounded or automatically aligned images. The manually supplied
+rate, post-hoc alignment, cropped diagnostic and simple input images remain
+material limitations. These runs do not establish automatic LPM selection,
+FLdigi compatibility, or complete independent-receiver interoperability.
+
+Two additional centered IOC 576 / 90 LPM runs used distinct 128×120
+spatially varying grayscale patterns. Each ran between two full Decodium
+sessions over virtual audio, requiring stop detection, full coverage and no
+reported discontinuities; A/B MAE was 0.1064/0.0547, p95 zero and maximum
+error 7/7. Captures and reference images are in
+`.../decodium-radiofax-centered-a-12rfcpv1` and
+`.../decodium-radiofax-centered-b-wor3homq`. After conversion as above,
+the independent decoder, with 90 LPM explicitly configured and phasing
+enabled, logged start, a phasing estimate and stop for both. Its output had
+223 rows including headers. The same diagnostic chose row 66 and column 0 for
+both matches, with centre-half MAE 1.48/1.51 versus crossed MAE 79.21/77.85.
+At those post-hoc offsets, full-width MAE was 1.60/1.52, p95 was 2/2 and
+maximum error was 28/56. Full-width errors include the higher transition
+errors omitted by a centre-only measure. These A/B captures give stronger
+waveform evidence than uniform images, but the row was still selected after
+decoding and the output was not automatically bounded to 120 image rows.
+The independent replay outputs and comparison JSON are in
+`/tmp/decodium-fax90-independent/pattern-auto-{a,b}` and
+`/tmp/decodium-fax90-independent/pattern-compare-*.json`.
+
+The two 90 LPM patterned recordings were independently checked again using
+the pinned `radio_fax_decoder` source, rebuilt without edits by
+`bash tests/sstv/tools/build_radiofax_decoder_oracle.sh CHECKOUT OUTPUT`.
+The builder rejects an incorrect revision, modified source or an existing
+output; the latter two negative controls passed. The rebuilt executable had
+SHA-256 `e6e454170f59f67dd63663b56523f3edd6aa283db7a9b4b801475d473266e2aa`;
+its decoded A/B PGM files were byte-identical to the previous build's output.
+
+`analyze_radiofax_decoder_stop_anchor.py` obtains the image row from the
+independent decoder's first sustained stop sequence and its documented
+header-inclusive 1809-pixel output accounting, subtracting the known 120-line
+transmitted height. It does not search pixels or choose a horizontal shift.
+For both recordings it obtained row 66 and compared the entire 128×120
+reference width after resizing. A/B MAE/p95/max were 1.600/2/28 and
+1.519/2/56; crossed references gave MAE 90.815 and 90.675. Unanchored
+full-raster MAE remained 122.709/105.484 because output contains the header.
+The helper's synthetic A/B and missing/broken-stop controls passed. This is
+an independent offline receive comparison with the rate and height supplied
+and the boundary derived after stop, not automatic image-boundary acquisition
+or a live peer/RF test. Rebuilt artifacts are
+`/tmp/decodium-fax90-independent/pinned-rebuild-{a,b}`.
+
+Applying the same stop-and-known-height method to the earlier symmetric
+240 LPM independent-decoder outputs did **not** pass a full-width comparison:
+A/B MAE/p95/max were 27.552/144/246 and 16.382/10/252. The decoder's output
+includes a horizontal displacement in those cases; no pixel-derived shift is
+applied by this diagnostic. The prior cropped post-hoc comparison remains a
+separate observation, not a full-width independent interoperability pass.
+
+An additional diagnostic derives horizontal alignment without consulting
+reference pixels: `analyze_radiofax_decoder_stop_anchor.py --symmetric-phasing`
+uses the median of 25 preceding phasing rows to locate the leading white edge,
+requires a single stripe occupying 40–60% of the line, and applies that edge
+to the continuous output raster. Image height remains supplied and the row
+comes from the logged stop as described above. For both symmetric A/B outputs
+the phasing-derived shift was -63 of 1809 decoder pixels. Full-width
+stop-and-phasing-anchored MAE/p95/max was 1.550/3/36 and 1.498/3/25;
+crossed-reference MAE was 90.790/90.772. Synthetic A/B positive and negative
+controls reject missing, multiple or narrow stripes. The rebuilt pinned
+decoder produced byte-identical PGM output for both recordings. The direct
+unaligned and stop-only metrics remain failures as recorded above: this is an
+offline, post-decoding alignment derived from signal and known height, not a
+claim that the unmodified independent application automatically aligns or
+bounds the final image, nor evidence of live or RF interoperability.
+
+For the WMO 4.5% dead-sector profile, two further IOC 576 / 90 LPM full
+Decodium exchanges used the same varying patterns and retained virtual audio.
+Both had 120 complete rows, detected stop and reported zero discontinuities,
+dropped chunks or processing failures. A/B image MAE/p95/max were
+0.1167/0/8 and 0.0833/0/8. Artifacts are
+`.../decodium-radiofax-centered-a-mk7gn6a1` and
+`.../decodium-radiofax-centered-b-2uw6724_`. The independent decoder above,
+using the same conversion and explicit 90 LPM with phasing enabled, logged
+start, phasing and stop for both and wrote 223 rows including headers. A/B
+post-hoc centre-half comparisons had MAE 4.50/3.26, p95 6/4 and maximum
+254/255; crossed comparisons had MAE 79.02/78.11. Direct full-raster MAE
+was 123.21/110.20. The diagnostic resized the entire fax line, including
+the dead sector, to the image width and searched row/column offsets; it did
+not correct dead-sector geometry or define the image boundaries automatically.
+These numbers demonstrate recognisable content and control events, not a
+successful full-image interoperability or quality test. Independent output,
+logs and comparison JSON are `/tmp/decodium-fax90-independent/wmo-auto-{a,b}`
+and `/tmp/decodium-fax90-independent/wmo-compare-*.json`.
+
+As a separate post-hoc diagnostic, `analyze_radiofax_dead_sector.py` samples
+the active 95.5% of each received line at reference-pixel centres on the
+continuous raster. Row and horizontal sample offset are supplied explicitly;
+they were selected by a search against the reference, not inferred by the
+decoder. At row 64 and offsets 32/36 of 1809 samples, A/B full-width MAE was
+1.56/1.61, p95 3/3 and max 14/14; crossed references at those offsets gave
+MAE 90.98/91.04. A/B synthetic checks cover different offsets, crossing a
+line boundary, a mismatched reference and invalid inputs. This supports the
+presence of the expected active-sector content but does not demonstrate that
+an operator's independent decoder automatically removes the dead sector or
+aligns and bounds the final image.
+
+A further replay of capture A again detected 44 phasing lines at 90 LPM but
+applied 120 at all 11 logged four-line transitions and discarded the image
+for low correlation (`.../decodium-fldigi-phase-syq4gbi4`). During that run,
+the isolated FLdigi receive window exposed no LPM control in the visible
+controls, and its XML-RPC method list exposed no LPM setter. This observation
+does not rule out a control elsewhere or a different FLdigi version. The
+Decodium transmit page now shows a targeted notice for centered IOC 576 / 90
+LPM, asking the sender to check the receiving station's rate. The offscreen
+Studio QML test checks this notice and the IOC 288 / 90 and IOC 576 / 120
+controls; it passed. The earlier two-Decodium A/B transfers above remain the
+functional evidence for the unchanged 90 LPM waveform.
+
+Separate two-Decodium A/B application runs exercised IOC 576 / 90 LPM with
+the WMO 4.5% dead sector instead of centered phasing. Both produced 120
+complete rows, detected stop and reported zero discontinuities. The received
+images had MAE 0.1070/0.0856, p95 0/0 and maximum error 5/5. Artifacts are
+`.../decodium-radiofax-centered-a-4y54to6k` and
+`.../decodium-radiofax-centered-b-brnbju7z`. These selected local transfers
+do not resolve the independent FLdigi rate mismatch or establish RF reception.
+
+With the later white-line confirmation enabled, unmodified FLdigi 4.2.11
+transmitted two fresh 128×120 reference images at IOC 576 / 120 LPM into
+virtual-audio recordings. The complete, unedited recordings were replayed
+into separate current-build Decodium receivers using the explicit centered
+phasing option and a 150-line canvas. Both recovered 120 complete rows,
+detected stop and reported no audio discontinuities, dropped chunks or
+processing failures. Without pixel translation, MAE/p95/max was
+0.0774/0/6 and 0.0451/0/4. The 80% canvas coverage is expected because
+30 of the 150 configured rows were not transmitted. Captures are
+`.../decodium-fldigi-tx-capture-t3puml1u` and
+`.../decodium-fldigi-tx-capture-oovb39d2`; Decodium receive artifacts are
+`.../decodium-fldigi-radiofax-replay-m_3u8_to` and
+`.../decodium-fldigi-radiofax-replay-f35yeezw`. This is a file-mediated
+FLdigi TX to Decodium RX test, not live RF or the reverse-direction 90 LPM
+interoperability that remains unresolved.
+
+Two full Decodium-to-Decodium sessions used centered phasing with IOC 288 at
+90 LPM and 128×120 pixels. Both A/B received complete images, reported all
+120 lines and stop detection, and showed zero reported audio discontinuities,
+dropped chunks or processing failures. Image MAE was 0.0602/0.0313 on the
+0–255 scale, p95 was zero, and maximum error was 3/2. The ordinary two-app
+harness checks completion, source and continuity; terminal diagnostics were
+additionally inspected for line count and stop. Artifacts are
+`.../decodium-radiofax-centered-a-fx8sqbps` and
+`.../decodium-radiofax-centered-b-ul3314td`. These selected virtual-audio
+transfers do not establish independent-peer or RF reliability and do not
+explain the earlier IOC 576/90 intermittent failure.
+
+The centered two-app lab now offers `DECODIUM_LAB_RADIOFAX_REQUIRE_STOP=1`
+to require a terminal stop, complete coverage and the expected line count
+instead of accepting completeness alone. Synthetic A/B controls reject
+missing or false stop, incorrect count or coverage, including a later
+regressing terminal snapshot. The check also accepted the prior IOC 288/90
+application logs above and rejected copies with stop removed. Two fresh
+IOC 288/240 application A/B transmissions passed the new explicit stop
+check, with full coverage, no reported audio discontinuities or dropped chunks,
+MAE 0.1721/0.1059, p95 zero and max 11/6. Artifacts are
+`.../decodium-radiofax-centered-a-onwn8rto` and
+`.../decodium-radiofax-centered-b-lxafqnf_`. This is a stricter lab assertion,
+not a change to stop detection or proof of arbitrary RF behavior.
+
+Two further two-Decodium IOC 288/240 LPM sessions configured a 150-line RX
+canvas for 120 transmitted lines. Both detected stop, reported exactly 120
+published lines and 80% coverage, and marked the image partial rather than
+complete. No audio discontinuities, dropped chunks or processing failures
+were reported. The received 120-row images had A/B MAE 0.1721/0.1059,
+p95 zero and maximum error 11/6. Artifacts are
+`.../decodium-radiofax-centered-a-jvlttqst` and
+`.../decodium-radiofax-centered-b-20segezx`. These are selected virtual-audio
+tests, not independent-peer or RF stop-reliability evidence.
+
+The partial-stop lab now additionally requires the exact canvas dimensions,
+15,360 completed pixels and 46,080 covered RGB components for that 128×150,
+120-line case, instead of allowing a one-percentage-point coverage tolerance.
+Both retained two-application diagnostic logs above passed the stricter
+check; A/B controls with altered pixel counts failed. The component test for
+four positive and negative clock drifts now examines every coverage mask:
+all RGB components of rows 0–119 are covered and every component of rows
+120–149 is uncovered. The Radiofax component suite passed. The exact per-pixel
+mask check is component-level; the two-application logs report aggregate
+coverage and line counts, not the individual masks.
+
+## Clock drift and reacquisition after phasing interference
+
+Two earlier 240-LPM A/B virtual-audio captures were copied with their
+48 kHz rate interpreted as 48,144 Hz and 47,856 Hz respectively, then
+resampled to 48 kHz. This simulates opposite sample-clock offsets and also
+shifts audio frequencies. An independent phasing-edge measurement found
+approximately -2,991 ppm and +3,009 ppm in the resulting recordings. The
+A capture initially failed: the receiver treated phasing as image data and
+did not report the expected stop. The B capture also failed after an initial
+mean-period change: its first measured phasing period straddled the APT-to-
+phasing transition and biased the estimated direction of drift. These
+failures are `.../decodium-fldigi-radiofax-replay-mnvws2xy` and
+`.../decodium-fldigi-radiofax-replay-r7xryznx`.
+
+The initial image-start anchor now uses the median of three accepted phasing
+periods, rather than a single period or their mean, when the measured period
+differs from nominal by more than 0.2%. Smaller offsets retain nominal timing
+until the longer multi-pulse estimate is ready, avoiding an observed clean
+loopback regression from early jitter. A/B component tests cover both drift
+directions and a single atypical period among the three. With the corrected
+anchor, the clean-drift A/B recordings reached 120 complete lines and detected
+stop; artifacts are `.../decodium-fldigi-radiofax-replay-9czhpa7u` and
+`.../decodium-fldigi-radiofax-replay-0_rlnh1d`. A was run with the earlier
+three-period mean, while B used the final median; the final median was also
+exercised in the combined A/B tests below.
+
+When two irregular pulses invalidate an established clock during phasing,
+the automatic receiver retries clock acquisition, up to 1,800 times, after
+at least one estimate has been confirmed. A new estimate requires at least
+two seconds of observations. It
+temporarily retains the last confirmed period only as an image-start search
+anchor; the image decoder uses a clock only if the new tracker has acquired
+its own valid estimate. With no prior valid estimate it falls back to nominal
+timing. After the restart limit, the last confirmed estimate remains only as
+an image-start anchor; image decoding still falls back to nominal timing. A synthetic A/B regression previously
+acquired image content during phasing; it now locates the actual image start,
+reacquires the correct clock and records one restart in each direction.
+
+The same two recordings with both the rate change and the two injected false
+phasing pulses were replayed into full Decodium receivers. Both reacquired a
+clock after one restart, reported 120 complete lines and detected stop, with
+no reported discontinuities, dropped chunks or processing failures. A/B MAE
+was 0.142/0.101 and p95 zero; artifacts are
+`.../decodium-fldigi-radiofax-replay-f30b3ug0` and
+`.../decodium-fldigi-radiofax-replay-_ikyymi4`. Two fresh ordinary
+Decodium-to-Decodium A/B transfers with the final code also passed with stop,
+120 lines and no reported discontinuities; artifacts are
+`.../decodium-radiofax-centered-a-2dkvulog` and
+`.../decodium-radiofax-centered-b-k54hudlq`.
+
+The final build also passed the `test_sstv_radiofax`,
+`test_sstv_radiofax_phasing_glitch` and `test_sstv_rx_runtime` CTest targets
+together (three of three; the runtime integration test took 333 seconds).
+These tests complement the selected application transfers above and do not
+extend their interoperability or RF coverage.
+
+These checks use selected 128-pixel local images and manipulated recordings;
+they do not establish general RF resilience or independent-sender
+interoperability. `analyze_radiofax_acquisition` is an offline native-frontend
+diagnostic, not a replacement for the full application replay. The restart
+bound limits reacquisition work, not the duration or quality of all possible
+disturbances. An additional observation-level A/B test applies four pairs of
+irregular pulses, separated by enough valid phasing to reacquire the clock,
+at both clock offsets. It verifies four restarts, a newly valid clock and the
+expected image start. Reception after exhausting the new limit remains unverified.
+
+The subsequent full-application A/B replay used the two opposite-drift
+recordings with four pairs of inserted phasing pulses. Both runs reported
+three restarts, an invalid tracker, zero validated image-clock samples, 120
+lines and detected stop without reported audio drops. However, image comparison
+failed: A/B mean absolute error was 16.50/10.41 and p95 was 129/76, above the
+8/4 limits. Artifacts are `.../decodium-fldigi-radiofax-replay-uoho83bq` and
+`.../decodium-fldigi-radiofax-replay-wlsm0vf7`. Nominal image timing after
+the former three-retry limit was therefore insufficient for these signals.
+The impairment helper's `--four-pairs`
+mode and its A/B tests check all eight modified intervals and unchanged audio.
+
+With the revised bound, the same A/B recordings passed full Decodium replay:
+each reported four restarts, a valid new estimate, 120 lines and detected
+stop, without reported dropped chunks or discontinuities. Mean absolute error
+was 0.145/0.162 and p95 zero. Artifacts are
+`.../decodium-fldigi-radiofax-replay-y3ldyn5a` and
+`.../decodium-fldigi-radiofax-replay-9pwq7k22`. These are selected altered
+local recordings, not RF or general interference guarantees.
+
+An observation-level A/B regression then exposed a separate failure when
+disturbances recur before the restarted tracker confirms its estimate. Once
+an initial clock has been confirmed, the receiver now permits another bounded
+restart in that situation, retaining the old clock only as a provisional
+start anchor. The new tracker must still independently confirm its estimate
+before image decoding uses it. The synthetic A/B test and Radiofax component
+suite pass; the full-application replay is described below.
+
+The closer-spaced A/B recordings were subsequently replayed through full
+Decodium receivers. Both reported seven restarts, a valid new estimate, 120
+lines and stop, without reported dropped chunks or discontinuities. Mean
+absolute error was 0.145/0.104 and p95 zero. Artifacts are
+`.../decodium-fldigi-radiofax-replay-zuiqfiuf` and
+`.../decodium-fldigi-radiofax-replay-ms149va_`. The helper's `--close-pairs`
+mode has A/B checks for all modified and unchanged intervals. These are
+selected altered local recordings, not RF tests.
+
+An additional synthetic A/B negative control applies repeated pulse-shaped
+disturbances through the remainder of phasing. After multiple restarts it
+finds the expected image-start position in both drift directions, but no
+unconfirmed clock is passed to the image decoder.
+The tracker may still be valid in the sense that it has not been rejected,
+without yet having enough observations for a clock estimate; validity alone
+does not establish an estimate. This observation-level control does not
+establish application-level image quality under persistent interference.
+
+Full-application A/B replays then inserted 204 short false pulses, two on
+each of 102 consecutive phasing lines, into the opposite-drift recordings.
+Both reported 153 tracker restarts and zero validated clock samples, then
+detected stop and 120 lines, but image comparison failed: mean absolute
+error was 16.41/10.41 and p95 129/76. Artifacts are
+`.../decodium-fldigi-radiofax-replay-9s2cp4m_` and
+`.../decodium-fldigi-radiofax-replay-jb95m10f`. The first run stopped at
+the explicit reacquisition assertion; its saved image was compared separately.
+The helper's `--persistent-pairs` mode and A/B interval controls reproduce
+the impairment. Persistent pulse rejection and image clock recovery remain
+open; these manipulated recordings do not represent all RF interference.
+
+An optional phase-reference filter is used after a confirmed clock is lost
+and the automatic receiver restarts its tracker. In an observation-level A/B
+test it ignores repeated off-phase pulses and independently estimates the
+clock; a deliberately wrong reference produces no estimate. The component
+suite passes. The tracker invalidates its estimate after 4.5 periods
+without an accepted pulse. Changing clock rates and broader application-level
+behaviour remain to be verified.
+
+With the filter enabled, the two persistent-interference recordings above
+passed full Decodium replay: each reported one restart, 203 ignored irregular
+pulses, a newly valid clock, 120 lines and stop without reported audio
+discontinuities. Mean absolute image error was 1.051/0.111, p95 1/0; artifacts
+are `.../decodium-fldigi-radiofax-replay-xt6yf9z9` and
+`.../decodium-fldigi-radiofax-replay-irm0snhr`. These remain selected local
+recordings, not a general claim about RF interference.
+
+An observation-level A/B test changes the line period from 2,991 to 3,009
+samples and vice versa after an initial disturbance and confirmed clock.
+The clock tracker eventually invalidates its old reference, but the automatic
+receiver identifies image start prematurely in both scenarios. The test
+currently records this known failure rather than asserting correct reception;
+it must be replaced by a correct-start regression when fixed. No full-app
+or RF result for this changing-rate scenario has been established.
+At 12 kHz, the observed candidate starts were 104,688 and 105,317 samples,
+versus expected image starts of 363,549 and 362,451 respectively. The
+change occurs at 89,730/90,270 samples, so the false candidate is roughly
+five lines after the change. This points to image-start alignment becoming
+stale before the clock tracker rejects its old phase reference; it does not
+by itself prove the best correction.
+Both early starts occur while a restarted tracker is valid but has not yet
+confirmed a new estimate; each reports two restarts and no image clock. An
+experimental alignment adjustment applied only to confirmed edges did not
+prevent either failure and was removed. A correction must also account for
+the period while reacquisition has no confirmed estimate, including an actual
+image beginning during that interval.
+
+The centered white-end-line profile now checks buffered observations for a
+predominantly white candidate after a clock has been confirmed, rejecting
+candidates with insufficient evidence or an inconsistent line. A newly
+confirmed clock anchors image timing to the tracker's latest confirmed edge
+when that edge precedes the candidate. The changing-rate synthetic A/B test
+now checks the correct image start, and the immediate-image A/B control still
+passes without an unconfirmed clock. The complete component suite passes.
+Replays of the earlier constant-rate persistent-interference recordings also
+passed with 120 lines and stop: A/B MAE 1.051/0.111, p95 1/0; artifacts are
+`.../decodium-fldigi-radiofax-replay-b5qcrlij` and
+`.../decodium-fldigi-radiofax-replay-pfdd2mpg`. Full-application tests with an
+actual mid-phasing rate change remain open. The historical failure and
+experiments above describe the earlier implementation.
+
+The mid-phasing change was subsequently tested in full Decodium A/B replays.
+The original two-application stereo captures were split at 22.06/21.08 s;
+FFmpeg `asetrate`/`aresample` applied 48,144 then 47,856 Hz for A and the
+reverse for B, with the segments concatenated. The existing two-pulse helper
+inserted two earlier false pulses. Both receivers reported four restarts,
+a valid final clock, 120 lines and detected stop without reported audio
+discontinuity. A/B MAE was 0.158/0.086 and p95 zero; artifacts are
+`.../decodium-fldigi-radiofax-replay-43vnbdwb` and
+`.../decodium-fldigi-radiofax-replay-cmfopn70`. This is a selected local
+resampling experiment with a splice, not a measurement of real RF or proof
+for every possible clock transition.
+
+With a 20% black interruption in the white end line, the synthetic A/B
+changing-clock test initially failed to acquire the image. The candidate
+threshold was adjusted from 75% to 60% white observations; the changing-clock,
+immediate-start and full Radiofax component tests pass. In full Decodium A/B
+replays, 50 ms of 1500 Hz replaced part of the measured white end line in
+the changing-rate recordings above. Both produced 120 lines and stop with no
+reported audio discontinuity; MAE was 0.158/0.086 and p95 zero. Artifacts are
+`.../decodium-fldigi-radiofax-replay-kev0tk5a` and
+`.../decodium-fldigi-radiofax-replay-ue1rskwm`. These selected disturbances
+do not establish a general tolerance to damaged or missing end lines.
+
+An observation-level A/B negative control also adds a 40%-line false white
+interval to eight phasing lines after the simulated rate change. The receiver
+still identifies the later end line at the expected position in both
+directions. This synthetic pattern is not a general bound on all false-white
+interference. The application replays below use a comparable audio impairment.
+
+Two subsequent full Decodium replays inserted eight 100 ms, 2300 Hz
+intervals into measured black phasing after the rate change in the A/B
+recordings. Each produced 120 lines and stop without reported audio drops or
+discontinuities; A/B MAE was 0.161/0.082 and p95 zero. Artifacts are
+`.../decodium-fldigi-radiofax-replay-f5ii88cg` and
+`.../decodium-fldigi-radiofax-replay-ja4fpy58`. The terminal logs do not
+identify which particular candidate was rejected, so these replays show the
+outcome for the selected manipulated audio, not classification of each
+inserted interval or general RF resistance.
+
+The observation-level `autoReceiverStartsImageDuringClockReacquisitionAB`
+control now places the white end line immediately after a disturbance, before
+the new tracker has a valid estimate. Both rate directions identify the
+expected image start and use no unconfirmed clock. This protects a real-start
+case while the changing-rate false-start bug remains open; it does not prove
+image quality or full-application behaviour for this short phasing sequence.
+
+To exercise that short sequence with recorded audio, two 240 LPM Decodium
+captures were altered with `prepare_radiofax_phasing_glitch.py --two-pulses`,
+then `shorten_radiofax_phasing.py` removed 101 phasing lines so the recorded
+white end line follows the disturbed line. The helper's outputs were checked
+byte-for-byte against the two earlier hand-spliced files. Replays through a
+full Decodium receiver produced 120 lines and stop, with no reported audio
+discontinuities; A/B MAE/p95/max were 0.172/0/11 and 0.105/0/7. Both terminal
+logs show one clock restart and no freshly confirmed image clock. Artifacts
+are `.../decodium-fldigi-radiofax-replay-p1pnypjv` and
+`.../decodium-fldigi-radiofax-replay-5f76fdk7`. The replay harness now waits
+through its configured minimum application lifetime for shortened captures;
+the earlier fixed 30-second post-playback wait timed out prematurely.
+
+Resampling those same altered files from 48,144 and 47,856 Hz to 48,000 Hz
+then exposed a remaining defect in both directions: 120 lines and stop were
+reported, but A/B image MAE/p95/max were 16.45/129/152 and 10.39/76/76,
+failing the 8/4 quality limits. Both logs show one restart and no confirmed
+image clock; the phasing lock periods were 2991/3009 rather than the nominal
+3000 samples. Artifacts are `.../decodium-fldigi-radiofax-replay-jixfw8py`
+and `.../decodium-fldigi-radiofax-replay-r9acy41q`; the modified inputs are
+`/tmp/decodium-fax90-independent/short-drift-{a,b}.f32`. This result is
+consistent with falling back to nominal image timing after losing the clock,
+but the experiment does not isolate that as the only cause. Reusing a stale
+estimate without signalling it or testing an actual rate change could produce
+another wrong image; this case remains open. The resampling changes both
+timing and audio frequency and is not an RF test.
+
+The receiver now retains the last confirmed clock as a **provisional** raster
+hint only if the candidate image begins within four line periods of its last
+confirmed edge and no fresh estimate is available. The image-start anchor uses
+that same edge. The initial tracker also expires its estimate after 4.5
+periods without a pulse; previously that timeout applied only to restarted
+trackers. A later independently confirmed estimate takes precedence. The
+image summary exposes `imageRadiofaxClockProvisional`, and the receive page
+shows a warning-coloured provisional-timing label. A sudden clock change
+immediately before image start remains indistinguishable from a transient
+disturbance in this short window, so the fallback may still be wrong; it is
+not represented as a newly confirmed estimate.
+
+The two failed drift recordings were replayed again on the updated full
+receiver. Both reported one restart, provisional clock, 120 rows, stop and no
+audio discontinuity; A/B MAE/p95/max were 2.043/2/15 and 1.935/2/7,
+within the 8/4 quality thresholds. Artifacts are
+`.../decodium-fldigi-radiofax-replay-sgo0djl5` and
+`.../decodium-fldigi-radiofax-replay-mub87u7j`. Two separate clean 240 LPM
+transmissions between full Decodium applications, using varying A/B patterns,
+also reached complete coverage with stop and no discontinuities; MAE/p95/max
+were 0.311/0/21 and 0.158/0/21, with confirmed rather than provisional
+clocks. Artifacts are `.../decodium-radiofax-centered-a-yd_6fhbt` and
+`.../decodium-radiofax-centered-b-ibzcl4sl`. Component A/B tests check the
+short interrupted phasing, stale-clock expiry and changed-clock reacquisition;
+an offscreen QML test checks the provisional warning and normal label. These
+selected cases do not establish resilience to arbitrary rate changes, RF or
+independent-decoder operation.
+The runtime's 48 kHz transmit-audio, consecutive-image rearm A/B and direct
+audio-stop chunk-size checks also passed after the change.
+
+The immediate clock-change limitation was then exercised with full receivers,
+not only the synthetic tracker. The shortened two-pulse A/B recordings above
+were split at 19.08/18.05 seconds respectively; FFmpeg interpreted the first
+segment at 48,144/47,856 Hz and the second at 47,856/48,144 Hz, resampling
+both back to 48 kHz before concatenation. The cut occurs just before the
+disturbed phasing line. Both detected stop and flagged their image clock as
+provisional, but the replays failed: A published 121 lines with MAE/p95/max
+17.40/127/253, and B published 119 with 11.66/78/78. Their terminal clock
+estimates remained near the earlier period, 2991/3009 samples, respectively.
+Artifacts are `.../decodium-fldigi-radiofax-replay-wej_tbmd` and
+`.../decodium-fldigi-radiofax-replay-qzofgjqh`; inputs are
+`/tmp/decodium-fax90-independent/short-switch-{a,b}.f32`. These deliberately
+resampled and spliced recordings shift audio frequencies as well as timing;
+the experiment does not isolate a physical source or prove RF behaviour.
+
+`autoReceiverMarksUnconfirmedImmediateClockChangeAB` now documents the
+corresponding observation-level limitation in both directions: a recent
+pre-change clock can still be selected, but must be marked provisional rather
+than newly confirmed. This regression intentionally checks truthful state;
+it does not assert correct raster timing or claim that the defect is fixed.
+
+The opt-in `DECODIUM_RADIOFAX_TRACE_LEVELS=1` offline acquisition diagnostic
+now reports median high-confidence black and white observations before and
+after the disturbance. On the two switched-rate recordings it measured
+old/new black/white levels of 1504.49/2306.92 to 1495.49/2293.10 Hz for A,
+and 1495.49/2293.13 to 1504.49/2306.89 Hz for B. If the entire frequency
+scale is assumed to follow the line clock, `analyze_radiofax_level_scaling.py`
+gives periods 3009.01 and 2991.03 samples, close to the intended switched
+rates. On stable-clock controls the levels remain essentially unchanged.
+
+That inference is not safe on its own. As A/B counterexamples, the same
+shortened recordings were split just before the disturbance; the later
+segment was pitch-shifted with FFmpeg `asetrate`/`aresample` and compensated
+with `atempo` to retain approximately its original duration. The observed
+recent black/white levels shifted from 1499.99/2300.03 to 1504.46/2306.89 Hz
+and 1495.47/2293.14 Hz. The frequency-only hypothesis suggests line periods
+2991.08 and 3009.04, although the final observed phasing-edge gaps were
+approximately 2999 and 3001 samples. These are deliberately transformed
+local audio counterexamples, not measurements of a particular transmitter.
+They show why proportional tone changes alone must not automatically replace
+the provisional clock. The diagnostic's synthetic A/B, stable-level,
+common-frequency-offset and invalid-input tests pass. Inputs are
+`/tmp/decodium-fax90-independent/short-toneonly-{a,b}.f32`.
+
+After a clock restart, the receiver now prefers a **provisional** period from
+three newly accepted consecutive phasing edges, if the last edge is within two
+periods of the candidate. Missing-line gaps or a pending irregular pulse reject
+this short estimate. A fully confirmed estimate still takes precedence; if no
+short estimate is available, the bounded previous-clock fallback described
+above remains in use. The short estimate is labelled provisional in the UI,
+because three edges are less conclusive than the normal acquisition threshold.
+It uses timing of phasing edges, not the tone-scaling hypothesis.
+
+Full receiver A/B replays of the previously failing switched-rate files now
+reported 120 lines, stop and zero audio discontinuities. A/B MAE/p95/max were
+1.994/2/12 and 1.990/2/10. Both reported provisional fresh periods of
+6018/2 and 5982/2 samples, rather than the earlier pre-switch periods;
+artifacts are `.../decodium-fldigi-radiofax-replay-f3ech0w3` and
+`.../decodium-fldigi-radiofax-replay-bhu6j_e2`. The component A/B regression
+checks insufficient edges, missing edges and a pending irregular pulse.
+Offline replays of the pitch-only counterexamples chose approximately 2999
+and 3001 samples from edge timing, not the misleading tone-scale hypothesis.
+This fixes these selected inputs, not the case where image start follows so
+quickly that there are fewer than three valid new edges, nor arbitrary RF.
+Two fresh clean 240 LPM A/B transmissions between full Decodium sessions also
+passed after the change, with full coverage, stop, zero reported audio
+discontinuities and MAE/p95/max 0.311/0/21 and 0.158/0/21. Artifacts are
+`.../decodium-radiofax-centered-a-hh_xo_l9` and
+`.../decodium-radiofax-centered-b-09ehx72l`.
+The 48 kHz audio path, consecutive-image rearm and direct-stop runtime
+regressions also passed with this version.
+
+To exercise a shorter reacquisition, one additional phasing line was removed
+from each switched-rate recording after its two false pulses. The cuts used
+estimated 12 kHz edge positions 231326–234335 for A and 220229–223220 for B,
+multiplied by four for the stereo 48 kHz recordings; the retained samples
+were concatenated. Before the following change, the offline acquisition
+diagnostic selected the older 2991/3009-sample clocks. These are edited audio
+files, and the estimated cuts do not establish a standards-compliant TX.
+
+Following a previously confirmed phase reference, two consecutive accepted
+edges may now provide a provisional clock; without that reference the three
+edge minimum remains. Missing periods, a pending irregular pulse, stale edges
+and an out-of-range rate still reject the hint. This is less certain than the
+fully confirmed clock and remains visibly provisional. Component A/B tests
+exercise both rates, missing pulses, absent reference and an isolated edge.
+Full Decodium receiver replays of the edited A/B audio detected stop and 120
+lines without reported discontinuities; MAE/p95/max were 1.994/2/12 and
+1.990/2/10. Artifacts are `.../decodium-fldigi-radiofax-replay-h054k65h`
+and `.../decodium-fldigi-radiofax-replay-9fwy8c7y`. The modified input files
+are `/tmp/decodium-fax90-independent/short-switch-fewer-{a,b}.f32`. These
+selected cases do not guarantee accuracy with jitter or impulsive interference
+and do not identify an abrupt change when only one reliable new edge exists.
+Two fresh clean 240 LPM Decodium-to-Decodium A/B exchanges also passed, with
+full coverage, stop and no reported discontinuities; MAE/p95/max were
+0.311/0/21 and 0.158/0/21. Artifacts are
+`.../decodium-radiofax-centered-a-anaxuw13` and
+`.../decodium-radiofax-centered-b-co5zjdbm`.
+The 48 kHz audio path, consecutive-image rearm and direct-stop runtime
+regressions passed again after the two-edge change.
+
+## One isolated false phasing pulse
+
+After a clock has accumulated at least six confirmed pulses spanning eight
+lines, the clock tracker now ignores one isolated pulse whose timing is
+inconsistent with the established period. The pulse is not added to the
+estimate; a following valid pulse confirms the existing clock, while a
+second consecutive irregular pulse invalidates the tracker. Before an
+estimate is established, an irregular pulse still invalidates it immediately.
+
+The new observation-level A/B regression inserts a 5%-width false white pulse
+at two positions in otherwise regular 120-LPM phasing. Before this change the
+tracker became invalid; after it, the estimate remains within one sample of
+the intended line period. Two early-pulse controls still reject acquisition,
+and the existing sustained-irregular-period test still invalidates the clock.
+The full Radiofax component suite passed.
+
+Two full Decodium TX/RX pairs then exchanged A/B images over BlackHole at
+IOC 576 and 240 LPM, detecting stop after 120 lines with no reported dropped
+chunks, discontinuities or processing failures. A/B MAE was 0.172/0.106,
+p95 zero; artifacts are `.../decodium-radiofax-centered-a-r6lb8we1` and
+`.../decodium-radiofax-centered-b-1vcse52v`. Separately recorded audio was
+copied with a 12.5 ms 2300 Hz pulse inserted into a confirmed 1500 Hz phasing
+interval, in a different location for each capture. Byte comparisons
+confirmed no other samples changed. Replays of these two modified recordings
+through full Decodium RX recovered 120 lines and the same A/B MAE/p95, with
+stop detected and clean audio diagnostics; each reported a 348,000/116
+sample-per-line estimate. Replays are
+`.../decodium-fldigi-radiofax-replay-jrxqezph` and
+`.../decodium-fldigi-radiofax-replay-sbz3w2me`.
+
+The impairment helper is `tests/sstv/tools/prepare_radiofax_phasing_glitch.py`;
+its A/B, unchanged-sample, overwrite and silent-input controls pass. These
+are selected recordings modified after capture, not RF, and the application
+logs do not establish whether the demodulator classified the inserted tone
+as the particular false pulse used by the component test. The recorded
+successful replays therefore complement, rather than replace, the focused
+regression or prove general resistance to interference.
+
+The tracker now exposes its count of tolerated irregular pulses to the
+test-mode terminal diagnostic. With the same receiver build, the two altered
+recordings above each reported one ignored pulse, while separate replays of
+their original unmodified captures each reported zero. All four produced
+120 complete lines, detected stop, had no reported audio discontinuities or
+dropped chunks, and retained A/B MAE 0.172/0.106 with p95 zero. The altered
+A/B runs are `.../decodium-fldigi-radiofax-replay-u_gmi3i_` and
+`.../decodium-fldigi-radiofax-replay-tya56_3_`; their respective unmodified
+controls are `.../decodium-fldigi-radiofax-replay-cf7a0uft` and
+`.../decodium-fldigi-radiofax-replay-w4uiknqj`. The helper can require a
+zero or nonzero count with `DECODIUM_LAB_EXPECT_IGNORED_PHASING_PULSE=0` or
+`1`. The counter records a count rather than a timestamp, and replay timing
+can vary, so the paired result associates the inserted pulse with the
+additional anomaly but is not sample-level proof of its classification.
+These remain local virtual-audio recordings, not RF tests.
+
+An additional A/B negative control inserts two 12.5 ms white pulses into the
+same otherwise black phasing line of those recordings. The component test
+requires that, once a clock was established, the first irregular pulse is
+ignored and the second invalidates the tracker. In both full Decodium replay
+tests the terminal diagnostics recorded one ignored pulse, an invalid clock
+tracker and no retained measured clock; the receiver used nominal timing.
+Each produced 120 complete lines and detected stop with no reported audio
+discontinuities, dropped chunks or processing failures. A/B MAE was
+0.1720/0.1050, p95 zero. Artifacts are
+`.../decodium-fldigi-radiofax-replay-6tygkolm` and
+`.../decodium-fldigi-radiofax-replay-cua_vw0u`.
+
+The impairment helper supports `--two-pulses`; its automated A/B checks
+verify that only the two requested PCM intervals change, along with overwrite
+and silence rejection. `test_sstv_radiofax` and
+`test_sstv_radiofax_phasing_glitch` passed. The test uses a nominal-clock
+local recording, so it does not establish image quality after clock fallback
+when an actual sender has sample-clock drift, nor does it establish RF or
+independent-transmitter interoperability.
+
+## Radiofax stop confidence bounds
+
+The FM-observation stop detector and its short-window boundary refinement now
+ignore observations with confidence above 1.0, consistent with the other
+Radiofax acquisition stages. Previously such invalid observations could
+contribute to a stop decision or boundary estimate. The A/B detector regression
+uses 447.3 and 452.7 Hz signals with frequency offsets, noise and dropouts;
+it verifies valid-confidence detection and rejects the same observations with
+confidence 1.01. The regression failed before the detector change and passes
+afterward, along with the full `test_sstv_radiofax` suite. This is a synthetic
+invalid-input control, not an observation that a sound device produced an
+out-of-range confidence value.
+
+After rebuilding Decodium, two local TX/RX application pairs sent A and B at
+IOC 576/240 LPM using BlackHole. Each RX was configured for 150 lines and
+required to detect the stop after the transmitted 120 lines, preserving the
+other 30 lines as uncovered. Both passed with no reported discontinuities;
+A/B image MAE was 0.172/0.106 and p95 was zero. Artifacts are
+`.../decodium-radiofax-centered-a-sixnm6hq` and
+`.../decodium-radiofax-centered-b-iiznll4d`. These runs exercise normal audio,
+not the synthetic invalid-confidence condition or RF interoperability.
+
 ## FAX480 consecutive reception
 
 The FAX480 runtime previously discarded its receiver after a completed frame,
@@ -20,6 +1072,16 @@ processes ran sequentially; this does not prove RF or other implementations.
 The reversed B then A run also passed, with MAE/p95 0.065/0 and 0.110/0,
 full coverage and distinct IDs; its artifacts are
 `.../decodium-fax480-consecutive-b-zzilk3oc`.
+
+After correcting the Receive page's obsolete instruction to restart RX,
+both orders were repeated through full Decodium processes. A→B and B→A
+each produced two complete 512×480 images with distinct acquisition IDs and
+clean checked RX audio diagnostics. Image A/B component MAE was 0.110/0.065
+and p95 was zero in both orders. Artifacts are
+`.../decodium-fax480-consecutive-a-1f9iit40` and
+`.../decodium-fax480-consecutive-b-bctj4day`. The offscreen receive-page
+CTest also passed. The application transfer checks the existing automatic
+rearm; it does not establish independent transmitter or RF interoperability.
 
 VIS 85 remains unresolved in this scenario. Before the invalid-gap change,
 one application run acquired only the second frame and another acquired only
@@ -73,6 +1135,417 @@ The `vis85LeaderDropoutAndRecoveryAB` core test also checks a 1 ms and an
 interruption is tolerated; the longer one rejects that header, and a later
 complete VIS 85 header is acquired. This is a synthetic observation-level
 test, not an audio-path measurement of dropout tolerance or RF performance.
+
+### VIS leader dropout and short classification spikes
+
+A further local consecutive VIS 85 run failed: only the second image began
+acquisition before the receiver laboratory timeout. In its separately captured
+first header, the 1900 Hz leader contained an approximately 10 ms interruption.
+With the receiver's fast three-sample, one-sample-hop demodulator configuration,
+the captured header did not acquire offline. An initial leader-only tolerance
+recovered that capture with a slower demodulator but did not solve another
+application run: brief classified-tone spikes split the leader around the gap.
+These failed runs are `.../decodium-fax480-consecutive-a-7zgx0edh`,
+`.../decodium-fax480-consecutive-a-3szka593` (interrupted after its first
+image was missed), `.../decodium-fax480-consecutive-a-liqgynmm` and
+`.../decodium-fax480-consecutive-b-e7itu2hs` in the macOS temporary directory.
+
+The FAX480 VIS adapter now tolerates gaps shorter than 15 ms within a 1900 Hz
+leader and requires a different classified tone to persist for one millisecond
+before leaving the leader. Start, break, data and parity validation remain in
+the shared VIS detector. Synthetic tests exercise dropouts and unclassified
+observations in either leader, short classified spikes followed by a dropout,
+longer gaps, missing break/data tones and wrong payload/parity. The synthetic
+spike regression failed before the change and passed afterwards. The first
+header from the failed B run was also acquired by an offline diagnostic with
+the native resampler, preprocessor and fast demodulator after the change; the
+separate capture is not guaranteed byte-identical to the application's input.
+
+The leader-dropout observation test now covers eight positions across both
+leaders, six dropout durations, one- and six-sample observation hops, and
+both low-confidence and valid but unclassified observations. The expected outcome distinguishes a 20 ms gap
+near the beginning of the first leader: the acquisition state resets, but
+the remaining 260 ms is still accepted as a leader. Longer interruptions in
+the other tested positions reject the first header, and a subsequent intact
+header is acquired. These are synthetic observations, not measured audio or
+proof that intermittent live acquisition has been eliminated.
+The data-dropout test also exercises all seven VIS payload bits, including
+wrong-bit controls, rather than only the first two bits.
+
+Two fresh full Decodium sessions exchanged consecutive VIS 85 images over
+BlackHole on macOS ARM64. A then B and B then A both produced two completed
+images with distinct acquisition IDs, full coverage and no reported dropped
+chunks, discontinuities or processing failures. Image A/B mean absolute errors
+were 0.237/0.138 on the 0–255 scale, with p95 zero for both. Artifacts are
+`.../decodium-fax480-consecutive-a-nhrzcako` and
+`.../decodium-fax480-consecutive-b-1qbswlzx`. The lab now retains audio for
+both headers and allows more time for two real-time transmissions. These
+selected local results do not prove immunity to all interference, physical
+radio performance or interoperability with independent applications.
+
+A follow-up regression confirmed the tone-change candidate must be cleared
+when an invalid or unclassified observation interrupts it; two separated
+sub-millisecond 1200 Hz spikes must not be treated as a continuous VIS break.
+The negative synthetic test passes. After that refinement, a further A then B
+application run acquired only the first image (`.../decodium-fax480-consecutive-a-raej8val`);
+that run did not retain the second header, so its exact cause is unknown. The
+next runs with continuous capture passed A then B and B then A, with full
+coverage, distinct IDs, zero reported RX discontinuities or dropped chunks,
+and the same A/B MAE/p95 values 0.237/0 and 0.138/0. Their artifacts are
+`.../decodium-fax480-consecutive-a-_q2sm0v5` and
+`.../decodium-fax480-consecutive-b-baumsvqo`. This mix of results means
+intermittent acquisition is not yet established as fully resolved.
+
+The harness now checks each acquisition shortly after image transmission
+starts, so a missed header ends the run early while retaining its capture.
+A further captured A/B run with this guard passed, with the same image metrics
+and clean RX counters; artifacts are
+`.../decodium-fax480-consecutive-a-5lrk3dm1` and
+`.../decodium-fax480-consecutive-b-ug28q28_`. Further captured repeats passed
+the same checks: A then B in `.../decodium-fax480-consecutive-a-k872nf_9`
+and `.../decodium-fax480-consecutive-a-tjirk62t`, and B then A in
+`.../decodium-fax480-consecutive-b-4tszzoky`. The earlier unrecorded
+second-header failure remains unexplained.
+
+On 2026-11-03 the consecutive full-application test was repeated in both
+orders with continuous BlackHole capture and receiver-side recent-audio
+exports. A then B and B then A both completed with full coverage, distinct
+acquisition IDs, and no reported dropped chunks, discontinuities or
+processing failures. The four exported receiver recordings each contained a
+recognised VIS 85 header. A/B image MAE was 0.237/0.138 and p95 was zero
+for both, on the 0–255 scale. Artifacts are
+`.../decodium-fax480-consecutive-a-dpbcvk28` and
+`.../decodium-fax480-consecutive-b-rhn9idn3`. These extra passes provide
+local repeatability evidence but do not identify the cause of the earlier
+uncaptured failure or establish general RF and independent interoperability.
+
+### Diagnostic export after a missed header
+
+The Receive page now offers an explicit **Save recent audio** action. It
+exports the bounded recent receiver buffer even if another image has already
+been recognised, which can preserve audio following that image when a later
+header is missed. The image-oriented export resolves the retained descriptor
+by its generation-namespaced identifier rather than treating the image
+identifier as the same value. An expired or unavailable descriptor falls
+back to the recent buffer and is not labelled as that acquisition; the bridge
+associates an exported recording with an image only while the image and
+retained descriptor still match. The export is post-resampler,
+post-preprocessing audio quantised to 16-bit WAV, not a bit-exact capture of
+the original sound-card input or the demodulator's float samples. Retention
+limits still apply.
+
+Controller A/B regressions acquire two synthetic Martin M1 examples and
+compare the image-only and recent exports, verify automatic descriptor
+selection and generation/ID correspondence, and exercise expired-descriptor
+and no-image fallbacks. The QML test exercises both save actions. Two local
+Decodium Radiofax transmissions also exported recent audio after a completed
+image; the WAVs were checked for 12 kHz mono samples, preamble-length audio,
+non-silent signal and an unassociated acquisition ID. A/B image MAE/p95 was
+0.172/0 and 0.106/0. Artifacts are
+`.../decodium-radiofax-centered-a-56213b63` and
+`.../decodium-radiofax-centered-b-eqmq3ssv`. The A WAV's signal check was
+run separately; the B harness checks it directly. These are local virtual
+audio controls, not an explanation of the intermittent missed VIS header or
+evidence of physical radio interoperability.
+
+### Captured missing VIS data symbol
+
+A later A-then-B two-application run reproduced a missed second VIS 85
+header. The receiver had completed the first image; it reported no dropped
+chunks, processing failures or discontinuities, but no second acquisition.
+The test retained its own postprocessed receiver audio for both headers in
+`.../decodium-fax480-consecutive-a-2pfdb3lj`. A separate coarse spectral
+diagnostic found VIS 85 in both recordings; it is not the receiver's decoder.
+
+Four-second 12 kHz signed-16-bit excerpts of that receiver audio are retained
+as `fax480-retained-vis-success.s16` (SHA-256
+`722c5e97b6f9648499d36c3b545daf7f22e38f833bd328f4963b40e9d7eaff4d`)
+and `fax480-retained-vis-missed.s16` (SHA-256
+`6e112f1ccb4d16ce77c18ad397d16d6cb19b1e72ee797ebe0d455a0e4b755909`).
+The native fast demodulator and FAX480 VIS adapter acquired the first but
+not the second before the fix. Tracing the latter showed that an approximately
+11 ms interruption and a brief classified spike split the first 30 ms data
+symbol into separate events. The adapter now confirms tone changes for one
+millisecond across symbols as well as the leader, and tolerates gaps shorter
+than 12 ms within symbols; the existing VIS payload, parity and control-tone
+checks remain in force. Both excerpts now acquire in the component regression.
+Synthetic A/B controls cover two data bits, 8/10 ms gaps and a short spike;
+16/30 ms gaps, wrong bits, wrong parity and missing control tones are rejected.
+The separately exported PCM is quantised, so this reproduces the failure in
+the selected offline path but does not prove the exact floating-point samples
+or establish that every intermittent missed header had the same cause.
+
+After the change, two Decodium application sessions sent A then B and B then
+A in continuous reception over BlackHole on macOS ARM64. All four headers
+were recognised and found by the separate coarse VIS diagnostic in the
+receiver's retained WAVs; all four images had full coverage, distinct
+acquisition IDs, no reported audio discontinuities or dropped chunks, and
+A/B MAE/p95 of 0.237/0 and 0.138/0. Artifacts are
+`.../decodium-fax480-consecutive-a-wh454u7a` and
+`.../decodium-fax480-consecutive-b-ltt37zwy`. The test-mode harness can save
+the receiver buffer at each header with `DECODIUM_LAB_FAX480_RETAIN_RX_AUDIO=1`.
+As A/B negative controls, a VIS transmitter was paired with a Dayton-profile
+receiver; both runs exited with the expected missing-acquisition error after
+saving a WAV and metadata, and the coarse diagnostic found VIS 85 in each
+(`.../decodium-fax480-consecutive-a-1ueufyxi`,
+`.../decodium-fax480-consecutive-b-209w_9a5`). Those selected local tests
+do not establish immunity to all dropouts, RF performance or independent
+application interoperability.
+
+The interrupted-symbol fix was then exercised through two full Decodium
+application pairs on macOS, using a BlackHole 16-channel to 2-channel relay.
+For each A/B image the relay inserted a 0.5 ms 1200 Hz spike followed by
+10 ms of silence seven milliseconds into the first VIS data bit. Separate
+source and altered relay captures confirmed that the affected original
+segment was predominantly 1100 Hz, that all 480 dropout samples per channel
+were zero, and that the 24 spike frames matched the requested waveform. The
+relay reported no clipping, underflow or overflow. Both images completed with
+100% reported coverage and no receiver discontinuities or dropped chunks;
+A/B MAE/p95 were 0.237/0 and 0.138/0. App artifacts are
+`.../decodium-fax480-two-app-libsstv-vis-480-iyjffggc` and
+`.../decodium-fax480-two-app-libsstv-vis-480-gk2xot30`; relay artifacts are
+`.../decodium-fax480-vis-dropout-a-z3fusvfd` and
+`.../decodium-fax480-vis-dropout-b-rnqmgzn_`. The automatic capture check
+ran within the B harness; the same validation was applied separately to both
+recordings after extending it to check the spike waveform. Reproduce with
+`python3 tests/sstv/tools/run_fax480_vis_dropout_two_app_lab.py a` and then
+`b`. A/B negative checks modified one dropout sample in temporary copies of
+the recorded relay audio; the validation rejected both. This is a controlled
+virtual-audio impairment, not an RF or independent
+application test, and does not establish recovery from every possible gap.
+
+Another captured A/B repetition passed in both orders with the same MAE/p95
+of 0.237/0 for A and 0.138/0 for B, full image checks and clean RX counters.
+Artifacts are `.../decodium-fax480-consecutive-a-qn4hjb4p` and
+`.../decodium-fax480-consecutive-b-gzzf6z0m`. These additional successes do
+not identify the cause of the earlier unrecorded failure.
+
+The first headers from the failed `a-7zgx0edh` and `b-e7itu2hs` runs are
+retained as five-second, mono 48 kHz signed-16-bit little-endian fixtures
+`tests/sstv/fixtures/fax480-vis-dropout-{a,b}.s16`. They are excerpts of the
+separately recorded BlackHole signal, not samples captured inside the RX
+application. SHA-256 A/B are
+`1abdc704748ccb936b45ef490679179c5e970418bbf3170ef5ddbac23463c439` and
+`45a9b2701a512cf0bc296e18ade295e27065e5e851051591716784b2d1562dac`.
+`test_sstv_fax480` replays both through the native resampler, preprocessor
+and fast demodulator, requires acquisition, and repeats each with the VIS
+break silenced as a negative control. Both original and negative A/B cases
+pass. This does not establish that the separately captured audio is identical
+to the application's input or explain the later unrecorded missed header.
+
+The `qsstv-500` convention was also exercised with consecutive images in
+one local Decodium RX session. A then B and B then A both completed with
+500 lines, distinct acquisition IDs and no reported processing failures,
+dropped chunks or discontinuities. Image A/B MAE/p95 were 0.109/0 and
+0.065/0 on the 0–255 scale. Artifacts are
+`.../decodium-fax480-consecutive-a-b89xseqr` and
+`.../decodium-fax480-consecutive-b-63p5sy96`. This is a Decodium-to-Decodium
+virtual-audio test of the named profile, not independent QSSTV or RF evidence.
+The `fax480ConsecutiveImagesRearmAB` runtime regression now also covers the
+500-line profile alongside Dayton and VIS 85, and passed on macOS ARM64.
+
+### Dayton FAX480 A/B with an independent codec
+
+The separately maintained [Revenant](https://github.com/Locke-Werks/Revenant)
+SSTV codec at pinned commit `67da9f8767b2a250792a6f5a5b2a69f5bc992b6d`
+was compiled unchanged with the narrow laboratory adapter documented in
+[AVT protocol notes](AVT_PROTOCOL.md). Its FAX480 profile uses 512×480 gray
+pixels, a 5.12 ms sync and 262.144 ms scan. The adapter writes a PGM for
+gray output. It invokes the codec, not the project's complete application.
+
+Two detailed, generated grayscale A/B rasters were encoded and decoded by
+the independent codec as self-controls. Both completed 480 rows; against
+the input rasters, A/B MAE was 0.297/0.365, p95 0/0 and maximum error
+63/37. The self-controls establish the selected codec and adapter path only.
+
+In the external-TX-to-Decodium direction, the same generated audio files
+were converted from mono to stereo and replayed at gain 0.8 through BlackHole
+into full Decodium RX sessions configured for `dayton-480`. Both completed
+with full reported coverage and zero reported discontinuities, dropped
+chunks and processing failures. Direct A/B image MAE was 0.420/0.503, p95
+0/0 and maximum error 79/82 against the original rasters. Artifacts are
+`.../decodium-avt-interference-ydblgjxv` and
+`.../decodium-avt-interference-xfcy98qz`.
+
+In the Decodium-TX-to-external-RX direction, two Decodium TX sessions
+transmitted the same A/B rasters and were captured through BlackHole. The
+separately recorded stereo audio was converted to mono and the external
+codec decoded complete 512×480 FAX480 images; direct MAE was 0.134/0.174,
+p95 1/1 and maximum error 16/15 against Decodium's prepared references. TX
+artifacts are `.../decodium-fax480-tx-dayton-480-lil3nwv8` and
+`.../decodium-fax480-tx-dayton-480-hhi5g_8d`; generated audio and PGM files
+are under `/tmp/decodium-revenant-avt-test`. The 8 MAE / 10 p95 gate was
+used throughout. Earlier two-Decodium continuous RX A/B results are recorded
+above. These are file-mediated codec comparisons and virtual audio, not live
+GUI-to-GUI, WEFAX/HFFAX, other FAX480 conventions, physical radio or RF
+evidence.
+
+### Independent Isobar WMO radiofax investigation
+
+The separate [Isobar](https://github.com/skgsara/isobar) WEFAX project at
+commit `111bd184a962b82ebde72aa07a34f9905e5b2f89` was built from unchanged
+C++17 CLI and core sources using
+`tests/sstv/tools/build_isobar_oracle.sh CHECKOUT OUTPUT`. Its `demod-test`
+passed for 1500/2300 Hz, and its `invphasing-test` passed batch and live
+chunk controls on the project's own VMW off-air excerpt. The unmodified CLI
+also produced images from its JMH and VMW sample WAVs. The sample provenance
+is as described by that project; those runs do not provide independent
+ground-truth images. The local unmodified CLI SHA-256 was
+`f7c243d695fca0357e6cb45617c29c738a6bbba13a43ca46b6b36bbcadad4996`.
+
+Two detailed 128×120 grayscale images were sent by Decodium using IOC 576,
+120 LPM and the explicit 4.5% WMO dead sector. Two local Decodium receivers
+detected the stop and reconstructed 120 lines with A/B MAE 0.306/0.359 and
+p95 2/3, without reported discontinuities, dropped chunks or processing
+failures. Their separately captured audio was converted to mono 22050 Hz
+16-bit WAV for Isobar. Artifacts are
+`.../decodium-radiofax-centered-a-uubgtgbx` and
+`.../decodium-radiofax-centered-b-3g6a4g6_`; inputs and Isobar outputs are
+under `/tmp/decodium-isobar-test`.
+
+The unmodified Isobar CLI emitted 1500×262 and 1500×261 rasters including
+the preamble. Its reported lock/corrected/coasted counts were 60/3/199 and
+59/2/200. Estimating the image start as the first captured 10 ms RMS block
+above 0.1 plus the nominal 35-second preamble gives row 87 in both outputs;
+this estimate includes unknown VOX/capture timing and is not an exact anchor.
+After resizing the full 1500-pixel line to 128 pixels, the unshifted
+estimated-row comparisons gave A/B MAE 50.499/39.577 and p95 207/187.
+These fail the earlier 8/15 gate, although the full-line comparison also
+includes the 4.5% dead sector and should not be mistaken for a definitive
+standard-aligned raster.
+
+A separate **post-hoc diagnostic** searched rows ±12 around the estimated
+row and circular horizontal starts in five-pixel steps, mapping 1433 of the
+1500 output columns to the approximately 95.5% active image sector. Best A/B
+MAE was 26.810/2.418, p95 175/4, at row 89 and columns 110/65. The A result fails
+and the B offset was selected after seeing the image, so neither establishes
+a direct passing interoperability test. `analyze_isobar_radiofax.py` performs
+this diagnostic; `test_analyze_isobar_radiofax.py` covers synthetic A/B
+full-line and active-sector controls and rejects silence. NumPy and FFmpeg
+are laboratory dependencies, not application dependencies.
+
+The original analysis mistakenly described the configured dead sector as 5%
+and used 1425 active columns, yielding post-hoc A/B MAE 27.551/2.427. The
+TX/RX mapper and UI actually use 4.5%; the 1433-column results above were
+recomputed from the same original recordings. At a 1500-column output,
+95.5% is 1432.5 columns, so 1433 is an approximation, not an exact sample
+boundary or an independent standard-alignment proof. Repeating the same
+post-hoc A/B search with 1432 columns gave MAE/p95 27.292/175 and 2.418/4,
+at the same row 89 and columns 110/65; this sensitivity does not change the
+conclusion that A fails and B is post-hoc aligned.
+
+To explore tracking, a disposable isolated CLI build changed only the call
+to `scan_lines` to disable tracking; the documented patch is
+`tests/sstv/fixtures/isobar-no-tracking-diagnostic.patch` and the build
+wrapper accepts `--no-tracking`. Its binary SHA-256 was
+`e5bb0df900d9bd9f11aa35c51b594e567ce774e62a98389b47848a4d386863e2`.
+On the same A/B WAVs, the corrected post-hoc active-sector search gave MAE
+1.968/2.423 and p95 4/4, at row 89 and columns 1440/1375. It suggests
+Isobar's tracking affects the observed A discrepancy, but the manually
+selected offsets, separate receiver, resampling, partial/estimated
+preamble timing and altered CLI do not establish a direct standard-aligned
+pass or a Decodium or Isobar defect. The two original TX captures have not
+been modified. RF and live GUI interoperability remain unverified.
+
+A further disposable instrumentation of Isobar's line emission logged its
+internal phase, state and inverted-phasing mode without changing the decode
+logic. Its A/B output rasters were byte-identical to the unmodified CLI's.
+The wrapper's `--trace-phase` option applies
+`tests/sstv/fixtures/isobar-phase-trace-diagnostic.patch` to a temporary copy.
+In the post-hoc selected image rows 89–208, phase changed seven times in A
+and zero times in B; all those A changes occurred while the receiver reported
+coasting in inverted-phasing mode. The source includes both measured-period
+phase updates and content-based dropout correction in that mode, so these
+logs alone do not attribute the changes to either mechanism. A second
+instrumentation logged the nonzero return from the content-based dropout
+correction: A produced corrections of +386, -476, +469 and -485 samples on
+output rows 119, 134, 149 and 164; B produced none. Both instrumented
+rasters were again byte-identical to the corresponding unmodified output.
+This second diagnostic can be rebuilt with the wrapper's `--trace-lag`
+option and `tests/sstv/fixtures/isobar-lag-trace-diagnostic.patch`; it patches
+a temporary copy, not the checked-out external source.
+This identifies the source of those four phase jumps in this experiment,
+but does not establish whether the correction is appropriate for other
+recordings or why these particular image features triggered it. Segment-wise
+post-hoc searches on A showed large errors concentrated in the middle of
+the image; with the diagnostic tracking disabled, all five segments had
+MAE below 2.1 after individually selected horizontal alignment. That earlier
+segment analysis used a 1425-column (95%) approximation, not the actual
+4.5% dead-sector setting, and is retained only as a historical diagnostic. The trace
+is additional evidence about this receiver and these captures, not a direct
+interoperability pass or proof of a defect in either implementation.
+
+#### Partial off-air observations
+
+The same pinned Isobar checkout supplies two WAV excerpts described by that
+project as off-air JMH and VMW receptions. They are different stations and
+images, not a controlled A/B pair with identical conditions, and no original
+image is supplied as ground truth. Each was resampled to 48 kHz stereo and
+replayed over BlackHole into a separate full Decodium receiver on macOS. A
+test-mode-only `DECODIUM_LAB_FAX_PARTIAL_SNAPSHOT=1` saves the latest partial
+Radiofax image every five seconds; it does not require or imply an APT stop.
+`tests/sstv/tools/run_radiofax_offair_observation.py` records the input hash,
+profile, output, receiver logs and summary, and rejects continuity failures.
+
+* `jmh-phasing-16k.wav`, SHA-256
+  `72ad54738f3e0b7aea715c5c1fe87ba903e86323a8eef4ce199fbde69977c23a`,
+  90 s, centered-phasing profile: one acquisition, 94 complete published
+  lines, no detected stop; artifacts `.../decodium-radiofax-offair-_bes7pg9`
+  and, after the final snapshot change, `.../decodium-radiofax-offair-q8b9u9dr`.
+* `vmw-phasing-12k.wav`, SHA-256
+  `e0d5c9b0b76fa8c47e53171c3d0d02451dafdbc25b4189857717f304f2ef3b6e`,
+  62 s, WMO-dead-sector profile: one acquisition, 41 complete published
+  lines, no detected stop; artifacts `.../decodium-radiofax-offair-am62csd1`
+  and, after the final snapshot change, `.../decodium-radiofax-offair-mgvfwdth`.
+
+Both snapshots contain visible content corresponding to the separate
+unmodified Isobar decodes of the same WAVs, with preamble and horizontal
+alignment differences. For each signal, the repeat's PNG was byte-identical
+to the earlier snapshot. No objective unshifted image-quality gate or full
+transmission was tested, and the recordings' RF origin is the external
+project's attribution. An eight-second silent WAV with the WMO profile
+produced no acquisition, no lines and no snapshot
+(`.../decodium-radiofax-offair-klhzut0j`; repeated after the final snapshot
+change in `.../decodium-radiofax-offair-jt0l95c_`). None of these tests verifies a
+physical radio, general standards compliance or full interoperability.
+
+`analyze_radiofax_partial_alignment.py` compares selected Decodium rows with
+the Isobar raster after resizing it to 512 columns. For JMH rows 35–89 and
+VMW rows 0–39, direct same-row MAE/p95 were 114.694/254 and 127.614/254.
+Searching every candidate row and circular horizontal shift in four-column
+steps after reception gave MAE/p95 14.348/54 and 19.569/140, at Isobar row
+120/83 and shifts 476/492 respectively. Mapping 486 of 512 candidate columns
+instead gave 31.398/109 and 14.776/95, showing sensitivity to the assumed
+active sector. For the actual 4.5% VMW setting, 489 of 512 columns approximate
+the 95.5% active sector and give post-hoc MAE/p95 19.446/145 at row 83 and shift
+488 on the coarse search. Crossing the two images under the full-width search gave
+MAE 108.181 and 69.928. These are comparisons between two decoders, not
+ground truth; the chosen row ranges, post-hoc search, resampling, large
+white areas and differing sector conventions limit their interpretation.
+Even the best fits do not pass the earlier 8/15 image gate. Synthetic A/B,
+crossed-image, active-sector and flat-input controls pass for the analysis
+tool. NumPy, FFmpeg and FFprobe are diagnostic dependencies only; CTest
+registers the synthetic check when its configured Python has NumPy.
+
+The optional `--refine` control searches individual columns near the winning
+coarse-row offset; it does not search every fine offset at every candidate
+row. With full width for JMH and 489 active columns for VMW, this gives
+row/shift 120/477 and 83/489, MAE/p95 10.903/38 and 9.241/44 respectively.
+Both still fail the 8/15 gate and remain post-hoc comparisons. Synthetic A/B
+tests with sub-step shifts verify that this local refinement can recover the
+known shift; they do not validate the selected row on real recordings.
+The corresponding aligned Pearson correlations are 0.971 and 0.941. These
+describe association between the two rasters and do not identify a correct
+decoder, remove the absolute-error failure or prove live interoperability.
+
+With partial snapshots enabled, two additional Decodium-to-Decodium 576/240
+transmissions of prepared images A and B verified that intermediate saves do
+not replace the terminal image. Both had full coverage, no reported audio
+discontinuities, and MAE/p95 0.172/0 and 0.106/0; the harness required both
+partial-snapshot and terminal-save log entries. Artifacts are
+`.../decodium-radiofax-centered-a-wkzo3inu` and
+`.../decodium-radiofax-centered-b-0_x84kel`. The A log was checked separately
+because its process was started just before the harness assertion was added.
 
 ## Phasing-level calibration
 
@@ -1355,8 +2828,9 @@ weather Radiofax receive configuration. For Dayton and QSSTV-style, the worker s
 start tone and first 1200 Hz line sync, then replays up to one second of
 observations to retain the beginning of the QSSTV-style image. It publishes
 progressive snapshots, keeps missing pixels uncovered, and publishes a partial
-image on an input discontinuity. After one image, stop and restart RX to arm
-another. Those profiles require the start tone and a selected convention; clock/slant
+image on an input discontinuity. After a completed frame, the receiver rearms
+automatically as described in the consecutive-reception section above. Those
+profiles require the start tone and a selected convention; clock/slant
 correction, difficult channels and independent application interoperability
 have not been established.
 
@@ -1610,6 +3084,18 @@ are `.../decodium-qsstv-exp-decode-7lc7nx0p` and
 
 #### Independent QSSTV self-loop control for the detailed rasters
 
+The detailed Decodium TX to unmodified QSSTV 10.0 failure was repeated after
+the earlier temporary captures had been cleaned up. Fresh generated A/B
+patterns were transmitted through BlackHole, and Decodium's offline capture
+decoder reported coverage 0.999996 for both and MAE 0.615/0.956. The pinned
+unmodified QSSTV receiver again failed the original 8/10 image gate: A/B
+MAE/p95/max were 5.202/24/240 and 4.210/25/225. Fresh capture directories
+are `.../decodium-fax480-tx-qsstv-500-85krfe8n` and
+`.../decodium-fax480-tx-qsstv-500-cbpky5qn`; QSSTV receiver directories
+are `.../decodium-qsstv-exp-decode-af16f6_g` and
+`.../decodium-qsstv-exp-decode-xj745ptf`. This repeat does not itself
+reproduce the separate QSSTV self-loop control below or prove RF behaviour.
+
 The locally built QSSTV-Experimental transmitter with the signed-PCM patch
 encoded the same TX-prepared 512×500 reference images. The unmodified QSSTV
 10.0 release receiver decoded those WAVs directly. Against the references,
@@ -1624,6 +3110,65 @@ cause, RF behavior, or all-image interoperability. The QSSTV TX WAVs are
 `/tmp/decodium-qsstv-pattern-{a,b}.wav` and the receiver images are in
 `/tmp/decodium-qsstv-self-pattern-{a,b}`. The release receiver emitted the
 same duplicate Qt framework warnings described above.
+
+After the previous temporary files were cleaned up, the control was repeated
+against the two fresh Decodium references above. A fresh isolated checkout of
+QSSTV source revision `a84584248d3307bfa081362031ff20f365337633`, with only
+`qsstv-experimental-10.0-signed-pcm.patch` applied, was built with installed
+Qt and used solely to generate the A/B WAVs. Its binary SHA-256 was
+`0b5f9be85f09208e60405fc46c64af45544e59080b227637240acdce26c719e6`.
+The unmodified 10.0 release decoded both WAVs. Against the prepared images,
+its own TX/RX result was MAE/p95/max 5.303/24/254 and 4.276/26/246. Without
+alignment, comparing the unmodified receiver's Decodium-TX image with its
+QSSTV-TX image gave 0.307/0/128 and 0.318/1/130. This reproduces the shared
+receive-side discrepancy and argues against changing Decodium's standard
+transmitter solely to improve this one receiver. It does not meet the 8/10
+original-reference gate, and the locally patched transmitter is not the
+unmodified release. The WAVs are `/tmp/decodium-qsstv-fax-self-{a,b}.wav`,
+the receiver outputs are `/tmp/decodium-qsstv-fax-self-{a,b}`, and the
+fresh build is `/tmp/decodium-qsstv-fax-self-build`.
+
+A further external-only diagnostic tested whether horizontally rotating the
+input by two pixels would safely compensate the QSSTV receive offset. Two
+new images retained the detailed patterns but deliberately used contrasting
+four-pixel strips on both edges. The signed-PCM-patched QSSTV transmitter
+encoded each image both normally and with a two-column circular rotation;
+the unmodified 10.0 receiver decoded all four WAVs. Against the original
+images, the unshifted A/B full-image MAE/p95 were 7.01/26 and 5.98/37; with
+rotated inputs they were 3.20/9 and 2.77/6. However, the four rightmost
+columns still had MAE/p95 82.89/255 in both rotated cases, and the four
+leftmost had 30.74/106. The full-image percentile therefore masks severe
+edge loss. These results do not justify silently rotating or truncating
+Decodium's standard transmission to make the aggregate gate pass. They are
+offline independent-software diagnostics, not Decodium A/B application
+tests. Inputs and waveforms are `/tmp/fax-edge-{a,b}*.{png,wav}` and
+receiver images are `/tmp/fax-edge-decode-*`.
+
+The same two edge-marked WAVs were decoded with two freshly built,
+same-source QSSTV binaries: baseline and the existing experimental patch
+that moves FAX480 RX sampling 12 samples earlier at 12 kHz. Against the
+originals, baseline A/B full-raster MAE/p95 were 7.011/26 and 5.984/37;
+earlier sampling gave 2.566/7 and 2.210/4. Nevertheless, the earlier RX
+still had left-edge MAE/p95 22.59/98 and 22.58/98, and right-edge 28.55/120
+for both. The baseline RX had edge p95 255 on both sides. In the examined
+QSSTV state machine, `getPixels()` consumes the current sample and cannot
+retrieve samples before entering the pixel state; moving target timestamps
+alone therefore cannot establish complete edge recovery. This is source
+inspection and a modified-independent-receiver diagnostic, not a change to
+Decodium or a successful unmodified QSSTV gate. Outputs are in
+`/tmp/fax-edge-{baseline,earlier}-{a,b}`.
+
+The same fresh QSSTV-generated A/B WAVs were also replayed through BlackHole
+into separate full Decodium receivers configured for `qsstv-500`. For these
+detailed 512 x 500 references, Decodium received full coverage with no
+reported dropped chunks, discontinuities or processing failures. Direct
+A/B MAE/p95/max were 0.337/2/39 and 0.432/2/39; crossed-reference MAE was
+74.842 and 74.849. Artifacts are
+`.../decodium-qsstv-exp-app-0-2l30fvde` and
+`.../decodium-qsstv-exp-app-1-8dinbl4c`. This is file-mediated audio from
+the signed-PCM-patched independent transmitter, not an unmodified release
+transmitter or live RF. The replay harness accepts `QSSTV_EXISTING_WAV` and
+`QSSTV_REFERENCE_IMAGE` together and checks continuity throughout RX.
 
 As a further diagnostic, sample delays of 25, 35, 60 and 70 at 48 kHz were
 applied to the scan regions of each original capture, preserving their sync
@@ -1720,6 +3265,17 @@ Artifacts are `.../decodium-radiofax-centered-a-3oltcw4s` and
 `DECODIUM_LAB_RADIOFAX_WMO_DEAD_SECTOR=1` and
 `DECODIUM_LAB_RADIOFAX_PARTIAL_STOP=1` using
 `tests/sstv/tools/run_radiofax_centered_two_app_lab.py a` and `b`.
+The pixel-coverage assertions were also applied to the WMO clock test: all
+three components of every pixel in the 120 received rows must be covered,
+while every pixel in the remaining 30 rows must be uncovered, and the frame
+must be partial. A further two-application A/B run used IOC 288 at 240 LPM;
+the terminal diagnostics passed the exact 120-of-150-row coverage checks, with
+no reported audio discontinuities. Component MAE was 0.309 and 0.248,
+respectively, with p95 zero for both images. Artifacts are
+`.../decodium-radiofax-centered-a-pbee_25q` and
+`.../decodium-radiofax-centered-b-_3rkkkzu`. Reproduce by setting
+`DECODIUM_LAB_RADIOFAX_IOC=288` alongside the two variables above and passing
+`a 240` or `b 240` to the laboratory script.
 The two-Decodium tests exercise the nominal stop. Separately, a synthetic
 continuous-phase audio generator sent 16 raster lines followed by alternating
 1500/2300 Hz stop modulation at 440 and 460 Hz over BlackHole 2ch into a full
@@ -2176,3 +3732,68 @@ using `--first-frame 768000 --removed-lines 3 --line-frames 24000` and the
 respective `--end-line-frame` values above. `test_sstv_radiofax_phasing_variant`
 and `test_sstv_radiofax_alignment_analyzer` passed on this Mac. FLdigi was
 stopped after each isolated replay; this is not RF evidence.
+
+### Open acquisition issue: wide white phasing interference
+
+`autoReceiverRejectsBroadFalseWhitePhasingAB` exercises a clock change in both
+directions and repeated white interference spanning 25–90% of a phasing line.
+The current receiver starts the image prematurely in both cases; these two
+assertions are recorded as expected failures. Shorter 25–65% interference is
+rejected in the same test. This is synthetic observation-level evidence, not
+an audio or two-application proof.
+
+A provisional detector that delayed a candidate and compared the following
+line rejected repeated interference, but still accepted the final disturbed
+line when normal phasing resumed. With clock displacement, the next candidate
+window contained 63 white observations out of 500 in one false case, while a
+valid end line produced 88 out of 500 in another case. A simple white-fraction
+threshold therefore risks rejecting valid signals. The provisional detector
+was removed; a solution needs to retain the original raster anchor while
+distinguishing resumed phasing from legitimate image content, and must be
+verified with real audio and two application sessions.
+
+Subsequent development added confirmation over a one-line window searched
+within one quarter line of the candidate, retaining the original candidate
+for raster alignment. With at least 75% white in one such window, the
+observation-level A/B test above now passes, as do controls with a noisy end
+line and image rows resembling phasing. The earlier expected-failure statement
+describes the pre-change receiver. This threshold does not guarantee rejection
+of all longer or differently positioned disturbances, and the synthetic result
+alone does not demonstrate performance on an audio path.
+
+On the source build with this confirmation, centered IOC 288 / 240 LPM
+ordinary audio passed between two Decodium sessions over BlackHole 2ch for
+fixtures A and B. Both reported complete coverage and zero discontinuities;
+mean absolute pixel errors were 0.1721 and 0.1059 respectively. These clean
+audio runs are regression controls, not a demonstration of the broad
+interference fix. The Radiofax core suite and the runtime audio, consecutive
+image and direct-stop tests also passed. Artifacts for the two local app runs
+are `.../decodium-radiofax-centered-a-obw6u6d2` and
+`.../decodium-radiofax-centered-b-7vlsoyv8` in the macOS temporary directory.
+
+An additional real-audio control replaced 65% of eight consecutive phasing
+lines with 2300 Hz audio in each of the original centered A/B captures. The
+helper `prepare_radiofax_phasing_glitch.py --broad-white` checks that every
+replacement targets a black tone; its tests check the exact changed intervals.
+With the preceding build, both modified captures caused premature reception
+of 150 rows and no Radiofax stop. This exposed a second path: before a clock
+was confirmed, candidate verification was bypassed. The receiver now applies
+the white-line check during acquisition too; the observation-level early
+interference regression passes at both clock offsets. The modified A capture
+then recovered 120 rows with stop detected, zero reported discontinuities and
+MAE 0.1721 (p95 0); its replay is
+`.../decodium-fldigi-radiofax-replay-x3re9jy_`. These are recordings modified
+after capture, not RF or proof for arbitrary interference.
+The modified B capture likewise recovered 120 rows with stop detected, zero
+reported discontinuities and MAE 0.1059 (p95 0); its replay is
+`.../decodium-fldigi-radiofax-replay-0yt5rcj_`.
+
+After enabling the confirmation during initial clock acquisition, clean
+IOC 288 / 240 LPM A/B exchanges were repeated between two full Decodium
+applications. Both achieved full coverage, detected stop and reported zero
+discontinuities; MAE was 0.1721 and 0.1059 with p95 zero. Artifacts are
+`.../decodium-radiofax-centered-a-_ginwv6x` and
+`.../decodium-radiofax-centered-b-nej2v4mg`. The updated component and
+impairment-helper CTests passed, as did the rebuilt runtime's Radiofax audio,
+consecutive-image and direct-stop cases. These clean-signal regression checks
+complement the modified-recording tests above; they are not RF evidence.

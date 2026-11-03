@@ -288,6 +288,8 @@ public:
         bool partial {false};
         bool cancelled {false};
         bool radiofaxStopDetected {false};
+        bool radiofaxClockProvisional {false};
+        bool radiofaxTimedPhasing {false};
         // Stable receiver-session key.  Unlike the route generation and
         // progressive image revision, this changes for back-to-back frames
         // received without restarting the audio route.

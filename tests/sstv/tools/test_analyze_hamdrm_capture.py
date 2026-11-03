@@ -2,6 +2,7 @@
 """A/B independent QSSTV samples and a wrong-reference negative control."""
 from pathlib import Path
 import array
+import os
 import random
 import subprocess
 import sys
@@ -24,6 +25,13 @@ with tempfile.TemporaryDirectory(prefix='decodium-hamdrm-analyze-') as directory
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
         assert result.returncode == 0 and b'exact=1' in result.stdout, result.stdout + result.stderr
         other = 'b' if variant == 'a' else 'a'
+        temporal_env = os.environ.copy()
+        temporal_env.pop('DECODIUM_HAMDRM_TEMPORAL_PILOTS', None)
+        temporal_env['DECODIUM_HAMDRM_TEMPORAL_MERGE'] = '1'
+        for ref, expected_code in ((variant, 0), (other, 1)):
+            result = subprocess.run(common + [str(fixtures / f'qsstv-image-{ref}.jpg'), 'short', 'adaptive-multistage'],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, env=temporal_env)
+            assert result.returncode == expected_code and f'exact={1 - expected_code}'.encode() in result.stdout, result.stdout + result.stderr
         result = subprocess.run(common + [str(fixtures / f'qsstv-image-{other}.jpg'), 'short'],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
         assert result.returncode == 1 and b'exact=0' in result.stdout, result.stdout + result.stderr
@@ -87,4 +95,8 @@ with tempfile.TemporaryDirectory(prefix='decodium-hamdrm-analyze-') as directory
                                      str(fixtures / 'qsstv-image-b.jpg'), 'long', estimator],
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             assert result.returncode == 1 and b'objects=0' in result.stdout and b'exact=0' in result.stdout, result.stdout + result.stderr
+        result = subprocess.run([str(binary), str(pcm), 'E', '2500', '16', '0.12', '0.30',
+                                 str(fixtures / 'qsstv-image-a.jpg'), 'long', 'adaptive-multistage'],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, env=temporal_env)
+        assert result.returncode == 1 and b'objects=0' in result.stdout and b'exact=0' in result.stdout, result.stdout + result.stderr
         print('PASS hybrid noise rejection', seed)

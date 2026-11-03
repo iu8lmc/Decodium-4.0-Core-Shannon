@@ -926,3 +926,9 @@ foreach (_decodium_regression_test_target IN LISTS
 endforeach ()
 unset (_decodium_regression_test_target)
 unset (_decodium_regression_test_targets)
+
+add_executable(test_multisettings_switch test_multisettings_switch.cpp)
+target_include_directories(test_multisettings_switch PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_multisettings_switch wsjt_qt wsjt_cxx wsjt_fort Qt6::Test Qt6::Widgets)
+add_test(NAME test_multisettings_switch COMMAND $<TARGET_FILE:test_multisettings_switch>)
+set_tests_properties(test_multisettings_switch PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

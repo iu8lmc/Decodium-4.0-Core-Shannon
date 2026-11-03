@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay a captured AVT signal with a controlled continuous tone on macOS."""
+"""Replay a captured AVT or Dayton FAX480 signal with optional interference."""
 import array
 import ctypes as c
 import ctypes.util
@@ -19,9 +19,12 @@ argv = sys.argv[:-1] if partial_expected or no_image_expected else sys.argv
 if len(argv) not in (6, 7):
     raise SystemExit('expected MODE capture.f32 reference.png tone_hz tone_peak [output_gain] [--expect-partial]')
 mode, source, reference = argv[1], Path(argv[2]).resolve(strict=True), Path(argv[3]).resolve(strict=True)
-if mode not in {'avt-24', *(f'avt-{duration}-{variant}' for duration in ('24','90','94')
-                             for variant in ('qrm','narrow-qrm'))}:
+if mode not in {'fax480-dayton', 'avt-24', *(f'avt-{duration}-{variant}' for duration in ('24','90','94')
+                             for variant in ('narrow','qrm','narrow-qrm'))}:
     raise SystemExit('unsupported test mode')
+is_fax = mode == 'fax480-dayton'
+if is_fax and (partial_expected or no_image_expected):
+    raise SystemExit('fax replay only supports complete-image checks')
 frequency, amplitude = float(argv[4]), float(argv[5])
 gain = float(argv[6]) if len(argv) == 7 else 0.8
 if not math.isfinite(frequency) or not 100 <= frequency <= 4000 or not math.isfinite(amplitude) or not 0 <= amplitude <= 0.2:
@@ -47,8 +50,9 @@ env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software',
 args = [str(binary), '--test-mode', '--rig-name', 'AVTNOISE' + secrets.token_hex(4),
         '--lab-no-cat', '--lab-audio-input', 'BlackHole 2ch', '--lab-audio-output', 'BlackHole 2ch',
         '--lab-reapply-ms', '500', '--lab-monitor-ms', '1800', '--lab-sstv-rx-ms', '3500',
-        '--lab-sstv-rx-mode', mode, '--lab-sstv-rx-ready-file', str(root / 'ready'),
+        '--lab-sstv-rx-ready-file', str(root / 'ready'),
         '--lab-sstv-rx-image-file', str(root / 'received.png'), '--lab-quit-ms', str(duration_ms)]
+args += ['--lab-sstv-fax480-rx', 'dayton-480'] if is_fax else ['--lab-sstv-rx-mode', mode]
 
 class Info(c.Structure):
     _fields_ = [('version', c.c_int), ('name', c.c_char_p), ('host', c.c_int), ('inputs', c.c_int),
@@ -137,7 +141,8 @@ try:
             raise RuntimeError('expected VIS was not detected in no-image control; artifacts ' + str(root))
         print('PASS AVT no-image control', mode, 'no processing or audio errors; artifacts', root, flush=True)
         sys.exit(0)
-    if not lines[-1].get('imageComplete') or lines[-1].get('imageMode') != mode:
+    expected_mode = 'fax480-experimental' if is_fax else mode
+    if not lines[-1].get('imageComplete') or lines[-1].get('imageMode') != expected_mode:
         raise RuntimeError('receiver did not produce a complete image; artifacts ' + str(root))
     received = root / 'received.png'
     if not received.exists(): raise RuntimeError('RX image not saved; artifacts ' + str(root))
@@ -148,8 +153,15 @@ try:
           'active_signal_rms', active_rms, 'nominal_sir_db', ratio_db,
           'output_gain', gain, 'mixture_peak', peak, 'discontinuities', lines[-1].get('discontinuities'),
           'artifacts', root, flush=True)
-    subprocess.run([sys.executable, str(repo / 'tests/sstv/tools/compare_sstv_lab_images.py'),
-                    str(reference), str(received), '--max-mae', '5', '--max-p95', '15'], check=True, timeout=30)
+    compare = [sys.executable, str(repo / 'tests/sstv/tools/compare_sstv_lab_images.py'),
+               str(reference), str(received), '--max-mae', '8' if is_fax else '5',
+               '--max-p95', '10' if is_fax else '15']
+    last_blue_limit = env.get('DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR')
+    if last_blue_limit is not None:
+        if is_fax:
+            raise RuntimeError('AVT terminal-component check cannot be used for FAX')
+        compare += ['--max-last-blue-error', last_blue_limit]
+    subprocess.run(compare, check=True, timeout=30)
     print('PASS AVT replay', mode, 'tone', frequency, 'peak', amplitude,
           'mixture peak', peak, 'discontinuities', lines[-1].get('discontinuities'), 'artifacts', root, flush=True)
 finally:
