@@ -1,10 +1,11 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "components"
 
 Dialog {
     id: catDialog
-    title: "CAT - Impostazioni Radio"
+    title: qsTr("CAT - Radio Settings")
     modal: true
     standardButtons: Dialog.Ok | Dialog.Cancel
     width: 440
@@ -17,21 +18,33 @@ Dialog {
     property color textSec:      (bridge && bridge.themeManager) ? bridge.themeManager.textSecondary : "#89B4D0"
     property color accent:       (bridge && bridge.themeManager) ? bridge.themeManager.primaryColor  : "#4A90E2"
     property color accentGreen:  (bridge && bridge.themeManager) ? bridge.themeManager.accentColor   : "#00FF88"
+    readonly property color dialogSurface: bridge && bridge.themeManager
+                                           && bridge.themeManager.isGlassTheme
+                                           && bridge.themeManager.glassTransparencySupported
+                                           ? Qt.rgba(bridge.themeManager.panelColor.r,
+                                                     bridge.themeManager.panelColor.g,
+                                                     bridge.themeManager.panelColor.b, 0.58)
+                                           : bgColor
 
     background: Rectangle {
-        color: bgColor
+        color: catDialog.dialogSurface
         border.color: accent
         border.width: 1
         radius: 8
     }
 
     header: Rectangle {
-        color: bgLight
+        color: bridge && bridge.themeManager && bridge.themeManager.isGlassTheme
+               && bridge.themeManager.glassTransparencySupported
+               ? Qt.rgba(bridge.themeManager.bgLight.r,
+                         bridge.themeManager.bgLight.g,
+                         bridge.themeManager.bgLight.b, 0.42)
+               : bgLight
         height: 40
         radius: 8
         Label {
             anchors.centerIn: parent
-            text: "⚙ CAT — Impostazioni Radio"
+            text: qsTr("⚙ CAT — Radio Settings")
             color: textColor
             font.pixelSize: 14
             font.bold: true
@@ -46,7 +59,7 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             Label { text: "Radio:"; color: textSec; Layout.preferredWidth: 100 }
-            ComboBox {
+            DecoComboBox {
                 id: rigCombo
                 Layout.fillWidth: true
                 model: bridge.catManager.rigList
@@ -105,12 +118,12 @@ Dialog {
                         width: rigComboPopup.width
                         spacing: 6
 
-                        TextField {
+                        DecoTextField {
                             id: rigSearchField
                             x: 8
                             width: parent.width - 16
                             height: 34
-                            placeholderText: "Cerca radio..."
+                            placeholderText: qsTr("Search radio...")
                             text: rigCombo.filterText
                             selectByMouse: true
                             color: textColor
@@ -157,7 +170,7 @@ Dialog {
                             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
                         }
                     }
-                    background: Rectangle { color: bgColor; border.color: accent; radius: 4 }
+                    background: Rectangle { color: catDialog.dialogSurface; border.color: accent; radius: 4 }
                 }
             }
         }
@@ -165,8 +178,8 @@ Dialog {
         // Serial port
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "Porta seriale:"; color: textSec; Layout.preferredWidth: 100 }
-            ComboBox {
+            Label { text: qsTr("Serial port:"); color: textSec; Layout.preferredWidth: 100 }
+            DecoComboBox {
                 id: portCombo
                 Layout.fillWidth: true
                 model: bridge.catManager.portList
@@ -177,13 +190,16 @@ Dialog {
                                  bridge.catManager.serialPort = editText
                 onEditTextChanged: if (bridge.catManager.serialPort !== editText)
                                        bridge.catManager.serialPort = editText
-                contentItem: TextField {
+                contentItem: DecoTextField {
                     leftPadding: 8
                     text: portCombo.editText
                     color: textColor
                     font.pixelSize: 12
                     background: Rectangle { color: "transparent" }
-                    onTextChanged: portCombo.editText = text
+                    // 1.0.352 fix: onTextEdited (solo input utente) invece di onTextChanged,
+                    // che scattava anche sull'update del binding text: portCombo.editText
+                    // rompendolo. Allineato a RigControlDialog.
+                    onTextEdited: portCombo.editText = text
                 }
                 background: Rectangle {
                     color: bgLight; border.color: accent; border.width: 1; radius: 4
@@ -201,14 +217,15 @@ Dialog {
                         model: portCombo.delegateModel
                         ScrollBar.vertical: ScrollBar {}
                     }
-                    background: Rectangle { color: bgColor; border.color: accent; radius: 4 }
+                    background: Rectangle { color: catDialog.dialogSurface; border.color: accent; radius: 4 }
                 }
                 Button {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     width: 28; height: 28
                     text: "↻"
-                    ToolTip.text: "Aggiorna porte"
+                    ToolTip.text: qsTr("Refresh ports")
+                    ToolTip.delay: 500
                     ToolTip.visible: hovered
                     onClicked: bridge.catManager.refreshPorts()
                     background: Rectangle { color: "transparent" }
@@ -220,8 +237,8 @@ Dialog {
         // Baud rate
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "Velocità (baud):"; color: textSec; Layout.preferredWidth: 100 }
-            ComboBox {
+            Label { text: qsTr("Speed (baud):"); color: textSec; Layout.preferredWidth: 100 }
+            DecoComboBox {
                 id: baudCombo
                 Layout.fillWidth: true
                 model: bridge.catManager.baudList
@@ -253,7 +270,7 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             Label { text: "PTT:"; color: textSec; Layout.preferredWidth: 100 }
-            ComboBox {
+            DecoComboBox {
                 id: pttCombo
                 Layout.fillWidth: true
                 model: ["CAT","DTR","RTS","VOX"]
@@ -284,7 +301,7 @@ Dialog {
             spacing: 20
             CheckBox {
                 id: autoConnectCheck
-                text: "Auto-connect CAT all'avvio"
+                text: qsTr("Auto-connect CAT on startup")
                 checked: bridge.catManager.catAutoConnect
                 onCheckedChanged: if (bridge.catManager.catAutoConnect !== checked)
                                       bridge.catManager.catAutoConnect = checked
@@ -310,7 +327,7 @@ Dialog {
             }
             CheckBox {
                 id: autoStartCheck
-                text: "Avvia audio alla connessione"
+                text: qsTr("Start audio on connect")
                 checked: bridge.catManager.audioAutoStart
                 onCheckedChanged: if (bridge.catManager.audioAutoStart !== checked)
                                       bridge.catManager.audioAutoStart = checked
@@ -346,7 +363,7 @@ Dialog {
             Label {
                 text: bridge.catConnected
                       ? "Connesso: " + bridge.catRigName + "  " + (bridge.frequency / 1e6).toFixed(6) + " MHz"
-                      : "Non connesso"
+                      : qsTr("Not connected")
                 color: bridge.catConnected ? accentGreen : "#f44336"
                 font.pixelSize: 11
             }
@@ -358,7 +375,7 @@ Dialog {
             Layout.alignment: Qt.AlignHCenter
             spacing: 12
             Button {
-                text: bridge.catConnected ? "Disconnetti" : "Connetti"
+                text: bridge.catConnected ? qsTr("Disconnect") : qsTr("Connect")
                 enabled: !bridge.catConnected
                 onClicked: {
                     bridge.catManager.rigName        = rigCombo.currentText
@@ -378,7 +395,7 @@ Dialog {
                 contentItem: Text { text: parent.text; color: parent.enabled ? accentGreen : "#666"; horizontalAlignment: Text.AlignHCenter; font.pixelSize: 12 }
             }
             Button {
-                text: "Disconnetti"
+                text: qsTr("Disconnect")
                 enabled: bridge.catConnected
                 onClicked: bridge.catManager.disconnectRig()
                 background: Rectangle {

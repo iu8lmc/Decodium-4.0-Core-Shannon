@@ -819,6 +819,30 @@ extern "C"
     *echo_delay_s = static_cast<float> (moon.echo_delay_s);
   }
 
+  // Stateless EME kinematics for the QML tracker. Reuse the native lunar
+  // model, not the simplified QML display (which assumes 144.1 MHz). No
+  // azel.dat writes, shared derivative history or Fortran global state.
+  bool decodium_moon_doppler_c(int year, int month, int day, double utcHours,
+                              double frequencyHz, char const* grid,
+                              double* oneWayHz, double* elevation)
+  {
+    if (!grid || !oneWayHz || !elevation || !std::isfinite(frequencyHz) || frequencyHz <= 0)
+      return false;
+    double westLongitude {}, latitude {};
+    grid_to_west_lon_lat(QByteArray(grid), westLongitude, latitude);
+    // Optional extended locator: move from the six-character cell centre
+    // to the centre of its selected tenth-width/tenth-height subsquare.
+    if (std::strlen(grid) == 8 && grid[6] >= '0' && grid[6] <= '9'
+        && grid[7] >= '0' && grid[7] <= '9') {
+      westLongitude -= (grid[6] - '0' + 0.5 - 5.0) * (5.0 / 600.0);
+      latitude += (grid[7] - '0' + 0.5 - 5.0) * (2.5 / 600.0);
+    }
+    MoonResult const moon = compute_moondop(year, month, day, utcHours, -westLongitude, latitude);
+    *oneWayHz = -frequencyHz * moon.vr_km_s / kLightKmPerSec;
+    *elevation = moon.el_deg;
+    return std::isfinite(*oneWayHz) && std::isfinite(*elevation);
+  }
+
   void astrosub(int nyear, int month, int nday, double uth, double freqMoon,
                 char const* mygrid, char const* hisgrid,
                 double* azsun, double* elsun, double* azmoon,

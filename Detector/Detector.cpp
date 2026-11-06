@@ -153,6 +153,13 @@ void Detector::applyInputGainLinear (float gain)
 qint64 Detector::writeData (char const * data, qint64 maxSize)
 {
   constexpr int kMaxKin = NTMAX * RX_SAMPLE_RATE;
+  bool const audioTrace = qEnvironmentVariableIsSet ("DECODIUM_LEGACY_AUDIO_TRACE");
+  qint64 const traceNow = audioTrace ? QDateTime::currentMSecsSinceEpoch () : -1;
+  if (audioTrace && m_audioTraceStartMs < 0)
+    {
+      m_audioTraceStartMs = traceNow;
+      m_audioTraceLastLogMs = traceNow;
+    }
   static unsigned mstr0=999999;
   qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
   unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
@@ -193,6 +200,33 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
                             sizeof (dec_data.d2[0]) - dec_data.params.kin) * m_downSampleFactor);
   size_t framesAccepted (qMin (static_cast<size_t> (maxSize /
                                                     bytesPerFrame ()), framesAcceptable));
+
+  if (audioTrace)
+    {
+      ++m_audioTraceWrites;
+      m_audioTraceInputFrames += static_cast<quint64> (maxSize / bytesPerFrame ());
+      m_audioTraceAcceptedFrames += static_cast<quint64> (framesAccepted);
+      if (traceNow - m_audioTraceLastLogMs >= 1000)
+        {
+          qInfo ().nospace ()
+            << "[LEGACY-AUDIO] detector inputFrames=" << m_audioTraceInputFrames
+            << " acceptedFrames=" << m_audioTraceAcceptedFrames
+            << " writes=" << m_audioTraceWrites
+            << " elapsedMs=" << (traceNow - m_audioTraceStartMs)
+            << " inputRate=" << (m_audioTraceInputFrames * 1000.0
+                                  / qMax<qint64> (1, traceNow - m_audioTraceStartMs))
+            << " acceptedRate=" << (m_audioTraceAcceptedFrames * 1000.0
+                                     / qMax<qint64> (1, traceNow - m_audioTraceStartMs))
+            << " bytesPerFrame=" << bytesPerFrame ()
+            << " kin=" << dec_data.params.kin
+            << " mstr=" << mstr;
+          m_audioTraceLastLogMs = traceNow;
+          m_audioTraceInputFrames = 0;
+          m_audioTraceAcceptedFrames = 0;
+          m_audioTraceWrites = 0;
+          m_audioTraceStartMs = traceNow;
+        }
+    }
 
   // Soundcard drift computation disabled per product requirement.
 

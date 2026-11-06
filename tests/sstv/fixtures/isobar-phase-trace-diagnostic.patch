@@ -1,0 +1,18 @@
+--- a/core/live.cpp
++++ b/core/live.cpp
+@@ -9,6 +9,7 @@
+  * docs/01-program-analysis.md sec. 3.2(7)(8)(10) is the spec. */
+ 
+ #include "live.h"
++#include <cstdio>
+ 
+ namespace {
+ const int LINE_SAMPLES = 4000;   /* one 120-rpm line = 0.5 s @ 8000 S/s */
+@@ -321,6 +322,7 @@
+     uint8_t px[FaxImage::WIDTH];
+     for (int i = 0; i < FaxImage::WIDTH; i++)
+         px[i] = buf[grid + ((8L * i) / 3 + phi) % LINE_SAMPLES];
++    std::fprintf(stderr, "LAB_PHASE %ld %ld %d %d\n", grid / LINE_SAMPLES, phi, state, int(inv_mode));
+     line_cb(px, state, ud);
+ }
+ 

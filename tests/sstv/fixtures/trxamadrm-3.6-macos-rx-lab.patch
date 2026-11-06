@@ -1,0 +1,576 @@
+--- a/linux/rxamadrm/drmtst.c
++++ b/linux/rxamadrm/drmtst.c
+@@ -78,7 +78,7 @@
+   n = BUFSIZE;
+ 
+   /* initialisations */
+-  init_waterfall();                  /* init the waterfall window */
++  /* No display in the isolated virtual-audio laboratory. */
+ 
+   init_audio();
+   (void) demodulate(NULL, n, 1);	/* init static vars in demodulate */
+--- a/linux/rxamadrm/drawblock.c
++++ b/linux/rxamadrm/drawblock.c
+@@ -36,13 +36,5 @@
+ #define BLKSIZE 3
+ void drawblock(int x, int y, Display * display, GC theGC, Window mywin)
+ {
+-  int i, j, hblk;
+-
+-  hblk = (int) floor(BLKSIZE / 2 + 0.5);
+-  for (i = x - hblk + 1; i < x - hblk + 1 + BLKSIZE; i++)
+-
+-    {
+-      for (j = y - hblk + 1; j < y - hblk + 1 + BLKSIZE; j++)
+-	(void) XDrawPoint(display, mywin, theGC, i, j);
+-    } (void) XFlush(display);
++  (void)x; (void)y; (void)display; (void)theGC; (void)mywin;
+ }
+--- a/linux/rxamadrm/initaudio.c
++++ b/linux/rxamadrm/initaudio.c
+@@ -1,414 +1,20 @@
+-
+-/*
+-*  file:   initaudio.c 
+-*
+-* initializes  audio I/O via ALSA SYSTEM
+-* for transfer of audio to short int  buffer
+-*
+-* PA0MBO  - M.Bos  
+-* Date Feb 21st 2009
+-*
+-* 
+-*
+-*/
+-
+-/*************************************************************************
+-*
+-*                           PA0MBO
+-*
+-*    COPYRIGHT (C)  2009  M.Bos 
+-*
+-*    This file is part of the distribution package RXAMADRM
+-*
+-*    This package is free software and you can redistribute is
+-*    and/or modify it under the terms of the GNU General Public License
+-*
+-*    More details can be found in the accompanying file COPYING
+-*************************************************************************/
+-
+-#define CHUNK 4096
+-
++#include <portaudio.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <alsa/asoundlib.h>
+-#include <math.h>
+-#include <pthread.h>
+-#include <semaphore.h>
+-#include "drmdefs.h"
+-
+-/* static char *device = "hw:2,0"; playback devices */ 
+-static char *snddevices[4] = {"hw:0,0", "hw:1,0", "hw:2,0", "hw:3:0"} ;
+-char *device;
+-static snd_pcm_format_t format = SND_PCM_FORMAT_S16_LE;	/* sample format */
+-static unsigned int rate = 48000;	/* stream rate */
+-static unsigned int nchannels = 2;	/* count of channels */
+-static int resample = 0;	/* disable alsa-lib resampling */
+-static snd_pcm_sframes_t buffer_size;
+-static snd_pcm_sframes_t period_size;
+-static snd_output_t *output = NULL;
+-short int tmpbuf[100000];
+-int bufsize = 50000;
+-static int startptr;
+-static int fillptr;
+-int emptyptr;
+-volatile int bufcnt;
+-static int verbose = 0;
+-sem_t mutex ;
+-char *home;
+-char rxamaini[100];
+-
+-static int
+-set_hwparams(snd_pcm_t * handle, snd_pcm_hw_params_t * params,
+-	     snd_pcm_access_t access)
+-{
+-  unsigned int rrate;
+-
+-  snd_pcm_uframes_t size;
+-  int err,  dir;
+-
+-
+-  /* choose all parameters */
+-  err = snd_pcm_hw_params_any(handle, params);
+-  if (err < 0)
+-    {
+-      printf
+-	("Broken configuration for playback: no configurations available: %s\n",
+-	 snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* set hardware resampling  */
+-  err = snd_pcm_hw_params_set_rate_resample(handle, params, resample);
+-  if (err < 0)
+-    {
+-      printf("Resampling setup failed for record: %s\n", snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* set the interleaved read/write format */
+-  err = snd_pcm_hw_params_set_access(handle, params, access);
+-  if (err < 0)
+-    {
+-      printf("Access type not available for record: %s\n", snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* set the sample format */
+-  err = snd_pcm_hw_params_set_format(handle, params, format);
+-  if (err < 0)
+-    {
+-      printf("Sample format not available for record: %s\n",
+-	     snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* set the count of channels */
+-  err = snd_pcm_hw_params_set_channels(handle, params, nchannels);
+-  if (err < 0)
+-    {
+-      printf("Channels count (%i) not available for record: %s\n", nchannels,
+-	     snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* set the stream rate */
+-  rrate = rate;
+-  err = snd_pcm_hw_params_set_rate_near(handle, params, &rrate, 0);
+-  if (err < 0)
+-    {
+-      printf("Rate %iHz not available for record: %s\n", rate,
+-	     snd_strerror(err));
+-      return err;
+-    }
+-  if (rrate != rate)
+-    {
+-      printf("Rate doesn't match (requested %iHz, get %iHz)\n", rate, err);
+-      return -EINVAL;
+-    }
+-  size = 4 * CHUNK;
+-  err = snd_pcm_hw_params_set_buffer_size_near(handle, params, &size);
+-  if (err < 0)
+-    {
+-      printf("Unable to set buffer size %li for set near\n", size);
+-      exit(1);
+-    }
+-  err = snd_pcm_hw_params_get_buffer_size(params, &size);
+-  buffer_size = size;
+-  /* printf("buf_size set near %i got %i err %i \n", 4 * CHUNK, (int) size, err); */
+-
+-  /* set the period size */
+-  size = CHUNK;
+-  err = snd_pcm_hw_params_set_period_size_near(handle, params, &size, &dir);
+-  if (err < 0)
+-    {
+-      printf("Unable to set period size  %i for playback: %s\n", (int) size,
+-	     snd_strerror(err));
+-      return err;
+-    }
+-  err = snd_pcm_hw_params_get_period_size(params, &size, &dir);
+-  if (err < 0)
+-    {
+-      printf("Unable to get period size for playback: %s\n",
+-	     snd_strerror(err));
+-      return err;
+-    }
+-  period_size = size;
+-  /* printf("period size from get %i\n", (int) size); */
+-
+-  /* write the parameters to device */
+-  err = snd_pcm_hw_params(handle, params);
+-  if (err < 0)
+-    {
+-      printf("Unable to set hw params for playback: %s\n", snd_strerror(err));
+-      return err;
+-    }
+-  return 0;
++PaStream *lab_stream = 0;
++void init_audio(void) {
++  PaStreamParameters p = {0}; int i, found = -1, count = 0;
++  if (Pa_Initialize() != paNoError) exit(1);
++  for (i = 0; i < Pa_GetDeviceCount(); ++i) {
++    const PaDeviceInfo *d = Pa_GetDeviceInfo(i);
++    if (d && d->maxInputChannels >= 2 && strcmp(d->name, "BlackHole 2ch") == 0) { found = i; ++count; }
++  }
++  if (count != 1) { fprintf(stderr, "lab input not unique\n"); exit(1); }
++  p.device = found; p.channelCount = 2; p.sampleFormat = paInt16;
++  p.suggestedLatency = Pa_GetDeviceInfo(found)->defaultLowInputLatency;
++  if (Pa_OpenStream(&lab_stream, &p, 0, 48000, 1024, paNoFlag, 0, 0) != paNoError || Pa_StartStream(lab_stream) != paNoError) {
++    fprintf(stderr, "lab input open failed\n"); exit(1);
++  }
++  fprintf(stderr, "LAB RX BlackHole 2ch ready\n"); fflush(stderr);
+ }
+-static int set_swparams(snd_pcm_t * handle, snd_pcm_sw_params_t * swparams)
+-{
+-  int err;
+-
+-
+-  /* get the current swparams */
+-  err = snd_pcm_sw_params_current(handle, swparams);
+-  if (err < 0)
+-    {
+-      printf("Unable to determine current swparams for playback: %s\n",
+-	     snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* allow the transfer when at least period_size samples can be processed */
+-  /* or disable this mechanism when period event is enabled (aka interrupt like style processing) */
+-  err = snd_pcm_sw_params_set_avail_min(handle, swparams, buffer_size);
+-  if (err < 0)
+-    {
+-      printf("Unable to set avail min for playback: %s\n", snd_strerror(err));
+-      return err;
+-    }
+-
+-  /* write the parameters to the playback device */
+-  err = snd_pcm_sw_params(handle, swparams);
+-  if (err < 0)
+-    {
+-      printf("Unable to set sw params for playback: %s\n", snd_strerror(err));
+-      return err;
+-    }
+-  return 0;
+-}
+-
+-
+-
+-/*
+-* Underrun and suspend recovery
+-*/
+-static int xrun_recovery(snd_pcm_t * handle, int err)
+-{
+-  if (verbose)
+-    printf("stream recovery\n");
+-  if (err == -EPIPE)
+-    {				/* under-run */
+-      err = snd_pcm_prepare(handle);
+-      printf("recovered from xrun\n");
+-      if (err < 0)
+-	printf("Can't recovery from underrun, prepare failed: %s\n",
+-	       snd_strerror(err));
+-      return 0;
+-    }
+-  else if (err == -ESTRPIPE)
+-    {
+-      while ((err = snd_pcm_resume(handle)) == -EAGAIN)
+-	sleep(1);		/* wait until the suspend flag is released */
+-      if (err < 0)
+-	{
+-	  err = snd_pcm_prepare(handle);
+-	  if (err < 0)
+-	    printf("Can't recovery from suspend, prepare failed: %s\n",
+-		   snd_strerror(err));
+-	}
+-      return 0;
+-    }
+-  return err;
+-}
+-
+-
+-/*
+-* Transfer method - asynchronous notification
+-*/
+-static void async_callback(snd_async_handler_t * ahandler)
+-{
+-  snd_pcm_t *handle = snd_async_handler_get_pcm(ahandler);
+-
+-  /* signed short *samples = snd_async_handler_get_callback_private(ahandler); */
+-  snd_pcm_sframes_t avail;
+-  int err, err2;
+-
+-
+-  /* printf("in async_call back\n"); */
+-  avail = snd_pcm_avail_update(handle);
+-  if (avail == -EPIPE)
+-    {
+-
+-      /* EPIPE means overrun */
+-      printf("overrun occurred\n");
+-      xrun_recovery(handle, avail);
+-      snd_pcm_start(handle);
+-      return;
+-    }
+-  else if (avail < 0)
+-    {
+-      printf("error avail update\n");
+-      return;
+-    }
+-  err = 0;
+-  err2=0;
+-
+-  /* printf("in async_callback avail = %d\n", (int) avail);  */
+-
+-      /* printf("ready to read samples avail= %i\n", avail); */
+-      sem_wait(&mutex);
+-      if ((BUFSIZE - fillptr) > avail)    /* enough psace for complete CHUNK */
+-      {
+-           err = snd_pcm_readi(handle,tmpbuf+2*fillptr , avail);
+-	   fillptr += avail;
+-      }
+-      else
+-      {
+-           err = snd_pcm_readi(handle,tmpbuf+2*fillptr , BUFSIZE - fillptr);   /* to end of buffer */
+-           err2 = snd_pcm_readi(handle,tmpbuf, avail - BUFSIZE + fillptr);   /* remainder */
+-	   fillptr += avail - BUFSIZE  ;
+-      }
+-
+-      /* printf("read %d samples \n",err); */
+-      if ((err < 0) || (err2 <0))
+-	{
+-	  printf("Read error: %s\n", snd_strerror(err));
+-	  exit(EXIT_FAILURE);
+-	}
+-        bufcnt += avail;
+-	sem_post(&mutex);
+-
+-}
+-static int init_async(snd_pcm_t * handle, signed short *samples)
+-{
+-  signed short data[20000];
+-
+-  snd_async_handler_t *ahandler;
+-  int err;
+-
+-  err = snd_async_add_pcm_handler(&ahandler, handle, async_callback, &data);
+-  if (err < 0)
+-    {
+-      printf("Unable to register async handler\n");
+-      exit(EXIT_FAILURE);
+-    }
+-
+-  /* printf("na registering async_handler\n"); */
+-  if (snd_pcm_state(handle) == SND_PCM_STATE_PREPARED)
+-    {
+-
+-      /* printf(" checking state\n"); */
+-      err = snd_pcm_start(handle);
+-      if (err < 0)
+-	{
+-	  printf("Start error: %s\n", snd_strerror(err));
+-	  exit(EXIT_FAILURE);
+-	}
+-    }
+-
+-  /* printf("end of async loop\n"); */
+-  return (err);
+-}
+-void init_audio(void)
+-{
+-  snd_pcm_t *handle;
+-  int err, morehelp, nrdev;
+-
+-  snd_pcm_hw_params_t *hwparams;
+-  snd_pcm_sw_params_t *swparams;
+-  signed short *samples;
+-  FILE *fpini;
+-  char regel[80];
+-  char *delims="= " ;
+-  char *ptxt;
+-
+-  /* init buffer pointer for transfers */
+-  startptr = 0;
+-  fillptr = 0;
+-  emptyptr = 0;
+-  bufcnt = 0;
+-  nrdev=0 ;
+-  /* set the sound_device  */
+-  home = getenv("HOME");
+-  strcpy(rxamaini, home);
+-  strcat(rxamaini,"/rxamadrm.ini");
+-  fpini = fopen(rxamaini, "r");
+-  if (fpini == NULL)
+-  {
+-	  printf("Cannot open %s\n", rxamaini);
+-	  exit(1);
+-  }
+-
+-  while (fgets(regel, 80, fpini) != NULL)
+-  {
+-	  ptxt =strtok(regel, delims);
+-	  if (strcmp(ptxt,"devin")==0)
+-	  {
+-		  ptxt=strtok(NULL, delims);
+-		  sscanf(ptxt,"%d",&nrdev);
+-	  }
+-  }
+-  
+-  device = snddevices[nrdev] ;   /* if not found =0 */
+-  /* init the mutex for yje async transfers */
+-
+-   sem_init(&mutex,1,1 );
+-
+-
+-  /* printf("Start startptr %d fillptr %d emptryptr %d\n", startptr, fillptr, emptyptr); */
+-  snd_pcm_hw_params_alloca(&hwparams);
+-  snd_pcm_sw_params_alloca(&swparams);
+-  morehelp = 0;
+-  rate = 48000;
+-  format = SND_PCM_FORMAT_S16;
+-  /* printf("Device is %s\n", device);
+-  printf("Stream parameters are %iHz, %s, %i channels\n", rate,
+-	 snd_pcm_format_name(format), nchannels); */
+-  if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_CAPTURE, 0)) < 0)
+-    {
+-      printf("Capture open error: %s\n", snd_strerror(err));
+-      return;
+-    }
+-  if ((err =
+-       set_hwparams(handle, hwparams, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
+-    {
+-      printf("Setting of hwparams failed: %s\n", snd_strerror(err));
+-      exit(EXIT_FAILURE);
+-    }
+-  if ((err = set_swparams(handle, swparams)) < 0)
+-    {
+-      printf("Setting of swparams failed: %s\n", snd_strerror(err));
+-      exit(EXIT_FAILURE);
+-    }
+-  if (verbose > 0)
+-    snd_pcm_dump(handle, output);
+-  samples =
+-    malloc((period_size * nchannels * snd_pcm_format_physical_width(format)) /
+-	   8);
+-  if (samples == NULL)
+-    {
+-      printf("Not enough memory\n");
+-      exit(EXIT_FAILURE);
+-    }
+-  err = snd_pcm_prepare(handle);
+-  if (err < 0)
+-
+-    {
+-      printf("cannot prepare handle \n");
+-      exit(1);
+-    }
+-  init_async(handle, samples);
+-
+-  /* printf("na call init_async in main\n"); */
+-}
+--- a/linux/rxamadrm/monorec.c
++++ b/linux/rxamadrm/monorec.c
+@@ -28,7 +28,8 @@
+ #include <X11/Xproto.h>
+ #include <stdio.h>
+ #include <math.h>
+-#include <alsa/asoundlib.h>
++#include <portaudio.h>
++extern PaStream *lab_stream;
+ #include <semaphore.h>
+ #include <pthread.h>
+ #include "drmdefs.h"
+@@ -186,42 +187,11 @@
+   float pQ1[BUFSIZE / 4], pQ2[BUFSIZE / 4], pQ3[BUFSIZE / 4],
+     pQ4[BUFSIZE / 4];
+ 
+-  if (cnt < 2048)
+-    bufaucnt[cnt++] = bufcnt;
+-
+-  /* active waiting */
+-
+-
+-  do
+-  {
+-       sem_wait( &mutex);
+-       flag = 	(bufcnt < nr_samps) ; 
+-       sem_post(&mutex); 
+-       sleep(1);
+-  } while (flag) ;
+-
+-  /* get the audiosamples int short int format in the tmpbuf to
+-   * the float buffer temp 
+-   */
+-
+-  sem_wait( &mutex);
+-  for (i=0 ; i < nr_samps ; i++ )
+-  {
+-      temp[i] = (float) tmpbuf[2*emptyptr] + (float) tmpbuf[2*emptyptr +1];
+-      emptyptr++ ;
+-      if (emptyptr == BUFSIZE)
+-	      emptyptr = 0;       /* wrap araound */
+-      bufcnt -- ;
+-      if (bufcnt < 0)
+-      {
+-	      printf("underrun tmpbuf \n");
+-	      sem_post(&mutex);
+-	      exit(-1);
+-      }
++  short pcm[BUFSIZE * 2];
++  if (nr_samps <= 0 || nr_samps > BUFSIZE || Pa_ReadStream(lab_stream, pcm, nr_samps) != paNoError) {
++    fprintf(stderr, "lab input failed\n"); exit(1);
+   }
+-  sem_post( &mutex);
+-
+-
++  for (i = 0; i < nr_samps; ++i) temp[i] = (float)pcm[2*i] + (float)pcm[2*i+1];
+   /* now convert baseband audio to usb with Fc= 12000 Hz */
+   /* start with downsampling by 4 */
+   for (i = 0; i < nr_samps; i += 4)
+@@ -241,51 +211,6 @@
+       sigdown[i] = sigdown1[i] + sigdown2[i] + sigdown3[i] + sigdown4[i];
+       sigdwndup[i]=sigdown[i];
+     }
+-  /* here new code for waterfall  April 2012 */
+-   
+-  /* now put frequency markers in top lines of window */
+-  for (i=0; i < 10 ; i++)
+-  {
+-     /* XSetForeground(display, gc_waterfall, BlackPixel(display, screen_num)); */
+-     XSetForeground(display, gc_waterfall, WhitePixel(display, screen_num));
+-     for (j=0; j < width_waterfall ; j++)
+-     {
+-          XDrawPoint(display, win_waterfall, gc_waterfall, j, i);
+-     }
+-     XSetForeground(display, gc_waterfall,BlackPixel(display, screen_num));
+-     XDrawPoint(display, win_waterfall, gc_waterfall, 61, i);
+-     XDrawPoint(display, win_waterfall, gc_waterfall, 62, i);
+-     XDrawPoint(display, win_waterfall, gc_waterfall, 125, i);
+-     XDrawPoint(display, win_waterfall, gc_waterfall, 126, i);
+-     XDrawPoint(display, win_waterfall, gc_waterfall, 157, i);
+-     XDrawPoint(display, win_waterfall, gc_waterfall, 158, i);
+-  }
+-
+-  chunks = nr_samps/8192 ;
+-  for (j=0; j < chunks ; j++)
+-  {
+-    remaining = nr_samps/4 - j*2048 ;
+-    if (remaining >= 2048)
+-    { 
+-      gen_power(sigdwndup+j*2048,powerspectrum, 2048);
+-    }  
+-    /* now display result in waterfall */
+-    XCopyArea(display, pmap_waterfall, pmap_tmp, gc_waterfall,
+-               0,10, width_waterfall, height_waterfall - 1, 0,11); 
+-    for (i=0; i < width_waterfall; i++)
+-    {
+-         fft_strength = powerspectrum[2*i]/MAX_FFT + powerspectrum[2*i+1]/MAX_FFT;
+-         pixvalue = (unsigned long) (fft_strength*256.0);
+-         XSetForeground( display, gc_waterfall, pixels_waterfall[pixvalue]);
+-         XDrawPoint(display, pmap_tmp, gc_waterfall, i, 10);
+-    } 
+-  
+-    XCopyArea(display, pmap_tmp, pmap_waterfall, gc_waterfall,
+-               0, 10, width_waterfall, height_waterfall - 10, 0, 10);  
+-    XCopyArea( display,pmap_waterfall, win_waterfall, gc_waterfall,
+-               0, 10, width_waterfall, height_waterfall - 10, 0, 10); 
+- } 
+-
+   /* Hilbert transform */
+   filter(sigdown, sI, B_Inphase, ZfI, nr_samps / 4, 83);
+   filter(sigdown, sQ, B_Quad, ZfQ, nr_samps / 4, 83);
+--- /dev/null
++++ b/linux/malloc.h
+@@ -0,0 +1 @@
++#include <stdlib.h>

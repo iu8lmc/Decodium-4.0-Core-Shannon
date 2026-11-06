@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import ipaddress
 import json
 import os
 import platform
@@ -31,6 +32,42 @@ MAGIC_2 = 0xABCD1234
 HEADER_SIZE = 16
 MAX_PACKET_BYTES = 16 * 1024 * 1024
 RAW_FLUSH_BYTES = 4096
+
+
+def is_loopback_listen_host(host: str) -> bool:
+    normalized = (host or "").strip().strip("[]").lower()
+    if normalized in {"localhost", "localhost.localdomain"}:
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(normalized, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    addresses = {info[4][0] for info in infos if info[4]}
+    if not addresses:
+        return False
+    for address in addresses:
+        try:
+            if not ipaddress.ip_address(address).is_loopback:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+def validate_listen_host(args: argparse.Namespace) -> None:
+    if is_loopback_listen_host(args.listen_host):
+        return
+    if args.allow_non_loopback:
+        return
+    raise ValueError(
+        "Refusing to expose the unauthenticated HRD tap on a non-loopback "
+        f"address ({args.listen_host}). Use 127.0.0.1/localhost, or pass "
+        "--allow-non-loopback only on a trusted isolated network."
+    )
 
 
 @dataclass
@@ -414,6 +451,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--listen-port", type=int, default=7810, help="local port Decodium connects to")
     parser.add_argument("--target-host", default="127.0.0.1", help="real HRD server host/IP")
     parser.add_argument("--target-port", type=int, default=7809, help="real HRD server port")
+    parser.add_argument(
+        "--allow-non-loopback",
+        action="store_true",
+        help="allow LAN/wildcard listen hosts; dangerous because the tap has no authentication",
+    )
     parser.add_argument("--connect-timeout", type=float, default=5.0, help="target HRD TCP connect timeout in seconds")
     parser.add_argument("--duration", type=float, default=0.0, help="stop automatically after N seconds; 0 means manual Ctrl+C")
     parser.add_argument("--single", action="store_true", help="stop after the first Decodium connection closes")
@@ -492,6 +534,11 @@ def maybe_prompt(args: argparse.Namespace, raw_argv: list[str]) -> None:
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     maybe_prompt(args, argv)
+    try:
+        validate_listen_host(args)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -520,6 +567,13 @@ def main(argv: list[str]) -> int:
             executable=sys.executable,
             frozen=bool(getattr(sys, "frozen", False)),
         )
+        if not is_loopback_listen_host(args.listen_host):
+            log.log(
+                "WARN",
+                "non-loopback HRD tap exposed by explicit user request",
+                listenHost=args.listen_host,
+                listenPort=args.listen_port,
+            )
         tap = HRDTap(args, log)
         try:
             exit_code = tap.run()

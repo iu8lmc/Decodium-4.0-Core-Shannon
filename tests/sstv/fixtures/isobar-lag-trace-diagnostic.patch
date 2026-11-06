@@ -1,0 +1,15 @@
+--- a/core/live.cpp
++++ b/core/live.cpp
+@@ -1,3 +1,4 @@
++#include <cstdio>
+ /* live.cpp - see live.h.
+  *
+  * This is THE sync state machine: the batch entry point scan_lines()
+@@ -641,6 +642,7 @@
+                         long lag = sync_content_step(sm, grid, phi,
+                                                      have_next);
+                         if (lag != 0) {
++                            std::fprintf(stderr, "LAB_LAG %ld %ld %.9f\n", grid / LINE_SAMPLES, lag, inv_period);
+                             inv_phase += (double)lag;
+                             while (inv_phase < 0.0)
+                                 inv_phase += (double)LINE_SAMPLES;

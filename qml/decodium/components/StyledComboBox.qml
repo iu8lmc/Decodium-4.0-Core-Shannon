@@ -14,6 +14,13 @@ ComboBox {
     property color textColor: textPrimary
     property color bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+    readonly property color popupSurface: bridge && bridge.themeManager
+        && bridge.themeManager.isGlassTheme
+        && bridge.themeManager.glassTransparencySupported
+        ? Qt.rgba(bridge.themeManager.panelColor.r,
+                  bridge.themeManager.panelColor.g,
+                  bridge.themeManager.panelColor.b, 0.48)
+        : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
     property int effectiveFontPixelSize: Math.max(font.pixelSize, 14)
     property int itemHeight: Math.max(42, effectiveFontPixelSize + 22)
     property int popupMinWidth: 180
@@ -36,8 +43,11 @@ ComboBox {
 
     contentItem: Text {
         text: control.currentText !== undefined && control.currentText !== "" ? control.currentText : control.displayText
-        font.family: control.font.family
+        font.family: control.font.family && control.font.family.length > 0
+                     ? control.font.family
+                     : (Qt.platform.os === "osx" ? "Helvetica Neue" : "")
         font.pixelSize: control.effectiveFontPixelSize
+        font.bold: control.font.bold
         color: control.textColor
         horizontalAlignment: control.textHorizontalAlignment
         verticalAlignment: Text.AlignVCenter
@@ -46,6 +56,7 @@ ComboBox {
         rightPadding: control.rightPadding
         topPadding: control.topPadding
         bottomPadding: control.bottomPadding
+        renderType: Text.QtRendering
     }
 
     indicator: Canvas {
@@ -79,13 +90,17 @@ ComboBox {
         contentItem: Text {
             text: modelData !== undefined ? modelData : (model.text !== undefined ? model.text : "")
             color: highlighted ? "#ffffff" : control.textColor
+            font.family: control.font.family && control.font.family.length > 0
+                         ? control.font.family
+                         : (Qt.platform.os === "osx" ? "Helvetica Neue" : "")
             font.pixelSize: control.effectiveFontPixelSize
-            font.bold: highlighted
+            font.bold: control.font.bold || highlighted
             elide: Text.ElideRight
             horizontalAlignment: control.textHorizontalAlignment
             verticalAlignment: Text.AlignVCenter
             leftPadding: 12
             rightPadding: 12
+            renderType: Text.QtRendering
         }
 
         background: Rectangle {
@@ -106,7 +121,7 @@ ComboBox {
         onOpened: controlPopupList.forceActiveFocus()
 
         background: Rectangle {
-            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            color: control.popupSurface
             border.color: control.accentColor
             border.width: 1
             radius: 6

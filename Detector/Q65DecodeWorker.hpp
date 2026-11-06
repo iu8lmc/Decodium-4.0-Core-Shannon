@@ -25,7 +25,10 @@ struct DecodeRequest
   int ndepth {1};
   int nfa {0};
   int nfb {0};
-  int nclearave {0};
+  // A normal Q65 window must not inherit coherent averages from a preceding
+  // station/mode.  The bridge explicitly disables this only when the user has
+  // enabled coherent averaging.
+  int nclearave {1};
   bool coherentAvgEnabled {false};
   int single_decode {0};
   int nagain {0};
@@ -38,6 +41,7 @@ struct DecodeRequest
   int nqsoprogress {0};
   int ncontest {0};
   int lapcqonly {0};
+  bool zapEnabled {false};
 };
 
 class Q65DecodeWorker final : public QObject

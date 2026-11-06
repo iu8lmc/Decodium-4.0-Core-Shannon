@@ -26,7 +26,7 @@ Item {
         to:   2 * Math.PI
         duration: 1000
         loops: Animation.Infinite
-        running: root.running
+        running: root.running && root.visible
     }
 
     // Colore corrente: rosso TX, verde ASYNC
@@ -51,7 +51,6 @@ Item {
             color: root.running
                    ? (root.transmitting ? "#ff4444" : "#00e676")
                    : "#444444"
-            font.family:    "Segoe UI"
             font.pixelSize: 8
             font.bold:      true
         }
@@ -68,7 +67,7 @@ Item {
             height:              root.showMeter
                                  ? parent.height - stateLabel.height - 18
                                  : parent.height - stateLabel.height - 4
-            visible: root.showWave && root.running
+            visible: root.showWave && root.running && root.visible
 
             onPaint: {
                 var ctx    = getContext("2d")
@@ -113,11 +112,17 @@ Item {
             // Rideseña ogni volta che la fase cambia
             Connections {
                 target: root
-                function on_PhaseChanged() { waveCanvas.requestPaint() }
+                function on_PhaseChanged() {
+                    if (waveCanvas.visible)
+                        waveCanvas.requestPaint()
+                }
             }
             Connections {
                 target: root
-                function onTransmittingChanged() { waveCanvas.requestPaint() }
+                function onTransmittingChanged() {
+                    if (waveCanvas.visible)
+                        waveCanvas.requestPaint()
+                }
             }
         }
 
@@ -141,7 +146,6 @@ Item {
                 horizontalAlignment:      Text.AlignHCenter
                 text:  root.snr <= -99 ? "--- dB" : (root.snr + " dB")
                 color: "white"
-                font.family:    "Segoe UI"
                 font.pixelSize: 6
             }
 

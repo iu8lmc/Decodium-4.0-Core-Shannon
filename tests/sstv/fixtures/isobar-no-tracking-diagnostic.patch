@@ -1,0 +1,11 @@
+--- a/cli/isobar-decode.cpp
++++ b/cli/isobar-decode.cpp
+@@ -87,7 +87,7 @@
+             }
+         }
+ 
+-        FaxImage img = scan_lines(video);
++        FaxImage img = scan_lines(video, nullptr, nullptr, false);
+         if (img.lines.empty()) {
+             fprintf(stderr, "error: no sync pulses found - not a %s "
+                             "WEFAX signal?\n", rpm60 ? "60 rpm" : "120 rpm");

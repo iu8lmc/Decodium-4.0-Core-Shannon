@@ -1,0 +1,15 @@
+diff --git a/src/sstv/modes/modebw.cpp b/src/sstv/modes/modebw.cpp
+index 110119e..6bf030e 100644
+--- a/src/sstv/modes/modebw.cpp
++++ b/src/sstv/modes/modebw.cpp
+@@ -98,6 +98,9 @@ void  modeBW::calcPixelPositionTable(unsigned int colorLine,bool tx)
+     }
+   for(i=0;i<activeSSTVParam->numberOfPixels;i++)
+     {
+-      pixelPositionTable[i]=(unsigned int)round(lineStart+(((float)(i+ofx)*visibleLineLength)/activeSSTVParam->numberOfPixels));
++      // Local FAX480 RX timing experiment; not a Decodium implementation.
++      const double candidate = lineStart+(((float)(i+ofx)*visibleLineLength)/activeSSTVParam->numberOfPixels)
++          - ((!tx && mode == FAX480) ? 12.0 : 0.0);
++      pixelPositionTable[i]=(unsigned int)round(candidate < 0.0 ? 0.0 : candidate);
+     }
+ }

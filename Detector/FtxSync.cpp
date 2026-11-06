@@ -113,27 +113,55 @@ float sync4_power (Complex const* cd0, int np, int start, std::array<Complex, 64
   return std::abs (z) * fac;
 }
 
-float sync4_metric (Complex const* cd0, int np, int i0, Complex const* ctwk, bool itwk)
+// The four FT2/FT4 sync templates multiplied by the frequency tweak. Built once and reused for every
+// start offset of a scan: the old code redid these 4 x 64 complex products on every single call, which
+// is as much work as the correlation itself. Without a tweak the shared base templates are used as they
+// are (no copy). Arithmetic is the same as before, so the metric is bit-identical.
+struct Sync4Templates
 {
-  std::array<Complex, 64> const s1 = apply_tweak (sync4a (), ctwk, itwk);
-  std::array<Complex, 64> const s2 = apply_tweak (sync4b (), ctwk, itwk);
-  std::array<Complex, 64> const s3 = apply_tweak (sync4c (), ctwk, itwk);
-  std::array<Complex, 64> const s4 = apply_tweak (sync4d (), ctwk, itwk);
+  std::array<Complex, 64> storage[4];
+  std::array<Complex, 64> const* ref[4];
 
+  Sync4Templates (Complex const* ctwk, bool itwk)
+  {
+    std::array<Complex, 64> const* const base[4] = {&sync4a (), &sync4b (), &sync4c (), &sync4d ()};
+    for (int k = 0; k < 4; ++k)
+      {
+        if (!itwk)
+          {
+            ref[k] = base[k];
+            continue;
+          }
+        for (size_t n = 0; n < 64; ++n)
+          {
+            storage[k][n] = ctwk[n] * (*base[k])[n];
+          }
+        ref[k] = &storage[k];
+      }
+  }
+};
+
+float sync4_metric_templates (Complex const* cd0, int np, int i0, Sync4Templates const& tpl)
+{
   int const i1 = i0;
   int const i2 = i0 + 33 * 32;
   int const i3 = i0 + 66 * 32;
   int const i4 = i0 + 99 * 32;
 
-  float const p1 = sync4_power (cd0, np, i1, s1, true, false);
-  float const p2 = sync4_power (cd0, np, i2, s2, false, false);
-  float const p3 = sync4_power (cd0, np, i3, s3, false, false);
-  float const p4 = sync4_power (cd0, np, i4, s4, false, true);
+  float const p1 = sync4_power (cd0, np, i1, *tpl.ref[0], true, false);
+  float const p2 = sync4_power (cd0, np, i2, *tpl.ref[1], false, false);
+  float const p3 = sync4_power (cd0, np, i3, *tpl.ref[2], false, false);
+  float const p4 = sync4_power (cd0, np, i4, *tpl.ref[3], false, true);
   float const pmin = std::min (std::min (p1, p2), std::min (p3, p4));
 
   return p1 + p2 + p3 + p4 - pmin;
 }
 
+float sync4_metric (Complex const* cd0, int np, int i0, Complex const* ctwk, bool itwk)
+{
+  Sync4Templates const tpl (ctwk, itwk);
+  return sync4_metric_templates (cd0, np, i0, tpl);
+}
 std::array<std::array<Complex, 32>, 7> const& sync8_patterns ()
 {
   static std::array<std::array<Complex, 32>, 7> value = [] {
@@ -404,6 +432,29 @@ extern "C" void ftx_sync2d_c (Complex const* cd0, int np, int i0,
                                Complex const* ctwk, int itwk, float* sync)
 {
   *sync = sync4_metric (cd0, np, i0, ctwk, itwk != 0);
+}
+
+// Best FT2 sync over a range of start offsets for one frequency tweak: same result as calling
+// ftx_sync2d_c for every offset and keeping the first strict maximum, with the tweaked templates built
+// once. Start offsets can be negative, so "nothing found" is signalled by *sync_best staying at -1e30
+// (below any real metric), never by *ibest.
+extern "C" void ftx_sync2d_scan_c (Complex const* cd0, int np, int ibmin, int ibmax, int ibstp,
+                                    Complex const* ctwk, int itwk, float* sync_best, int* ibest)
+{
+  Sync4Templates const tpl (ctwk, itwk != 0);
+  float best = -1.0e30f;
+  int best_i = -1;
+  for (int i0 = ibmin; i0 <= ibmax; i0 += ibstp)
+    {
+      float const sync = sync4_metric_templates (cd0, np, i0, tpl);
+      if (sync > best)
+        {
+          best = sync;
+          best_i = i0;
+        }
+    }
+  *sync_best = best;
+  *ibest = best_i;
 }
 
 extern "C" void ftx_sync4d_c (Complex const* cd0, int np, int i0,

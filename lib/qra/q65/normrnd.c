@@ -39,6 +39,8 @@
   #error "No good quality PRNG found"
 #endif
 
+#define K_RAND_MAX_F ((float)(K_RAND_MAX))
+
 
 // use MS rand_s(...) function
 void normrnd_s(float *dst, int nitems, float mean, float stdev)
@@ -53,8 +55,8 @@ void normrnd_s(float *dst, int nitems, float mean, float stdev)
 			set = 0;
 			}
 		else {
-			rand_s((unsigned int*)&r); phi = (M_2PI/(1.0f+K_RAND_MAX))*r;
-			rand_s((unsigned int*)&r); u   = (float)sqrt(-2.0f* log( (1.0f/(1.0f+K_RAND_MAX))*(1.0f+r) ) );
+			rand_s((unsigned int*)&r); phi = (M_2PI/(1.0f+K_RAND_MAX_F))*r;
+			rand_s((unsigned int*)&r); u   = (float)sqrt(-2.0f* log( (1.0f/(1.0f+K_RAND_MAX_F))*(1.0f+r) ) );
 			*dst++ = (float)cos(phi)*u*stdev+mean;
 			set=1;
 			}
