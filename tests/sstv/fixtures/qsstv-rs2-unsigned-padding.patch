@@ -1,0 +1,11 @@
+--- a/src/utils/reedsolomoncoder.cpp
++++ b/src/utils/reedsolomoncoder.cpp
+@@ -155,7 +155,7 @@ bool reedSolomonCoder::decode(QByteArray &ba,QString fn,QVector<int> erasuresArr
+       errorOut() << "bep_sizeaa: " << bep_size <<" coded size: " << (((unsigned char) ba[1]) + ((unsigned char)ba[2])*256 ) ;
+       return false;
+     }
+-  coded_file_size = bep_size*rs_dsize - (int)tr_buf[0];
++  coded_file_size = bep_size*rs_dsize - (int)(unsigned char)tr_buf[0];
+   strncpy(coded_file_ext, tr_buf.data()+3,3);
+   coded_file_ext[3]=0;
+ 

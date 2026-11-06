@@ -1,0 +1,2254 @@
+function (add_decodium_sstv_test test_name)
+  add_executable (${test_name} ${ARGN})
+  target_link_libraries (${test_name}
+    PRIVATE
+      Decodium::SstvCore
+      Qt6::Core
+      Qt6::Test
+    )
+  set_target_properties (${test_name} PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
+  set_tests_properties (${test_name} PROPERTIES LABELS "sstv;unit")
+endfunction ()
+
+function (add_decodium_sstv_integration_test test_name)
+  add_executable (${test_name} ${ARGN})
+  target_link_libraries (${test_name}
+    PRIVATE
+      Decodium::SstvIntegration
+      Qt6::Core
+      Qt6::Test
+    )
+  set_target_properties (${test_name} PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
+  set_tests_properties (${test_name} PROPERTIES LABELS "sstv;integration")
+endfunction ()
+
+add_decodium_sstv_test (test_sstv_mode_registry test_sstv_mode_registry.cpp)
+add_decodium_sstv_test (test_sstv_mode_docs test_sstv_mode_docs.cpp)
+target_compile_definitions (test_sstv_mode_docs PRIVATE
+  DECODIUM_SSTV_MODE_CATALOG_PATH="${CMAKE_SOURCE_DIR}/docs/sstv/MODE_CATALOG.md"
+  DECODIUM_SSTV_MODE_MATRIX_PATH="${CMAKE_SOURCE_DIR}/docs/sstv/MODE_MATRIX.md"
+  )
+add_executable (generate_sstv_mode_matrix EXCLUDE_FROM_ALL
+  tools/generate_sstv_mode_matrix.cpp)
+target_link_libraries (generate_sstv_mode_matrix
+  PRIVATE Decodium::SstvCore Qt6::Core)
+set_target_properties (generate_sstv_mode_matrix PROPERTIES
+  AUTOMOC OFF
+  AUTORCC OFF
+  AUTOUIC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_decodium_sstv_test (test_sstv_timing test_sstv_timing.cpp)
+add_decodium_sstv_test (test_sstv_fax480 test_sstv_fax480.cpp)
+add_executable (analyze_radiofax_acquisition EXCLUDE_FROM_ALL tools/analyze_radiofax_acquisition.cpp)
+target_link_libraries (analyze_radiofax_acquisition PRIVATE Decodium::SstvCore Qt6::Core)
+set_target_properties (analyze_radiofax_acquisition PROPERTIES AUTOMOC OFF CXX_EXTENSIONS OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_compile_definitions (test_sstv_fax480 PRIVATE
+  DECODIUM_SSTV_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+find_program (_fax_alignment_python NAMES python3)
+find_program (_fax_alignment_ffmpeg NAMES ffmpeg)
+find_program (_fax_alignment_ffprobe NAMES ffprobe)
+if (_fax_alignment_python)
+  add_test (NAME test_sstv_share_server_unit
+    COMMAND "${_fax_alignment_python}" -m unittest -v test_store test_server)
+  set_tests_properties (test_sstv_share_server_unit PROPERTIES
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/tools/sstv-share-server"
+    LABELS "sstv;sharing;security;server" TIMEOUT 30)
+  add_test (NAME test_sstv_fldigi_lpm_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_fldigi_lpm.py")
+  set_tests_properties (test_sstv_fldigi_lpm_diagnostic PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_phasing_glitch
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_phasing_glitch.py")
+  set_tests_properties (test_sstv_radiofax_phasing_glitch PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_fax480_retained_vis_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_fax480_retained_vis.py")
+  set_tests_properties (test_sstv_fax480_retained_vis_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_windows_share_inventory
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_check_windows_share_tests.py")
+  set_tests_properties (test_sstv_windows_share_inventory PROPERTIES LABELS "sstv;sharing;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_macos_share_inventory
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_check_macos_share_tests.py")
+  set_tests_properties (test_sstv_macos_share_inventory PROPERTIES LABELS "sstv;sharing;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_share_loopback_preflight
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_share_loopback_preflight.py")
+  set_tests_properties (test_sstv_share_loopback_preflight PROPERTIES LABELS "sstv;sharing;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_terminal_tone_probe
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_terminal_tone_probe.py")
+  set_tests_properties (test_sstv_avt_terminal_tone_probe PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_capture_integrity
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_check_avt_capture_integrity.py")
+  set_tests_properties (test_sstv_avt_capture_integrity PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_vox_boundary_probe
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_vox_boundary_probe.py")
+  set_tests_properties (test_sstv_avt_vox_boundary_probe PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_qsstv_prefix_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_qsstv_prefix_probe.py")
+  set_tests_properties (test_sstv_avt_qsstv_prefix_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_single_vis_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_single_vis_lab.py")
+  set_tests_properties (test_sstv_avt_single_vis_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_riff_repair_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_repair_qsstv_riff_length.py")
+  set_tests_properties (test_sstv_riff_repair_diagnostic PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_hamdrm_lab_rx_diagnostics
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_sstv_lab_rx_diagnostics.py")
+  set_tests_properties (test_sstv_hamdrm_lab_rx_diagnostics PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_phasing_variant
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_radiofax_phasing_variant.py")
+  set_tests_properties (test_sstv_radiofax_phasing_variant PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_fldigi_radiofax_metadata
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fldigi_radiofax_metadata.py")
+  set_tests_properties (test_sstv_fldigi_radiofax_metadata PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_tone_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_tones.py")
+  set_tests_properties (test_sstv_radiofax_tone_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_duration_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_duration.py")
+  set_tests_properties (test_sstv_radiofax_duration_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_phasing_clock_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_phasing_clock.py")
+  set_tests_properties (test_sstv_radiofax_phasing_clock_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_level_scaling_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_level_scaling.py")
+  set_tests_properties (test_sstv_radiofax_level_scaling_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_decoder_stop_anchor
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_decoder_stop_anchor.py")
+  set_tests_properties (test_sstv_radiofax_decoder_stop_anchor PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+endif ()
+if (_fax_alignment_python AND _fax_alignment_ffmpeg AND _fax_alignment_ffprobe)
+  add_test (NAME test_sstv_lab_image_terminal_comparison
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_compare_sstv_lab_images.py")
+  set_tests_properties (test_sstv_lab_image_terminal_comparison PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_fldigi_phasing_anchor
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fldigi_phasing_anchor.py")
+  set_tests_properties (test_sstv_fldigi_phasing_anchor PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_row_shifts
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_row_shifts.py")
+  set_tests_properties (test_sstv_radiofax_row_shifts PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_alignment_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_2d_alignment.py")
+  set_tests_properties (test_sstv_radiofax_alignment_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_radiofax_dead_sector_analyzer
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_dead_sector.py")
+  set_tests_properties (test_sstv_radiofax_dead_sector_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  execute_process (COMMAND "${_fax_alignment_python}" -c "import numpy"
+    RESULT_VARIABLE _fax_alignment_numpy OUTPUT_QUIET ERROR_QUIET)
+  if (_fax_alignment_numpy EQUAL 0)
+    add_test (NAME test_sstv_radiofax_partial_alignment
+      COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_radiofax_partial_alignment.py")
+    set_tests_properties (test_sstv_radiofax_partial_alignment PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+    add_test (NAME test_sstv_isobar_radiofax_analyzer
+      COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_isobar_radiofax.py")
+    set_tests_properties (test_sstv_isobar_radiofax_analyzer PROPERTIES LABELS "sstv;fax;diagnostics" TIMEOUT 30)
+  endif ()
+  unset (_fax_alignment_numpy)
+endif ()
+set (DECODIUM_SSTV_NUMPY_PYTHON "" CACHE FILEPATH
+  "Optional Python with NumPy for SSTV spectral diagnostic tests")
+if (DECODIUM_SSTV_NUMPY_PYTHON)
+  set (_sstv_numpy_python "${DECODIUM_SSTV_NUMPY_PYTHON}")
+else ()
+  set (_sstv_numpy_python "${_fax_alignment_python}")
+endif ()
+if (_sstv_numpy_python)
+  execute_process (COMMAND "${_sstv_numpy_python}" -c "import numpy"
+    RESULT_VARIABLE _sstv_numpy_available OUTPUT_QUIET ERROR_QUIET)
+  if (_sstv_numpy_available EQUAL 0)
+    add_test (NAME test_sstv_avt_spectral_guard_bands
+      COMMAND "${_sstv_numpy_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_avt_out_of_band.py")
+    set_tests_properties (test_sstv_avt_spectral_guard_bands PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+    add_test (NAME test_sstv_avt_boundary_fit_diagnostic
+      COMMAND "${_sstv_numpy_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_avt_boundary_trace.py")
+    set_tests_properties (test_sstv_avt_boundary_fit_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  elseif (DECODIUM_SSTV_NUMPY_PYTHON)
+    message (FATAL_ERROR "DECODIUM_SSTV_NUMPY_PYTHON cannot import NumPy")
+  endif ()
+endif ()
+unset (_sstv_numpy_python)
+unset (_sstv_numpy_available)
+if (_fax_alignment_python AND _fax_alignment_ffmpeg)
+  add_test (NAME test_sstv_avt_countdown_audio_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_avt_countdown_audio.py")
+  set_tests_properties (test_sstv_avt_countdown_audio_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_notch_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prepare_avt_notch_lab.py")
+  set_tests_properties (test_sstv_avt_notch_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+  add_test (NAME test_sstv_avt_stationary_tone_diagnostic
+    COMMAND "${_fax_alignment_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_avt_stationary_tone.py")
+  set_tests_properties (test_sstv_avt_stationary_tone_diagnostic PROPERTIES LABELS "sstv;avt;diagnostics" TIMEOUT 30)
+endif ()
+unset (_fax_alignment_python)
+unset (_fax_alignment_ffmpeg)
+unset (_fax_alignment_ffprobe)
+add_executable (decode_libsstv_fax EXCLUDE_FROM_ALL tools/decode_libsstv_fax.cpp)
+target_link_libraries (decode_libsstv_fax PRIVATE Decodium::SstvCore)
+target_compile_features (decode_libsstv_fax PRIVATE cxx_std_17)
+add_executable (render_avt94_native EXCLUDE_FROM_ALL tools/render_avt94_native.cpp)
+target_link_libraries (render_avt94_native PRIVATE Decodium::SstvCore)
+target_include_directories (render_avt94_native PRIVATE ${CMAKE_SOURCE_DIR})
+target_compile_features (render_avt94_native PRIVATE cxx_std_17)
+add_executable (decode_fax480_capture EXCLUDE_FROM_ALL tools/decode_fax480_capture.cpp)
+target_link_libraries (decode_fax480_capture PRIVATE Decodium::SstvCore Qt6::Gui)
+target_compile_features (decode_fax480_capture PRIVATE cxx_std_17)
+add_executable (export_fax480_capture EXCLUDE_FROM_ALL tools/export_fax480_capture.cpp)
+target_link_libraries (export_fax480_capture PRIVATE Decodium::SstvCore Qt6::Gui)
+target_compile_features (export_fax480_capture PRIVATE cxx_std_17)
+add_dependencies (test_sstv_fax480 decode_fax480_capture export_fax480_capture)
+add_decodium_sstv_test (test_sstv_vis test_sstv_vis.cpp)
+add_decodium_sstv_test (test_sstv_narrow_vis test_sstv_narrow_vis.cpp)
+target_compile_definitions (test_sstv_narrow_vis PRIVATE
+  DECODIUM_SSTV_MMSSTV_EXTENDED_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/mmsstv-8060b5-extended-mode-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_mmsstv_vis test_sstv_mmsstv_vis.cpp)
+target_compile_definitions (test_sstv_mmsstv_vis PRIVATE
+  DECODIUM_SSTV_MMSSTV_EXTENDED_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/mmsstv-8060b5-extended-mode-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_mmsstv_extended
+  test_sstv_mmsstv_extended.cpp)
+target_compile_definitions (test_sstv_mmsstv_extended PRIVATE
+  DECODIUM_SSTV_MMSSTV_EXTENDED_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/mmsstv-8060b5-extended-mode-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_narrow_vis_detector
+  test_sstv_narrow_vis_detector.cpp)
+add_decodium_sstv_test (test_sstv_fskid test_sstv_fskid.cpp)
+add_decodium_sstv_test (test_sstv_fskid_tx_stream
+  test_sstv_fskid_tx_stream.cpp)
+add_decodium_sstv_test (test_sstv_fskid_detector
+  test_sstv_fskid_detector.cpp)
+add_decodium_sstv_test (test_sstv_resampler test_sstv_resampler.cpp)
+add_decodium_sstv_test (test_sstv_audio_buffer test_sstv_audio_buffer.cpp)
+add_decodium_sstv_test (test_sstv_tone_generator test_sstv_tone_generator.cpp)
+add_decodium_sstv_test (test_sstv_tx_state_machine
+  test_sstv_tx_state_machine.cpp)
+add_decodium_sstv_test (test_sstv_rx_state_machine test_sstv_rx_state_machine.cpp)
+add_decodium_sstv_test (test_sstv_rx_controls test_sstv_rx_controls.cpp)
+add_decodium_sstv_integration_test (test_sstv_rx_audio_job_controller
+  test_sstv_rx_audio_job_controller.cpp)
+target_link_libraries (test_sstv_rx_audio_job_controller
+  PRIVATE Qt6::Concurrent)
+add_decodium_sstv_test (test_sstv_tone_detector test_sstv_tone_detector.cpp)
+add_decodium_sstv_test (test_sstv_image_core test_sstv_image_core.cpp)
+add_decodium_sstv_test (test_sstv_rx_frontend test_sstv_rx_frontend.cpp)
+add_decodium_sstv_test (test_sstv_wav_stream test_sstv_wav_stream.cpp)
+add_decodium_sstv_test (test_sstv_vis_detector test_sstv_vis_detector.cpp)
+add_decodium_sstv_test (test_sstv_sync_tracker test_sstv_sync_tracker.cpp)
+add_decodium_sstv_test (test_sstv_avt_sync test_sstv_avt_sync.cpp)
+add_decodium_sstv_test (test_sstv_avt test_sstv_avt.cpp)
+foreach (_avt_edge_pattern IN ITEMS pattern-a pattern-b blocks-a blocks-b)
+  add_test (NAME test_sstv_avt24_split_edge_${_avt_edge_pattern}
+    COMMAND $<TARGET_FILE:test_sstv_avt>
+      "fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively:24-narrow-qrm-${_avt_edge_pattern}")
+  set_tests_properties (test_sstv_avt24_split_edge_${_avt_edge_pattern} PROPERTIES
+    LABELS "sstv;avt;diagnostics" TIMEOUT 30
+    ENVIRONMENT "DECODIUM_AVT_LOOP_PREPROCESS=1;DECODIUM_AVT_LOOP_SPLIT_EDGE=1")
+  foreach (_avt_drop_period IN ITEMS 3 7)
+    add_test (NAME test_sstv_avt24_split_edge_${_avt_edge_pattern}_drop${_avt_drop_period}
+      COMMAND $<TARGET_FILE:test_sstv_avt>
+        "fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively:24-narrow-qrm-${_avt_edge_pattern}")
+    set_tests_properties (test_sstv_avt24_split_edge_${_avt_edge_pattern}_drop${_avt_drop_period} PROPERTIES
+      LABELS "sstv;avt;diagnostics" TIMEOUT 30
+      ENVIRONMENT "DECODIUM_AVT_LOOP_PREPROCESS=1;DECODIUM_AVT_LOOP_SPLIT_EDGE=1;DECODIUM_AVT_LOOP_DROP_PERIOD=${_avt_drop_period}")
+  endforeach ()
+  foreach (_avt_interference_hz IN ITEMS 430 2900)
+    add_test (NAME test_sstv_avt24_split_edge_${_avt_edge_pattern}_tone${_avt_interference_hz}
+      COMMAND $<TARGET_FILE:test_sstv_avt>
+        "fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively:24-narrow-qrm-${_avt_edge_pattern}")
+    set_tests_properties (test_sstv_avt24_split_edge_${_avt_edge_pattern}_tone${_avt_interference_hz} PROPERTIES
+      LABELS "sstv;avt;diagnostics" TIMEOUT 30
+      ENVIRONMENT "DECODIUM_AVT_LOOP_PREPROCESS=1;DECODIUM_AVT_LOOP_SPLIT_EDGE=1;DECODIUM_AVT_LOOP_INTERFERENCE_HZ=${_avt_interference_hz};DECODIUM_AVT_LOOP_INTERFERENCE_PEAK=0.1")
+  endforeach ()
+endforeach ()
+target_compile_definitions (test_sstv_avt PRIVATE
+  DECODIUM_SSTV_AVT_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/avt-handbook-qsstv-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_avt_rx_session
+  test_sstv_avt_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_radiofax test_sstv_radiofax.cpp)
+add_decodium_sstv_test (test_sstv_martin_m1 test_sstv_martin_m1.cpp)
+add_decodium_sstv_test (test_sstv_martin_m1_rx_session
+  test_sstv_martin_m1_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_martin_family
+  test_sstv_martin_family.cpp)
+target_compile_definitions (test_sstv_martin_family PRIVATE
+  DECODIUM_SSTV_MARTIN_LIBSSTV_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/libsstv-193157-martin-m2-m3-m4-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_martin_family_rx_session
+  test_sstv_martin_family_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_scottie test_sstv_scottie.cpp)
+target_compile_definitions (test_sstv_scottie PRIVATE
+  DECODIUM_SSTV_SCOTTIE_LIBSSTV_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/libsstv-193157-scottie-s3-s4-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_scottie_rx_session
+  test_sstv_scottie_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_sequential_rgb
+  test_sstv_sequential_rgb.cpp)
+target_compile_definitions (test_sstv_sequential_rgb PRIVATE
+  DECODIUM_SSTV_SEQUENTIAL_RGB_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/pysstv-d998fad-sequential-rgb-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_sequential_rgb_rx_session
+  test_sstv_sequential_rgb_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_pd test_sstv_pd.cpp)
+target_compile_definitions (test_sstv_pd PRIVATE
+  DECODIUM_SSTV_PD_PYSSTV_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/pysstv-d998fad-pd-landmarks.json"
+  DECODIUM_SSTV_PD_LIBSSTV_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/libsstv-193157-pd-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_pd_rx_session
+  test_sstv_pd_rx_session.cpp)
+add_decodium_sstv_test (test_sstv_robot test_sstv_robot.cpp)
+target_compile_definitions (test_sstv_robot PRIVATE
+  DECODIUM_SSTV_ROBOT_LIBSSTV_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/libsstv-193157-robot-landmarks.json"
+  )
+add_decodium_sstv_test (test_sstv_robot_rx_session
+  test_sstv_robot_rx_session.cpp)
+add_decodium_sstv_integration_test (test_sstv_audio_ingress
+  test_sstv_audio_ingress.cpp)
+add_decodium_sstv_integration_test (test_sstv_qso_log
+  test_sstv_qso_log.cpp)
+add_decodium_sstv_integration_test (test_sstv_rx_runtime
+  test_sstv_rx_runtime.cpp)
+add_executable (analyze_sstv_capture EXCLUDE_FROM_ALL tools/analyze_sstv_capture.cpp)
+target_link_libraries (analyze_sstv_capture PRIVATE Decodium::SstvIntegration Qt6::Core)
+target_compile_features (analyze_sstv_capture PRIVATE cxx_std_17)
+add_decodium_sstv_integration_test (test_sstv_tx_audio_device
+  test_sstv_tx_audio_device.cpp)
+add_decodium_sstv_integration_test (test_sstv_tx_coordinator
+  test_sstv_tx_coordinator.cpp)
+target_link_libraries (test_sstv_tx_coordinator PRIVATE Qt6::Gui)
+add_decodium_sstv_integration_test (test_sstv_wav_exporter
+  test_sstv_wav_exporter.cpp)
+add_decodium_sstv_integration_test (test_sstv_wav_pcm_reader
+  test_sstv_wav_pcm_reader.cpp)
+add_decodium_sstv_integration_test (test_sstv_wav_replay_controller
+  test_sstv_wav_replay_controller.cpp)
+
+set (DECODIUM_SSTV_EXTERNAL_VECTOR_DIR "" CACHE PATH
+  "Optional local directory containing pinned independent SSTV WAV vectors")
+if (DECODIUM_SSTV_EXTERNAL_VECTOR_DIR)
+  get_filename_component (_decodium_sstv_external_vector_dir
+    "${DECODIUM_SSTV_EXTERNAL_VECTOR_DIR}" REALPATH)
+  if (NOT IS_DIRECTORY "${_decodium_sstv_external_vector_dir}")
+    message (FATAL_ERROR
+      "DECODIUM_SSTV_EXTERNAL_VECTOR_DIR is not a readable directory")
+  endif ()
+  if (_decodium_sstv_external_vector_dir MATCHES "[\";]")
+    message (FATAL_ERROR
+      "DECODIUM_SSTV_EXTERNAL_VECTOR_DIR contains an unsupported character")
+  endif ()
+  add_executable (test_sstv_external_vectors
+    test_sstv_external_vectors.cpp)
+  target_link_libraries (test_sstv_external_vectors
+    PRIVATE
+      Decodium::SstvIntegration
+      Qt6::Core
+      Qt6::Gui
+      Qt6::Test
+    )
+  target_compile_definitions (test_sstv_external_vectors PRIVATE
+    DECODIUM_SSTV_EXTERNAL_VECTOR_DIR="${_decodium_sstv_external_vector_dir}"
+    )
+  set_target_properties (test_sstv_external_vectors PROPERTIES
+    AUTOMOC ON
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_sstv_external_vectors
+    COMMAND $<TARGET_FILE:test_sstv_external_vectors>)
+  set_tests_properties (test_sstv_external_vectors PROPERTIES
+    LABELS "sstv;external-fixture;interop;wav;decoder"
+    TIMEOUT 600
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+  unset (_decodium_sstv_external_vector_dir)
+endif ()
+
+if (WIN32 AND TARGET decodium_sstv_share_aead)
+  find_program (_share_windows_python NAMES python3 python)
+  find_program (_share_windows_ffmpeg NAMES ffmpeg)
+  find_program (_share_windows_ffprobe NAMES ffprobe)
+  if (_share_windows_python AND _share_windows_ffmpeg AND _share_windows_ffprobe)
+    set (_share_windows_script "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py")
+    set (_share_windows_common $<TARGET_FILE:decodium_qml>
+      "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+      "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+      "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+      "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+    add_test (NAME test_sstv_share_windows_transfer
+      COMMAND "${_share_windows_python}" "${_share_windows_script}" ${_share_windows_common})
+    add_test (NAME test_sstv_share_windows_tamper
+      COMMAND "${_share_windows_python}" "${_share_windows_script}" --tamper ${_share_windows_common})
+    foreach (_share_variant IN ITEMS a b)
+      add_test (NAME test_sstv_share_windows_expiry_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-download ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_expiry_awaiting_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-awaiting ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_expiry_partial_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-download ${_share_variant} --expiry-after-first-chunk ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_expiry_restart_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --expire-download ${_share_variant} --expiry-after-first-chunk --expiry-restart-cleanup ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_payload_tamper_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --tamper-payload ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_payload_swap_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --swap-payload ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_replay_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --replay-envelope ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_manifest_tamper_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --tamper-manifest ${_share_variant} ${_share_windows_common})
+      add_test (NAME test_sstv_share_windows_downgrade_${_share_variant}
+        COMMAND "${_share_windows_python}" "${_share_windows_script}" --downgrade-manifest ${_share_variant} ${_share_windows_common})
+    endforeach ()
+    set_tests_properties (test_sstv_share_windows_transfer test_sstv_share_windows_tamper
+      test_sstv_share_windows_manifest_tamper_a test_sstv_share_windows_manifest_tamper_b
+      test_sstv_share_windows_payload_tamper_a test_sstv_share_windows_payload_tamper_b
+      test_sstv_share_windows_payload_swap_a test_sstv_share_windows_payload_swap_b
+      test_sstv_share_windows_replay_a test_sstv_share_windows_replay_b
+      test_sstv_share_windows_expiry_a test_sstv_share_windows_expiry_b
+      test_sstv_share_windows_expiry_awaiting_a test_sstv_share_windows_expiry_awaiting_b
+      test_sstv_share_windows_expiry_partial_a test_sstv_share_windows_expiry_partial_b
+      test_sstv_share_windows_expiry_restart_a test_sstv_share_windows_expiry_restart_b
+      test_sstv_share_windows_downgrade_a test_sstv_share_windows_downgrade_b PROPERTIES
+      LABELS "sstv;sharing;network;security;application;windows" TIMEOUT 150 RUN_SERIAL TRUE
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+  endif ()
+  unset (_share_windows_python)
+  unset (_share_windows_ffmpeg)
+  unset (_share_windows_ffprobe)
+  unset (_share_windows_script)
+  unset (_share_windows_common)
+  unset (_share_variant)
+endif ()
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET decodium_sstv_share_aead)
+  find_program (_share_linux_python NAMES python3)
+  find_program (_share_linux_dbus NAMES dbus-run-session)
+  find_program (_share_linux_keyring NAMES gnome-keyring-daemon)
+  find_program (_share_linux_secret_tool NAMES secret-tool)
+  find_program (_share_linux_ffmpeg NAMES ffmpeg)
+  find_program (_share_linux_ffprobe NAMES ffprobe)
+  if (_share_linux_python AND _share_linux_dbus AND _share_linux_keyring
+      AND _share_linux_secret_tool AND _share_linux_ffmpeg AND _share_linux_ffprobe)
+    set (_share_linux_lab "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_linux_secret_service_lab.sh")
+    add_test (NAME test_sstv_share_linux_transfer
+      COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml>)
+    add_test (NAME test_sstv_share_linux_tamper
+      COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --tamper)
+    foreach (_share_variant IN ITEMS a b)
+      add_test (NAME test_sstv_share_linux_expiry_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-download ${_share_variant})
+      add_test (NAME test_sstv_share_linux_expiry_awaiting_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-awaiting ${_share_variant})
+      add_test (NAME test_sstv_share_linux_expiry_partial_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-partial ${_share_variant})
+      add_test (NAME test_sstv_share_linux_expiry_restart_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --expire-restart ${_share_variant})
+      add_test (NAME test_sstv_share_linux_payload_tamper_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --tamper-payload ${_share_variant})
+      add_test (NAME test_sstv_share_linux_payload_swap_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --swap-payload ${_share_variant})
+      add_test (NAME test_sstv_share_linux_replay_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --replay-envelope ${_share_variant})
+      add_test (NAME test_sstv_share_linux_manifest_tamper_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --tamper-manifest ${_share_variant})
+      add_test (NAME test_sstv_share_linux_downgrade_${_share_variant}
+        COMMAND bash "${_share_linux_lab}" $<TARGET_FILE:decodium_qml> --downgrade-manifest ${_share_variant})
+    endforeach ()
+    set_tests_properties (test_sstv_share_linux_transfer test_sstv_share_linux_tamper
+      test_sstv_share_linux_manifest_tamper_a test_sstv_share_linux_manifest_tamper_b
+      test_sstv_share_linux_payload_tamper_a test_sstv_share_linux_payload_tamper_b
+      test_sstv_share_linux_payload_swap_a test_sstv_share_linux_payload_swap_b
+      test_sstv_share_linux_replay_a test_sstv_share_linux_replay_b
+      test_sstv_share_linux_expiry_a test_sstv_share_linux_expiry_b
+      test_sstv_share_linux_expiry_awaiting_a test_sstv_share_linux_expiry_awaiting_b
+      test_sstv_share_linux_expiry_partial_a test_sstv_share_linux_expiry_partial_b
+      test_sstv_share_linux_expiry_restart_a test_sstv_share_linux_expiry_restart_b
+      test_sstv_share_linux_downgrade_a test_sstv_share_linux_downgrade_b PROPERTIES
+      LABELS "sstv;sharing;network;security;application;linux" TIMEOUT 150 RUN_SERIAL TRUE)
+  endif ()
+  unset (_share_linux_python)
+  unset (_share_linux_dbus)
+  unset (_share_linux_keyring)
+  unset (_share_linux_secret_tool)
+  unset (_share_linux_ffmpeg)
+  unset (_share_linux_ffprobe)
+  unset (_share_linux_lab)
+  unset (_share_variant)
+endif ()
+
+# Keep the final performance claim executable and machine-readable.  The
+# target measures both the inactive runtime and a deterministic 12 kHz DSP
+# stream; it opens no device and performs no network or file I/O.
+add_executable (sstv_performance tools/sstv_performance.cpp)
+target_link_libraries (sstv_performance
+  PRIVATE
+    Decodium::SstvIntegration
+    Qt6::Core
+  )
+set_target_properties (sstv_performance PROPERTIES
+  AUTOMOC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME sstv_performance COMMAND $<TARGET_FILE:sstv_performance>)
+set_tests_properties (sstv_performance PROPERTIES
+  LABELS "sstv;performance;runtime"
+  TIMEOUT 30
+  )
+
+add_executable (test_sstv_receive_qml test_sstv_receive_qml.cpp)
+target_link_libraries (test_sstv_receive_qml
+  PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_receive_qml PRIVATE
+  DECODIUM_SSTV_RECEIVE_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvReceivePage.qml"
+  )
+set_target_properties (test_sstv_receive_qml PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_receive_qml
+  COMMAND $<TARGET_FILE:test_sstv_receive_qml>)
+set_tests_properties (test_sstv_receive_qml PROPERTIES
+  LABELS "sstv;replay;qml;render"
+  TIMEOUT 20
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+foreach (sstv_button_style IN ITEMS Material Fusion)
+  add_test (NAME test_sstv_receive_qml_${sstv_button_style}
+    COMMAND $<TARGET_FILE:test_sstv_receive_qml>)
+  set_tests_properties (test_sstv_receive_qml_${sstv_button_style} PROPERTIES
+    LABELS "sstv;replay;qml;render"
+    TIMEOUT 20
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=${sstv_button_style}")
+endforeach ()
+
+add_executable (test_sstv_settings_qml test_sstv_settings_qml.cpp)
+target_link_libraries (test_sstv_settings_qml
+  PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_settings_qml PRIVATE
+  DECODIUM_SSTV_SETTINGS_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvSettingsPage.qml"
+  )
+set_target_properties (test_sstv_settings_qml PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_settings_qml
+  COMMAND $<TARGET_FILE:test_sstv_settings_qml>)
+set_tests_properties (test_sstv_settings_qml PROPERTIES
+  LABELS "sstv;settings;qml;render"
+  TIMEOUT 20
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+add_executable (test_sstv_image_preprocessor
+  test_sstv_image_preprocessor.cpp)
+target_link_libraries (test_sstv_image_preprocessor
+  PRIVATE
+    Decodium::SstvStudio
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+  )
+set_target_properties (test_sstv_image_preprocessor PROPERTIES
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_image_preprocessor
+  COMMAND $<TARGET_FILE:test_sstv_image_preprocessor>)
+set_tests_properties (test_sstv_image_preprocessor PROPERTIES
+  LABELS "sstv;studio;image"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_studio_controller
+  test_sstv_studio_controller.cpp)
+target_link_libraries (test_sstv_studio_controller
+  PRIVATE
+    Decodium::SstvStudio
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+  )
+set_target_properties (test_sstv_studio_controller PROPERTIES
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_studio_controller
+  COMMAND $<TARGET_FILE:test_sstv_studio_controller>)
+set_tests_properties (test_sstv_studio_controller PROPERTIES
+  LABELS "sstv;studio;integration"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_studio_qml
+  test_sstv_studio_qml.cpp)
+target_link_libraries (test_sstv_studio_qml
+  PRIVATE
+    Decodium::SstvStudio
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_studio_qml PRIVATE
+  DECODIUM_SSTV_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvTransmitPage.qml"
+  )
+set_target_properties (test_sstv_studio_qml PROPERTIES
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_studio_qml
+  COMMAND $<TARGET_FILE:test_sstv_studio_qml>)
+set_tests_properties (test_sstv_studio_qml PROPERTIES
+  LABELS "sstv;studio;qml;render"
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+add_executable (test_sstv_storage test_sstv_storage.cpp)
+target_link_libraries (test_sstv_storage
+  PRIVATE
+    Decodium::SstvStorage
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Test
+  )
+set_target_properties (test_sstv_storage PROPERTIES
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_storage COMMAND $<TARGET_FILE:test_sstv_storage>)
+set_tests_properties (test_sstv_storage PROPERTIES
+  LABELS "sstv;storage"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_tx_gallery_archive
+  test_sstv_tx_gallery_archive.cpp)
+target_link_libraries (test_sstv_tx_gallery_archive
+  PRIVATE
+    Decodium::SstvStorage
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+  )
+set_target_properties (test_sstv_tx_gallery_archive PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_tx_gallery_archive
+  COMMAND $<TARGET_FILE:test_sstv_tx_gallery_archive>)
+set_tests_properties (test_sstv_tx_gallery_archive PROPERTIES
+  LABELS "sstv;storage;gallery;tx"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_incoming_gallery_import
+  test_sstv_incoming_gallery_import.cpp)
+target_link_libraries (test_sstv_incoming_gallery_import
+  PRIVATE
+    Decodium::SstvSharingUi
+    Decodium::SstvStorage
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Sql
+    Qt6::Test
+  )
+set_target_properties (test_sstv_incoming_gallery_import PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_incoming_gallery_import
+  COMMAND $<TARGET_FILE:test_sstv_incoming_gallery_import>)
+set_tests_properties (test_sstv_incoming_gallery_import PROPERTIES
+  LABELS "sstv;sharing;inbox;storage;gallery;threading;security"
+  TIMEOUT 30
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_gallery_model test_sstv_gallery_model.cpp)
+target_link_libraries (test_sstv_gallery_model
+  PRIVATE
+    Decodium::SstvGallery
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Quick
+    Qt6::Sql
+    Qt6::Test
+  )
+set_target_properties (test_sstv_gallery_model PROPERTIES
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_gallery_model
+  COMMAND $<TARGET_FILE:test_sstv_gallery_model>)
+set_tests_properties (test_sstv_gallery_model PROPERTIES
+  LABELS "sstv;gallery;storage;model"
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software"
+  )
+
+add_executable (test_sstv_gallery_qml test_sstv_gallery_qml.cpp)
+target_link_libraries (test_sstv_gallery_qml
+  PRIVATE
+    Decodium::SstvGallery
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Sql
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_gallery_qml PRIVATE
+  DECODIUM_SSTV_GALLERY_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvGalleryPage.qml"
+  )
+set_target_properties (test_sstv_gallery_qml PROPERTIES
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_gallery_qml
+  COMMAND $<TARGET_FILE:test_sstv_gallery_qml>)
+set_tests_properties (test_sstv_gallery_qml PROPERTIES
+  LABELS "sstv;gallery;qml;render"
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+add_executable (test_sstv_diagnostics test_sstv_diagnostics.cpp)
+target_link_libraries (test_sstv_diagnostics
+  PRIVATE
+    Decodium::SstvDiagnostics
+    Qt6::Core
+    Qt6::Test
+  )
+set_target_properties (test_sstv_diagnostics PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_diagnostics
+  COMMAND $<TARGET_FILE:test_sstv_diagnostics>)
+set_tests_properties (test_sstv_diagnostics PROPERTIES
+  LABELS "sstv;diagnostics;security;threading;export"
+  TIMEOUT 30
+  )
+
+add_executable (test_sstv_diagnostics_qml
+  test_sstv_diagnostics_qml.cpp)
+target_link_libraries (test_sstv_diagnostics_qml
+  PRIVATE
+    Decodium::SstvDiagnostics
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_diagnostics_qml PRIVATE
+  DECODIUM_SSTV_DIAGNOSTICS_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvDiagnosticsPage.qml"
+  )
+set_target_properties (test_sstv_diagnostics_qml PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_diagnostics_qml
+  COMMAND $<TARGET_FILE:test_sstv_diagnostics_qml>)
+set_tests_properties (test_sstv_diagnostics_qml PROPERTIES
+  LABELS "sstv;diagnostics;qml;render;export"
+  TIMEOUT 20
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+add_executable (test_sstv_qso_qml test_sstv_qso_qml.cpp)
+target_link_libraries (test_sstv_qso_qml
+  PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_qso_qml PRIVATE
+  DECODIUM_SSTV_QSO_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvLogQsoDialog.qml"
+  )
+set_target_properties (test_sstv_qso_qml PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_qso_qml
+  COMMAND $<TARGET_FILE:test_sstv_qso_qml>)
+set_tests_properties (test_sstv_qso_qml PROPERTIES
+  LABELS "sstv;qso;adif;gallery;qml;render"
+  TIMEOUT 20
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+add_executable (test_sstv_sharing_core test_sstv_sharing_core.cpp)
+target_link_libraries (test_sstv_sharing_core
+  PRIVATE
+    Decodium::SstvSharingCore
+    Qt6::Core
+  )
+set_target_properties (test_sstv_sharing_core PROPERTIES
+  AUTOMOC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_sharing_core
+  COMMAND $<TARGET_FILE:test_sstv_sharing_core>)
+set_tests_properties (test_sstv_sharing_core PROPERTIES
+  LABELS "sstv;sharing;security"
+  )
+
+add_executable (test_sstv_share_queue_manager
+  test_sstv_share_queue_manager.cpp)
+target_link_libraries (test_sstv_share_queue_manager
+  PRIVATE
+    Decodium::SstvSharingQueue
+    Qt6::Core
+    Qt6::Sql
+  )
+set_target_properties (test_sstv_share_queue_manager PROPERTIES
+  AUTOMOC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_share_queue_manager
+  COMMAND $<TARGET_FILE:test_sstv_share_queue_manager>)
+set_tests_properties (test_sstv_share_queue_manager PROPERTIES
+  LABELS "sstv;sharing;queue;storage;security"
+  TIMEOUT 30
+  )
+
+add_executable (test_sstv_incoming_media_validator
+  test_sstv_incoming_media_validator.cpp)
+target_link_libraries (test_sstv_incoming_media_validator
+  PRIVATE
+    Decodium::SstvSharingQueue
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+  )
+set_target_properties (test_sstv_incoming_media_validator PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_incoming_media_validator
+  COMMAND $<TARGET_FILE:test_sstv_incoming_media_validator>)
+set_tests_properties (test_sstv_incoming_media_validator PROPERTIES
+  LABELS "sstv;sharing;inbox;image;security"
+  TIMEOUT 20
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_share_controller
+  test_sstv_share_controller.cpp)
+target_link_libraries (test_sstv_share_controller
+  PRIVATE
+    Decodium::SstvSharingUi
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Sql
+    Qt6::Test
+  )
+set_target_properties (test_sstv_share_controller PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_share_controller
+  COMMAND $<TARGET_FILE:test_sstv_share_controller>)
+set_tests_properties (test_sstv_share_controller PROPERTIES
+  LABELS "sstv;sharing;controller;threading;security"
+  TIMEOUT 20
+  )
+
+add_executable (test_sstv_local_integration_provider
+  test_sstv_local_integration_provider.cpp)
+target_link_libraries (test_sstv_local_integration_provider
+  PRIVATE
+    Decodium::SstvSharingUi
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Sql
+    Qt6::Test
+  )
+set_target_properties (test_sstv_local_integration_provider PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_local_integration_provider
+  COMMAND $<TARGET_FILE:test_sstv_local_integration_provider>)
+set_tests_properties (test_sstv_local_integration_provider PROPERTIES
+  LABELS "sstv;sharing;local-integration;queue;controller;security"
+  TIMEOUT 30
+  )
+
+add_executable (test_sstv_share_qml test_sstv_share_qml.cpp)
+target_link_libraries (test_sstv_share_qml
+  PRIVATE
+    Decodium::SstvSharingUi
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Sql
+    Qt6::Test
+  )
+target_compile_definitions (test_sstv_share_qml PRIVATE
+  DECODIUM_SSTV_SHARE_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvSharePage.qml"
+  )
+set_target_properties (test_sstv_share_qml PROPERTIES
+  AUTOMOC ON
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_share_qml
+  COMMAND $<TARGET_FILE:test_sstv_share_qml>)
+set_tests_properties (test_sstv_share_qml PROPERTIES
+  LABELS "sstv;sharing;qml;render;privacy"
+  TIMEOUT 20
+  ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+  )
+
+# Compile the transport directly with the double-gated localhost test escape.
+# The production Decodium::SstvSharingHttp target above never receives it.
+add_executable (test_sstv_http_providers
+  test_sstv_http_providers.cpp
+  ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvHttpShareProviders.cpp)
+target_link_libraries (test_sstv_http_providers
+  PRIVATE
+    Decodium::SstvSharingCore
+    Qt6::Core
+    Qt6::Network
+  )
+target_compile_definitions (test_sstv_http_providers PRIVATE
+  DECODIUM_SSTV_ALLOW_INSECURE_LOCAL_TEST_TRANSPORT=1
+  DECODIUM_SSTV_PROVIDER_TESTING=1
+  DECODIUM_SSTV_TEST_TLS_CERT="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+  DECODIUM_SSTV_TEST_TLS_KEY="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key")
+set_target_properties (test_sstv_http_providers PROPERTIES
+  AUTOMOC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_http_providers
+  COMMAND $<TARGET_FILE:test_sstv_http_providers>)
+set_tests_properties (test_sstv_http_providers PROPERTIES
+  LABELS "sstv;sharing;network;security"
+  TIMEOUT 30
+  )
+
+# Compile and execute the explicit production-gate case against the normal
+# provider library to prove a runtime flag alone cannot enable plaintext.
+add_executable (test_sstv_http_provider_production_gate
+  test_sstv_http_providers.cpp)
+target_link_libraries (test_sstv_http_provider_production_gate
+  PRIVATE
+    Decodium::SstvSharingHttp
+    Qt6::Core
+    Qt6::Network
+  )
+target_compile_definitions (test_sstv_http_provider_production_gate PRIVATE
+  DECODIUM_SSTV_TEST_TLS_CERT="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+  DECODIUM_SSTV_TEST_TLS_KEY="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key")
+set_target_properties (test_sstv_http_provider_production_gate PROPERTIES
+  AUTOMOC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_http_provider_production_gate
+  COMMAND $<TARGET_FILE:test_sstv_http_provider_production_gate>
+    plaintextTransportNeedsBothCompileAndRuntimeTestGates)
+set_tests_properties (test_sstv_http_provider_production_gate PROPERTIES
+  LABELS "sstv;sharing;network;security;production-gate"
+  TIMEOUT 10
+  )
+
+# This deterministic target keeps the seed corpus and parser invariants
+# executable on every supported compiler. It does not require libFuzzer and is
+# the only fuzz-hardening target included in an ordinary BUILD_TESTING build.
+add_executable (test_sstv_fuzz_smoke
+  test_sstv_fuzz_smoke.cpp
+  ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvQsoLog.cpp
+  ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvQsoLog.h
+  ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvWavPcmReader.cpp
+  ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvWavPcmReader.h
+  )
+target_include_directories (test_sstv_fuzz_smoke PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_sstv_fuzz_smoke
+  PRIVATE
+    Decodium::SstvSharingCore
+    Qt6::Core
+  )
+target_compile_definitions (test_sstv_fuzz_smoke PRIVATE
+  DECODIUM_SSTV_FUZZ_CORPUS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus"
+  )
+set_target_properties (test_sstv_fuzz_smoke PROPERTIES
+  AUTOMOC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_fuzz_smoke
+  COMMAND $<TARGET_FILE:test_sstv_fuzz_smoke>)
+set_tests_properties (test_sstv_fuzz_smoke PROPERTIES
+  LABELS "sstv;fuzz-smoke;parser;security"
+  TIMEOUT 20
+  )
+
+# Keep the exact remote-image staging boundary under ordinary CTest as well as
+# the libFuzzer build.  This exercises hostile bytes through the real
+# hash/MIME/decode/normalise/reinspect path without requiring a Clang runtime.
+add_executable (test_sstv_incoming_media_fuzz_smoke
+  test_sstv_incoming_media_fuzz_smoke.cpp
+  fuzz/fuzz_sstv_incoming_media.cpp)
+target_include_directories (test_sstv_incoming_media_fuzz_smoke PRIVATE
+  ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_sstv_incoming_media_fuzz_smoke
+  PRIVATE
+    Decodium::SstvSharingQueue
+    Qt6::Core
+    Qt6::Gui
+  )
+target_compile_definitions (test_sstv_incoming_media_fuzz_smoke PRIVATE
+  DECODIUM_SSTV_INCOMING_MEDIA_FUZZ_CORPUS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/incoming-media"
+  )
+set_target_properties (test_sstv_incoming_media_fuzz_smoke PROPERTIES
+  AUTOMOC OFF
+  AUTORCC OFF
+  AUTOUIC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_incoming_media_fuzz_smoke
+  COMMAND $<TARGET_FILE:test_sstv_incoming_media_fuzz_smoke>)
+set_tests_properties (test_sstv_incoming_media_fuzz_smoke PROPERTIES
+  LABELS "sstv;fuzz-smoke;sharing;inbox;image;security"
+  TIMEOUT 30
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+add_executable (test_sstv_protocol_fuzz_smoke
+  test_sstv_protocol_fuzz_smoke.cpp
+  fuzz/fuzz_sstv_protocol_parsers.cpp)
+target_include_directories (test_sstv_protocol_fuzz_smoke PRIVATE
+  ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_sstv_protocol_fuzz_smoke
+  PRIVATE Decodium::SstvCore)
+set_target_properties (test_sstv_protocol_fuzz_smoke PROPERTIES
+  AUTOMOC OFF
+  AUTORCC OFF
+  AUTOUIC OFF
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  )
+add_test (NAME test_sstv_protocol_fuzz_smoke
+  COMMAND $<TARGET_FILE:test_sstv_protocol_fuzz_smoke>)
+set_tests_properties (test_sstv_protocol_fuzz_smoke PROPERTIES
+  LABELS "sstv;fuzz-smoke;parser;security;vis;fskid"
+  TIMEOUT 30
+  )
+
+if (DECODIUM_ENABLE_SSTV_FUZZING)
+  function (configure_decodium_sstv_fuzzer target_name)
+    target_compile_options (${target_name} PRIVATE
+      -fsanitize=fuzzer,address,undefined
+      -fno-omit-frame-pointer
+      )
+    # LINK_FLAGS keeps this developer-only branch compatible with the
+    # repository's declared CMake 3.7 baseline.
+    set_property (TARGET ${target_name} APPEND_STRING PROPERTY LINK_FLAGS
+      " -fsanitize=fuzzer,address,undefined")
+    set_target_properties (${target_name} PROPERTIES
+      AUTOMOC OFF
+      AUTORCC OFF
+      AUTOUIC OFF
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 17
+      CXX_STANDARD_REQUIRED ON
+      )
+  endfunction ()
+
+  # Compile the parser source into each fuzzer instead of linking the normal
+  # static runtime libraries, so libFuzzer coverage and sanitizers instrument
+  # the code under test as well as the small harness.
+  add_executable (fuzz_sstv_wav_pcm_reader
+    fuzz/fuzz_sstv_wav_pcm_reader.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvWavPcmReader.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvWavPcmReader.h
+    )
+  target_include_directories (fuzz_sstv_wav_pcm_reader PRIVATE
+    ${CMAKE_SOURCE_DIR})
+  target_link_libraries (fuzz_sstv_wav_pcm_reader PRIVATE Qt6::Core)
+  configure_decodium_sstv_fuzzer (fuzz_sstv_wav_pcm_reader)
+
+  add_executable (fuzz_sstv_share_parsers
+    fuzz/fuzz_sstv_share_parsers.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareManifest.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareManifest.h
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareSecurity.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareSecurity.h
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareTransfer.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareTransfer.h
+    )
+  target_include_directories (fuzz_sstv_share_parsers PRIVATE
+    ${CMAKE_SOURCE_DIR})
+  target_link_libraries (fuzz_sstv_share_parsers PRIVATE Qt6::Core)
+  configure_decodium_sstv_fuzzer (fuzz_sstv_share_parsers)
+
+  # This target deliberately uses the production remote-image validation
+  # sequence, including private staging and reinspection, rather than only a
+  # header parser. The readable PNG and JPEG seeds reach decode and
+  # normalisation; mutated dimensions and byte streams must fail closed before
+  # import.
+  add_executable (fuzz_sstv_incoming_media
+    fuzz/fuzz_sstv_incoming_media.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvIncomingMediaValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvIncomingMediaValidator.h
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareManifest.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareManifest.h
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareSecurity.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/sharing/SstvShareSecurity.h
+    )
+  target_include_directories (fuzz_sstv_incoming_media PRIVATE
+    ${CMAKE_SOURCE_DIR})
+  target_link_libraries (fuzz_sstv_incoming_media PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    )
+  configure_decodium_sstv_fuzzer (fuzz_sstv_incoming_media)
+
+  add_executable (fuzz_sstv_qso_log
+    fuzz/fuzz_sstv_qso_log.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvQsoLog.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/integration/SstvQsoLog.h
+    )
+  target_include_directories (fuzz_sstv_qso_log PRIVATE
+    ${CMAKE_SOURCE_DIR})
+  target_link_libraries (fuzz_sstv_qso_log PRIVATE Qt6::Core)
+  configure_decodium_sstv_fuzzer (fuzz_sstv_qso_log)
+
+  add_executable (fuzz_sstv_protocol_parsers
+    fuzz/fuzz_sstv_protocol_parsers.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/core/SstvVisCodec.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/core/SstvVisCodec.h
+    ${CMAKE_SOURCE_DIR}/src/sstv/core/SstvNarrowVisCodec.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/core/SstvNarrowVisCodec.h
+    ${CMAKE_SOURCE_DIR}/src/sstv/core/SstvFskIdCodec.cpp
+    ${CMAKE_SOURCE_DIR}/src/sstv/core/SstvFskIdCodec.h
+    )
+  target_include_directories (fuzz_sstv_protocol_parsers PRIVATE
+    ${CMAKE_SOURCE_DIR})
+  configure_decodium_sstv_fuzzer (fuzz_sstv_protocol_parsers)
+endif ()
+
+if (DECODIUM_ENABLE_HAMDRM)
+  add_executable (test_hamdrm_core test_hamdrm_core.cpp)
+  target_link_libraries (test_hamdrm_core PRIVATE Decodium::HamDrmCore)
+  target_compile_definitions (test_hamdrm_core PRIVATE
+    DECODIUM_HAMDRM_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+  set_target_properties (test_hamdrm_core PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_core COMMAND $<TARGET_FILE:test_hamdrm_core>)
+  set_tests_properties (test_hamdrm_core PROPERTIES
+    LABELS "sstv;hamdrm;digital;mot;bsr;security"
+    TIMEOUT 20
+    )
+
+  add_executable (test_hamdrm_partial_store
+    test_hamdrm_partial_store.cpp)
+  target_link_libraries (test_hamdrm_partial_store
+    PRIVATE
+      Decodium::HamDrmPersistence
+      Qt6::Core
+    )
+  set_target_properties (test_hamdrm_partial_store PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_partial_store
+    COMMAND $<TARGET_FILE:test_hamdrm_partial_store>)
+  set_tests_properties (test_hamdrm_partial_store PROPERTIES
+    LABELS "sstv;hamdrm;digital;resume;storage;security"
+    TIMEOUT 20
+    )
+
+  add_executable (test_hamdrm_jpeg2000 test_hamdrm_jpeg2000.cpp)
+  target_link_libraries (test_hamdrm_jpeg2000
+    PRIVATE
+      Decodium::HamDrmOpenJpeg
+  )
+  set_target_properties (test_hamdrm_jpeg2000 PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_jpeg2000
+    COMMAND $<TARGET_FILE:test_hamdrm_jpeg2000>)
+  set_tests_properties (test_hamdrm_jpeg2000 PROPERTIES
+    LABELS "sstv;hamdrm;digital;jpeg2000;openjpeg;security"
+    TIMEOUT 20
+    )
+
+  add_executable (test_hamdrm_controller test_hamdrm_controller.cpp)
+  target_link_libraries (test_hamdrm_controller
+    PRIVATE
+      Decodium::HamDrmUi
+      Qt6::Core
+      Qt6::Gui
+      Qt6::Test
+    )
+  set_target_properties (test_hamdrm_controller PROPERTIES
+    AUTOMOC ON
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_controller
+    COMMAND $<TARGET_FILE:test_hamdrm_controller>)
+  set_tests_properties (test_hamdrm_controller PROPERTIES
+    LABELS "sstv;hamdrm;digital;controller;resume;security"
+    TIMEOUT 30
+    )
+
+  add_executable (test_hamdrm_hybrid_ftp test_hamdrm_hybrid_ftp.cpp)
+  target_link_libraries (test_hamdrm_hybrid_ftp PRIVATE Decodium::HamDrmUi Qt6::Network Qt6::Test)
+  set_target_properties (test_hamdrm_hybrid_ftp PROPERTIES AUTOMOC ON CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_hamdrm_hybrid_ftp COMMAND $<TARGET_FILE:test_hamdrm_hybrid_ftp>)
+  set_tests_properties (test_hamdrm_hybrid_ftp PROPERTIES LABELS "sstv;hamdrm;digital;hybrid" TIMEOUT 30)
+
+  add_executable (test_sstv_digital_qml test_sstv_digital_qml.cpp)
+  target_link_libraries (test_sstv_digital_qml
+    PRIVATE
+      Decodium::HamDrmUi
+      Qt6::Core
+      Qt6::Gui
+      Qt6::Qml
+      Qt6::Quick
+      Qt6::QuickControls2
+      Qt6::Test
+    )
+  target_compile_definitions (test_sstv_digital_qml PRIVATE
+    DECODIUM_SSTV_DIGITAL_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvDigitalPage.qml"
+    DECODIUM_SSTV_WORKSPACE_QML_SOURCE="${CMAKE_SOURCE_DIR}/qml/decodium/components/sstv/SstvWorkspace.qml"
+    DECODIUM_SSTV_ITALIAN_QM="${CMAKE_SOURCE_DIR}/translations/decodium_it.qm"
+    )
+  set_target_properties (test_sstv_digital_qml PROPERTIES
+    AUTOMOC ON
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_sstv_digital_qml
+    COMMAND $<TARGET_FILE:test_sstv_digital_qml>)
+  set_tests_properties (test_sstv_digital_qml PROPERTIES
+    LABELS "sstv;hamdrm;digital;qml;render"
+    TIMEOUT 30
+    ENVIRONMENT
+      "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+    )
+
+  add_executable (test_hamdrm_phy test_hamdrm_phy.cpp)
+  target_link_libraries (test_hamdrm_phy PRIVATE Decodium::HamDrmCore)
+  target_compile_definitions (test_hamdrm_phy PRIVATE
+    DECODIUM_QSSTV_OFDM_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-ofdm-8c27d6d.txt")
+  set_target_properties (test_hamdrm_phy PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_phy COMMAND $<TARGET_FILE:test_hamdrm_phy>)
+  set_tests_properties (test_hamdrm_phy PROPERTIES
+    LABELS "sstv;hamdrm;digital;phy;ofdm;qam"
+    TIMEOUT 30
+    )
+
+  add_executable (export_decodium_packets EXCLUDE_FROM_ALL tools/export_decodium_packets.cpp)
+  target_link_libraries (export_decodium_packets PRIVATE Decodium::HamDrmCore)
+  target_compile_features (export_decodium_packets PRIVATE cxx_std_17)
+  add_executable (export_decodium_msc EXCLUDE_FROM_ALL tools/export_decodium_msc.cpp)
+  target_link_libraries (export_decodium_msc PRIVATE Decodium::HamDrmCore)
+  target_compile_features (export_decodium_msc PRIVATE cxx_std_17)
+
+  add_executable (export_decodium_fac EXCLUDE_FROM_ALL tools/export_decodium_fac.cpp)
+  target_link_libraries (export_decodium_fac PRIVATE Decodium::HamDrmCore)
+  target_compile_features (export_decodium_fac PRIVATE cxx_std_17)
+
+  add_executable (test_hamdrm_channel test_hamdrm_channel.cpp)
+  target_link_libraries (test_hamdrm_channel PRIVATE Decodium::HamDrmCore)
+  target_compile_definitions (test_hamdrm_channel PRIVATE
+    DECODIUM_QSSTV_FAC_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-fac-8c27d6d.txt"
+    DECODIUM_QSSTV_MSC_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-msc-8c27d6d.txt"
+    DECODIUM_QSSTV_CELLMAP_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-cellmap-8c27d6d.txt"
+    DECODIUM_QSSTV_PILOTS_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-pilots-8c27d6d.txt"
+    DECODIUM_QSSTV_MAPPER_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-mapper-8c27d6d.txt"
+    DECODIUM_QSSTV_RX_MAP_FIXTURE="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-msc-rx-map-8c27d6d.txt")
+  set_target_properties (test_hamdrm_channel PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_channel
+    COMMAND $<TARGET_FILE:test_hamdrm_channel>)
+  set_tests_properties (test_hamdrm_channel PROPERTIES
+    LABELS "sstv;hamdrm;digital;channel;fac;msc;fec;interleaver"
+    TIMEOUT 60
+    )
+
+  add_executable (analyze_hamdrm_capture EXCLUDE_FROM_ALL tools/analyze_hamdrm_capture.cpp)
+  target_link_libraries (analyze_hamdrm_capture PRIVATE Decodium::HamDrmCore)
+  set_target_properties (analyze_hamdrm_capture PROPERTIES AUTOMOC OFF CXX_EXTENSIONS OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_executable (export_hamdrm_fallback_fixture EXCLUDE_FROM_ALL tools/export_hamdrm_fallback_fixture.cpp)
+  add_executable (export_easypal_bsr_audio EXCLUDE_FROM_ALL tools/export_easypal_bsr_audio.cpp)
+  add_executable (export_hamdrm_rs_boundary_wave EXCLUDE_FROM_ALL tools/export_hamdrm_rs_boundary_wave.cpp)
+  target_link_libraries (export_hamdrm_rs_boundary_wave PRIVATE Decodium::HamDrmCore)
+  set_target_properties (export_hamdrm_rs_boundary_wave PROPERTIES AUTOMOC OFF CXX_EXTENSIONS OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  target_link_libraries (export_easypal_bsr_audio PRIVATE Decodium::HamDrmCore)
+  set_target_properties (export_easypal_bsr_audio PROPERTIES AUTOMOC OFF CXX_EXTENSIONS OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  target_link_libraries (export_hamdrm_fallback_fixture PRIVATE Decodium::HamDrmCore)
+  set_target_properties (export_hamdrm_fallback_fixture PROPERTIES AUTOMOC OFF CXX_EXTENSIONS OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_executable (export_hamdrm_crc_stress EXCLUDE_FROM_ALL tools/export_hamdrm_crc_stress.cpp)
+  target_link_libraries (export_hamdrm_crc_stress PRIVATE Decodium::HamDrmCore)
+  set_target_properties (export_hamdrm_crc_stress PROPERTIES AUTOMOC OFF CXX_EXTENSIONS OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  find_program (_hamdrm_analyze_python NAMES python3 python)
+  if (_hamdrm_analyze_python)
+    add_test (NAME test_hamdrm_crc_stress
+      COMMAND "${_hamdrm_analyze_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_hamdrm_crc_stress.py"
+        $<TARGET_FILE:export_hamdrm_crc_stress> $<TARGET_FILE:analyze_hamdrm_capture>
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg")
+    set_tests_properties (test_hamdrm_crc_stress PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 60)
+    add_test (NAME test_hamdrm_capture_analyzer
+      COMMAND "${_hamdrm_analyze_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_analyze_hamdrm_capture.py"
+        $<TARGET_FILE:analyze_hamdrm_capture> "${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+        $<TARGET_FILE:export_hamdrm_fallback_fixture>)
+    set_tests_properties (test_hamdrm_capture_analyzer PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 60)
+    add_test (NAME test_hamdrm_qsstv_a23_allpass
+      COMMAND "${_hamdrm_analyze_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_qsstv_a23_allpass.py"
+        $<TARGET_FILE:analyze_hamdrm_capture> "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-a23-allpass")
+    set_tests_properties (test_hamdrm_qsstv_a23_allpass PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 120)
+    add_test (NAME test_hamdrm_qsstv_a25_normal64
+      COMMAND "${_hamdrm_analyze_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_qsstv_a25_normal64.py"
+        $<TARGET_FILE:analyze_hamdrm_capture> "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-a25-normal64")
+    set_tests_properties (test_hamdrm_qsstv_a25_normal64 PROPERTIES LABELS "sstv;hamdrm;diagnostics" TIMEOUT 120)
+    add_test (NAME test_hamdrm_upstream_bsr_timing
+      COMMAND "${_hamdrm_analyze_python}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_qsstv_upstream_bsr_timing.py"
+        $<TARGET_FILE:analyze_hamdrm_capture> "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+    set_tests_properties (test_hamdrm_upstream_bsr_timing PROPERTIES LABELS "sstv;hamdrm;bsr;diagnostics" TIMEOUT 60)
+  endif ()
+  unset (_hamdrm_analyze_python)
+
+  add_executable (test_hamdrm_waveform test_hamdrm_waveform.cpp)
+  add_dependencies (test_hamdrm_waveform analyze_hamdrm_capture export_hamdrm_fallback_fixture export_hamdrm_crc_stress)
+  target_link_libraries (test_hamdrm_waveform
+    PRIVATE Decodium::HamDrmCore Qt6::Gui)
+  target_compile_definitions (test_hamdrm_waveform PRIVATE
+    DECODIUM_QSSTV_SUPERFRAME_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-superframe-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_SUPERFRAME_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-superframe-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_VALID_FAC_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-valid-fac-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_VALID_FAC_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-valid-fac-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_MOT_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-mot-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_MOT_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-mot-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_OBJECT_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-object-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_OBJECT_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-object-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_IMAGE_PCM_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-a-8c27d6d.pcm"
+    DECODIUM_QSSTV_IMAGE_PCM_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-b-8c27d6d.pcm"
+    DECODIUM_QSSTV_IMAGE_A="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-a.jpg"
+    DECODIUM_QSSTV_IMAGE_B="${CMAKE_SOURCE_DIR}/tests/sstv/fixtures/qsstv-image-b.jpg")
+  set_target_properties (test_hamdrm_waveform PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_waveform
+    COMMAND $<TARGET_FILE:test_hamdrm_waveform>)
+  set_tests_properties (test_hamdrm_waveform PROPERTIES
+    LABELS "sstv;hamdrm;digital;waveform;ofdm;loopback"
+    TIMEOUT 600
+    )
+
+  add_executable (test_hamdrm_waveform_adapters
+    test_hamdrm_waveform_adapters.cpp)
+  target_link_libraries (test_hamdrm_waveform_adapters
+    PRIVATE
+      Decodium::HamDrmRuntime
+      Qt6::Core
+  )
+  set_target_properties (test_hamdrm_waveform_adapters PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options (test_hamdrm_waveform_adapters PRIVATE
+      -Wall -Wextra -Wpedantic -Werror)
+  endif ()
+  add_test (NAME test_hamdrm_waveform_adapters
+    COMMAND $<TARGET_FILE:test_hamdrm_waveform_adapters>)
+  set_tests_properties (test_hamdrm_waveform_adapters PROPERTIES
+    LABELS "sstv;hamdrm;digital;waveform;adapter;controller;integration"
+    TIMEOUT 60
+    )
+
+  add_executable (test_hamdrm_fuzz_smoke
+    test_hamdrm_fuzz_smoke.cpp
+    fuzz/fuzz_hamdrm_parsers.cpp
+    )
+  add_executable (test_hamdrm_rs test_hamdrm_rs.cpp)
+  target_link_libraries (test_hamdrm_rs PRIVATE Decodium::HamDrmCore)
+  target_compile_definitions (test_hamdrm_rs PRIVATE DECODIUM_HAMDRM_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+  set_target_properties (test_hamdrm_rs PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_hamdrm_rs COMMAND $<TARGET_FILE:test_hamdrm_rs>)
+  set_tests_properties (test_hamdrm_rs PROPERTIES LABELS "sstv;hamdrm;digital;security" TIMEOUT 30)
+  target_link_libraries (test_hamdrm_fuzz_smoke
+    PRIVATE Decodium::HamDrmCore)
+  set_target_properties (test_hamdrm_fuzz_smoke PROPERTIES
+    AUTOMOC OFF
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    )
+  add_test (NAME test_hamdrm_fuzz_smoke
+    COMMAND $<TARGET_FILE:test_hamdrm_fuzz_smoke>)
+  set_tests_properties (test_hamdrm_fuzz_smoke PROPERTIES
+    LABELS "sstv;hamdrm;digital;fuzz-smoke;parser;security"
+    TIMEOUT 30
+    )
+
+  if (DECODIUM_ENABLE_SSTV_FUZZING)
+    add_executable (fuzz_hamdrm_parsers
+      fuzz/fuzz_hamdrm_parsers.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmBsrCodec.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmBsrCodec.h
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmCrc.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmCrc.h
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/channel/HamDrmChannelCrc.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/channel/HamDrmChannelCrc.h
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmImageValidator.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmImageValidator.h
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmMotCodec.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmMotCodec.h
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmProfileRegistry.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmProfileRegistry.h
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmRsCodec.cpp
+      ${CMAKE_SOURCE_DIR}/src/sstv/digital/HamDrmRsCodec.h
+      )
+    target_include_directories (fuzz_hamdrm_parsers PRIVATE
+      ${CMAKE_SOURCE_DIR})
+    configure_decodium_sstv_fuzzer (fuzz_hamdrm_parsers)
+  endif ()
+endif ()
+
+# Give CI and developers one stable target that materialises every ordinary
+# SSTV/HAMDRM test executable declared in this directory.  Fuzzers are kept
+# behind their explicit developer option and are run with bounded corpora, not
+# as part of this aggregate.
+get_property (_decodium_sstv_directory_targets
+  DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+add_custom_target (decodium_sstv_test_binaries)
+foreach (_decodium_sstv_target IN LISTS _decodium_sstv_directory_targets)
+  if (_decodium_sstv_target MATCHES "^fuzz_")
+    continue ()
+  endif ()
+  get_target_property (_decodium_sstv_target_type
+    ${_decodium_sstv_target} TYPE)
+  if (_decodium_sstv_target_type STREQUAL "EXECUTABLE")
+    add_dependencies (decodium_sstv_test_binaries
+      ${_decodium_sstv_target})
+  endif ()
+endforeach ()
+unset (_decodium_sstv_target_type)
+unset (_decodium_sstv_target)
+unset (_decodium_sstv_directory_targets)
+
+if (TARGET decodium_sstv_share_aead)
+  add_executable (test_sstv_p256_backend_diagnostic tools/probe_p256_backend.cpp)
+  target_link_libraries (test_sstv_p256_backend_diagnostic PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_p256_backend_diagnostic PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_p256_backend_diagnostic COMMAND $<TARGET_FILE:test_sstv_p256_backend_diagnostic>)
+  set_tests_properties (test_sstv_p256_backend_diagnostic PROPERTIES LABELS "sstv;sharing;security;diagnostics" TIMEOUT 30)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_p256_backend_diagnostic)
+  add_executable (test_sstv_ed25519_backend_diagnostic tools/probe_ed25519_backend.cpp)
+  target_link_libraries (test_sstv_ed25519_backend_diagnostic PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_ed25519_backend_diagnostic PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_ed25519_backend_diagnostic COMMAND $<TARGET_FILE:test_sstv_ed25519_backend_diagnostic>)
+  set_tests_properties (test_sstv_ed25519_backend_diagnostic PROPERTIES LABELS "sstv;sharing;security;diagnostics" TIMEOUT 30)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_ed25519_backend_diagnostic)
+  add_executable (test_sstv_coordinated_secret_backend test_sstv_coordinated_secret_backend.cpp)
+  target_include_directories (test_sstv_coordinated_secret_backend PRIVATE ${CMAKE_SOURCE_DIR})
+  target_link_libraries (test_sstv_coordinated_secret_backend PRIVATE decodium_sstv_share_aead Qt6::Core)
+  set_target_properties (test_sstv_coordinated_secret_backend PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_coordinated_secret_backend)
+  add_test (NAME test_sstv_coordinated_secret_backend COMMAND $<TARGET_FILE:test_sstv_coordinated_secret_backend>)
+  set_tests_properties (test_sstv_coordinated_secret_backend PROPERTIES LABELS "sstv;sharing;security" TIMEOUT 90)
+  target_link_libraries (test_sstv_share_queue_manager PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_share_queue_manager PRIVATE DECODIUM_TEST_SHARE_CRYPTO=1)
+  add_executable (test_sstv_share_aead test_sstv_share_aead.cpp)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_share_aead)
+  target_link_libraries (test_sstv_share_aead PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_share_aead PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_share_aead COMMAND $<TARGET_FILE:test_sstv_share_aead>)
+  set_tests_properties (test_sstv_share_aead PROPERTIES LABELS "sstv;sharing;security" TIMEOUT 30)
+endif ()
+
+if (TARGET decodium_sstv_share_aead)
+  target_link_libraries (test_sstv_http_providers PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_http_providers PRIVATE DECODIUM_TEST_SHARE_CRYPTO=1)
+  target_link_libraries (test_sstv_http_provider_production_gate PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_http_provider_production_gate PRIVATE DECODIUM_TEST_SHARE_CRYPTO=1)
+  add_test (NAME test_sstv_https_encrypted_production
+    COMMAND $<TARGET_FILE:test_sstv_http_provider_production_gate>
+      restEncryptedEnvelopeOverVerifiedHttps)
+  set_tests_properties (test_sstv_https_encrypted_production PROPERTIES
+    LABELS "sstv;sharing;network;security;production-gate" TIMEOUT 30)
+endif ()
+
+if (APPLE AND TARGET decodium_sstv_share_aead)
+  target_link_libraries (test_sstv_share_qml PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_share_qml PRIVATE DECODIUM_TEST_MAC_E2EE=1)
+  find_program (_decodium_sstv_test_python NAMES python3)
+  if (_decodium_sstv_test_python)
+    add_test (NAME test_sstv_share_high_s_fixture
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_share_high_s_fixture.py")
+    set_tests_properties (test_sstv_share_high_s_fixture PROPERTIES
+      LABELS "sstv;sharing;security;diagnostics" TIMEOUT 30)
+    add_test (NAME test_sstv_fax480_capture_analyzer
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fax480_capture_analyzer.py"
+        $<TARGET_FILE:export_fax480_capture> $<TARGET_FILE:decode_fax480_capture>)
+    set_tests_properties (test_sstv_fax480_capture_analyzer PROPERTIES
+      LABELS "sstv;fax;audio" TIMEOUT 90)
+    add_test (NAME test_sstv_fax480_lab_cli
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fax480_lab_cli.py"
+        $<TARGET_FILE:decodium_qml>)
+    set_tests_properties (test_sstv_fax480_lab_cli PROPERTIES
+      LABELS "sstv;fax;application" TIMEOUT 20)
+    add_test (NAME test_hamdrm_lab_cli
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_hamdrm_lab_cli.py"
+        $<TARGET_FILE:decodium_qml>)
+    set_tests_properties (test_hamdrm_lab_cli PROPERTIES
+      LABELS "sstv;hamdrm;application" TIMEOUT 20)
+    foreach (_partial_variant a b)
+      add_test (NAME test_hamdrm_partial_restart_app_${_partial_variant}
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_hamdrm_partial_restart_app_lab.py"
+          ${_partial_variant} $<TARGET_FILE:decodium_qml>)
+      set_tests_properties (test_hamdrm_partial_restart_app_${_partial_variant} PROPERTIES
+        LABELS "sstv;hamdrm;resume;application" TIMEOUT 100 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+    endforeach ()
+    add_test (NAME test_sstv_share_app_identities
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_identity_lab.py"
+        $<TARGET_FILE:decodium_qml>)
+    set_tests_properties (test_sstv_share_app_identities PROPERTIES
+      LABELS "sstv;sharing;security;keychain;application"
+      TIMEOUT 150 RUN_SERIAL TRUE
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+    if (APPLE)
+      foreach (_server_variant signed unsigned)
+        set (_server_args)
+        if (_server_variant STREQUAL "unsigned")
+          list (APPEND _server_args --unsigned)
+        endif ()
+        add_test (NAME test_sstv_share_server_app_${_server_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_server_two_app_lab.py"
+            --binary $<TARGET_FILE:decodium_qml> ${_server_args})
+        set_tests_properties (test_sstv_share_server_app_${_server_variant} PROPERTIES
+          LABELS "sstv;sharing;security;server;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      endforeach ()
+    endif ()
+    add_test (NAME test_sstv_share_https_fixture
+      COMMAND "${_decodium_sstv_test_python}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_share_https_fixture.py"
+        $<TARGET_FILE:test_sstv_http_provider_production_gate>
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key")
+    set_tests_properties (test_sstv_share_https_fixture PROPERTIES
+      LABELS "sstv;sharing;network;security;production-gate" TIMEOUT 60)
+    find_program (_decodium_sstv_test_ffmpeg NAMES ffmpeg)
+    find_program (_decodium_sstv_test_ffprobe NAMES ffprobe)
+    if (_decodium_sstv_test_ffmpeg AND _decodium_sstv_test_ffprobe)
+      add_test (NAME test_sstv_share_app_transfer
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      foreach (_policy_variant a b)
+        add_test (NAME test_sstv_share_app_signed_pending_policy_${_policy_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --policy-awaiting ${_policy_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_pending_policy_${_policy_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_pending_policy_${_policy_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --policy-awaiting ${_policy_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_pending_policy_${_policy_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      endforeach ()
+      add_test (NAME test_sstv_share_app_signed_transfer
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      set_tests_properties (test_sstv_share_app_signed_transfer PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      foreach (_busy_variant a b)
+        add_test (NAME test_sstv_share_app_busy_refresh_${_busy_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --busy-refresh ${_busy_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_busy_refresh_${_busy_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_busy_exhaust_${_busy_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --busy-refresh ${_busy_variant} --busy-exhaust
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_busy_exhaust_${_busy_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      endforeach ()
+      if (APPLE)
+        add_test (NAME test_sstv_share_app_replace_sender_signing
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replace-sender-signing
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_replace_sender_signing PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 210 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_rotate_sender_signing
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --rotate-sender-signing
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_rotate_sender_signing PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 210 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        foreach (_retired_variant IN ITEMS a b)
+          add_test (NAME test_sstv_share_app_retired_signing_${_retired_variant}
+            COMMAND "${_decodium_sstv_test_python}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+              --signed --rotate-sender-signing --retired-signature ${_retired_variant}
+              $<TARGET_FILE:decodium_qml>
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+          set_tests_properties (test_sstv_share_app_retired_signing_${_retired_variant} PROPERTIES
+            LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 210 RUN_SERIAL TRUE
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+          add_test (NAME test_sstv_share_app_unseen_old_signing_${_retired_variant}
+            COMMAND "${_decodium_sstv_test_python}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+              --signed --rotate-sender-signing --retired-unseen ${_retired_variant}
+              $<TARGET_FILE:decodium_qml>
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+          set_tests_properties (test_sstv_share_app_unseen_old_signing_${_retired_variant} PROPERTIES
+            LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 210 RUN_SERIAL TRUE
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        endforeach ()
+      endif ()
+      add_test (NAME test_sstv_share_app_rotated_recipient
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --rotate-recipient
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      set_tests_properties (test_sstv_share_app_rotated_recipient PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      add_test (NAME test_sstv_share_app_replaced_recipient
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --rotate-recipient --replace-recipient
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      set_tests_properties (test_sstv_share_app_replaced_recipient PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      add_test (NAME test_sstv_share_app_rotated_identity_restart
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --rotate-recipient --replace-recipient --restart-rotated-identity --restart-sender-pin
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      set_tests_properties (test_sstv_share_app_rotated_identity_restart PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 180 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      add_test (NAME test_sstv_share_app_tamper
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      add_test (NAME test_sstv_share_app_manifest_tamper_a
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper-manifest a
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      add_test (NAME test_sstv_share_app_manifest_tamper_b
+        COMMAND "${_decodium_sstv_test_python}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper-manifest b
+          $<TARGET_FILE:decodium_qml>
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+          "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      foreach (_share_variant a b)
+        add_test (NAME test_sstv_share_app_signed_corrupt_recipient_pin_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+            --corrupt-recipient-pin ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_corrupt_recipient_pin_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_signed_corrupt_sender_pin_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+            --corrupt-sender-pin ${_share_variant} $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_corrupt_sender_pin_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_expiry_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+            --tamper-manifest ${_share_variant} --tamper-manifest-field expiresUtc
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_ephemeral_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+            --tamper-manifest ${_share_variant} --tamper-manifest-field keyId
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_nonce_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+            --tamper-manifest ${_share_variant} --tamper-manifest-field nonceBase64
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_nonce_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py"
+            --signed --tamper-manifest ${_share_variant} --tamper-manifest-field nonceBase64
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      endforeach ()
+      foreach (_share_variant IN ITEMS a b)
+        add_test (NAME test_sstv_share_app_expiry_awaiting_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-awaiting ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_expiry_awaiting_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --expire-awaiting ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_expiry_pending_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --expire-awaiting ${_share_variant} --expiry-pending-restart
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_expiry_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-download ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_expiry_partial_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-download ${_share_variant} --expiry-after-first-chunk
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_gallery_unavailable_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant} --gallery-unavailable
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        foreach (_signed_attack IN ITEMS forge-sender tamper-payload)
+          add_test (NAME test_sstv_share_app_signed_${_signed_attack}_${_share_variant}
+            COMMAND "${_decodium_sstv_test_python}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+              --${_signed_attack} ${_share_variant}
+              $<TARGET_FILE:decodium_qml>
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+          set_tests_properties (test_sstv_share_app_signed_${_signed_attack}_${_share_variant} PROPERTIES
+            LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        endforeach ()
+        foreach (_signed_field IN ITEMS senderSignatureBase64 senderSignatureHighS senderId recipientId senderAuth sstvMode expiresUtc keyId)
+          add_test (NAME test_sstv_share_app_signed_${_signed_field}_${_share_variant}
+            COMMAND "${_decodium_sstv_test_python}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed
+              --tamper-manifest ${_share_variant} --tamper-manifest-field ${_signed_field}
+              $<TARGET_FILE:decodium_qml>
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+              "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+          set_tests_properties (test_sstv_share_app_signed_${_signed_field}_${_share_variant} PROPERTIES
+            LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        endforeach ()
+        add_test (NAME test_sstv_share_app_inbox_unavailable_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant} --inbox-unavailable
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_inbox_unavailable_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --accept-restart-cleanup ${_share_variant} --inbox-unavailable
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_gallery_corrupt_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant} --corrupt-gallery
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_accepted_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --accept-restart-cleanup ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_expiry_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --expire-download ${_share_variant} --expiry-after-first-chunk --expiry-restart-cleanup
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_payload_tamper_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --tamper-payload ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_payload_swap_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --swap-payload ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_payload_swap_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --swap-payload ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_payload_swap_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_replay_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --replay-envelope ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_replay_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_replay_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant} --replay-after-restart
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_replay_accepted_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant} --replay-after-restart --replay-after-accept
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_replay_high_s_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant} --replay-after-restart --replay-after-accept --replay-high-s
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        add_test (NAME test_sstv_share_app_signed_replay_resigned_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant} --replay-after-restart --replay-after-accept --replay-resigned
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_replay_resigned_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_signed_replay_index_upgrade_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --replay-envelope ${_share_variant} --replay-after-restart --replay-after-accept --replay-resigned --drop-replay-indexes-before-restart
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_replay_index_upgrade_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_signed_invalid_then_valid_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --invalid-before-valid ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_invalid_then_valid_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_signed_nonce_restart_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --invalid-before-valid ${_share_variant} --invalid-nonce-restart
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_nonce_restart_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_signed_legacy_invalid_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --signed --invalid-before-valid ${_share_variant} --legacy-invalid-record
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+        set_tests_properties (test_sstv_share_app_signed_legacy_invalid_${_share_variant} PROPERTIES
+          LABELS "sstv;sharing;network;security;keychain;application" TIMEOUT 150 RUN_SERIAL TRUE
+          ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+        add_test (NAME test_sstv_share_app_downgrade_${_share_variant}
+          COMMAND "${_decodium_sstv_test_python}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_share_app_transfer_lab.py" --downgrade-manifest ${_share_variant}
+            $<TARGET_FILE:decodium_qml>
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.crt"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localhost-test-only.key"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-a.jpg"
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qsstv-image-b.jpg")
+      endforeach ()
+      set_tests_properties (test_sstv_share_app_expiry_awaiting_a test_sstv_share_app_expiry_awaiting_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_expiry_awaiting_a test_sstv_share_app_signed_expiry_awaiting_b
+        test_sstv_share_app_signed_inbox_unavailable_a test_sstv_share_app_signed_inbox_unavailable_b
+        test_sstv_share_app_signed_expiry_pending_restart_a test_sstv_share_app_signed_expiry_pending_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_a test_sstv_share_app_expiry_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_partial_a test_sstv_share_app_expiry_partial_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_inbox_unavailable_a test_sstv_share_app_inbox_unavailable_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_gallery_unavailable_a test_sstv_share_app_gallery_unavailable_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_gallery_corrupt_a test_sstv_share_app_gallery_corrupt_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_accepted_restart_a test_sstv_share_app_accepted_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_restart_a test_sstv_share_app_expiry_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_manifest_tamper_a test_sstv_share_app_manifest_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_expiry_tamper_a test_sstv_share_app_expiry_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_ephemeral_tamper_a test_sstv_share_app_ephemeral_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_nonce_tamper_a test_sstv_share_app_nonce_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_nonce_tamper_a test_sstv_share_app_signed_nonce_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_payload_tamper_a test_sstv_share_app_payload_tamper_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_payload_swap_a test_sstv_share_app_payload_swap_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_replay_a test_sstv_share_app_replay_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_replay_a test_sstv_share_app_signed_replay_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_replay_restart_a test_sstv_share_app_signed_replay_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 250 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_replay_accepted_restart_a test_sstv_share_app_signed_replay_accepted_restart_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 250 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_signed_replay_high_s_a test_sstv_share_app_signed_replay_high_s_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 250 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_downgrade_a test_sstv_share_app_downgrade_b PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_tamper PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+      set_tests_properties (test_sstv_share_app_transfer PROPERTIES
+        LABELS "sstv;sharing;network;security;keychain;application"
+        TIMEOUT 150 RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic")
+    endif ()
+    unset (_decodium_sstv_test_ffmpeg)
+    unset (_decodium_sstv_test_ffprobe)
+  endif ()
+  unset (_decodium_sstv_test_python)
+  target_link_libraries (test_sstv_local_integration_provider PRIVATE decodium_sstv_share_aead)
+  target_compile_definitions (test_sstv_local_integration_provider PRIVATE DECODIUM_TEST_MAC_E2EE=1)
+  add_executable (test_sstv_macos_keychain test_sstv_macos_keychain.cpp)
+  target_link_libraries (test_sstv_macos_keychain PRIVATE decodium_sstv_share_aead)
+  set_target_properties (test_sstv_macos_keychain PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_sstv_macos_keychain COMMAND $<TARGET_FILE:test_sstv_macos_keychain>)
+  set_tests_properties (test_sstv_macos_keychain PROPERTIES LABELS "sstv;sharing;security;keychain" TIMEOUT 60)
+endif ()

@@ -18,8 +18,27 @@ Item {
 
     property var target: typeof bridge !== "undefined" ? bridge : null
     property real appStartMs: Date.now()
-    readonly property real uptimeSec: (Date.now() - appStartMs) / 1000.0
-    readonly property string forkVersion: "1.0.233"
+    // 1.0.244 fix: Date.now() non e' osservabile in QML -> uptimeSec era
+    // calcolato solo al primo eval del binding (subito dopo apertura).
+    // _liveTick e' aggiornato da Timer 1s -> forza re-eval ogni secondo.
+    property real _liveTick: 0
+    readonly property real uptimeSec: {
+        var _ = _liveTick  // dependency capture
+        return (Date.now() - appStartMs) / 1000.0
+    }
+    readonly property bool warmingUp: uptimeSec < 5
+    // 1.0.243 fix: era hardcoded "1.0.233" -> mostrava versione obsoleta nel
+    // snapshot. Usa bridge.version() (Q_INVOKABLE, FORK_RELEASE_VERSION live).
+    readonly property string forkVersion: (target && target.version)
+        ? target.version() : "?"
+
+    Timer {
+        id: liveTickTimer
+        interval: 1000
+        running: true
+        repeat: true
+        onTriggered: _liveTick = Date.now()
+    }
 
     function fmt(v, digits) {
         if (v === undefined || v === null || isNaN(v)) return "--"
@@ -49,9 +68,15 @@ Item {
         lines.push("  RHI backend       : " + (t ? t.activeRhiBackend : "n/a"))
         lines.push("")
         lines.push("[Frame time (ms)]")
-        lines.push("  last              : " + fmt(t ? t.lastFrameTimeMs : 0, 2))
-        lines.push("  mean (32 samples) : " + fmt(t ? t.meanFrameTimeMs : 0, 2))
-        lines.push("  p99               : " + fmt(t ? t.p99FrameTimeMs : 0, 2))
+        var ftAvail = (t && t.lastFrameTimeMs > 0)
+        if (ftAvail) {
+            lines.push("  last              : " + fmt(t.lastFrameTimeMs, 2))
+            lines.push("  mean (32 samples) : " + fmt(t.meanFrameTimeMs, 2))
+            lines.push("  p99               : " + fmt(t.p99FrameTimeMs, 2))
+        } else {
+            lines.push("  (n/a - Qt 6.11 RHI on-demand pipeline doesn't")
+            lines.push("   emit frameSwapped/afterRendering after startup)")
+        }
         lines.push("")
         lines.push("[Decode rate (Hz)]")
         lines.push("  received          : " + fmt(t ? t.decodeRateReceivedHz : 0, 1))
@@ -64,6 +89,22 @@ Item {
         var rm = t ? modelCount(t.rxDecodeModel) : -1
         lines.push("  bandActivityModel : " + (bm < 0 ? "n/a" : bm))
         lines.push("  rxDecodeModel     : " + (rm < 0 ? "n/a" : rm))
+        lines.push("")
+        lines.push("[Cumulative counters (debug)]")
+        // 1.0.245: incrementati PRIMA del gate m_devOverlayActive.
+        // Se totalFrameSamples > 0 ma mean=0 -> bug downstream QTimer/emit.
+        // Se totalFrameSamples == 0 -> connect frameSwapped non funziona.
+        lines.push("  totalFrameSamples       : " + (t ? t.totalFrameSamples : 0))
+        lines.push("  totalDecodesReceived    : " + (t ? t.totalDecodesReceived : 0))
+        lines.push("  totalDecodesCommitted   : " + (t ? t.totalDecodesCommitted : 0))
+        lines.push("  devOverlayActive (gate) : " + (t ? t.devOverlayActive : false))
+        // 1.0.244: hint quando metrics non popolate. warmingUp = uptime<5s.
+        if (warmingUp) {
+            lines.push("")
+            lines.push("(Note: still warming up uptime=" + fmt(uptimeSec, 0) +
+                       "s -- wait at least 10s after Ctrl+Shift+F")
+            lines.push(" before clicking Copy diagnostics for meaningful samples.)")
+        }
         // Snapshot deliberatamente privo di callsign/grid/freq specifiche (no PII).
         return lines.join("\n")
     }
@@ -96,7 +137,7 @@ Item {
                     anchors.rightMargin: 4
                     spacing: 4
                     Text {
-                        text: "Decodium DevOverlay"
+                        text: qsTr("Decodium DevOverlay")
                         color: "#5DD9C1"
                         font.pixelSize: 11
                         font.bold: true
@@ -153,24 +194,36 @@ Item {
                     Layout.fillWidth: true
                 }
 
-                Text { text: "Frame (ms):"; color: "#9AB8C4"; font.pixelSize: 10 }
+                Text { text: qsTr("Frame (ms):"); color: "#9AB8C4"; font.pixelSize: 10 }
                 Text {
-                    text: fmt(target ? target.lastFrameTimeMs : 0, 2)
-                          + "  mean " + fmt(target ? target.meanFrameTimeMs : 0, 2)
-                          + "  p99 " + fmt(target ? target.p99FrameTimeMs : 0, 2)
-                    color: "#E0E0E0"; font.pixelSize: 10
+                    // 1.0.252: Qt 6.11 RHI on-demand stoppa frame signals dopo
+                    // ~4s startup. Frame timing inaffidabile su Decodium pipeline.
+                    text: warmingUp
+                          ? "warming up... " + fmt(uptimeSec, 0) + "/5s"
+                          : (target && target.lastFrameTimeMs > 0
+                             ? (fmt(target.lastFrameTimeMs, 2)
+                                + "  mean " + fmt(target.meanFrameTimeMs, 2)
+                                + "  p99 " + fmt(target.p99FrameTimeMs, 2))
+                             : "n/a (Qt RHI on-demand)")
+                    color: warmingUp ? "#7088A0"
+                                     : (target && target.lastFrameTimeMs > 0
+                                        ? "#E0E0E0" : "#7088A0")
+                    font.pixelSize: 10
                     Layout.fillWidth: true
                 }
 
-                Text { text: "Decode Hz:"; color: "#9AB8C4"; font.pixelSize: 10 }
+                Text { text: qsTr("Decode Hz:"); color: "#9AB8C4"; font.pixelSize: 10 }
                 Text {
-                    text: "rx " + fmt(target ? target.decodeRateReceivedHz : 0, 1)
-                          + "  ok " + fmt(target ? target.decodeRateCommittedHz : 0, 1)
-                    color: "#E0E0E0"; font.pixelSize: 10
+                    text: warmingUp
+                          ? "warming up..."
+                          : ("rx " + fmt(target ? target.decodeRateReceivedHz : 0, 1)
+                             + "  ok " + fmt(target ? target.decodeRateCommittedHz : 0, 1))
+                    color: warmingUp ? "#7088A0" : "#E0E0E0"
+                    font.pixelSize: 10
                     Layout.fillWidth: true
                 }
 
-                Text { text: "Delegates:"; color: "#9AB8C4"; font.pixelSize: 10 }
+                Text { text: qsTr("Delegates:"); color: "#9AB8C4"; font.pixelSize: 10 }
                 Text {
                     // Force binding re-eval ad ogni perfMetricsChanged (250ms tick).
                     property real _tick: target ? target.lastFrameTimeMs : 0
@@ -188,8 +241,9 @@ Item {
                     Layout.fillWidth: true
                 }
 
-                Text { text: "Uptime:"; color: "#9AB8C4"; font.pixelSize: 10 }
+                Text { text: qsTr("Uptime:"); color: "#9AB8C4"; font.pixelSize: 10 }
                 Text {
+                    // 1.0.244 fix: binding rilegge ad ogni Timer 1s tick.
                     text: fmt(uptimeSec, 0) + " s"
                     color: "#E0E0E0"; font.pixelSize: 10
                     Layout.fillWidth: true
@@ -207,7 +261,7 @@ Item {
                 radius: 4
 
                 Text {
-                    text: "Frame time 5s"
+                    text: qsTr("Frame time 5s")
                     color: "#7088A0"
                     font.pixelSize: 9
                     anchors.left: parent.left
@@ -273,7 +327,7 @@ Item {
                 spacing: 6
 
                 Button {
-                    text: "Copy diagnostics"
+                    text: qsTr("Copy diagnostics")
                     Layout.fillWidth: true
                     font.pixelSize: 10
                     onClicked: {
@@ -290,7 +344,7 @@ Item {
                 }
 
                 Button {
-                    text: "Close"
+                    text: qsTr("Close")
                     Layout.preferredWidth: 64
                     font.pixelSize: 10
                     onClicked: {
@@ -302,7 +356,7 @@ Item {
 
             Text {
                 id: copyFeedback
-                text: "Copied to clipboard"
+                text: qsTr("Copied to clipboard")
                 color: "#5DD9C1"
                 font.pixelSize: 9
                 opacity: 0

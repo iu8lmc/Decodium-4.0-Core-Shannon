@@ -174,7 +174,8 @@ EncodedQ65 encode_q65 (QString const& message)
   std::fill (msg.begin (), msg.end (), ' ');
   std::fill (msgsent.begin (), msgsent.end (), ' ');
   QByteArray latin = fixed_message (message).toLatin1 ();
-  std::memcpy (msg.data (), latin.constData (), std::min (latin.size (), kMessageChars));
+  std::memcpy (msg.data (), latin.constData (),
+               static_cast<size_t> (std::min<qsizetype> (latin.size (), kMessageChars)));
 
   q65_encode_message_ (msg.data (), msgsent.data (), result.payload.data (), result.codeword.data (),
                        result.tones.data (), static_cast<fortran_charlen_t> (kMessageChars),

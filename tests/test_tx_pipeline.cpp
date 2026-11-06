@@ -92,6 +92,8 @@ namespace
   constexpr int kBitsPerMessage {77};
   constexpr int kDecodedChars {37};
 
+  enum class Mode { Ft8, Ft4, Ft2 };
+
   // QSO message sequence between IW8XOU (op) and K1ABC (partner).
   // The test checks that each transmitted message roundtrips through
   // encode -> waveform -> decoder.
@@ -152,6 +154,94 @@ namespace
             static_cast<qint16> (std::lround (static_cast<double> (clipped) * 32767.0));
       }
     return pcm;
+  }
+
+  QVector<float> generate_tx_wave (Mode mode, QString const& message, float carrier_hz)
+  {
+    decodium::txmsg::EncodedMessage enc;
+    int nsps = 0;
+
+    switch (mode)
+      {
+      case Mode::Ft8:
+        enc = decodium::txmsg::encodeFt8 (message);
+        nsps = kFt8Nsps;
+        break;
+      case Mode::Ft4:
+        enc = decodium::txmsg::encodeFt4 (message);
+        nsps = kFt4Nsps;
+        break;
+      case Mode::Ft2:
+        enc = decodium::txmsg::encodeFt2 (message);
+        nsps = kFt2Nsps;
+        break;
+      }
+
+    if (!enc.ok || enc.tones.isEmpty ())
+      {
+        return {};
+      }
+
+    switch (mode)
+      {
+      case Mode::Ft8:
+        return decodium::txwave::generateFt8Wave (enc.tones.constData (), enc.tones.size (),
+                                                  nsps, kFt8Bt,
+                                                  static_cast<float> (kSampleRate), carrier_hz);
+      case Mode::Ft4:
+        return decodium::txwave::generateFt4Wave (enc.tones.constData (), enc.tones.size (),
+                                                  nsps, static_cast<float> (kSampleRate),
+                                                  carrier_hz);
+      case Mode::Ft2:
+        return decodium::txwave::generateFt2Wave (enc.tones.constData (), enc.tones.size (),
+                                                  nsps, static_cast<float> (kSampleRate),
+                                                  carrier_hz);
+      }
+    return {};
+  }
+
+  QVector<float> mix_two_streams_normalized (QVector<float> const& a, QVector<float> const& b)
+  {
+    int const n = std::max (a.size (), b.size ());
+    QVector<float> mixed (n, 0.0f);
+    float peak = 0.0f;
+    for (int i = 0; i < n; ++i)
+      {
+        float const sample = (i < a.size () ? a[i] : 0.0f)
+                             + (i < b.size () ? b[i] : 0.0f);
+        mixed[i] = sample;
+        peak = std::max (peak, std::fabs (sample));
+      }
+    if (peak > 1.0e-6f)
+      {
+        float const scale = 0.98f / peak;
+        for (float& sample : mixed)
+          {
+            sample *= scale;
+          }
+      }
+    return mixed;
+  }
+
+  double normalized_projection_power (QVector<float> const& mixed, QVector<float> const& stream)
+  {
+    int const n = std::min (mixed.size (), stream.size ());
+    double dot = 0.0;
+    double mixed_energy = 0.0;
+    double stream_energy = 0.0;
+    for (int i = 0; i < n; ++i)
+      {
+        double const m = mixed[i];
+        double const s = stream[i];
+        dot += m * s;
+        mixed_energy += m * m;
+        stream_energy += s * s;
+      }
+    if (mixed_energy <= 0.0 || stream_energy <= 0.0)
+      {
+        return 0.0;
+      }
+    return (dot * dot) / (mixed_energy * stream_energy);
   }
 
   struct DecodeRow
@@ -296,8 +386,6 @@ namespace
     return rows;
   }
 
-  enum class Mode { Ft8, Ft4, Ft2 };
-
   struct ModeResult
   {
     QString name;
@@ -430,6 +518,62 @@ namespace
     out << result.name << " summary: " << result.passed << "/" << result.total << " passed\n\n";
     return result;
   }
+
+  QString mode_name (Mode mode)
+  {
+    switch (mode)
+      {
+      case Mode::Ft8: return QStringLiteral ("FT8");
+      case Mode::Ft4: return QStringLiteral ("FT4");
+      case Mode::Ft2: return QStringLiteral ("FT2");
+      }
+    return QStringLiteral ("?");
+  }
+
+  bool run_two_frequency_tx_test (QTextStream& out, Mode mode)
+  {
+    QString const tag = mode_name (mode);
+    QVector<float> const stream_a =
+        generate_tx_wave (mode, QStringLiteral ("CQ IW8XOU JN71"), 1000.0f);
+    QVector<float> const stream_b =
+        generate_tx_wave (mode, QStringLiteral ("K1ABC IW8XOU -10"), 1800.0f);
+    if (stream_a.isEmpty () || stream_b.isEmpty ())
+      {
+        out << "  [FAIL] " << tag << " two-frequency TX: waveform generation failed\n";
+        return false;
+      }
+
+    QVector<float> const mixed = mix_two_streams_normalized (stream_a, stream_b);
+    double const a_power = normalized_projection_power (mixed, stream_a);
+    double const b_power = normalized_projection_power (mixed, stream_b);
+
+    float peak = 0.0f;
+    for (float const sample : mixed)
+      {
+        peak = std::max (peak, std::fabs (sample));
+      }
+
+    bool const ok = peak <= 0.981f && peak > 0.10f
+                    && a_power > 0.20
+                    && b_power > 0.20;
+    out << (ok ? "  [ OK ] " : "  [FAIL] ")
+        << tag << " two-frequency TX f0=1000/1800 Hz"
+        << " peak=" << peak
+        << " projectionA=" << a_power
+        << " projectionB=" << b_power << "\n";
+    return ok;
+  }
+
+  bool run_two_frequency_tx_tests (QTextStream& out)
+  {
+    out << "=== MAM two-frequency TX ===\n";
+    bool ok = true;
+    ok = run_two_frequency_tx_test (out, Mode::Ft8) && ok;
+    ok = run_two_frequency_tx_test (out, Mode::Ft4) && ok;
+    ok = run_two_frequency_tx_test (out, Mode::Ft2) && ok;
+    out << "MAM two-frequency TX summary: " << (ok ? "passed" : "failed") << "\n\n";
+    return ok;
+  }
 }
 
 int main (int argc, char* argv[])
@@ -446,9 +590,10 @@ int main (int argc, char* argv[])
       QList<QsoMessage> const qso = make_qso ();
 
       QList<ModeResult> results;
-      results.append (run_mode (out, Mode::Ft8, qso));
-      results.append (run_mode (out, Mode::Ft4, qso));
-      results.append (run_mode (out, Mode::Ft2, qso));
+	      results.append (run_mode (out, Mode::Ft8, qso));
+	      results.append (run_mode (out, Mode::Ft4, qso));
+	      results.append (run_mode (out, Mode::Ft2, qso));
+	      bool const two_frequency_tx_ok = run_two_frequency_tx_tests (out);
 
       int total = 0, passed = 0;
       for (ModeResult const& r : results)
@@ -456,8 +601,8 @@ int main (int argc, char* argv[])
           total += r.total;
           passed += r.passed;
         }
-      out << "=== TOTAL: " << passed << "/" << total << " messages roundtripped ===\n";
-      return (passed == total) ? EXIT_SUCCESS : EXIT_FAILURE;
+	      out << "=== TOTAL: " << passed << "/" << total << " messages roundtripped ===\n";
+	      return (passed == total && two_frequency_tx_ok) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
   catch (std::exception const& e)
     {

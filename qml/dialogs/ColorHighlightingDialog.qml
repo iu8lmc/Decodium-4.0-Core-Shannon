@@ -1,11 +1,12 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../decodium/components"
 
 // ColorHighlightingDialog — palette WSJT-X (B7)
 Dialog {
     id: colorDialog
-    title: "Color Highlighting"
+    title: qsTr("Color Highlighting")
     modal: true
     standardButtons: Dialog.Ok | Dialog.Cancel
     width: 460
@@ -13,7 +14,12 @@ Dialog {
     anchors.centerIn: parent
 
     background: Rectangle {
-        color: Qt.rgba(18/255, 18/255, 28/255, 0.98)
+        color: bridge && bridge.themeManager && bridge.themeManager.isGlassTheme
+               && bridge.themeManager.glassTransparencySupported
+               ? Qt.rgba(bridge.themeManager.panelColor.r,
+                         bridge.themeManager.panelColor.g,
+                         bridge.themeManager.panelColor.b, 0.58)
+               : Qt.rgba(18/255, 18/255, 28/255, 0.98)
         border.color: "#00BCD4"
         border.width: 1
         radius: 10
@@ -35,7 +41,7 @@ Dialog {
         { label: "New Grid",              prop: "colorNewGrid",          defaultColor: "#FF8C00" },
         { label: "New Callsign on Band",  prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
         { label: "New Callsign",          prop: "colorNewCall",          defaultColor: "#00E0E0" },
-        { label: "LoTW User",             prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
+        { label: "LoTW marker",           prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
         { label: "CQ in Message",         prop: "colorCQ",               defaultColor: "#33FF33" },
         { label: "DX Entity",             prop: "colorDXEntity",         defaultColor: "#FFAA33" },
         { label: "73 / RR73",             prop: "color73",               defaultColor: "#5599FF" },
@@ -64,7 +70,7 @@ Dialog {
 
                     Text {
                         text: modelData.label
-                        font.family: "Consolas"
+                        font.family: decodiumMonoFontFamily
                         font.pixelSize: 12
                         color: "#ECEFF1"
                         Layout.preferredWidth: 180
@@ -93,7 +99,7 @@ Dialog {
                     // Etichetta colore corrente
                     Text {
                         text: bridge[modelData.prop] || modelData.defaultColor
-                        font.family: "Consolas"
+                        font.family: decodiumMonoFontFamily
                         font.pixelSize: 11
                         color: "#90A4AE"
                     }
@@ -108,8 +114,8 @@ Dialog {
                 width: contentColumn.width - 32
 
                 Text {
-                    text: "B4 Strikethrough:"
-                    font.family: "Consolas"
+                    text: qsTr("B4 Strikethrough:")
+                    font.family: decodiumMonoFontFamily
                     font.pixelSize: 12
                     color: "#ECEFF1"
                     Layout.preferredWidth: 180
@@ -127,8 +133,8 @@ Dialog {
                 width: contentColumn.width - 32
 
                 Text {
-                    text: "Alert Sounds:"
-                    font.family: "Consolas"
+                    text: qsTr("Alert Sounds:")
+                    font.family: decodiumMonoFontFamily
                     font.pixelSize: 12
                     color: "#ECEFF1"
                     Layout.preferredWidth: 180
@@ -145,7 +151,7 @@ Dialog {
     // Color picker sub-dialog
     Dialog {
         id: colorPickerDialog
-        title: "Choose Color"
+        title: qsTr("Choose Color")
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         width: 280
@@ -155,7 +161,12 @@ Dialog {
         property string currentHex: "#FFFFFF"
 
         background: Rectangle {
-            color: Qt.rgba(18/255, 18/255, 28/255, 0.98)
+            color: bridge && bridge.themeManager && bridge.themeManager.isGlassTheme
+                   && bridge.themeManager.glassTransparencySupported
+                   ? Qt.rgba(bridge.themeManager.panelColor.r,
+                             bridge.themeManager.panelColor.g,
+                             bridge.themeManager.panelColor.b, 0.48)
+                   : Qt.rgba(18/255, 18/255, 28/255, 0.98)
             border.color: "#00BCD4"
             border.width: 1
             radius: 8
@@ -166,18 +177,18 @@ Dialog {
             padding: 12
 
             Text {
-                text: "Hex color (#RRGGBB):"
-                font.family: "Consolas"
+                text: qsTr("Hex color (#RRGGBB):")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 11
                 color: "#B0BEC5"
             }
 
-            TextField {
+            DecoTextField {
                 id: colorPickerInput
                 width: 240
                 text: colorPickerDialog.currentHex
-                placeholderText: "#RRGGBB"
-                font.family: "Consolas"
+                placeholderText: qsTr("#RRGGBB")
+                font.family: decodiumMonoFontFamily
                 font.pixelSize: 13
                 background: Rectangle {
                     color: Qt.rgba(1,1,1,0.08)
@@ -206,10 +217,10 @@ Dialog {
         onAccepted: {
             if (colorPickerInput.text.match(/^#[0-9A-Fa-f]{6}$/) && targetProp !== "") {
                 bridge[targetProp] = colorPickerInput.text
-                bridge.saveSettings()
+                bridge.saveSettingsAsync()
             }
         }
     }
 
-    onAccepted: bridge.saveSettings()
+    onAccepted: bridge.saveSettingsAsync()
 }

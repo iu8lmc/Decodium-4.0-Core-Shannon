@@ -1,5 +1,679 @@
 # Changelog / Registro Modifiche
 
+## [1.0.701] - 2026-10-19
+
+### English
+
+- Fixed the CW external-window function-key path. F1-F12 now dispatch the
+  active CW macros while the CW window owns the keyboard, and the dashboard's
+  global F1/F2/F3/F4/F11 shortcuts are temporarily disabled in that context so
+  monitoring, QSY selection, QSO logging and fullscreen cannot consume a CW
+  macro key.
+- Fixed one-character CW macros for Yaesu CAT radios. Hamlib's Yaesu backend
+  treats a single-character `send_morse()` payload as a memory selector; the
+  literal Decodium text path now adds a trailing word gap so F5=`?` and custom
+  one-character macros are transmitted as Morse text.
+- Kept CW speed control optional for rigctld/Hamlib connections: when
+  `KEYSPD` is unavailable, the configured radio speed is used and the Morse
+  command is still sent instead of being rejected before transmission.
+- Hardened native CAT keyer ownership and stopping. The radio can control its
+  own break-in/PTT timing, while Stop still sends the native keyer stop command
+  and releases an emergency PTT state when required. Late CAT completions no
+  longer revive a stopped transmission.
+- Added CW macro diagnostics containing macro index, label, template length and
+  expanded length, plus a visible warning for macros that expand to empty text.
+- Added clickable decoded CW callsigns. Recognised calls are exposed as a
+  separate list in the CW window; clicking one fills the CW Call field and the
+  application DX call without transmitting anything.
+- Fixed file-dialog activation for ADIF import and other bridge file dialogs.
+  The dialog now uses an application-modal non-native window, establishes the
+  transient relationship with the QML owner, raises and activates the dialog
+  before entering the modal loop, and requests native focus explicitly.
+- Added SPE Expert amplifier manufacturer selection and Taurus telemetry
+  compatibility. The parser now accepts both the documented SPE status frame
+  and the real Expert 1.5K-FA Taurus frame with its leading/trailing framing
+  commas, while preserving checksum validation and correct stream consumption.
+- Added focused regression coverage for Yaesu single-character CAT Morse,
+  unavailable CAT speed control, CW macro delivery, CW function-key ownership,
+  file-dialog activation, and SPE/Taurus telemetry parsing.
+
+### Italiano
+
+- Corretto il percorso dei tasti funzione nella finestra CW esterna. F1-F12
+  inviano ora le macro CW attive quando la finestra CW possiede la tastiera; in
+  questo contesto le scorciatoie globali F1/F2/F3/F4/F11 della dashboard vengono
+  temporaneamente disabilitate, evitando che attivino monitor, QSY, log QSO o
+  fullscreen al posto della macro.
+- Corrette le macro CW di un solo carattere sulle radio Yaesu via CAT. Il
+  backend Yaesu di Hamlib interpreta un payload singolo di `send_morse()` come
+  selezione di memoria; il percorso testuale letterale di Decodium aggiunge ora
+  una pausa finale, così F5=`?` e le macro personalizzate di un carattere
+  vengono trasmesse come testo Morse.
+- Il controllo della velocità CW resta opzionale per le connessioni
+  rigctld/Hamlib: se `KEYSPD` non è disponibile, viene usata la velocità già
+  configurata nella radio e il comando Morse viene comunque inviato invece di
+  essere rifiutato prima della trasmissione.
+- Rafforzata la gestione del keyer CAT nativo e del comando Stop. La radio può
+  controllare autonomamente il proprio break-in/PTT, mentre Stop invia comunque
+  il comando di arresto al keyer nativo e rilascia il PTT di emergenza quando
+  necessario. Le completion CAT arrivate in ritardo non possono riavviare una
+  trasmissione già fermata.
+- Aggiunta una diagnostica delle macro CW con indice, etichetta, lunghezza del
+  modello e lunghezza del testo espanso, oltre a un avviso visibile quando una
+  macro risulta vuota dopo l'espansione.
+- Aggiunta la selezione cliccabile dei callsign decodificati in CW. I callsign
+  riconosciuti sono esposti in un elenco separato nella finestra CW; cliccandone
+  uno si riempiono il campo Call della finestra e il DX call dell'applicazione,
+  senza trasmettere nulla.
+- Corretto il focus dei dialoghi file usati per l'import ADIF e dagli altri
+  percorsi file del bridge. Il dialogo usa ora una finestra non nativa modale
+  per l'applicazione, collega la finestra QML proprietaria come transient parent,
+  porta il dialogo in primo piano e richiede esplicitamente l'attivazione prima
+  del ciclo modale.
+- Aggiunta la selezione del produttore per gli amplificatori SPE Expert e la
+  compatibilità con la telemetria Taurus. Il parser accetta ora sia la trama
+  SPE documentata sia quella reale dell'Expert 1.5K-FA Taurus con virgole di
+  framing iniziali/finali, mantenendo il controllo checksum e il consumo
+  corretto del flusso seriale.
+- Aggiunti test mirati per Morse CAT Yaesu a carattere singolo, velocità CAT
+  non disponibile, invio macro CW, priorità dei tasti funzione CW, attivazione
+  dei dialoghi file e parsing della telemetria SPE/Taurus.
+
+## [1.0.700] - 2026-10-18
+
+### English
+
+- Fixed the classic/non-Glass dashboard surfaces that remained translucent when
+  Glass was disabled or unavailable. The main hamburger menu and its language
+  submenu now use an opaque theme surface, keeping their text and controls
+  readable without changing the Liquid Glass appearance when it is supported.
+- Added a regression check covering the opaque fallback for detached windows,
+  dialogs and popups.
+- Hardened Windows CAT serial configuration for an unresolved `Default`
+  handshake. Force DTR and Force RTS are no longer offered or applied in that
+  state, preventing Hamlib from selecting hardware flow control and rejecting
+  the connection with `cannot set RTS with hardware handshake` or `Invalid
+  configuration`.
+- Preserved explicit handshake behaviour and the operator's ability to select
+  DTR/RTS when the CAT handshake is explicitly configured.
+- Added focused CAT serial safety coverage for the default-handshake case and
+  validated the implementation with the existing CAT and Liquid Glass test
+  targets.
+
+### Italiano
+
+- Corrette le superfici classiche della dashboard che restavano traslucide con
+  Glass disattivato o non disponibile. Il menu hamburger principale e il suo
+  sottomenu della lingua usano ora uno sfondo opaco del tema, mantenendo testo
+  e controlli leggibili senza modificare l'aspetto Liquid Glass quando è
+  supportato.
+- Aggiunto un controllo di regressione per il fallback opaco di finestre
+  esterne, dialoghi e popup.
+- Rafforzata la configurazione CAT seriale su Windows quando l'handshake è
+  `Default` e quindi non ancora risolto. Force DTR e Force RTS non vengono più
+  proposti né applicati in questo stato, evitando che Hamlib selezioni il
+  controllo di flusso hardware e rifiuti la connessione con `cannot set RTS with
+  hardware handshake` o `Invalid configuration`.
+- Conservato il comportamento per gli handshake espliciti: DTR/RTS restano
+  selezionabili quando la configurazione CAT lo consente realmente.
+- Aggiunti test mirati per la sicurezza CAT seriale con handshake predefinito e
+  validata l'implementazione con i target di test CAT e Liquid Glass esistenti.
+
+## [1.0.699] - 2026-10-18
+
+### English
+
+- Hardened radio startup against unintended CW transmission: PTT is released
+  immediately after CAT opens, before startup queries, mode/frequency restore,
+  and power probing, with additional guarded release checks during the startup
+  synchronisation window.
+- Added startup RX-only protections across the bridge and transceiver manager,
+  preventing automatic, periodic, CW, frequency, split, and CAT mode paths
+  from inheriting a stale PTT-on state. Explicit operator transmission remains
+  available after startup protection is released.
+- Prevented an unnecessary intermediate DATA-U/USB mode transition when the
+  persisted radio state is already CW, reducing mode flicker during CAT
+  connection.
+- Added persistent `SHOW CW`, `SHOW JTTY`, and `SHOW SSB` controls to reopen
+  the corresponding external window without changing modes. The LDPC status
+  control was widened so its label remains readable beside STOP.
+- Fixed the SSB external-window focus race that prevented the Radio AGC menu
+  from opening. All SSB combo boxes now retain focus during mouse interaction,
+  including dynamically created menus, while the space-bar PTT remains blocked
+  whenever a menu is active and still works normally elsewhere.
+- Radio AGC selection now reaches the CAT control path reliably, including
+  OFF, FAST, MID, and SLOW presets with their numeric Hamlib values.
+- Fixed frozen receive-level indicators after switching between CW/JTTY/SSB
+  and FT modes by rearming legacy state refresh and selecting the active RX
+  level owner instead of testing a retained audio-input object.
+- Added focused SSB UI regression coverage for menu opening, AGC values,
+  keyboard/mouse focus, text-entry behaviour, and PTT safety; expanded the
+  regression target and validated it with Material and Fusion Qt styles.
+
+### Italiano
+
+- Rafforzata la sicurezza all'avvio della radio contro la trasmissione CW
+  involontaria: il PTT viene rilasciato subito dopo l'apertura CAT, prima delle
+  interrogazioni iniziali, del ripristino modo/frequenza e della lettura della
+  potenza, con ulteriori controlli durante la sincronizzazione di avvio.
+- Aggiunte protezioni RX-only all'avvio nel bridge e nel transceiver manager:
+  i percorsi automatici, periodici, CW, frequenza, split e modo CAT non possono
+  più ereditare uno stato PTT attivo. La trasmissione esplicita dell'operatore
+  resta disponibile dopo la fine della protezione iniziale.
+- Evitato il passaggio intermedio non necessario a DATA-U/USB quando la radio
+  era già in CW, riducendo il cambio di modo visibile durante la connessione CAT.
+- Aggiunti i pulsanti persistenti `SHOW CW`, `SHOW JTTY` e `SHOW SSB` per
+  riaprire le rispettive finestre esterne senza cambiare modo. Allargato il
+  controllo di stato LDPC per rendere leggibile l'etichetta accanto a STOP.
+- Corretto il problema di focus della finestra SSB esterna che impediva
+  l'apertura del menu Radio AGC. Tutti i menu ComboBox SSB mantengono ora il
+  focus durante il clic, inclusi quelli creati dinamicamente; la barra spaziatrice
+  continua a non attivare il PTT mentre un menu è aperto e funziona normalmente
+  negli altri contesti.
+- La selezione Radio AGC raggiunge ora correttamente il percorso CAT, inclusi i
+  preset OFF, FAST, MID e SLOW con i rispettivi valori numerici Hamlib.
+- Corretto il congelamento degli indicatori di livello RX dopo il passaggio tra
+  CW/JTTY/SSB e i modi FT, riattivando il refresh dello stato legacy e usando il
+  proprietario effettivo del livello RX invece di un oggetto audio rimasto in memoria.
+- Aggiunti test mirati per la UI SSB: apertura menu, valori AGC, focus da mouse
+  e tastiera, campi di testo e sicurezza PTT; esteso il target di regressione e
+  validato con gli stili Qt Material e Fusion.
+
+## [1.0.657] - 2026-10-02
+
+### English
+
+- Fixed profile-aware loading of MaxCallerRetries and
+  CallerRetriesAlwaysHard, so the active profile value is also the value
+  enforced by the bridge.
+- Fixed TX retry-limit bypasses that allowed repeated TX2 reports to continue
+  through closing-QSO states.
+- Added a final AutoCQ/MAM safety barrier preventing stale state from sending
+  RR73 to a caller that had not received our numeric report.
+- Completed and logged a QSO immediately after a locally transmitted final 73,
+  even if the current TX state or CAT status changes afterwards.
+- Stabilised macOS Hamlib PTT handling: the bridge waits beyond Hamlib's
+  one-second CI-V transaction timeout and does not immediately reconnect CAT
+  from the TX error path.
+
+### Italiano
+
+- Corretto il caricamento profilo-aware di MaxCallerRetries e
+  CallerRetriesAlwaysHard: il valore del profilo attivo è ora anche quello
+  realmente applicato dal bridge.
+- Corretto il bypass del limite retry che consentiva la ripetizione indefinita
+  dei report TX2 durante la chiusura del QSO.
+- Aggiunta una barriera finale AutoCQ/MAM che impedisce l'invio di RR73 a un
+  caller che non ha ancora ricevuto il nostro report numerico.
+- Il QSO viene completato e registrato subito dopo il nostro 73 finale
+  realmente trasmesso, anche se lo stato TX o CAT cambia subito dopo.
+- Stabilizzato il PTT Hamlib su macOS: il bridge attende oltre il timeout CI-V
+  di un secondo e non avvia immediatamente una riconnessione CAT dal percorso
+  di errore TX.
+
+## [1.0.503] - 2026-07-27
+
+### Repository and release infrastructure
+
+- Moved required runtime data to `resources/runtime`, configured CMake inputs
+  to `CMake/templates`, and platform metadata to `packaging`.
+- Preserved historical technical references and acknowledgements under `doc`.
+- Removed obsolete Qt 5, Cirrus, duplicate Linux, and hard-coded macOS
+  workflows, along with unused root placeholders and the orphan `aethersdr`
+  gitlink.
+- Added a repository-layout validator and a single release-version resolver.
+  Windows, macOS, and Linux release workflows now reject tags or manual version
+  inputs that differ from `fork_release_version.txt`.
+- Made required runtime data and matching release notes part of the CI
+  contract, and removed the stale hard-coded Windows installer version.
+- Kept CAT frequency rejection handling source-compatible with Linux
+  distributions that still provide Hamlib 4.5.
+- Kept installed runtime filenames unchanged so upgrades preserve application
+  lookup behavior on Windows, macOS, and Linux.
+
+### UDP reporting
+
+- Normalized the configured WSJT-X Client ID once and serialized the same value
+  on primary, secondary and tertiary UDP endpoints.
+- Added a complete secondary WSJT-X protocol client for decode, status, WSPR,
+  clear and optional logged-QSO traffic instead of limiting secondary output to
+  selected ADIF notifications.
+- Applied reporting changes immediately to the embedded legacy backend without
+  restarting the application.
+- Added diagnostic lines that identify the Client ID, destination, interface
+  and TTL used by every UDP endpoint.
+- Added loopback tests that inspect heartbeat packets from all three endpoints
+  and verify live Client ID changes.
+
+### macOS audio and panadapter
+
+- Reduced the native AudioQueue callback quantum to approximately 20 ms by
+  default while retaining four queued buffers for stability.
+- Added `DECODIUM_MAC_AUDIO_QUEUE_FRAMES` as a diagnostic override.
+- Changed the spectrum timer to a precise timer and allowed the accelerated
+  legacy GPU path to follow the configured FPS cap.
+- Kept adaptive throttling during DEEP decode and real CPU pressure, with
+  conservative behavior for CPU fallback rendering.
+
+### Runtime data and UI
+
+- Updated source-tree fallbacks for `CALL3.TXT`, `cty.dat` and `sat.dat` to the
+  maintained `resources/runtime` directory.
+- Added internal padding to TCP port, frequency, offset and color-entry fields
+  in Setup so numeric values no longer touch their borders.
+
+## [1.0.351] - 2026-05-31
+
+### Italiano
+
+Release finale dopo la 1.0.346. Integra il lavoro locale delle serie 1.0.347/1.0.348, l'allineamento di Martino fino a `v1.0.350` e il merge locale finale sul ramo principale.
+
+#### Aggiunto
+
+- Supporto Linux ai path seriali stabili `/dev/serial/by-id` nelle liste CAT/PTT.
+- Telemetria ALC con flag di validita' separato, cosi' `ALC --` indica dato non disponibile e `0` resta un valore valido.
+- Cablaggio del controllo ZAP nel decoder Q65.
+- Componenti QML `DecoComboBox` e `DecoTextField` per evitare rendering errato di emoji/simboli nei campi Material su macOS.
+- Refresh automatico delle periferiche audio prima dell'auto-monitor all'avvio.
+- Worked-before preciso per chiamata, banda e modo.
+- Opzioni Display > Decodes per mostrare/nascondere `Dist` e `Az` in Full Spectrum e Signal RX, piu' colonna `Freq` in Signal RX.
+
+#### Modificato
+
+- Integrata la localizzazione italiana completa post-merge di Martino `v1.0.350`.
+- Conservate le funzioni fork-only durante il merge: DX-Pedition Mode, ALC, miglioramenti FT8/FT2 e funzioni UI locali.
+- Cloudlog normalizza meglio gli endpoint API e distingue errori HTTP/autenticazione/proxy con messaggi piu' chiari.
+- Prompt-to-log e MessageBox hanno layout piu' robusti, senza dim Material invasivo e con pulsanti non sovrapposti.
+- Check SWR non blocca piu' Tune: resta protezione su TX reale e AutoCQ.
+- Il panadapter non mostra piu' i marker gialli duplicati a 500/1000/1500/2000/2500/3000 Hz.
+- Aggiornati metadati locali, Inno Setup, NSIS e workflow macOS legacy alla versione `1.0.351`.
+
+#### Corretto
+
+- Crash Linux TX/Tune dopo errore audio (`QSocketNotifier` da thread errato e `SIGNAL 11`).
+- Fallback audio indesiderato con periferiche omonime o cache Qt non aggiornata.
+- Falsi worked-before tra modi o bande differenti.
+- Autosequenza con CPU lente, nominativi speciali/lunghi e hash diretti al partner attivo.
+- Avvio QML su macOS causato da proprieta' non supportate in `TxPanel`.
+- Doppia porta CAT/PTT quando `/dev/serial/by-id/...` punta allo stesso device di `/dev/tty*`.
+
+### English
+
+Final release after 1.0.346. It integrates the local 1.0.347/1.0.348 work, Martino's alignment up to `v1.0.350`, and the final local merge on the main branch.
+
+#### Added
+
+- Linux support for stable `/dev/serial/by-id` serial paths in CAT/PTT lists.
+- ALC telemetry with a separate validity flag, so `ALC --` means unavailable while `0` remains a valid value.
+- ZAP wiring into the Q65 decoder.
+- QML `DecoComboBox` and `DecoTextField` controls to avoid Material emoji/symbol rendering corruption on macOS.
+- Automatic audio-device refresh before startup auto-monitor.
+- Worked-before tracking by exact call, band, and mode.
+- Display > Decodes options for `Dist` and `Az` in Full Spectrum and Signal RX, plus `Freq` in Signal RX.
+
+#### Changed
+
+- Integrated Martino's complete Italian localization after the `v1.0.350` merge.
+- Preserved fork-only features during merge: DX-Pedition Mode, ALC, FT8/FT2 improvements, and local UI features.
+- Cloudlog now normalizes API endpoints better and distinguishes HTTP/authentication/proxy failures more clearly.
+- Prompt-to-log and MessageBox layouts are more robust, without invasive Material dimming and without button/text overlap.
+- Check SWR no longer blocks Tune; protection remains active for real TX and AutoCQ.
+- The panadapter no longer draws duplicate yellow 500/1000/1500/2000/2500/3000 Hz markers.
+- Local metadata, Inno Setup, NSIS, and the legacy macOS workflow are aligned to `1.0.351`.
+
+#### Fixed
+
+- Linux TX/Tune crash after audio errors (`QSocketNotifier` from the wrong thread followed by `SIGNAL 11`).
+- Unwanted audio fallback with same-name devices or stale Qt audio cache.
+- False worked-before matches across different bands or modes.
+- Autosequence handling for slow CPUs, long/special callsigns, and hashes directed to the active partner.
+- macOS QML startup failure caused by unsupported `TxPanel` properties.
+- Duplicate CAT/PTT ports when `/dev/serial/by-id/...` points to the same device as `/dev/tty*`.
+
+## [1.0.348] - 2026-05-31
+
+### Italiano
+
+Release finale dopo la 1.0.347, centrata su stabilita' TX/Tune Linux, autosequenza, worked-before corretto per banda/modo, refresh audio all'avvio e opzioni display richieste dagli utenti.
+
+#### Aggiunto
+
+- Refresh automatico delle periferiche audio durante l'avvio, prima dell'auto-monitor, per evitare che RX parta con una cache audio non aggiornata.
+- Opzioni in Setup > Display > Decodes per mostrare/nascondere `Dist` e `Az` in Full Spectrum e Signal RX.
+- Colonna `Freq` configurabile nella finestra Signal RX.
+- Riconoscimento worked-before piu' preciso per chiamata, banda e modo.
+- Gestione autosequenza piu' permissiva per CPU lente nei passaggi TX1/TX2/TX3.
+
+#### Modificato
+
+- `Check SWR` non blocca piu' il Tune: la protezione resta attiva solo per TX reale e AutoCQ, cosi' l'utente puo' misurare e correggere SWR alto con strumenti esterni.
+- Il decoder FT2 su CPU lente evita lavoro asincrono non utile durante TX, riducendo ritardi nei casi limite di slot/timing.
+- Il panadapter non disegna piu' i marker gialli duplicati a 500/1000/1500/2000/2500/3000 Hz, lasciando la scala inferiore come riferimento unico.
+- La risoluzione audio TX/Tune usa callback QAudioSink piu' difensivi, con guardie su oggetti e seriale playback.
+- Metadati locali, Inno Setup e NSIS allineati alla versione `1.0.348`.
+
+#### Corretto
+
+- Fix del crash Linux dopo errori audio TX/Tune (`QSocketNotifier` da thread errato e successivo `SIGNAL 11`).
+- Corretto il falso worked-before tra modi o bande diverse: un QSO in 20m FT2 non marca piu' come gia' lavorato 20m FT8 o 40m FT2.
+- Migliorata l'autosequenza con nominativi lunghi/speciali e hash locali diretti al partner attivo.
+- Evitati fallback silenziosi in startup monitor quando la periferica audio salvata esiste ma Qt non ha ancora completato l'enumerazione.
+
+### English
+
+Final release after 1.0.347, focused on Linux TX/Tune stability, autosequence reliability, exact band/mode worked-before checks, startup audio refresh, and requested decode display options.
+
+#### Added
+
+- Automatic audio-device refresh during startup before auto-monitor starts, avoiding RX startup with stale audio cache.
+- Setup > Display > Decodes options to show/hide `Dist` and `Az` in Full Spectrum and Signal RX.
+- Configurable `Freq` column in Signal RX.
+- More precise worked-before tracking by call, band, and mode.
+- More tolerant autosequence retry budget for slow CPUs during TX1/TX2/TX3 transitions.
+
+#### Changed
+
+- `Check SWR` no longer blocks Tune: protection remains active only for real TX and AutoCQ, so users can measure high SWR and correct it externally.
+- FT2 decoding on slow CPUs avoids non-useful async decode work during TX, reducing slot/timing edge cases.
+- The panadapter no longer draws duplicate yellow 500/1000/1500/2000/2500/3000 Hz labels, leaving the bottom scale as the single reference.
+- TX/Tune audio handling now uses more defensive QAudioSink callbacks guarded by object lifetime and playback serial.
+- Local metadata, Inno Setup, and NSIS are aligned to `1.0.348`.
+
+#### Fixed
+
+- Fixed the Linux crash after TX/Tune audio errors (`QSocketNotifier` from the wrong thread followed by `SIGNAL 11`).
+- Fixed false worked-before matches across different modes or bands: 20m FT2 no longer marks 20m FT8 or 40m FT2 as worked.
+- Improved autosequence handling for long/special callsigns and local hashes directed to the active partner.
+- Avoided silent startup-monitor fallback when the saved audio device exists but Qt has not completed enumeration yet.
+
+## [1.0.347] - 2026-05-31
+
+### Italiano
+
+Release di stabilizzazione dopo la 1.0.346, centrata su affidabilita' audio/CAT, compatibilita' Linux/macOS, pulizia della UI QML e gestione piu' robusta di Cloudlog.
+
+#### Aggiunto
+
+- Supporto Linux ai path seriali stabili `/dev/serial/by-id` nelle liste CAT e PTT, con confronto canonico dei symlink.
+- Identita' audio piu' stabile nei percorsi di selezione periferica, con refresh esplicito della cache prima di TX/Tune.
+- Telemetria ALC con validita' separata, cosi' il valore `0` non viene piu' confuso con dato assente.
+- Controllo ZAP cablato nel percorso decode Q65.
+- Componenti QML dedicati `DecoComboBox` e `DecoTextField` per evitare rendering errato di emoji/simboli nei campi Material su macOS.
+
+#### Modificato
+
+- Cloudlog normalizza meglio l'endpoint API, distingue errori HTTP/autenticazione e segnala API key valida/non valida con messaggi piu' chiari.
+- La finestra "prompt to log" non usa piu' il dim Material sullo sfondo ed e' leggermente piu' alta per contenere correttamente i pulsanti.
+- MessageBox e popup QML hanno dimensioni piu' conservative per evitare sovrapposizioni tra testo e pulsanti.
+- La status bar mostra ALC solo quando Hamlib lo considera realmente disponibile.
+- Metadati locali, Inno Setup, NSIS e workflow macOS legacy allineati alla versione `1.0.347`.
+
+#### Corretto
+
+- Corretto il crash Linux visto dopo `Tune` quando Qt audio segnalava `IOError` e il callback tentava lo stop da thread non GUI.
+- Evitato il falso uso di una porta PTT separata quando `/dev/serial/by-id/...` e `/dev/tty*` puntano allo stesso dispositivo.
+- Migliorata la gestione Hamlib ALC sui backend Linux che rispondono a `RIG_LEVEL_ALC` anche se non lo dichiarano nelle capability.
+- Ridotto il rischio di fallback audio verso un device omonimo o default non voluto quando piu' periferiche espongono lo stesso nome.
+- Corretto l'errore QML su macOS relativo a proprieta' non supportate in `TxPanel`.
+
+### English
+
+Stabilization release after 1.0.346, focused on audio/CAT reliability, Linux/macOS compatibility, QML UI cleanup, and more robust Cloudlog handling.
+
+#### Added
+
+- Linux support for stable `/dev/serial/by-id` serial paths in CAT and PTT lists, including canonical symlink comparison.
+- More stable audio identity handling in device selection paths, with explicit cache refresh before TX/Tune.
+- ALC telemetry with a separate validity flag, so value `0` is no longer treated as missing data.
+- ZAP wiring in the Q65 decode path.
+- Dedicated `DecoComboBox` and `DecoTextField` QML controls to avoid emoji/symbol rendering corruption in Material fields on macOS.
+
+#### Changed
+
+- Cloudlog now normalizes API endpoints more reliably, distinguishes HTTP/authentication failures, and reports valid/invalid API keys more clearly.
+- The "prompt to log" popup no longer dims the Material background and has a slightly taller layout for its buttons.
+- MessageBox and QML popups use more conservative sizing to avoid text/button overlap.
+- The status bar displays ALC only when Hamlib reports it as truly available.
+- Local version metadata, Inno Setup, NSIS, and the legacy macOS workflow are aligned to `1.0.347`.
+
+#### Fixed
+
+- Fixed the Linux crash seen after `Tune` when Qt audio reported `IOError` and the stop path ran from the wrong thread.
+- Avoided treating `/dev/serial/by-id/...` and `/dev/tty*` as separate PTT ports when they point to the same device.
+- Improved Hamlib ALC handling on Linux backends that can answer `RIG_LEVEL_ALC` even when the capability mask does not advertise it.
+- Reduced the risk of silent audio fallback to an unwanted same-name/default device.
+- Fixed the macOS QML load error caused by unsupported properties in `TxPanel`.
+
+## [1.0.345] - 2026-05-31
+
+### Italiano
+
+Release di stabilizzazione dopo la 1.0.344, centrata sulla resa dei font su Windows, sulla pulizia dei warning DirectWrite e sulla persistenza corretta dei pannelli flottanti durante la chiusura dell'applicazione.
+
+#### Aggiunto
+
+- Font UI Windows esplicito su `Segoe UI` per il percorso Qt Widgets e per il percorso QML.
+- Sostituzioni Qt per famiglie legacy Windows come `MS Sans Serif`, `MS Serif`, `System` e `Small Fonts`, oltre ai gia' gestiti `MS Shell Dlg` e `MS Shell Dlg 2`.
+- Impostazione font dedicata su `BootLoader.qml` e `Main.qml` per partire con la famiglia corretta anche prima del caricamento completo della UI.
+
+#### Modificato
+
+- Il resolver font del bridge tratta le famiglie Windows legacy come alias del font sans-serif di piattaforma.
+- Il message handler ignora il warning DirectWrite noto `CreateFontFaceFromHDC()` legato a `MS Sans Serif`, evitando rumore non utile nel log.
+- Alla chiusura dell'app, le finestre flottanti Waterfall e Live Map non riscrivono piu' lo stato salvato come se l'utente le avesse chiuse manualmente.
+- Metadati locali, Inno Setup, NSIS e workflow macOS legacy allineati alla versione `1.0.345`.
+
+#### Corretto
+
+- Ridotto il rischio di fallback font errato su Windows quando Qt o QML incontrano nomi storici non piu' adatti al rendering moderno.
+- Evitata la perdita indesiderata dello stato detached/minimized di Waterfall e Live Map durante lo shutdown.
+
+### English
+
+Stabilization release after 1.0.344, focused on Windows font rendering, DirectWrite warning cleanup, and correct floating-panel persistence during application shutdown.
+
+#### Added
+
+- Explicit Windows UI font selection to `Segoe UI` for both the Qt Widgets and QML startup paths.
+- Qt substitutions for legacy Windows families such as `MS Sans Serif`, `MS Serif`, `System`, and `Small Fonts`, in addition to `MS Shell Dlg` and `MS Shell Dlg 2`.
+- Dedicated font family assignment in `BootLoader.qml` and `Main.qml` so the correct UI font is active from early startup.
+
+#### Changed
+
+- The bridge font resolver now maps legacy Windows families to the platform sans-serif candidates.
+- The message handler filters the known DirectWrite `CreateFontFaceFromHDC()` warning for `MS Sans Serif`.
+- During application shutdown, detached Waterfall and Live Map windows no longer rewrite saved layout state as if the user had manually closed them.
+- Local version metadata, Inno Setup, NSIS, and the legacy macOS workflow are aligned to `1.0.345`.
+
+#### Fixed
+
+- Reduced the chance of bad Windows font fallback when Qt or QML see old Windows font names.
+- Prevented detached/minimized Waterfall and Live Map state from being lost during shutdown.
+
+## [1.0.342] - 2026-05-30
+
+### Italiano
+
+Release di stabilizzazione per allineare il ramo locale alla 1.0.342 dopo la 1.0.341, ridurre la verbosita' dei log diagnostici e mantenere compilabile il codice anche su macOS.
+
+#### Aggiunto
+
+- Metriche `DECODEMETRIC` per i worker FT8, FT4 e FT2 con tempi di attesa, decode e totale, thread attivi/richiesti, dimensione audio e dettagli di profondita'.
+- Hook diagnostici sul main thread per misurare le fasi di consegna decode-ready e aggiornamento modello, utili a correlare eventuali stall UI.
+- Indicatori runtime aggiuntivi in status bar per monitor GPU e thread FT, coerenti con le diagnostiche gia' presenti nel backend.
+
+#### Modificato
+
+- Log `PANMETRIC` ridotti da intervalli brevi a circa 60 secondi per abbassare il rumore nei log ordinari.
+- Log profilo `MAPGPU` ridotti a circa 60 secondi ed evitato il profilo immediato duplicato subito dopo il primo frame.
+- Log `DEPTHDBG` nascosti di default e abilitabili solo impostando `DECODIUM_DEPTHDBG`.
+- Metadati locali, Inno Setup, NSIS e workflow macOS legacy allineati alla versione `1.0.342`.
+
+#### Corretto
+
+- Corretto il build macOS con Clang: la funzione di affinita' OpenMP dei thread FT viene compilata solo su Windows quando OpenMP e' disponibile.
+- Ripulite anomalie di fine riga nel worker FT2 che causavano controlli whitespace sporchi.
+- Mantenuti gli aggiornamenti locali al path GPU del panadapter/waterfall e alle finestre QML senza introdurre regressioni nel build macOS.
+
+### English
+
+Stabilization release to align the local branch to 1.0.342 after 1.0.341, reduce diagnostic log noise, and keep the code building cleanly on macOS.
+
+#### Added
+
+- `DECODEMETRIC` timing for FT8, FT4, and FT2 workers, including wait/decode/total time, active/requested thread counts, audio size, and depth details.
+- Main-thread diagnostic hooks for decode-ready delivery and model-update phases, useful for correlating UI stalls.
+- Additional runtime status indicators for GPU monitoring and FT thread activity.
+
+#### Changed
+
+- `PANMETRIC` logs are throttled to roughly 60-second intervals.
+- `MAPGPU` profile logs are throttled to roughly 60-second intervals and no longer emit an immediate duplicate right after the first-frame log.
+- `DEPTHDBG` logs are disabled by default and can be enabled with `DECODIUM_DEPTHDBG`.
+- Local version metadata, Inno Setup, NSIS installer metadata, and the legacy macOS workflow are aligned to `1.0.342`.
+
+#### Fixed
+
+- Fixed the macOS Clang build by compiling the FT OpenMP affinity helper only on Windows when OpenMP is available.
+- Cleaned FT2 worker line-ending anomalies that made whitespace checks fail.
+- Preserved the local GPU panadapter/waterfall and QML window updates while restoring a clean macOS build.
+
+## [1.0.335] - 2026-05-30
+
+### Italiano
+
+Release di stabilizzazione per la selezione delle periferiche audio Qt/Windows e per l'autosequenza con nominativi speciali.
+
+#### Aggiunto
+
+- Persistenza degli ID stabili Qt delle periferiche audio in `audioInputDeviceId` e `audioOutputDeviceId`, oltre ai nomi visibili gia' salvati.
+- Log diagnostici piu' espliciti per periferica salvata, ID salvato, periferica scelta, ID scelto, motivo del match e default disponibile.
+- Log di salute audio RX subito dopo l'avvio, con RMS, picco, range e clipping, per capire rapidamente se l'audio reale arriva dal dispositivo corretto.
+- Copertura test per messaggi FT speciali con nominativo locale non standard, incluso il caso `II9MESC` verso `KQ5I`.
+
+#### Modificato
+
+- La risoluzione audio preferisce l'ID stabile del dispositivo e usa il nome visibile solo come fallback esatto e univoco.
+- Quando piu' dispositivi hanno lo stesso nome, ad esempio piu' `USB Audio CODEC`, Decodium non riscrive piu' silenziosamente la scelta salvata sul default.
+- La cache TX e il riuso dello stream RX distinguono ora dispositivi con stesso nome ma ID diverso.
+- Metadati locali e installer NSIS sono allineati alla versione `1.0.335`.
+
+#### Corretto
+
+- Corretto il caso in cui l'utente con piu' periferiche audio omonime vedeva Decodium scegliere o salvare il default sbagliato dopo l'enumerazione Qt.
+- Corretta la sequenza FT per nominativo locale speciale e corrispondente standard: il report viene indirizzato al DX (`KQ5I <II9MESC> -15`) e non alla chiamata locale hashata in posizione errata, evitando che il corrispondente continui a rimandare il locator e blocchi l'autosequenza.
+- Migliorata la diagnosi di fallback audio: quando un dispositivo salvato non viene trovato o non e' univoco, il log conserva nome e ID richiesti invece di nascondere il problema dietro il default.
+
+### English
+
+Stabilization release for Qt/Windows audio-device selection and special-callsign autosequencing.
+
+#### Added
+
+- Stable Qt audio device IDs are now persisted as `audioInputDeviceId` and `audioOutputDeviceId` alongside the existing visible device names.
+- Clearer diagnostics for saved device, saved ID, selected device, selected ID, match reason, and available default.
+- RX startup audio-health logging with RMS, peak, range, and clipping to confirm that real audio arrives from the selected device.
+- Test coverage for FT special-call messages, including local non-standard call `II9MESC` with standard peer `KQ5I`.
+
+#### Changed
+
+- Audio resolution now prefers the stable device ID and uses the visible name only as an exact, unique fallback.
+- When multiple devices share the same visible name, such as multiple `USB Audio CODEC` entries, Decodium no longer silently rewrites the saved selection to the default.
+- TX audio caching and RX stream reuse now distinguish devices with the same visible name but different IDs.
+- Local metadata and NSIS installer metadata are aligned to version `1.0.335`.
+
+#### Fixed
+
+- Fixed the case where users with multiple same-name audio devices could have Decodium select or save the wrong default device after Qt enumeration.
+- Fixed FT sequencing for a non-standard local special call and a standard peer: the report is now addressed to the DX (`KQ5I <II9MESC> -15`), preventing the peer from repeatedly sending its locator and stalling autosequence.
+- Improved audio fallback diagnostics by preserving requested name and ID in the log when the saved device is missing or ambiguous.
+
+## [1.0.333] - 2026-05-30
+
+### Italiano
+
+Release di stabilizzazione UI per evitare il blocco osservato riaprendo Decodium in modalita' DX-Pedition e per riportare l'avvio su un profilo grafico sicuro.
+
+#### Modificato
+
+- L'avvio forza `Ocean Blue` come tema runtime e riscrive la preferenza `theme/current` se era rimasta su un tema diverso.
+- Il workspace DX-Pedition non viene piu' ripristinato automaticamente allo startup; se `uiDxPeditionMode` era salvato attivo, viene disattivato prima di caricare il layout principale.
+- `DX-Pedition` e' stato rimosso dall'elenco temi visibile nelle impostazioni, lasciando intatta la palette interna per eventuali test futuri o percorsi codice esistenti.
+- Metadati locali, installer Windows Inno Setup/NSIS e workflow macOS legacy sono allineati alla versione `1.0.333`.
+
+#### Corretto
+
+- Evitato il rientro automatico nel layout DX-Pedition dopo un avvio precedente in quella modalita', riducendo il rischio di blocco UI allo startup.
+- Riallineate le preferenze locali di test su `Ocean Blue` e `uiDxPeditionMode=false`.
+
+### English
+
+UI stabilization release to avoid the lock-up seen after reopening Decodium in DX-Pedition mode and to return startup to a safe graphics profile.
+
+#### Changed
+
+- Startup now forces `Ocean Blue` as the runtime theme and rewrites the stored `theme/current` preference when it contains a different theme.
+- The DX-Pedition workspace is no longer restored automatically at startup; if `uiDxPeditionMode` was saved as enabled, it is disabled before the main layout loads.
+- `DX-Pedition` was removed from the visible theme list in settings, while the internal palette remains available for future testing or existing code paths.
+- Local version metadata, Windows Inno Setup/NSIS installers, and the legacy macOS workflow are aligned to `1.0.333`.
+
+#### Fixed
+
+- Prevented automatic re-entry into the DX-Pedition layout after a previous run in that mode, reducing startup UI lock-up risk.
+- Local test preferences were realigned to `Ocean Blue` and `uiDxPeditionMode=false`.
+
+## [1.0.332] - 2026-05-29
+
+### Italiano
+
+Release focalizzata sulla stabilita' macOS Apple Silicon, sulla riduzione degli stalli audio/UI e sulla robustezza dei percorsi GPU di panadapter, waterfall e LiveMap.
+
+#### Aggiunto
+
+- Aggiunta una cache debounced dei dispositivi audio Qt per evitare enumerazioni ripetute su startup, wake e cambio dispositivo.
+- Aggiunta strumentazione piu' leggibile per timeline audio/TX, stalli main-thread e fasi QSG.
+- Aggiunta una texture fallback 1x1 per i layer LiveMap quando la texture reale non e' ancora pronta.
+
+#### Modificato
+
+- `SoundInput` ora esegue start, stop, suspend, resume, reset e gain sul proprio thread, riducendo il lavoro CoreAudio/Qt Multimedia sul thread UI.
+- Il TX audio macOS riusa il sink CoreAudio quando possibile e lo mantiene caldo/silenziato fra un TX e il successivo.
+- Il percorso GPU panadapter/waterfall ritira le texture QRhi in modo differito e rilascia risorse nello stage corretto del render thread.
+- Il detach della finestra waterfall viene differito al giro Qt successivo per evitare collisioni con la sincronizzazione QSG.
+- Metadati locali, installer Windows e workflow macOS legacy sono allineati alla versione `1.0.332`.
+
+#### Corretto
+
+- Mitigato il crash CoreAudio in `AudioObjectRemovePropertyListenerBlock` / `QCoreAudioSinkStream::stopAudioUnit()` visto dopo fine TX o cambio stato audio.
+- Mitigato il crash QSGRenderThread in `WorldMapGpuItem::updatePaintNode()` causato da `QSGSimpleTextureNode::setTexture(nullptr)`.
+- Corretta la gestione delle label decode native sul waterfall quando l'overlay C++/GPU e' attivo, mantenendo leggibilita' e click sugli spot DX.
+- Migliorata la leggibilita' dell'overlay panadapter con testo piu' netto e fallback texture sempre valido.
+
+### English
+
+Release focused on macOS Apple Silicon stability, lower audio/UI stalls, and stronger GPU paths for the panadapter, waterfall, and LiveMap.
+
+#### Added
+
+- Added a debounced Qt audio-device cache to avoid repeated device enumeration during startup, wake, and device changes.
+- Added clearer timeline instrumentation for audio/TX, main-thread stalls, and QSG frame phases.
+- Added a 1x1 fallback texture for LiveMap layers while the real map texture is not ready.
+
+#### Changed
+
+- `SoundInput` now runs start, stop, suspend, resume, reset, and gain changes on its owner thread.
+- macOS TX audio now reuses the CoreAudio sink where possible and keeps it warm/muted between transmit cycles.
+- The GPU panadapter/waterfall path now retires QRhi textures defensively and releases GPU resources in the render-thread stage.
+- Waterfall pop-out activation is deferred to the next Qt turn to avoid QSG synchronization collisions.
+- Local version metadata, Windows installers, and the legacy macOS workflow are aligned to `1.0.332`.
+
+#### Fixed
+
+- Mitigated the CoreAudio crash in `AudioObjectRemovePropertyListenerBlock` / `QCoreAudioSinkStream::stopAudioUnit()` after TX finish or audio state changes.
+- Mitigated the QSG render-thread crash in `WorldMapGpuItem::updatePaintNode()` caused by `QSGSimpleTextureNode::setTexture(nullptr)`.
+- Fixed native decode-label handling on the waterfall while the C++/GPU overlay is active, keeping labels readable and DX spot clicks available.
+- Improved panadapter overlay readability and ensured sampled shader textures always have a valid fallback.
+
 ## [1.6.0] - 2026-04-03
 
 ### English

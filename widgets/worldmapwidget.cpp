@@ -35,6 +35,47 @@ qint64 const kGreylineCacheRefreshMs = 5000;
 qint64 const kLiveMapProfileLogMs = 5000;
 double constexpr kEarthRadiusKm = 6371.0;
 
+bool maidenheadCellBounds(QString const& locator,
+                          QPointF* southWest,
+                          QPointF* northEast)
+{
+  if (!southWest || !northEast)
+    {
+      return false;
+    }
+  QString const candidate = locator.trimmed().toUpper();
+  QString const grid = candidate.left(candidate.size() >= 6 ? 6 : 4);
+  if ((grid.size() != 4 && grid.size() != 6)
+      || grid.at(0) < QLatin1Char('A') || grid.at(0) > QLatin1Char('R')
+      || grid.at(1) < QLatin1Char('A') || grid.at(1) > QLatin1Char('R')
+      || !grid.at(2).isDigit() || !grid.at(3).isDigit())
+    {
+      return false;
+    }
+
+  double west = (grid.at(0).unicode() - 'A') * 20.0 - 180.0
+    + (grid.at(2).unicode() - '0') * 2.0;
+  double south = (grid.at(1).unicode() - 'A') * 10.0 - 90.0
+    + (grid.at(3).unicode() - '0');
+  double lonStep = 2.0;
+  double latStep = 1.0;
+  if (grid.size() == 6)
+    {
+      if (grid.at(4) < QLatin1Char('A') || grid.at(4) > QLatin1Char('X')
+          || grid.at(5) < QLatin1Char('A') || grid.at(5) > QLatin1Char('X'))
+        {
+          return false;
+        }
+      lonStep = 5.0 / 60.0;
+      latStep = 2.5 / 60.0;
+      west += (grid.at(4).unicode() - 'A') * lonStep;
+      south += (grid.at(5).unicode() - 'A') * latStep;
+    }
+  *southWest = QPointF(west, south);
+  *northEast = QPointF(west + lonStep, south + latStep);
+  return true;
+}
+
 qint64 monotonicNowMs()
 {
   static QElapsedTimer timer;
@@ -306,8 +347,11 @@ void WorldMapWidget::rebuildBackgroundCache(QRectF const& bounds)
   cachePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
   // bounds traslato all'origine del pixmap
   QRectF const localBounds {0.0, 0.0, bounds.width(), bounds.height()};
-  drawBackground(&cachePainter, localBounds);
-  drawGeoOverlay(&cachePainter, localBounds);
+  if (m_baseMapEnabled)
+    {
+      drawBackground(&cachePainter, localBounds);
+      drawGeoOverlay(&cachePainter, localBounds);
+    }
   drawGrid(&cachePainter, localBounds);
   cachePainter.end();
 
@@ -400,6 +444,46 @@ void WorldMapWidget::setHomeGrid(QString const& grid)
   update();
 }
 
+void WorldMapWidget::focusLocation(double longitude, double latitude,
+                                   double spanLongitude, double spanLatitude)
+{
+  if (!std::isfinite(longitude) || !std::isfinite(latitude))
+    {
+      return;
+    }
+  m_userViewportLocked = true;
+  m_targetSpanLon = qBound(45.0, spanLongitude, 360.0);
+  m_targetSpanLat = qBound(24.0, spanLatitude, 180.0);
+  m_targetCenterLon = wrapLongitude(longitude);
+  m_targetCenterLat = qBound(-90.0 + 0.5 * m_targetSpanLat,
+                             latitude,
+                             90.0 - 0.5 * m_targetSpanLat);
+  update();
+}
+
+void WorldMapWidget::resetView()
+{
+  m_userViewportLocked = false;
+  m_azimuthalBaseDirty = true;
+  m_azimuthalOverlayDirty = true;
+  m_azimuthalExternalDirty = true;
+  m_backgroundCache = QPixmap();
+  invalidateGreylineCache();
+  updateViewportTargets();
+  update();
+}
+
+void WorldMapWidget::setBaseMapEnabled(bool enabled)
+{
+  if (m_baseMapEnabled == enabled)
+    {
+      return;
+    }
+  m_baseMapEnabled = enabled;
+  m_backgroundCache = QPixmap();
+  update();
+}
+
 void WorldMapWidget::setGreylineEnabled(bool enabled)
 {
   if (m_greylineEnabled == enabled)
@@ -409,6 +493,107 @@ void WorldMapWidget::setGreylineEnabled(bool enabled)
 
   m_greylineEnabled = enabled;
   invalidateGreylineCache();
+  update();
+}
+
+void WorldMapWidget::setCoverageCells(QVariantList const& cells)
+{
+  QVector<CoverageCell> next;
+  next.reserve(cells.size());
+  for (QVariant const& value : cells)
+    {
+      QVariantMap const row = value.toMap();
+      CoverageCell cell;
+      QString const grid = row.value(QStringLiteral("grid")).toString().trimmed().toUpper();
+      cell.grid = grid.left(grid.size() >= 6 ? 6 : 4);
+      cell.workedCount = row.value(QStringLiteral("workedCount")).toInt();
+      cell.confirmedCount = row.value(QStringLiteral("confirmedCount")).toInt();
+      cell.activeCount = row.value(QStringLiteral("activeCount")).toInt();
+      cell.pskCount = row.value(QStringLiteral("pskCount")).toInt();
+      cell.historicalStatus = row.value(QStringLiteral("historicalStatus")).toString();
+      cell.liveStatus = row.value(QStringLiteral("liveStatus")).toString();
+      cell.liveOpacity = qBound<qreal>(
+        0.2, row.value(QStringLiteral("liveOpacity"), 1.0).toReal(), 1.0);
+      cell.split = row.value(QStringLiteral("split")).toBool();
+      cell.worked = row.value(QStringLiteral("worked")).toBool();
+      cell.confirmed = row.value(QStringLiteral("confirmed")).toBool();
+      cell.active = row.value(QStringLiteral("active")).toBool();
+      cell.missing = row.value(QStringLiteral("missing")).toBool();
+      cell.psk = row.value(QStringLiteral("psk")).toBool();
+      QPointF lonLat;
+      if (maidenheadToLonLat(cell.grid, &lonLat))
+        {
+          next.push_back(cell);
+        }
+    }
+  m_coverageCells = next;
+  update();
+}
+
+void WorldMapWidget::setOperationalMarkers(QVariantList const& markers)
+{
+  if (m_operationalMarkers == markers)
+    {
+      return;
+    }
+  m_operationalMarkers = markers;
+  update();
+}
+
+void WorldMapWidget::setGeographicFeatures(QVariantList const& features)
+{
+  if (m_geographicFeatures == features)
+    {
+      return;
+    }
+  m_geographicFeatures = features;
+  update();
+}
+
+void WorldMapWidget::setProjection(QString const& projection)
+{
+  QString normalized = projection.trimmed();
+  if (normalized != QStringLiteral("Mercator")
+      && normalized != QStringLiteral("Miller")
+      && normalized != QStringLiteral("Azimuthal Equidistant"))
+    {
+      normalized = QStringLiteral("Equirectangular");
+    }
+  if (m_projection == normalized)
+    {
+      return;
+    }
+  m_projection = normalized;
+  m_azimuthalBaseDirty = true;
+  m_azimuthalOverlayDirty = true;
+  m_azimuthalExternalDirty = true;
+  m_backgroundCache = QPixmap();
+  invalidateGreylineCache();
+  updateViewportTargets();
+  update();
+}
+
+void WorldMapWidget::setExternalOverlayImage(QImage const& image)
+{
+  m_externalOverlay = image.isNull()
+    ? QPixmap()
+    : QPixmap::fromImage(image);
+  m_azimuthalExternalDirty = true;
+  m_backgroundCache = QPixmap();
+  update();
+}
+
+void WorldMapWidget::setBaseMapImage(QImage const& image)
+{
+  QPixmap const next = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+  if (m_worldTexture.cacheKey() == next.cacheKey()
+      && m_worldTexture.size() == next.size())
+    {
+      return;
+    }
+  m_worldTexture = next;
+  m_azimuthalBaseDirty = true;
+  m_backgroundCache = QPixmap();
   update();
 }
 
@@ -752,6 +937,7 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
     cacheRebuild = true;
   }
   painter.drawPixmap(mapBounds.topLeft(), m_backgroundCache);
+  drawExternalOverlay(&painter, mapBounds);
   // Day/night dipende dall'orario UTC e dal viewport ma cambia lentamente:
   // cache trasparente aggiornata ogni 5s o quando size/viewport cambiano.
   if (m_greylineEnabled) {
@@ -764,6 +950,9 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
     painter.drawPixmap(mapBounds.topLeft(), m_greylineCache);
     greylineMs = elapsedMs(greylineTimer);
   }
+
+  drawCoverage(&painter, mapBounds);
+  drawGeographicFeatures(&painter, mapBounds);
 
   QList<Contact> contacts = m_contacts.values();
   int const contactsCount = contacts.size();
@@ -886,6 +1075,8 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
           m_postTxQueueUntilMs = 0;
         }
     }
+
+  drawOperationalLayers(&painter, mapBounds);
 
   if (m_hasHome)
     {
@@ -1024,6 +1215,20 @@ void WorldMapWidget::handleMapClick(QPointF const& clickPos)
   QString closestCall;
   QString closestGrid;
 
+  QVariantMap const operational = operationalMarkerAt(clickPos);
+  if (!operational.isEmpty())
+    {
+      Q_EMIT operationalMarkerClicked(operational, clickPos.x(), clickPos.y());
+      return;
+    }
+
+  QVariantMap const geographic = geographicFeatureAt(clickPos);
+  if (!geographic.isEmpty())
+    {
+      Q_EMIT geographicFeatureClicked(geographic, clickPos.x(), clickPos.y());
+      return;
+    }
+
   for (auto const& contact : m_contacts)
     {
       auto normalizedCall = contact.call.trimmed();
@@ -1073,6 +1278,184 @@ void WorldMapWidget::handleMapClick(QPointF const& clickPos)
       qDebug() << "[Map] found contact" << closestCall << closestGrid;
       Q_EMIT contactClicked(closestCall, closestGrid);
     }
+}
+
+void WorldMapWidget::setCoveragePushPins(bool enabled)
+{
+  if (m_coveragePushPins == enabled)
+    {
+      return;
+    }
+  m_coveragePushPins = enabled;
+  update();
+}
+
+void WorldMapWidget::setTimeZoneOverlayEnabled(bool enabled)
+{
+  if (m_timeZoneOverlayEnabled == enabled)
+    {
+      return;
+    }
+  m_timeZoneOverlayEnabled = enabled;
+  m_backgroundCache = QPixmap();
+  update();
+}
+
+QVariantMap WorldMapWidget::coverageCellAt(QPointF const& point) const
+{
+  QRectF const frame = QRectF(rect()).adjusted(3, 3, -3, -3);
+  QRectF const mapBounds = frame.adjusted(2, 2, -2, -2);
+  if (!mapBounds.contains(point))
+    {
+      return {};
+    }
+
+  for (CoverageCell const& cell : m_coverageCells)
+    {
+      QPointF southWest;
+      QPointF northEast;
+      if (!maidenheadCellBounds(cell.grid, &southWest, &northEast))
+        {
+          continue;
+        }
+      QPointF const sw = projectLonLatToPoint(southWest, mapBounds);
+      QPointF const se = projectLonLatToPoint(
+        QPointF(northEast.x(), southWest.y()), mapBounds);
+      QPointF const ne = projectLonLatToPoint(northEast, mapBounds);
+      QPointF const nw = projectLonLatToPoint(
+        QPointF(southWest.x(), northEast.y()), mapBounds);
+      if (!azimuthalProjectionEnabled()
+          && (qAbs(se.x() - sw.x()) > mapBounds.width() * 0.5
+              || qAbs(ne.x() - nw.x()) > mapBounds.width() * 0.5))
+        {
+          continue;
+        }
+      QPolygonF const cellPolygon {sw, se, ne, nw};
+      if (!cellPolygon.containsPoint(point, Qt::OddEvenFill))
+        {
+          continue;
+        }
+      QString splitSegment;
+      if (cell.split && (cell.confirmed || cell.worked)
+          && (cell.active || cell.psk || cell.missing))
+        {
+          QPolygonF const historicalHalf {sw, se, ne};
+          splitSegment = historicalHalf.containsPoint(point, Qt::OddEvenFill)
+            ? QStringLiteral("Historical") : QStringLiteral("Live");
+        }
+      return {
+        {QStringLiteral("grid"), cell.grid},
+        {QStringLiteral("workedCount"), cell.workedCount},
+        {QStringLiteral("confirmedCount"), cell.confirmedCount},
+        {QStringLiteral("activeCount"), cell.activeCount},
+        {QStringLiteral("pskCount"), cell.pskCount},
+        {QStringLiteral("historicalStatus"), cell.historicalStatus},
+        {QStringLiteral("liveStatus"), cell.liveStatus},
+        {QStringLiteral("liveOpacity"), cell.liveOpacity},
+        {QStringLiteral("split"), cell.split},
+        {QStringLiteral("splitSegment"), splitSegment},
+        {QStringLiteral("worked"), cell.worked},
+        {QStringLiteral("confirmed"), cell.confirmed},
+        {QStringLiteral("active"), cell.active},
+        {QStringLiteral("missing"), cell.missing},
+        {QStringLiteral("psk"), cell.psk}
+      };
+    }
+  return {};
+}
+
+QVariantMap WorldMapWidget::operationalMarkerAt(QPointF const& point) const
+{
+  QRectF const frame = QRectF(rect()).adjusted(3, 3, -3, -3);
+  QRectF const mapBounds = frame.adjusted(2, 2, -2, -2);
+  if (!mapBounds.contains(point))
+    {
+      return {};
+    }
+
+  double const radius = qBound(10.0, 11.0 * devicePixelRatioF(), 24.0);
+  double bestDistanceSquared = radius * radius;
+  QVariantMap best;
+  for (QVariant const& markerValue : m_operationalMarkers)
+    {
+      QVariantMap const marker = markerValue.toMap();
+      bool okLon = false;
+      bool okLat = false;
+      double const lon = marker.value(QStringLiteral("longitude")).toDouble(&okLon);
+      double const lat = marker.value(QStringLiteral("latitude")).toDouble(&okLat);
+      if (!okLon || !okLat)
+        {
+          continue;
+        }
+      QPointF const markerPoint = projectLonLatToPoint(QPointF(lon, lat), mapBounds);
+      double const dx = markerPoint.x() - point.x();
+      double const dy = markerPoint.y() - point.y();
+      double const distanceSquared = dx * dx + dy * dy;
+      if (distanceSquared < bestDistanceSquared)
+        {
+          bestDistanceSquared = distanceSquared;
+          best = marker;
+        }
+    }
+  return best;
+}
+
+QVariantMap WorldMapWidget::geographicFeatureAt(QPointF const& point) const
+{
+  QRectF const frame = QRectF(rect()).adjusted(3, 3, -3, -3);
+  QRectF const mapBounds = frame.adjusted(2, 2, -2, -2);
+  if (!mapBounds.contains(point))
+    {
+      return {};
+    }
+
+  for (auto featureIt = m_geographicFeatures.crbegin();
+       featureIt != m_geographicFeatures.crend(); ++featureIt)
+    {
+      QVariantMap const feature = featureIt->toMap();
+      bool okLongitude = false;
+      bool okLatitude = false;
+      double const longitude = feature.value(QStringLiteral("longitude"))
+        .toDouble(&okLongitude);
+      double const latitude = feature.value(QStringLiteral("latitude"))
+        .toDouble(&okLatitude);
+      if (okLongitude && okLatitude)
+        {
+          QPointF const marker = projectLonLatToPoint(QPointF(longitude, latitude), mapBounds);
+          double const hitRadius = qBound(
+            9.0, feature.value(QStringLiteral("hitRadius"), 14.0).toDouble(), 28.0);
+          double const dx = marker.x() - point.x();
+          double const dy = marker.y() - point.y();
+          if (dx * dx + dy * dy <= hitRadius * hitRadius)
+            {
+              return feature;
+            }
+        }
+      for (QVariant const& polygonValue
+           : feature.value(QStringLiteral("polygons")).toList())
+        {
+          for (QVariant const& ringValue : polygonValue.toList())
+            {
+              QPolygonF polygon;
+              for (QVariant const& coordinateValue : ringValue.toList())
+                {
+                  QVariantList const coordinate = coordinateValue.toList();
+                  if (coordinate.size() >= 2)
+                    {
+                      polygon << projectLonLatToPoint(
+                        QPointF(coordinate.at(0).toDouble(),
+                                coordinate.at(1).toDouble()), mapBounds);
+                    }
+                }
+              if (polygon.size() >= 3
+                  && polygon.containsPoint(point, Qt::OddEvenFill))
+                {
+                  return feature;
+                }
+            }
+        }
+    }
+  return {};
 }
 
 bool WorldMapWidget::maidenheadToLonLat(QString const& locator, QPointF * lonLat) const
@@ -1128,8 +1511,123 @@ bool WorldMapWidget::maidenheadToLonLat(QString const& locator, QPointF * lonLat
   return true;
 }
 
+bool WorldMapWidget::azimuthalProjectionEnabled() const
+{
+  return m_projection == QStringLiteral("Azimuthal Equidistant");
+}
+
+QPixmap WorldMapWidget::azimuthalProjectionPixmap(QPixmap const& source,
+                                                   int cacheSlot) const
+{
+  if (source.isNull())
+    {
+      return {};
+    }
+
+  QPixmap* cache = &m_azimuthalBaseCache;
+  bool* dirty = &m_azimuthalBaseDirty;
+  if (cacheSlot == 1)
+    {
+      cache = &m_azimuthalOverlayCache;
+      dirty = &m_azimuthalOverlayDirty;
+    }
+  else if (cacheSlot == 2)
+    {
+      cache = &m_azimuthalExternalCache;
+      dirty = &m_azimuthalExternalDirty;
+    }
+  if (!*dirty && !cache->isNull())
+    {
+      return *cache;
+    }
+
+  QImage const input = source.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+  int const outputWidth = qBound(640, input.width(), 1280);
+  int const outputHeight = qMax(320, outputWidth / 2);
+  QImage projected(outputWidth, outputHeight, QImage::Format_ARGB32_Premultiplied);
+  projected.fill(Qt::transparent);
+
+  QPointF const origin = m_hasHome ? m_homeLonLat : QPointF();
+  double const lon0 = qDegreesToRadians(origin.x());
+  double const lat0 = qDegreesToRadians(origin.y());
+  double const sinLat0 = std::sin(lat0);
+  double const cosLat0 = std::cos(lat0);
+  for (int y = 0; y < outputHeight; ++y)
+    {
+      QRgb* destination = reinterpret_cast<QRgb*>(projected.scanLine(y));
+      double const normalizedY = 1.0
+        - (2.0 * (static_cast<double>(y) + 0.5) / outputHeight);
+      for (int x = 0; x < outputWidth; ++x)
+        {
+          double const normalizedX = (2.0 * (static_cast<double>(x) + 0.5)
+                                      / outputWidth) - 1.0;
+          double const radius = std::hypot(normalizedX, normalizedY);
+          if (radius > 1.0)
+            {
+              continue;
+            }
+
+          double const c = M_PI * radius;
+          double latitude = lat0;
+          double longitude = lon0;
+          if (radius > 1.0e-9)
+            {
+              double const sinC = std::sin(c);
+              double const cosC = std::cos(c);
+              latitude = std::asin(qBound(-1.0,
+                cosC * sinLat0 + (normalizedY * sinC * cosLat0 / radius),
+                1.0));
+              longitude = lon0 + std::atan2(normalizedX * sinC,
+                radius * cosLat0 * cosC - normalizedY * sinLat0 * sinC);
+            }
+          double const longitudeDegrees = wrapLongitude(qRadiansToDegrees(longitude));
+          double const latitudeDegrees = qBound(-90.0, qRadiansToDegrees(latitude), 90.0);
+          int const sourceX = qBound(0,
+              qFloor((longitudeDegrees + 180.0) / 360.0 * input.width()),
+              input.width() - 1);
+          int const sourceY = qBound(0,
+              qFloor((90.0 - latitudeDegrees) / 180.0 * input.height()),
+              input.height() - 1);
+          destination[x] = reinterpret_cast<const QRgb*>(input.constScanLine(sourceY))[sourceX];
+        }
+    }
+
+  *cache = QPixmap::fromImage(projected);
+  *dirty = false;
+  return *cache;
+}
+
 QPointF WorldMapWidget::projectLonLatToPoint(QPointF const& lonLat, QRectF const& bounds) const
 {
+  if (azimuthalProjectionEnabled())
+    {
+      QPointF const origin = m_hasHome ? m_homeLonLat : QPointF();
+      double const lon0 = qDegreesToRadians(origin.x());
+      double const lat0 = qDegreesToRadians(origin.y());
+      double const lon = qDegreesToRadians(lonLat.x());
+      double const lat = qDegreesToRadians(lonLat.y());
+      double const deltaLon = lon - lon0;
+      double const sinLat0 = std::sin(lat0);
+      double const cosLat0 = std::cos(lat0);
+      double const sinLat = std::sin(lat);
+      double const cosLat = std::cos(lat);
+      double const cosC = qBound(-1.0,
+        sinLat0 * sinLat + cosLat0 * cosLat * std::cos(deltaLon), 1.0);
+      if (cosC < -0.999999)
+        {
+          return QPointF(-1.0e6, -1.0e6);
+        }
+      double const c = std::acos(cosC);
+      double const scale = c < 1.0e-9 ? 1.0 : c / std::sin(c);
+      double const virtualLon = scale * cosLat * std::sin(deltaLon) * 180.0;
+      double const virtualLat = scale * (cosLat0 * sinLat
+        - sinLat0 * cosLat * std::cos(deltaLon)) * 90.0;
+      return {
+        bounds.left() + static_cast<qreal>((virtualLon - m_viewCenterLon
+          + 0.5 * m_viewSpanLon) / m_viewSpanLon) * bounds.width(),
+        bounds.top() + static_cast<qreal>((m_viewCenterLat + 0.5 * m_viewSpanLat
+          - virtualLat) / m_viewSpanLat) * bounds.height()};
+    }
   double leftLon = m_viewCenterLon - 0.5 * m_viewSpanLon;
   double lon = lonLat.x();
   while (lon < leftLon)
@@ -1141,12 +1639,30 @@ QPointF WorldMapWidget::projectLonLatToPoint(QPointF const& lonLat, QRectF const
       lon -= 360.0;
     }
 
-  double lat = qBound(-90.0, static_cast<double>(lonLat.y()), 90.0);
-  double topLat = m_viewCenterLat + 0.5 * m_viewSpanLat;
+  double lat = projectLatitude(lonLat.y());
+  double topLat = projectLatitude(m_viewCenterLat + 0.5 * m_viewSpanLat);
+  double bottomLat = projectLatitude(m_viewCenterLat - 0.5 * m_viewSpanLat);
+  double projectedSpan = qMax(0.000001, topLat - bottomLat);
 
   qreal x = bounds.left() + static_cast<qreal>((lon - leftLon) / m_viewSpanLon) * bounds.width();
-  qreal y = bounds.top() + static_cast<qreal>((topLat - lat) / m_viewSpanLat) * bounds.height();
+  qreal y = bounds.top() + static_cast<qreal>((topLat - lat) / projectedSpan) * bounds.height();
   return QPointF {x, y};
+}
+
+double WorldMapWidget::projectLatitude(double latitude) const
+{
+  double const clamped = qBound(-85.0, latitude, 85.0);
+  if (m_projection == QStringLiteral("Mercator"))
+    {
+      double const radians = qDegreesToRadians(clamped);
+      return qRadiansToDegrees(std::log(std::tan(M_PI / 4.0 + radians * 0.5)));
+    }
+  if (m_projection == QStringLiteral("Miller"))
+    {
+      double const radians = qDegreesToRadians(clamped);
+      return qRadiansToDegrees(1.25 * std::log(std::tan(M_PI / 4.0 + 0.4 * radians)));
+    }
+  return qBound(-90.0, latitude, 90.0);
 }
 
 QVector<QPointF> WorldMapWidget::greatCircle(QPointF const& startLonLat, QPointF const& endLonLat, int steps) const
@@ -1197,6 +1713,120 @@ QVector<QPointF> WorldMapWidget::greatCircle(QPointF const& startLonLat, QPointF
   return points;
 }
 
+void WorldMapWidget::drawProjectedPixmap(QPainter * painter,
+                                         QRectF const& bounds,
+                                         QPixmap const& texture,
+                                         qreal opacity,
+                                         bool screenBlend) const
+{
+  if (!painter || texture.isNull() || bounds.isEmpty())
+    {
+      return;
+    }
+
+  if (azimuthalProjectionEnabled())
+    {
+      int const cacheSlot = texture.cacheKey() == m_worldTexture.cacheKey() ? 0
+        : (texture.cacheKey() == m_worldOverlay.cacheKey() ? 1 : 2);
+      QPixmap const projected = azimuthalProjectionPixmap(texture, cacheSlot);
+      if (projected.isNull())
+        {
+          return;
+        }
+      painter->save();
+      painter->setOpacity(opacity);
+      if (screenBlend)
+        {
+          painter->setCompositionMode(QPainter::CompositionMode_Screen);
+        }
+      painter->drawPixmap(bounds, projected, projected.rect());
+      painter->restore();
+      return;
+    }
+
+  double const topLat =
+    qBound(-90.0, m_viewCenterLat + 0.5 * m_viewSpanLat, 90.0);
+  double const bottomLat =
+    qBound(-90.0, m_viewCenterLat - 0.5 * m_viewSpanLat, 90.0);
+  double const projectedTop = projectLatitude(topLat);
+  double const projectedBottom = projectLatitude(bottomLat);
+  double const projectedSpan =
+    qMax(0.000001, projectedTop - projectedBottom);
+  int const verticalSlices =
+    m_projection == QStringLiteral("Equirectangular") ? 1 : 72;
+  qreal const texW = texture.width();
+  qreal const texH = texture.height();
+  double const leftLon = m_viewCenterLon - 0.5 * m_viewSpanLon;
+  double const rightLon = leftLon + m_viewSpanLon;
+
+  auto inverseProjection = [this] (double projected) {
+    if (m_projection == QStringLiteral("Mercator"))
+      {
+        return qRadiansToDegrees(
+          2.0 * std::atan(std::exp(qDegreesToRadians(projected)))
+          - M_PI_2);
+      }
+    if (m_projection == QStringLiteral("Miller"))
+      {
+        return qRadiansToDegrees(
+          2.5 * (std::atan(
+            std::exp(qDegreesToRadians(projected) / 1.25)) - M_PI_4));
+      }
+    return projected;
+  };
+
+  painter->save();
+  painter->setOpacity(opacity);
+  if (screenBlend)
+    {
+      painter->setCompositionMode(QPainter::CompositionMode_Screen);
+    }
+
+  for (int k = -2; k <= 2; ++k)
+    {
+      double const lonStart = -180.0 + 360.0 * k;
+      double const lonEnd = lonStart + 360.0;
+      double const visibleLon0 = qMax(leftLon, lonStart);
+      double const visibleLon1 = qMin(rightLon, lonEnd);
+      if (visibleLon1 <= visibleLon0)
+        {
+          continue;
+        }
+      qreal const x0 = bounds.left()
+        + (visibleLon0 - leftLon) / m_viewSpanLon * bounds.width();
+      qreal const x1 = bounds.left()
+        + (visibleLon1 - leftLon) / m_viewSpanLon * bounds.width();
+      qreal const sourceX0 = (visibleLon0 - lonStart) / 360.0 * texW;
+      qreal const sourceX1 = (visibleLon1 - lonStart) / 360.0 * texW;
+
+      for (int slice = 0; slice < verticalSlices; ++slice)
+        {
+          double const fraction0 =
+            static_cast<double>(slice) / verticalSlices;
+          double const fraction1 =
+            static_cast<double>(slice + 1) / verticalSlices;
+          double const latitude0 = inverseProjection(
+            projectedTop - fraction0 * projectedSpan);
+          double const latitude1 = inverseProjection(
+            projectedTop - fraction1 * projectedSpan);
+          qreal const sourceY0 = (90.0 - latitude0) / 180.0 * texH;
+          qreal const sourceY1 = (90.0 - latitude1) / 180.0 * texH;
+          qreal const targetY0 =
+            bounds.top() + fraction0 * bounds.height();
+          qreal const targetY1 =
+            bounds.top() + fraction1 * bounds.height();
+          painter->drawPixmap(
+            QRectF {x0, targetY0, x1 - x0,
+                    qMax<qreal>(0.5, targetY1 - targetY0)},
+            texture,
+            QRectF {sourceX0, sourceY0,
+                    qMax<qreal>(1.0, sourceX1 - sourceX0),
+                    qMax<qreal>(0.5, sourceY1 - sourceY0)});
+        }
+    }
+  painter->restore();
+}
+
 void WorldMapWidget::drawBackground(QPainter * painter, QRectF const& bounds) const
 {
   if (m_worldTexture.isNull())
@@ -1208,31 +1838,7 @@ void WorldMapWidget::drawBackground(QPainter * painter, QRectF const& bounds) co
       return;
     }
 
-  double topLat = qBound(-90.0, m_viewCenterLat + 0.5 * m_viewSpanLat, 90.0);
-  double bottomLat = qBound(-90.0, m_viewCenterLat - 0.5 * m_viewSpanLat, 90.0);
-  qreal texW = static_cast<qreal>(m_worldTexture.width());
-  qreal texH = static_cast<qreal>(m_worldTexture.height());
-  qreal srcY0 = static_cast<qreal>((90.0 - topLat) / 180.0) * texH;
-  qreal srcY1 = static_cast<qreal>((90.0 - bottomLat) / 180.0) * texH;
-  QRectF sourceRect {0.0, srcY0, texW, qMax<qreal>(1.0, srcY1 - srcY0)};
-  double leftLon = m_viewCenterLon - 0.5 * m_viewSpanLon;
-
-  painter->save();
-  painter->setOpacity(0.98);
-  for (int k = -2; k <= 2; ++k)
-    {
-      double lonStart = -180.0 + 360.0 * k;
-      double lonEnd = lonStart + 360.0;
-      qreal x1 = bounds.left() + static_cast<qreal>((lonStart - leftLon) / m_viewSpanLon) * bounds.width();
-      qreal x2 = bounds.left() + static_cast<qreal>((lonEnd - leftLon) / m_viewSpanLon) * bounds.width();
-      QRectF tileRect {x1, bounds.top(), x2 - x1, bounds.height()};
-      if (tileRect.right() < bounds.left() || tileRect.left() > bounds.right())
-        {
-          continue;
-        }
-      painter->drawPixmap(tileRect, m_worldTexture, sourceRect);
-    }
-  painter->restore();
+  drawProjectedPixmap(painter, bounds, m_worldTexture, 0.98, false);
 
   painter->fillRect(bounds, QColor(0, 14, 24, 18));
 }
@@ -1244,32 +1850,7 @@ void WorldMapWidget::drawGeoOverlay(QPainter * painter, QRectF const& bounds) co
       return;
     }
 
-  double topLat = qBound(-90.0, m_viewCenterLat + 0.5 * m_viewSpanLat, 90.0);
-  double bottomLat = qBound(-90.0, m_viewCenterLat - 0.5 * m_viewSpanLat, 90.0);
-  qreal texW = static_cast<qreal>(m_worldOverlay.width());
-  qreal texH = static_cast<qreal>(m_worldOverlay.height());
-  qreal srcY0 = static_cast<qreal>((90.0 - topLat) / 180.0) * texH;
-  qreal srcY1 = static_cast<qreal>((90.0 - bottomLat) / 180.0) * texH;
-  QRectF sourceRect {0.0, srcY0, texW, qMax<qreal>(1.0, srcY1 - srcY0)};
-  double leftLon = m_viewCenterLon - 0.5 * m_viewSpanLon;
-
-  painter->save();
-  painter->setCompositionMode(QPainter::CompositionMode_Screen);
-  painter->setOpacity(0.44);
-  for (int k = -2; k <= 2; ++k)
-    {
-      double lonStart = -180.0 + 360.0 * k;
-      double lonEnd = lonStart + 360.0;
-      qreal x1 = bounds.left() + static_cast<qreal>((lonStart - leftLon) / m_viewSpanLon) * bounds.width();
-      qreal x2 = bounds.left() + static_cast<qreal>((lonEnd - leftLon) / m_viewSpanLon) * bounds.width();
-      QRectF tileRect {x1, bounds.top(), x2 - x1, bounds.height()};
-      if (tileRect.right() < bounds.left() || tileRect.left() > bounds.right())
-        {
-          continue;
-        }
-      painter->drawPixmap(tileRect, m_worldOverlay, sourceRect);
-    }
-  painter->restore();
+  drawProjectedPixmap(painter, bounds, m_worldOverlay, 0.44, true);
 }
 
 void WorldMapWidget::drawGrid(QPainter * painter, QRectF const& bounds) const
@@ -1287,28 +1868,365 @@ void WorldMapWidget::drawGrid(QPainter * painter, QRectF const& bounds) const
 
   painter->setPen(QPen(QColor(170, 210, 225, 42), 1.0));
 
-  double leftLon = m_viewCenterLon - 0.5 * m_viewSpanLon;
-  double rightLon = m_viewCenterLon + 0.5 * m_viewSpanLon;
-  double startLon = std::floor(leftLon / lonStep) * lonStep;
-  for (double lon = startLon; lon <= rightLon; lon += lonStep)
+  auto drawProjectedLine = [this, painter, &bounds] (bool meridian, double value,
+                                                       int steps = 72) {
+    QPainterPath path;
+    bool havePoint = false;
+    for (int index = 0; index <= steps; ++index)
+      {
+        double const fraction = static_cast<double>(index) / steps;
+        QPointF const lonLat = meridian
+          ? QPointF(value, -89.0 + 178.0 * fraction)
+          : QPointF(-180.0 + 360.0 * fraction, value);
+        QPointF const point = projectLonLatToPoint(lonLat, bounds);
+        bool const visible = bounds.adjusted(-3.0, -3.0, 3.0, 3.0).contains(point);
+        if (!visible)
+          {
+            havePoint = false;
+            continue;
+          }
+        if (!havePoint)
+          {
+            path.moveTo(point);
+          }
+        else
+          {
+            path.lineTo(point);
+          }
+        havePoint = true;
+      }
+    painter->drawPath(path);
+  };
+
+  if (azimuthalProjectionEnabled())
     {
-      qreal x = bounds.left() + static_cast<qreal>((lon - leftLon) / m_viewSpanLon) * bounds.width();
-      painter->drawLine(QPointF {x, bounds.top()}, QPointF {x, bounds.bottom()});
+      for (double lon = -180.0; lon <= 180.0; lon += lonStep)
+        {
+          drawProjectedLine(true, lon);
+        }
+      for (double lat = -80.0; lat <= 80.0; lat += latStep)
+        {
+          drawProjectedLine(false, lat);
+        }
+    }
+  else
+    {
+      double const leftLon = m_viewCenterLon - 0.5 * m_viewSpanLon;
+      double const rightLon = m_viewCenterLon + 0.5 * m_viewSpanLon;
+      double const startLon = std::floor(leftLon / lonStep) * lonStep;
+      for (double lon = startLon; lon <= rightLon; lon += lonStep)
+        {
+          qreal const x = bounds.left()
+            + static_cast<qreal>((lon - leftLon) / m_viewSpanLon) * bounds.width();
+          painter->drawLine(QPointF {x, bounds.top()}, QPointF {x, bounds.bottom()});
+        }
+
+      double const topLat = m_viewCenterLat + 0.5 * m_viewSpanLat;
+      double const bottomLat = m_viewCenterLat - 0.5 * m_viewSpanLat;
+      double const startLat = std::floor(bottomLat / latStep) * latStep;
+      for (double lat = startLat; lat <= topLat; lat += latStep)
+        {
+          qreal const y = projectLonLatToPoint(
+            QPointF(m_viewCenterLon, lat), bounds).y();
+          painter->drawLine(QPointF {bounds.left(), y}, QPointF {bounds.right(), y});
+        }
     }
 
-  double topLat = m_viewCenterLat + 0.5 * m_viewSpanLat;
-  double bottomLat = m_viewCenterLat - 0.5 * m_viewSpanLat;
-  double startLat = std::floor(bottomLat / latStep) * latStep;
-  for (double lat = startLat; lat <= topLat; lat += latStep)
+  if (m_timeZoneOverlayEnabled)
     {
-      qreal y = bounds.top() + static_cast<qreal>((topLat - lat) / m_viewSpanLat) * bounds.height();
-      painter->drawLine(QPointF {bounds.left(), y}, QPointF {bounds.right(), y});
+      painter->setPen(QPen(QColor(112, 223, 255, 104), 1.0));
+      for (int utcOffset = -12; utcOffset <= 12; ++utcOffset)
+        {
+          double const longitude = utcOffset * 15.0;
+          if (azimuthalProjectionEnabled())
+            {
+              drawProjectedLine(true, longitude);
+            }
+          else
+            {
+              QPointF const top = projectLonLatToPoint(QPointF(longitude, 85.0), bounds);
+              QPointF const bottom = projectLonLatToPoint(QPointF(longitude, -85.0), bounds);
+              painter->drawLine(top, bottom);
+            }
+          if ((utcOffset % 2) != 0)
+            {
+              continue;
+            }
+          QPointF const labelPoint = projectLonLatToPoint(QPointF(longitude + 7.5, 0.0), bounds);
+          if (!bounds.adjusted(8.0, 8.0, -8.0, -8.0).contains(labelPoint))
+            {
+              continue;
+            }
+          QString const label = utcOffset == 0 ? QStringLiteral("UTC")
+            : QStringLiteral("UTC%1%2")
+                .arg(utcOffset > 0 ? QLatin1Char('+') : QLatin1Char('-'))
+                .arg(qAbs(utcOffset));
+          painter->drawText(labelPoint + QPointF(3.0, -4.0), label);
+        }
     }
+}
+
+void WorldMapWidget::drawCoverage(QPainter * painter, QRectF const& bounds) const
+{
+  if (!painter || m_coverageCells.isEmpty())
+    {
+      return;
+    }
+
+  painter->save();
+  for (CoverageCell const& cell : m_coverageCells)
+    {
+      QPointF southWest;
+      QPointF northEast;
+      if (!maidenheadCellBounds(cell.grid, &southWest, &northEast))
+        {
+          continue;
+        }
+      QPointF const southEast(northEast.x(), southWest.y());
+      QPointF const northWest(southWest.x(), northEast.y());
+      QPointF const sw = projectLonLatToPoint(southWest, bounds);
+      QPointF const se = projectLonLatToPoint(southEast, bounds);
+      QPointF const ne = projectLonLatToPoint(northEast, bounds);
+      QPointF const nw = projectLonLatToPoint(northWest, bounds);
+      if (!azimuthalProjectionEnabled()
+          && (qAbs(se.x() - sw.x()) > bounds.width() * 0.5
+              || qAbs(ne.x() - nw.x()) > bounds.width() * 0.5))
+        {
+          continue;
+        }
+      QPolygonF const cellPolygon {sw, se, ne, nw};
+      auto historicalColor = [&cell] {
+        return cell.confirmed
+          ? QColor(84, 255, 145, 205)
+          : QColor(0, 216, 255, 155);
+      };
+      auto liveColor = [&cell] {
+        QString const status = cell.liveStatus.trimmed().toUpper();
+        QColor color(246, 195, 68, 190);
+        if (status == QStringLiteral("CQDX") || status == QStringLiteral("QRZ")
+            || cell.missing)
+          color = QColor(255, 140, 66, 215);
+        else if (status == QStringLiteral("WSPR") || status == QStringLiteral("QSX")
+                 || status == QStringLiteral("PSK") || cell.psk)
+          color = QColor(186, 124, 255, 205);
+        color.setAlphaF(color.alphaF() * cell.liveOpacity);
+        return color;
+      };
+      bool const hasHistory = cell.confirmed || cell.worked;
+      bool const hasLive = cell.active || cell.psk || cell.missing;
+      if (cell.split && hasHistory && hasLive)
+        {
+          QColor history = historicalColor();
+          QColor historyFill = history;
+          historyFill.setAlpha(54);
+          QColor live = liveColor();
+          QColor liveFill = live;
+          liveFill.setAlphaF(qMax(0.12, live.alphaF() * 0.28));
+          QPolygonF const lower {sw, se, ne};
+          QPolygonF const upper {sw, ne, nw};
+          painter->setPen(Qt::NoPen);
+          painter->setBrush(historyFill);
+          painter->drawPolygon(lower);
+          painter->setBrush(liveFill);
+          painter->drawPolygon(upper);
+          painter->setPen(QPen(live, 1.0));
+          painter->setBrush(Qt::NoBrush);
+          painter->drawPolygon(cellPolygon);
+          painter->drawLine(sw, ne);
+        }
+      else
+        {
+          QColor color = hasHistory ? historicalColor() : liveColor();
+          QColor fill = color;
+          fill.setAlphaF(qMax(0.12, color.alphaF() * 0.28));
+          painter->setPen(QPen(color, 1.0));
+          painter->setBrush(fill);
+          painter->drawPolygon(cellPolygon);
+        }
+      if (m_coveragePushPins && hasLive)
+        {
+          QPointF const anchor = cellPolygon.boundingRect().center();
+          QColor const pinColor = liveColor();
+          painter->setPen(QPen(pinColor, 1.2));
+          painter->setBrush(pinColor);
+          painter->drawLine(anchor + QPointF(0.0, 7.0), anchor + QPointF(0.0, 1.8));
+          QPolygonF const pin {anchor + QPointF(0.0, -5.0),
+                               anchor + QPointF(-3.6, 1.8),
+                               anchor + QPointF(3.6, 1.8)};
+          painter->drawPolygon(pin);
+        }
+    }
+  painter->restore();
+}
+
+void WorldMapWidget::drawGeographicFeatures(QPainter * painter,
+                                            QRectF const& bounds) const
+{
+  if (!painter || m_geographicFeatures.isEmpty())
+    {
+      return;
+    }
+
+  painter->save();
+  painter->setBrush(Qt::NoBrush);
+  for (QVariant const& featureValue : m_geographicFeatures)
+    {
+      QVariantMap const feature = featureValue.toMap();
+      QString const type = feature.value(QStringLiteral("type")).toString();
+      if (type == QStringLiteral("earthquake"))
+        {
+          bool okLongitude = false;
+          bool okLatitude = false;
+          double const longitude = feature.value(QStringLiteral("longitude"))
+            .toDouble(&okLongitude);
+          double const latitude = feature.value(QStringLiteral("latitude"))
+            .toDouble(&okLatitude);
+          if (!okLongitude || !okLatitude)
+            {
+              continue;
+            }
+          QPointF const point = projectLonLatToPoint(QPointF(longitude, latitude), bounds);
+          if (!bounds.adjusted(-24.0, -24.0, 24.0, 24.0).contains(point))
+            {
+              continue;
+            }
+          double const magnitude = feature.value(QStringLiteral("magnitude"), 0.0).toDouble();
+          QColor const color = magnitude >= 6.0
+            ? QColor(255, 89, 94)
+            : (magnitude >= 4.5 ? QColor(255, 160, 54) : QColor(255, 219, 91));
+          qreal const coreRadius = magnitude >= 6.0 ? 5.2 : (magnitude >= 4.5 ? 4.5 : 3.8);
+          qreal const pulseRadius = coreRadius + 5.0 + m_animationPhase * 13.0;
+          QColor pulse = color;
+          pulse.setAlpha(qRound(96.0 * (1.0 - m_animationPhase)));
+          painter->setPen(QPen(pulse, 1.2));
+          painter->setBrush(Qt::NoBrush);
+          painter->drawEllipse(point, pulseRadius, pulseRadius);
+          painter->setPen(QPen(QColor(255, 255, 255, 210), 0.8));
+          painter->setBrush(color);
+          painter->drawEllipse(point, coreRadius, coreRadius);
+          continue;
+        }
+      QColor color = type == QStringLiteral("states")
+        ? QColor(112, 235, 255, 238)
+        : QColor(124, 190, 228, 148);
+      painter->setPen(QPen(color, type == QStringLiteral("states") ? 1.8 : 0.82));
+
+      for (QVariant const& polygonValue
+           : feature.value(QStringLiteral("polygons")).toList())
+        {
+          for (QVariant const& ringValue : polygonValue.toList())
+            {
+              QPainterPath path;
+              QPointF previous;
+              bool havePrevious = false;
+              for (QVariant const& coordinateValue : ringValue.toList())
+                {
+                  QVariantList const coordinate = coordinateValue.toList();
+                  if (coordinate.size() < 2)
+                    {
+                      continue;
+                    }
+                  QPointF const point = projectLonLatToPoint(
+                    QPointF(coordinate.at(0).toDouble(),
+                            coordinate.at(1).toDouble()), bounds);
+                  if (!havePrevious
+                      || qAbs(point.x() - previous.x()) > bounds.width() * 0.5)
+                    {
+                      path.moveTo(point);
+                    }
+                  else
+                    {
+                      path.lineTo(point);
+                    }
+                  previous = point;
+                  havePrevious = true;
+                }
+              painter->drawPath(path);
+            }
+        }
+    }
+  painter->restore();
+}
+
+void WorldMapWidget::drawOperationalLayers(QPainter * painter,
+                                           QRectF const& bounds) const
+{
+  if (!painter || m_operationalMarkers.isEmpty())
+    {
+      return;
+    }
+
+  painter->save();
+  painter->setFont(liveMapFont());
+  int labelsDrawn = 0;
+  for (QVariant const& markerValue : m_operationalMarkers)
+    {
+      QVariantMap const marker = markerValue.toMap();
+      bool okLon = false;
+      bool okLat = false;
+      double const lon = marker.value(QStringLiteral("longitude")).toDouble(&okLon);
+      double const lat = marker.value(QStringLiteral("latitude")).toDouble(&okLat);
+      if (!okLon || !okLat)
+        {
+          continue;
+        }
+      QPointF const point = projectLonLatToPoint(QPointF(lon, lat), bounds);
+      if (!bounds.adjusted(-16.0, -16.0, 16.0, 16.0).contains(point))
+        {
+          continue;
+        }
+
+      QString const type = marker.value(QStringLiteral("type"))
+        .toString().trimmed().toUpper();
+      QColor core = type == QStringLiteral("POTA")
+        ? QColor(166, 255, 154, 240)
+        : (type == QStringLiteral("IOTA")
+           ? QColor(130, 236, 255, 240)
+           : (type == QStringLiteral("MOON")
+              ? QColor(245, 249, 255, 250)
+              : QColor(255, 215, 145, 240)));
+      QColor halo = core;
+      halo.setAlpha(105);
+      painter->setPen(Qt::NoPen);
+      painter->setBrush(halo);
+      painter->drawEllipse(point, type == QStringLiteral("MOON") ? 10.0 : 7.0,
+                           type == QStringLiteral("MOON") ? 10.0 : 7.0);
+      painter->setBrush(core);
+      painter->drawEllipse(point, type == QStringLiteral("MOON") ? 4.5 : 3.7,
+                           type == QStringLiteral("MOON") ? 4.5 : 3.7);
+
+      if (labelsDrawn < 16)
+        {
+          QString label = marker.value(QStringLiteral("label")).toString();
+          if (label.isEmpty())
+            {
+              label = marker.value(QStringLiteral("reference")).toString();
+            }
+          if (!label.isEmpty())
+            {
+              painter->setPen(core);
+              painter->drawText(point + QPointF(7.0, -7.0), label.left(18));
+              ++labelsDrawn;
+            }
+        }
+    }
+  painter->restore();
+}
+
+void WorldMapWidget::drawExternalOverlay(QPainter * painter,
+                                         QRectF const& bounds) const
+{
+  if (!painter || m_externalOverlay.isNull()
+      || bounds.isEmpty() || m_viewSpanLon <= 0.0 || m_viewSpanLat <= 0.0)
+    {
+      return;
+    }
+  drawProjectedPixmap(painter, bounds, m_externalOverlay, 1.0, false);
 }
 
 void WorldMapWidget::drawDayNightMask(QPainter * painter, QRectF const& bounds) const
 {
-  if (!m_greylineEnabled)
+  if (!m_greylineEnabled || azimuthalProjectionEnabled())
     {
       return;
     }
@@ -1764,6 +2682,18 @@ void WorldMapWidget::drawContact(QPainter * painter, QRectF const& bounds, Conta
 
 void WorldMapWidget::updateViewportTargets()
 {
+  if (m_userViewportLocked)
+    {
+      return;
+    }
+  if (azimuthalProjectionEnabled())
+    {
+      m_targetCenterLon = 0.0;
+      m_targetCenterLat = 0.0;
+      m_targetSpanLon = 360.0;
+      m_targetSpanLat = 180.0;
+      return;
+    }
   bool queueActive = (!m_transmitting
                       && m_postTxQueueUntilMs > QDateTime::currentMSecsSinceEpoch());
   QVector<QPointF> points;

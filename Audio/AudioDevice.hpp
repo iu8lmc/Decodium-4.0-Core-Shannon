@@ -29,6 +29,15 @@ public:
 
   bool isSequential () const override {return true;}
 
+  // Optional source-clock position for the first input frame, in nanoseconds
+  // relative to the capture stream. Backends without a clock use write().
+  virtual qint64 writeWithSourceTime (char const *data, qint64 size,
+                                    qint64 sourceTimeNs)
+  {
+    Q_UNUSED (sourceTimeNs)
+    return write (data, size);
+  }
+
   size_t bytesPerFrame () const {return sizeof (qint16) * m_sourceChannelCount;}
 
   Channel channel () const {return m_channel;}
@@ -61,10 +70,12 @@ protected:
         switch (m_channel)
           {
           case Mono:
-            // Match Decodium3/Qt5 mono behavior: avoid OS/Qt downmixing but
-            // keep the first hardware channel. Users can explicitly select
-            // Right when an interface carries RX audio only on that side.
-            *dest++ = apply_input_gain (left);
+            // Match the effective Qt5/CoreAudio mono path used by Decodium3:
+            // when the hardware source is stereo, create a real mono downmix
+            // ourselves instead of depending on Qt6/driver channel mapping.
+            *dest++ = sourceChannels > 1
+              ? apply_input_gain (static_cast<qint16> ((static_cast<int> (left) + static_cast<int> (right)) / 2))
+              : apply_input_gain (left);
             break;
 
           case Right:

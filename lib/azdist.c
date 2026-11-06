@@ -35,8 +35,8 @@ void azdist_(char *MyGrid, char *HisGrid, const double *utch,
              size_t MyGrid_len, size_t HisGrid_len)
 {
     /* cache keys (saved pre-fill values) */
-    static char   mygrid0[6]  = "      ";
-    static char   hisgrid0[6] = "      ";
+    static char   mygrid0[6]  = { ' ', ' ', ' ', ' ', ' ', ' ' };
+    static char   hisgrid0[6] = { ' ', ' ', ' ', ' ', ' ', ' ' };
     static double utch0        = -999.0;
     /* cached computed results */
     static float  Az = 0.f, El = 0.f, Dmiles = 0.f, Dkm = 0.f;

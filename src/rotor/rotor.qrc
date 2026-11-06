@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/rotor">
+    <file alias="web/index.html">web/index.html</file>
+  </qresource>
+</RCC>

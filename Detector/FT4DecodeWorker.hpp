@@ -6,11 +6,17 @@
 #include <QByteArray>
 #include <QStringList>
 #include <QVector>
+#include <atomic>
 
 namespace decodium
 {
 namespace ft4
 {
+
+// Stops the asynchronous hash-seed worker before Qt application teardown.
+void shutdownHashSeedWorker ();
+// Suspend background log scanning on mode changes; the worker can resume.
+void setHashSeedWorkEnabled (bool enabled);
 
 struct DecodeRequest
 {
@@ -37,9 +43,15 @@ public:
   explicit FT4DecodeWorker (QObject * parent = nullptr);
 
   void decode (DecodeRequest const& request);
+  void markLatestDecodeSerial (quint64 serial);
+  void beginShutdown ();
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
+
+private:
+  std::atomic<quint64> m_latestDecodeSerial {0};
+  std::atomic<bool> m_shuttingDown {false};
 };
 
 }
