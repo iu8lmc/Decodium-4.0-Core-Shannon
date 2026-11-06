@@ -121,6 +121,8 @@ jobs:
           echo "CMAKE_PREFIX_PATH=$(brew --prefix qt);$(brew --prefix hamlib);$(brew --prefix openjpeg);$(brew --prefix openssl@3);$(brew --prefix libomp)" >> "${GITHUB_ENV}"
 
       - name: Configure full native SSTV and HAMDRM
+        env:
+          CXXFLAGS: -Wno-error=deprecated-pragma
         run: |
           set -euo pipefail
           cmake -S . -B build-native-sstv -G Ninja \

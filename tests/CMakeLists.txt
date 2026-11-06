@@ -518,6 +518,12 @@ add_executable (test_map_layer_service
   ../src/services/MapLayerModel.cpp
   ../src/services/MapLayerModel.h)
 target_link_libraries (test_map_layer_service Qt6::Test Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::Concurrent)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # Source properties from the parent directory do not propagate to this
+  # regression target. Match its targeted GCC/Qt false-positive exception.
+  set_source_files_properties (../src/services/MapIntelligenceService.cpp PROPERTIES
+    COMPILE_FLAGS "-Wno-error=stringop-overflow")
+endif ()
 qt_add_resources (test_map_layer_service test_map_layer_service_award_resources
   PREFIX "/"
   BASE "${CMAKE_SOURCE_DIR}/resources/map"
