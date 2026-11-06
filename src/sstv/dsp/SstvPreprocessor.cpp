@@ -373,7 +373,8 @@ void SstvPreprocessor::validateConfig (SstvPreprocessorConfig const& config)
       || config.humNotchQ > 100.0
       || !std::isfinite (config.interferenceFrequencyHz)
       || config.interferenceFrequencyHz < 900.0
-      || config.interferenceFrequencyHz > 2'500.0
+      || config.interferenceFrequencyHz > 3'500.0
+      || config.interferenceFrequencyHz >= nyquist
       || !std::isfinite (config.interferenceNotchQ)
       || config.interferenceNotchQ < 2.0
       || config.interferenceNotchQ > 500.0

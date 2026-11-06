@@ -149,9 +149,16 @@ and sender blocking are distinct explicit actions; none deletes an unrelated
 Gallery item or transmits RF.
 
 TLS certificate and hostname validation cannot be disabled in production.
-TLS protects transport, but a normal provider endpoint can read the object;
-end-to-end encryption is not currently advertised, and an E2EE-required
-transfer fails closed.
+TLS protects transport; without end-to-end encryption, the provider can read
+the object. Experimental encrypted sharing is available when the configured
+provider advertises encrypted-envelope support and secure key storage is
+available. Verify the recipient's public-key fingerprint through an independent
+trusted channel before sending. Sender authentication additionally requires a
+signature and an independently verified, pinned signing key. A transfer that
+requires encryption fails closed when the required capability or key is absent.
+The provider can still see transfer metadata. Local two-application tests and
+the remaining limits are described in `E2EE_IMPLEMENTATION.md`; no particular
+public provider or independent security audit has been verified.
 
 ## Digital HAMDRM
 

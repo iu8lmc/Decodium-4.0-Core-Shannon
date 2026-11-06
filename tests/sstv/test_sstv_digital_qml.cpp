@@ -6,16 +6,19 @@
 #include <QtTest/QtTest>
 
 #include <QBuffer>
+#include <QFile>
 #include <QImage>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQmlError>
+#include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScopedPointer>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTranslator>
 #include <QVariantMap>
 
 namespace hamdrm = decodium::sstv::hamdrm;
@@ -33,6 +36,18 @@ public:
     hamdrm::HamDrmStatus start(const hamdrm::HamDrmProfile&, std::uint64_t,
                                hamdrm::HamDrmWaveformRxSink&) override
     { return hamdrm::HamDrmStatus::success(); }
+    void cancel(std::uint64_t) noexcept override {}
+};
+
+class CaptureTxFixture final : public hamdrm::HamDrmWaveformTxBackend
+{
+public:
+    std::optional<hamdrm::HamDrmEncodedObject> object;
+    hamdrm::HamDrmWaveformCapability capability() const override
+    { return {true, QStringLiteral("fixture"), QStringLiteral("fixture")}; }
+    hamdrm::HamDrmStatus start(const hamdrm::HamDrmProfile&, hamdrm::HamDrmEncodedObject encoded,
+                                std::uint64_t, hamdrm::HamDrmWaveformTxSink&) override
+    { object = std::move(encoded); return hamdrm::HamDrmStatus::success(); }
     void cancel(std::uint64_t) noexcept override {}
 };
 
@@ -106,6 +121,121 @@ class TestSstvDigitalQml final : public QObject
     Q_OBJECT
 
 private slots:
+    void qsstvCompatibilityTranslation_data()
+    {
+        QTest::addColumn<bool>("italian");
+        QTest::newRow("english") << false;
+        QTest::newRow("italian") << true;
+    }
+
+    void qsstvCompatibilityTranslation()
+    {
+        QFETCH(bool, italian);
+        QTranslator translator;
+        if (italian) {
+            QVERIFY(translator.load(QString::fromUtf8(DECODIUM_SSTV_ITALIAN_QM)));
+            QVERIFY(QCoreApplication::installTranslator(&translator));
+        }
+        hamdrm::HamDrmController controller({}, {});
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)),
+                                QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        auto* item = qobject_cast<QQuickItem*>(page.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(1000, 820);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 820));
+        window.show();
+        QObject* level = requiredObject(page.data(), "hamdrmRsLevel");
+        QObject* toggle = requiredObject(page.data(), "hamdrmQsstvRsCompatibility");
+        QObject* details = requiredObject(page.data(), "hamdrmQsstvRsCompatibilityDetails");
+        QVERIFY(level && toggle && details);
+        QVERIFY(level->setProperty("currentIndex", 2));
+        QTRY_VERIFY(toggle->property("visible").toBool());
+        const QString toggleText = toggle->property("text").toString();
+        const QString detailsText = details->property("text").toString();
+        if (italian) {
+            QVERIFY(toggleText.contains(QStringLiteral("Compatibilità RS")));
+            QVERIFY(detailsText.contains(QStringLiteral("può quindi differire")));
+            const auto translated = translator.translate("decodium::sstv::hamdrm::HamDrmController",
+                "QSSTV RS compatibility requires a JPEG image and RS protection");
+            QVERIFY(translated.contains(QStringLiteral("richiede un’immagine JPEG")));
+            const auto limitError = translator.translate("decodium::sstv::hamdrm::HamDrmController",
+                "QSSTV compatibility padding exceeds the image size limit");
+            QVERIFY(limitError.contains(QStringLiteral("superano il limite")));
+        } else {
+            QVERIFY(toggleText.contains(QStringLiteral("QSSTV RS compatibility")));
+            QVERIFY(detailsText.contains(QStringLiteral("differ in bytes")));
+        }
+        if (italian) QCoreApplication::removeTranslator(&translator);
+    }
+
+    void qsstvCompatibilityButtonSendsSelectedMode()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        for (unsigned variant = 0; variant < 2; ++variant) {
+            QImage image(48, 32, QImage::Format_RGB32);
+            image.fill(variant ? QColor(20, 140, 80) : QColor(150, 30, 90));
+            const QString path = temporary.filePath(QStringLiteral("ui-%1.jpg").arg(variant));
+            QVERIFY(image.save(path, "JPEG"));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadWrite));
+            QByteArray source = file.readAll();
+            source.append(QByteArray((64 - source.size() % 192 + 192) % 192, '\0'));
+            QVERIFY(file.resize(0));
+            QVERIFY(file.seek(0));
+            QCOMPARE(file.write(source), source.size());
+            file.close();
+            for (const bool enabled : {false, true}) {
+                auto tx = std::make_shared<CaptureTxFixture>();
+                hamdrm::HamDrmControllerBackends backends;
+                backends.waveformTx = tx;
+                hamdrm::HamDrmController controller({}, backends);
+                QQmlEngine engine;
+                QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)),
+                                        QQmlComponent::PreferSynchronous);
+                QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+                QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+                QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+                QVERIFY(page);
+                auto* item = qobject_cast<QQuickItem*>(page.data());
+                QVERIFY(item);
+                QQuickWindow window;
+                window.resize(1000, 820);
+                item->setParentItem(window.contentItem());
+                item->setSize(QSizeF(1000, 820));
+                window.show();
+                QObject* selector = requiredObject(page.data(), "hamdrmRsLevel");
+                QObject* compat = requiredObject(page.data(), "hamdrmQsstvRsCompatibility");
+                QObject* button = requiredObject(page.data(), "hamdrmStartTx");
+                QVERIFY(selector && compat && button);
+                QVERIFY(page->setProperty("selectedTxImage", QUrl::fromLocalFile(path)));
+                QVERIFY(selector->setProperty("currentIndex", 2));
+                QVERIFY(compat->setProperty("checked", enabled));
+                QTRY_VERIFY(button->property("enabled").toBool());
+                QTRY_VERIFY(compat->property("visible").toBool());
+                QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+                QTRY_VERIFY(tx->object.has_value());
+                hamdrm::HamDrmController receiver({}, {});
+                for (const auto& group : tx->object->headerGroups)
+                    QVERIFY(receiver.ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok());
+                for (const auto& group : tx->object->bodyGroups)
+                    QVERIFY(receiver.ingestMotGroup(QByteArray(reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok());
+                const auto received = receiver.takeCompletedObject(tx->object->metadata.transportId);
+                QVERIFY(received.ok());
+                const QByteArray actual(reinterpret_cast<const char*>(received.value->originalBytes.data()),
+                                        qsizetype(received.value->originalBytes.size()));
+                QCOMPARE(actual, source + (enabled ? QByteArray(1, '\0') : QByteArray()));
+            }
+        }
+    }
+
     void hybridPickerRetainsReferenceToken_data()
     {
         QTest::addColumn<int>("transportId");
@@ -282,10 +412,34 @@ private slots:
         QObject* server = requiredObject(page.data(), "hamdrmHybridHost");
         QObject* password = requiredObject(page.data(), "hamdrmHybridPassword");
         QObject* recovery = requiredObject(page.data(), "hamdrmRsLevel");
-        QVERIFY(toggle && normal && hybrid && call && server && password && recovery);
+        QObject* rs2Notice = requiredObject(page.data(), "hamdrmRsQsstvNotice");
+        QObject* qsstvCompat = requiredObject(page.data(), "hamdrmQsstvRsCompatibility");
+        QObject* qsstvCompatDetails = requiredObject(page.data(), "hamdrmQsstvRsCompatibilityDetails");
+        QVERIFY(toggle && normal && hybrid && call && server && password && recovery && rs2Notice && qsstvCompat && qsstvCompatDetails);
+        QVERIFY(!qsstvCompat->property("checked").toBool());
+        QVERIFY(!qsstvCompat->property("visible").toBool());
+        QVERIFY(!rs2Notice->property("visible").toBool());
+        QVERIFY(recovery->setProperty("currentIndex", 2));
+        QTRY_VERIFY(rs2Notice->property("visible").toBool());
+        QTRY_VERIFY(qsstvCompat->property("visible").toBool());
+        QTRY_VERIFY(qsstvCompatDetails->property("visible").toBool());
+        QVERIFY(qsstvCompatDetails->property("text").toString().contains(QStringLiteral("differ in bytes")));
+        QVERIFY(rs2Notice->property("text").toString().contains(QStringLiteral("QSSTV")));
+        QVERIFY(recovery->setProperty("currentIndex", 1));
+        QTRY_VERIFY(rs2Notice->property("visible").toBool());
+        QVERIFY(recovery->setProperty("currentIndex", 3));
+        QTRY_VERIFY(rs2Notice->property("visible").toBool());
+        QVERIFY(recovery->setProperty("currentIndex", 4));
+        QTRY_VERIFY(rs2Notice->property("visible").toBool());
+        QVERIFY(recovery->setProperty("currentIndex", 0));
+        QTRY_VERIFY(!rs2Notice->property("visible").toBool());
+        QVERIFY(recovery->setProperty("currentIndex", 2));
         QVERIFY(page->setProperty("selectedTxImage", QUrl::fromLocalFile("/tmp/synthetic.jpg")));
         QTRY_VERIFY(normal->property("enabled").toBool());
         QVERIFY(toggle->setProperty("checked", true));
+        QTRY_VERIFY(!rs2Notice->property("visible").toBool());
+        QTRY_VERIFY(!qsstvCompat->property("visible").toBool());
+        QTRY_VERIFY(!qsstvCompatDetails->property("visible").toBool());
         QTRY_VERIFY(!normal->property("enabled").toBool());
         QTRY_VERIFY(!recovery->property("enabled").toBool());
         QVERIFY(!hybrid->property("enabled").toBool());
@@ -294,6 +448,7 @@ private slots:
         QTRY_VERIFY(hybrid->property("enabled").toBool());
         QCOMPARE(password->property("echoMode").toInt(), 2); // TextInput.Password
         QVERIFY(toggle->setProperty("checked", false));
+        QTRY_VERIFY(rs2Notice->property("visible").toBool());
         QTRY_VERIFY(normal->property("enabled").toBool());
         QTRY_VERIFY(recovery->property("enabled").toBool());
     }
@@ -396,6 +551,11 @@ private slots:
         QVERIFY(controller.canBuildBsr());
         QTRY_VERIFY(build->property("enabled").toBool());
         QVERIFY(selector->property("enabled").toBool());
+        QQmlExpression hint(qmlContext(selector), selector, QStringLiteral("ToolTip.text"));
+        const QString hintText = hint.evaluate().toString();
+        QVERIFY2(!hint.hasError(), qPrintable(hint.error().toString()));
+        QVERIFY(hintText.contains(QStringLiteral("TRXAMADRM 3.6")));
+        QVERIFY(hintText.contains(QStringLiteral("QSSTV extended")));
 
         const auto first = hamdrm::parseHamDrmMotDataGroup(source.value->bodyGroups.front().data(),
                                                            source.value->bodyGroups.front().size());
@@ -453,6 +613,74 @@ private slots:
         QVERIFY(controller.startRx());
         QVERIFY(!toggle->property("enabled").toBool());
     }
+    void savedPartialsCanBeFoundAndResumed_data()
+    {
+        QTest::addColumn<int>("transportId");
+        QTest::newRow("a") << 0x1234;
+        QTest::newRow("b") << 0xabcd;
+    }
+
+    void savedPartialsCanBeFoundAndResumed()
+    {
+        QFETCH(int, transportId);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        hamdrm::HamDrmControllerConfig config;
+        config.partialStoreRoot = root.path();
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = static_cast<std::uint16_t>(transportId);
+        metadata.filename = "saved.jpg";
+        const auto encoded = hamdrm::encodeHamDrmObject(metadata, std::vector<std::uint8_t>(400, 0x72), 64);
+        QVERIFY(encoded.ok());
+        metadata.transportId = 0x5678U;
+        const auto other = hamdrm::encodeHamDrmObject(metadata, std::vector<std::uint8_t>(400, 0x34), 64);
+        QVERIFY(other.ok());
+        const auto asBytes = [](const std::vector<std::uint8_t>& group) {
+            return QByteArray(reinterpret_cast<const char*>(group.data()), static_cast<qsizetype>(group.size()));
+        };
+        {
+            hamdrm::HamDrmController sender(config, {});
+            for (const auto& group : encoded.value->headerGroups)
+                QVERIFY(sender.ingestMotGroup(asBytes(group)).ok());
+            QVERIFY(sender.ingestMotGroup(asBytes(encoded.value->bodyGroups.front())).ok());
+            for (const auto& group : other.value->headerGroups)
+                QVERIFY(sender.ingestMotGroup(asBytes(group)).ok());
+            QVERIFY(sender.ingestMotGroup(asBytes(other.value->bodyGroups.front())).ok());
+        }
+        hamdrm::HamDrmController controller(config, {});
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QString::fromUtf8(DECODIUM_SSTV_DIGITAL_QML_SOURCE)), QQmlComponent::PreferSynchronous);
+        QVERIFY2(component.isReady(), qPrintable(qmlErrors(component.errors())));
+        QVariantMap initial {{QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject*>(&controller))}};
+        QScopedPointer<QObject> page(component.createWithInitialProperties(initial));
+        QVERIFY(page);
+        QObject* find = requiredObject(page.data(), "hamdrmFindSavedPartials");
+        QObject* selector = requiredObject(page.data(), "hamdrmSavedPartials");
+        QObject* input = requiredObject(page.data(), "hamdrmResumeTransportId");
+        QObject* resume = requiredObject(page.data(), "hamdrmResumePartial");
+        QVERIFY(find && selector && input && resume);
+        QVERIFY(QMetaObject::invokeMethod(find, "clicked"));
+        QCOMPARE(selector->property("count").toInt(), 2);
+        const int selectedIndex = transportId < 0x5678 ? 0 : 1;
+        QVERIFY(selector->setProperty("currentIndex", selectedIndex));
+        QVERIFY(QMetaObject::invokeMethod(selector, "activated", Q_ARG(int, selectedIndex)));
+        QCOMPARE(input->property("text").toString(), QStringLiteral("%1").arg(transportId, 4, 16, QLatin1Char('0')).toUpper());
+        QVERIFY(QMetaObject::invokeMethod(resume, "clicked"));
+        QCOMPARE(controller.selectedTransportId(), transportId);
+        QVERIFY(controller.canBuildBsr());
+        QVERIFY(controller.discardObject(transportId));
+        QVERIFY(QMetaObject::invokeMethod(find, "clicked"));
+        QCOMPARE(selector->property("count").toInt(), 1);
+        QCOMPARE(input->property("text").toString(), QStringLiteral("5678"));
+        QVERIFY(QMetaObject::invokeMethod(resume, "clicked"));
+        QCOMPARE(controller.selectedTransportId(), 0x5678);
+        QVERIFY(controller.discardObject(0x5678));
+        QVERIFY(input->setProperty("text", QStringLiteral("4321")));
+        QVERIFY(QMetaObject::invokeMethod(find, "clicked"));
+        QCOMPARE(selector->property("count").toInt(), 0);
+        QCOMPARE(input->property("text").toString(), QStringLiteral("4321"));
+    }
     void pageCreatesExposesNamedControlsAndRendersOffscreen()
     {
         QTemporaryDir partialRoot;
@@ -504,6 +732,9 @@ private slots:
             "hamdrmObjectInbox",
             "hamdrmResumeTransportId",
             "hamdrmResumePartial",
+            "hamdrmSavedPartials",
+            "hamdrmFindSavedPartials",
+            "hamdrmNoSavedPartials",
             "hamdrmBuildBsr",
             "hamdrmBsrDialect",
             "hamdrmSendBsr",
@@ -516,6 +747,14 @@ private slots:
         for (const char* name : expectedObjects) {
             QVERIFY2(requiredObject(page, name) != nullptr, name);
         }
+        QObject* saved = requiredObject(page, "hamdrmSavedPartials");
+        QObject* manual = requiredObject(page, "hamdrmResumeTransportId");
+        QVERIFY(manual->setProperty("text", QStringLiteral("1234")));
+        QVERIFY(QMetaObject::invokeMethod(requiredObject(page, "hamdrmFindSavedPartials"), "clicked"));
+        QCOMPARE(saved->property("count").toInt(), 0);
+        QVERIFY(saved->property("searched").toBool());
+        QCOMPARE(manual->property("text").toString(), QStringLiteral("1234"));
+        QVERIFY(!requiredObject(page, "hamdrmNoSavedPartials")->property("text").toString().isEmpty());
         QCOMPARE(requiredObject(page, "hamdrmBsrDialect")->property("count").toInt(), 2);
         QVERIFY(!requiredObject(page, "hamdrmSendBsr")->property("enabled").toBool());
         QVERIFY(!requiredObject(page, "hamdrmRepairBsr")->property("enabled").toBool());

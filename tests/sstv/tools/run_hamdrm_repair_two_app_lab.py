@@ -20,6 +20,10 @@ if len(sys.argv) == 3 and sys.argv[2] not in ('air', 'live'):
 live = len(sys.argv) == 3 and sys.argv[2] == 'live'
 air = len(sys.argv) == 3
 audio_loss = os.environ.get('DECODIUM_LAB_REPAIR_AUDIO_LOSS') == '1'
+compatibility = os.environ.get('DECODIUM_LAB_HAMDRM_QSSTV_COMPAT') == '1'
+device = os.environ.get('DECODIUM_LAB_REPAIR_DEVICE', 'BlackHole 2ch')
+if device not in ('BlackHole 2ch', 'BlackHole 16ch'):
+    raise SystemExit('unsupported repair audio device')
 missing_final = os.environ.get('DECODIUM_LAB_DROP_MOT_FINAL') == '1'
 external_wav = os.environ.get('DECODIUM_LAB_REPAIR_EXTERNAL_WAV')
 external_qsstv = os.environ.get('DECODIUM_LAB_REPAIR_QSSTV_BINARY')
@@ -28,10 +32,18 @@ qsstv_live_rx = os.environ.get('DECODIUM_LAB_REPAIR_QSSTV_LIVE_RX') == '1'
 qsstv_live_repair = os.environ.get('DECODIUM_LAB_REPAIR_QSSTV_LIVE_REPAIR') == '1'
 qsstv_single = os.environ.get('DECODIUM_LAB_REPAIR_QSSTV_SINGLE') == '1'
 external_mode = bool(external_wav or external_qsstv)
+if compatibility and (not live or audio_loss or external_mode or missing_final):
+    raise SystemExit('RS compatibility repair requires isolated live segment loss')
+if compatibility and os.environ.get('DECODIUM_LAB_HAMDRM_RS_LEVEL') != '2':
+    raise SystemExit('RS compatibility repair fixture requires RS2')
+if device != 'BlackHole 2ch' and (audio_loss or external_mode):
+    raise SystemExit('external and relay tests require BlackHole 2ch')
 if audio_loss and not live:
     raise SystemExit('audio loss requires live mode')
 if missing_final and (not live or audio_loss):
     raise SystemExit('final segment injection requires live mode without relay audio loss')
+if os.environ.get('DECODIUM_LAB_INJECT_SHORT_FINAL') == '1' and not missing_final:
+    raise SystemExit('short final injection requires final segment loss')
 if (external_wav and external_qsstv) or (qsstv_single and not qsstv_live_repair) or (qsstv_live_repair and not qsstv_live_rx) or (qsstv_live_rx and (not external_qsstv or external_bsr)) or (external_bsr and not external_mode) or (external_mode and not (external_bsr or qsstv_live_rx)) or (external_mode and (not live or not audio_loss)):
     raise SystemExit('external waveform and BSR require the live audio-loss laboratory')
 if external_wav:
@@ -45,10 +57,14 @@ if qsstv_live_rx:
     external_bsr = root / 'qsstv-live.bsr'
 binary = Path('build/decodium').resolve(strict=True)
 fixture = root / ('repair-' + variant + '.jpg')
-fixture.write_bytes(Path('tests/sstv/fixtures/qsstv-image-' + variant + '.jpg').read_bytes() + bytes(2500))
+source = Path('tests/sstv/fixtures/qsstv-image-' + variant + '.jpg').read_bytes() + bytes(2500)
+if compatibility:
+    source += bytes((64 - len(source) % 192) % 192)
+fixture.write_bytes(source)
+expected_received = source + (bytes(1) if compatibility else b'')
 profile = 'hamdrm-E-2500-high-16-QAM-long'
-common = ['--test-mode', '--lab-no-cat', '--lab-audio-input', 'BlackHole 2ch',
-          '--lab-audio-output', 'BlackHole 2ch', '--lab-reapply-ms', '500',
+common = ['--test-mode', '--lab-no-cat', '--lab-audio-input', device,
+          '--lab-audio-output', device, '--lab-reapply-ms', '500',
           '--lab-hamdrm', '--lab-hamdrm-profile', profile]
 processes = []
 qsstv_rx = None
@@ -87,10 +103,11 @@ try:
                       '--lab-sstv-rx-image-file', str(received), '--lab-quit-ms', '165000'],
                {'DECODIUM_LAB_REPAIR_LIVE': variant,
                 'DECODIUM_LAB_DROP_MOT_UNTIL': '' if audio_loss else str(initial),
+                'DECODIUM_LAB_REPAIR_DROP_RS': '1' if compatibility else '0',
                 'DECODIUM_LAB_REPAIR_INITIAL': str(initial),
                 'DECODIUM_LAB_REPAIR_READY': str(ready)})
         wait_for(initial_rx_ready.exists, 30, 'initial receiver did not become ready')
-        if json.loads(initial_rx_ready.read_text()).get('sourceDevice') != 'BlackHole 2ch':
+        if json.loads(initial_rx_ready.read_text()).get('sourceDevice') != device:
             raise RuntimeError('initial RX is not using BlackHole; artifacts ' + str(root))
     if qsstv_live_rx:
         qsstv_rx_root = root / 'qsstv-rx-settings'
@@ -133,7 +150,7 @@ try:
                        'DECODIUM_LAB_REPAIR_VARIANT': variant, 'DECODIUM_LAB_REPAIR_READY': str(ready),
                        'DECODIUM_LAB_REPAIR_AIR': '1' if air else '0'})
     wait_for(ready.exists, 45 if air else 20, 'receiver did not become ready')
-    if json.loads(ready.read_text()).get('sourceDevice') != 'BlackHole 2ch':
+    if json.loads(ready.read_text()).get('sourceDevice') != device:
         raise RuntimeError('receiver is not using BlackHole; artifacts ' + str(root))
     if qsstv_single:
         (root / 'qsstv-send').touch()
@@ -189,8 +206,8 @@ try:
             if stream: pa.Pa_CloseStream(stream)
             pa.Pa_Terminate()
         (root / 'external-bsr-done').touch()
-    wait_for(lambda: received.exists() and received.read_bytes() == fixture.read_bytes(), 70, 'repaired image not received')
-    if received.read_bytes() != fixture.read_bytes():
+    wait_for(lambda: received.exists() and received.read_bytes() == expected_received, 70, 'repaired image not received')
+    if received.read_bytes() != expected_received:
         raise RuntimeError('repaired image differs; artifacts ' + str(root))
     tx = (root / 'tx.log').read_text(errors='replace')
     rx = (root / 'rx.log').read_text(errors='replace')
@@ -211,8 +228,16 @@ try:
     expected_drop = '[LAB][HAMDRM] discarded initial MOT body segment ' + str(expected_missing) + (' final true' if missing_final else ' final false')
     if live and not audio_loss and expected_drop not in rx:
         raise RuntimeError('initial segment loss was not injected; artifacts ' + str(root))
+    if (os.environ.get('DECODIUM_LAB_INJECT_SHORT_FINAL') == '1'
+            and '[LAB][HAMDRM] short final rejected and state preserved true' not in rx):
+        raise RuntimeError('malformed final segment did not preserve state; artifacts ' + str(root))
     if missing_final and ('QVariant(int, ' + str(expected_missing) + ')') not in rx:
         raise RuntimeError('receiver did not request the expected final segment; artifacts ' + str(root))
+    if os.environ.get('DECODIUM_LAB_REPAIR_UNMARK_FINAL') == '1':
+        final = (len(fixture.read_bytes()) + 1023) // 1024 - 1
+        if ('[LAB][HAMDRM] unmarked initial final MOT segment ' + str(final) not in rx
+                or ('QVariant(int, ' + str(final) + ')') not in rx):
+            raise RuntimeError('unmarked final segment was not requested; artifacts ' + str(root))
     if air and ('[LAB][REPAIR] over-audio BSR received' not in tx
                 or (not external_mode and '[LAB][REPAIR] over-audio BSR TX started true' not in rx)):
         raise RuntimeError('BSR did not travel through audio; artifacts ' + str(root))
@@ -261,7 +286,7 @@ try:
         active = [row for row in diagnostics if row.get('hamdrmActive')]
         counters = ('discontinuities', 'droppedChunks', 'hamdrmRejectedChunks',
                     'hamdrmQueueOverflows', 'processingFailures')
-        if not active or any(row.get('sourceDevice') != 'BlackHole 2ch'
+        if not active or any(row.get('sourceDevice') != device
                              or any(row.get(name) != 0 for name in counters)
                              for row in active):
             raise RuntimeError('live RX audio diagnostics failed; artifacts ' + str(root))

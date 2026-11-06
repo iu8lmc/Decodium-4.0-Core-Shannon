@@ -955,12 +955,12 @@ private slots:
     {
         SstvRxRuntime runtime(smallConfig());
         QVERIFY(!runtime.interferenceNotch().has_value());
-        for (int frequency : {1700, 1900}) {
+        for (int frequency : {1700, 2900, 3500, 1900}) {
             QVERIFY(runtime.setInterferenceNotch(frequency));
             QCOMPARE(*runtime.interferenceNotch(), frequency);
         }
         QVERIFY(!runtime.setInterferenceNotch(899));
-        QVERIFY(!runtime.setInterferenceNotch(2501));
+        QVERIFY(!runtime.setInterferenceNotch(3501));
         QCOMPARE(*runtime.interferenceNotch(), 1900);
         QVERIFY(runtime.start(SstvAudioSourceKind::Replay, 45U));
         QVERIFY(!runtime.setInterferenceNotch(std::nullopt));
@@ -2116,11 +2116,13 @@ private slots:
         auto config = smallConfig();
         config.ingress.maximumQueuedSamples = 65'536U;
         config.ingress.maximumSamplesPerCall = 16'384U;
-        const auto pcm = avtPrefix(SstvAvtMode::Avt24, 8U, SstvAvtVariant::Qrm);
-        for (int hz : {1700, 1900}) {
+        for (auto variant : {SstvAvtVariant::Qrm, SstvAvtVariant::NarrowQrm}) {
+          const auto pcm = avtPrefix(SstvAvtMode::Avt24, 8U, variant);
+          const auto mode = variant == SstvAvtVariant::Qrm ? "avt-24-qrm" : "avt-24-narrow-qrm";
+          for (int hz : {1700, 1900, 2900, 3500}) {
             SstvRxRuntime runtime(config);
             QVERIFY(runtime.setInterferenceNotch(hz));
-            QVERIFY(runtime.setRxModeControl(SstvRxModeControl::Manual, "avt-24-qrm"));
+            QVERIFY(runtime.setRxModeControl(SstvRxModeControl::Manual, mode));
             QVERIFY(runtime.start(SstvAudioSourceKind::Replay, static_cast<std::uint64_t>(hz)));
             std::uint64_t chunks = 0U;
             for (std::size_t offset = 0; offset < pcm.size(); offset += 4093U) {
@@ -2133,9 +2135,10 @@ private slots:
             const auto snapshot = runtime.snapshot();
             QVERIFY(snapshot.vis.valid);
             QVERIFY(snapshot.image.available);
-            QCOMPARE(snapshot.image.mode, QStringLiteral("avt-24-qrm"));
+            QCOMPARE(snapshot.image.mode, QString::fromLatin1(mode));
             QVERIFY(snapshot.image.coverage > 0.01);
             QVERIFY(runtime.stop());
+          }
         }
     }
 

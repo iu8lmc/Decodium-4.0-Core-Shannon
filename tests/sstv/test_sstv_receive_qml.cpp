@@ -181,7 +181,7 @@ public:
     }
     Q_INVOKABLE bool configureSstvInterferenceNotch(bool enabled, int hz)
     {
-        if (m_rxActive || m_replayActive || hz < 900 || hz > 2500) return false;
+        if (m_rxActive || m_replayActive || hz < 900 || hz > 3500) return false;
         m_controls.insert(QStringLiteral("interferenceNotchEnabled"), enabled);
         m_controls.insert(QStringLiteral("interferenceNotchHz"), hz);
         Q_EMIT rxChanged();
@@ -395,7 +395,7 @@ private slots:
         auto* notchHz = page->findChild<QObject*>(QStringLiteral("sstvInterferenceNotchHz"));
         auto* notchApply = page->findChild<QObject*>(QStringLiteral("sstvInterferenceNotchApply"));
         QVERIFY(notchEnabled && notchHz && notchApply);
-        for (int frequency : {1700, 1900}) {
+        for (int frequency : {1700, 1900, 2900, 3500}) {
             QVERIFY(notchEnabled->setProperty("checked", true));
             QVERIFY(notchHz->setProperty("value", frequency));
             QVERIFY(QMetaObject::invokeMethod(notchApply, "clicked"));

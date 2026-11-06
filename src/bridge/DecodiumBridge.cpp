@@ -12522,6 +12522,12 @@ void DecodiumBridge::runPostQmlStartupServices()
     if (m_autoStartMonitorOnStartup && m_mode != QStringLiteral("Echo")) {
         int const startupMonitorDelayMs = usingLegacyBackendForTx() ? 2800 : 1200;
         QTimer::singleShot(startupMonitorDelayMs, this, [this]() {
+            if (QStandardPaths::isTestModeEnabled()
+                && QCoreApplication::instance()
+                && QCoreApplication::instance()->property("decodiumLabNoMonitor").toBool()) {
+                qInfo() << "[LAB] startup auto-monitor suppressed by --lab-no-monitor";
+                return;
+            }
             if (!m_autoStartMonitorOnStartup || m_mode == QStringLiteral("Echo")
                 || m_monitoring || m_transmitting || m_tuning) {
                 bridgeLog(QStringLiteral("startup auto-monitor: skipped autoStart=%1 mode=%2 monitoring=%3 tx=%4 tune=%5")

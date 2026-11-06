@@ -8,6 +8,7 @@
 #include <QString>
 
 #include <cstdint>
+#include <vector>
 
 namespace decodium::sstv::hamdrm {
 
@@ -22,10 +23,12 @@ public:
 
     QString partialDirectory() const;
     QString pathForTransportId(std::uint16_t transportId) const;
+    std::vector<std::uint16_t> savedTransportIds() const;
 
-    HamDrmStatus save(const HamDrmObjectAssembler& assembler) const;
+    HamDrmStatus save(const HamDrmObjectAssembler& assembler,
+                      const QString& profileId = {}) const;
     HamDrmValueResult<HamDrmObjectAssembler> load(
-        std::uint16_t transportId) const;
+        std::uint16_t transportId, QString* profileId = nullptr) const;
     HamDrmStatus remove(std::uint16_t transportId) const;
 
 private:

@@ -1,5 +1,219 @@
 # QSSTV MOT data-group oracle
 
+## A/2.5/high/64-QAM/short: wide-PPI application A/B
+
+This profile has a 258-byte packet body. Two distinct JPEGs were padded
+to 7,413 and 4,341 bytes, making the final 1,024-byte MOT segment 245 bytes;
+with 11 bytes of MOT overhead, each final 256-byte group must be split because
+PPI has an eight-bit useful-length field. Two Decodium application pairs
+reconstructed the exact files over a BlackHole relay without added echo, and
+the pinned unmodified QSSTV receiver independently decoded the same captures
+to the same bytes. App artifacts are `.../decodium-hamdrm-two-app-a-o9iwhtjt`
+and `...-b-t0tawh1n`, relay captures `.../decodium-hamdrm-two-app-echo-jbv7ydpf`
+and `...-foh3zbhh`, and QSSTV outputs
+`.../decodium-qsstv-drm-decode-slxw6wmj` and `...-6sr7uu5m`. QSSTV reported
+51/34 good MSC CRCs and 0/1 bad CRCs for A/B; it identified the expected
+`A/2.5/Hi/64/Short`. The source files are
+`/tmp/decodium-hamdrm-a25-high-ppi-ab/{a,b}.jpg`. This covers selected virtual
+audio, not RF or every profile and channel condition.
+
+The long-interleaver variant was then checked using two different 1,269-byte
+JPEGs padded so the last MOT group is 256 bytes and requires split PPI.
+Two Decodium application pairs reconstructed each file exactly via a
+BlackHole relay without echo; the unmodified pinned QSSTV receiver decoded
+the same recordings byte-for-byte and identified `A/2.5/Hi/64/Long`.
+Both QSSTV runs reported 21 good MSC CRCs and no bad MSC CRCs; `pkt_bad=5`
+has the source-level interpretation and limits described below. Decodium
+artifacts are `.../decodium-hamdrm-two-app-a-5rtihwdd` and `...-b-4s0hv4f7`,
+relay captures `.../decodium-hamdrm-two-app-echo-vk5b9_x1` and
+`...-1s5mscfv`, and QSSTV results `.../decodium-qsstv-drm-decode-7jdfzc_u`
+and `...-8g3aay41`. The helper retained logs, output and SHA-256 provenance
+while removing its reproducible intermediate WAVs. This is selected
+file-mediated virtual-audio evidence.
+
+## A/2.3/normal/64-QAM/short: wide-PPI application A/B
+
+The registered A/2.3/normal/64-QAM profiles have 285-byte packet bodies.
+Two different JPEGs were padded with trailing zeros to 7,428 and 4,356 bytes,
+so their last 1,024-byte MOT segment contains 260 payload bytes. With the
+11-byte MOT group overhead, that final 271-byte group requires splitting
+across two padded packets because the PPI useful-length field is one byte.
+Two full Decodium application pairs transferred these exact files via a
+BlackHole relay without echo, and the pinned unmodified QSSTV receiver decoded
+the same recorded signals to the exact source bytes. App artifacts are
+`.../decodium-hamdrm-two-app-a-f2jxjx8t` and `...-b-7d_nwzhx`, relay captures
+`.../decodium-hamdrm-two-app-echo-woql6350` and `...-l22f2pn9`, and QSSTV
+outputs `.../decodium-qsstv-drm-decode-sfh16vxo` and `...-j0jy89sg`. QSSTV
+identified `A/2.3/Lo/64/Short`, reporting 44/31 good and zero bad MSC CRCs,
+with 22/13 `pkt_bad`; the counter interpretation and its limits are discussed
+below. The source files are `/tmp/decodium-hamdrm-a23-ppi-ab/{a,b}.jpg`.
+This is selected virtual-audio evidence, not RF or all-profile coverage.
+
+## A/2.5/normal/64-QAM/short: selected bidirectional A/B
+
+An A/B test with larger 6,481- and 3,673-byte JPEGs exposed a TX defect:
+the latter failed with `HAMDRM PPI cannot represent the final packet fragment`
+because a padded fragment exceeded the one-byte length field. The packetizer
+now splits such a fragment into representable padded packets; the receiver
+accepts a non-final PPI packet while retaining packet CRC, continuity and
+padding checks. The independently inspected pinned QSSTV source handles PPI
+independently of the last flag. A/B packet tests exercise 256- and 300-byte
+fragments with continuity wrap and exact reassembly.
+For both sizes, additional controls corrupt the non-final padded packet's
+CRC or set non-zero fill with a valid recalculated CRC. The receiver rejects
+each, refuses the following continuation and successfully reassembles a
+fresh valid sequence; the waveform CTest passed with these controls.
+The waveform suite also modulates and demodulates repeated 256- and 300-byte
+MOT groups on A/2.5/normal/64-QAM/short, asserting that each uses two PPI
+packets and that every recovered group matches exactly. This automated A/B
+loopback complements, rather than replaces, the application and independent
+QSSTV tests below.
+The same automated A/B waveform check now covers all six wide-packet
+profiles, including short and long interleaving: each uses 256 bytes and one
+less than its packet-body capacity, explicitly verifies non-final PPI, and
+checks exact recovery. This is native synthetic PCM, not independent QSSTV
+or RF evidence for every combination.
+An independent method-level oracle now passes 256- and 300-byte MOT groups
+through the new non-final PPI split and the unmodified packet-reassembly
+methods extracted from QSSTV upstream revision
+`8c27d6d169d8c6c197eb47c2089870e39bc06a02`. Both payloads and metadata
+matched exactly, including continuity wrap; the same run checked 24 existing
+corrupt groups and 12 broken-continuity sequences. Reproduce with
+`bash tests/sstv/tools/run_qsstv_packet_rx.sh`. This executes extracted
+upstream methods in a shim, not an unmodified live application or RF link.
+For each split-PPI A/B group, the oracle also sends a group with a damaged
+MOT CRC wrapped in valid packet CRCs and a separate packet sequence with
+broken continuity and a recomputed packet CRC. Both negative cases were
+rejected for each variant by the extracted QSSTV receiver methods.
+An adapter A/B regression also drains prepared 48 kHz audio for 255- and
+256-byte groups. Both sources produce exactly their declared sample count;
+the split case adds exactly one 400 ms frame. With the frame budget set to
+the first case's exact length, the adapter accepts that case and rejects
+the split case before starting audio. The adapter CTest passed.
+The packetizer/reassembler regression also passed two boundary inputs for
+each of the 72 registered profiles; six profiles have packet bodies wider
+than 256 bytes and exercise the split explicitly. This is a packet-level
+matrix, not independent waveform interoperability for every profile.
+
+On the current macOS build both files were transmitted through BlackHole and
+the pinned unmodified QSSTV 10.0 receiver reconstructed their original bytes
+exactly (`.../decodium-qsstv-drm-decode-i027vxbo` and `...-oribnxrg`). Its
+logs report 40/28 good MSC CRCs, zero bad MSC CRCs and 19/11 bad packets;
+despite those packet reports each complete image matched. TX artifacts are
+`.../decodium-hamdrm-tx-a-6mut4ots` and `...-b-l10p80s8`; the pre-fix
+failed B log is `.../decodium-hamdrm-tx-b-dn4ts3m3`. Two Decodium
+applications also transferred each JPEG exactly (`.../decodium-hamdrm-two-app-a-aamdi5tb`
+and `...-b-c7mgeyxx`). The waveform, waveform-adapter and two independent
+QSSTV fixture regressions passed. This establishes selected virtual-audio
+interoperability, not the cause of QSSTV's packet reports or RF behaviour.
+
+The pinned QSSTV source revision provides an important interpretation of
+`pkt_bad`: `sourceDecoder::decode` increments it when `setupDataBlock`
+returns false even for a packet whose CRC passed, and `setupDataBlock`
+returns false for an intermediate block before the last block completes a
+data group. In the official receiver's A/B logs, `crc_ok` equals
+`hdr_seg + data_seg + pkt_bad` (40 = 14 + 7 + 19 and 28 = 13 + 4 + 11),
+with zero bad CRCs. This is consistent with intermediate blocks contributing
+to the counter. The release binary was not instrumented per block, so the
+logs alone do not prove that every `pkt_bad` entry has that cause or rule
+out another data-group failure.
+
+Two Decodium application pairs transferred distinct 225-byte JPEGs exactly
+over BlackHole (`.../decodium-hamdrm-two-app-a-pci9m8ki` and
+`.../decodium-hamdrm-two-app-b-03ghp92o`). Separately captured Decodium TX
+A/B signals were decoded exactly by the SHA-256-pinned unmodified QSSTV 10.0
+receiver, which identified `A/2.5/Lo/64/Short` with 14/15 good MSC CRCs
+and zero bad CRCs or packets. Captures are
+`.../decodium-hamdrm-tx-a-leucxyk_` and `...-b-_9civj8_`; receiver outputs
+are `.../decodium-qsstv-drm-decode-rlsfodsa` and `...-_8hkns8m`.
+
+In the reverse direction, locally instrumented QSSTV source revision
+`a84584248d3307bfa081362031ff20f365337633`, with signed-PCM correction and
+hybrid instrumentation disabled, generated two 320x240 WAVs. Although the
+CLI requested long, the pinned unmodified receiver identified both as short,
+recovering distinct 4,998/4,992-byte JP2 files with 57 good and zero bad CRCs
+or packets each. Full Decodium RX replayed each WAV over BlackHole and
+reconstructed the corresponding reference exactly with clean audio diagnostics
+(`.../decodium-qsstv-drm-app-a3zots1d` and `...-zu8rf7b_`). WAVs and logs
+are in `/tmp/decodium-qsstv-a25-normal64-ab-xuqp2avt`; A/B WAV SHA-256 are
+`6eeb4658587d2a367a674bc43fab926f05747d45d0e8c00a9efd9bacc7f205f8`
+and `2af98aad31d34162e2314a5d0e714dd0c02bc4d903ed96ef99bb71bf297eaa64`.
+This is selected file-mediated evidence, not an unmodified live transmitter,
+all profiles, EasyPal or RF.
+
+After the non-final PPI receiver change, the retained QSSTV-source A/B WAVs
+were replayed again through full Decodium receivers. Both reconstructed the
+same independently decoded 4,998- and 4,992-byte JP2 references exactly with
+clean audio diagnostics (`.../decodium-qsstv-drm-app-qyrz8xas` and
+`...-aaaz9hml`). The inspected upstream transmitter normally sets PPI for its
+final packet, so these recordings are a compatibility regression and are not
+claimed to contain a QSSTV-generated non-final PPI packet.
+
+Two further Decodium A/B transfers on this profile used a BlackHole relay
+with 1 ms echo at gain 0.27, deterministic noise at peak 0.01 and a 1700 Hz
+tone at peak 0.01. Both 225-byte JPEGs were recovered exactly; the relay
+reported no errors and carried 378,216/378,146 active frames. The pinned
+unmodified QSSTV receiver decoded the recorded relay signals to the same
+bytes and reported 15 good MSC CRCs, zero bad CRCs and zero bad packets for
+each. Decodium app artifacts are `.../decodium-hamdrm-two-app-a-8w00finj`
+and `...-b-m6fyuoak`; relay recordings are
+`.../decodium-hamdrm-two-app-echo-phqzll5l` and `...-h2a4eo1y`, and QSSTV
+results are `.../decodium-qsstv-drm-decode-_fsbl3_p` and `...-pgrky3ci`.
+These are selected synthetic conditions and virtual audio, not RF or a
+general noise and echo tolerance measurement.
+
+## A/2.5/normal/16-QAM/long: local A/B and QSSTV receiver
+
+Two full Decodium application pairs transmitted distinct 225-byte JPEGs over
+BlackHole and recovered their respective input bytes exactly using
+`hamdrm-A-2500-normal-16-QAM-long`. Artifacts are
+`.../decodium-hamdrm-two-app-a-h_jbehov` and `...-b-2ybvxuzu`.
+Separately captured A/B Decodium transmissions at that profile were decoded
+by the pinned unmodified QSSTV-Experimental 10.0 batch receiver, which
+reported A/2.5/Lo/16/Long and recovered each corresponding JPEG byte-for-byte;
+crossed-image comparisons failed as intended. QSSTV reported 15/16 valid MSC
+blocks, zero bad MSC CRCs, and one `pkt_bad` in each run. TX artifacts are
+`.../decodium-hamdrm-tx-a-ucb2lsmt` and `...-b-wkvi1fl6`, with independent
+receiver artifacts `.../decodium-qsstv-drm-decode-ng69woqs` and
+`...-zu83m_pi`. The exact-zero diagnostic found no internal run in A's audio
+and one 6144-frame run in B's; its cause and whether it is intentional were
+not determined. QSSTV nevertheless recovered B exactly. This covers selected
+file-mediated Decodium TX to QSSTV RX, not the reverse direction, RF, or all
+HAMDRM profiles.
+
+The reverse direction was also tested with two different 320×240 images.
+The locally instrumented QSSTV source build at revision
+`a84584248d3307bfa081362031ff20f365337633`, including the signed-PCM fix
+and hybrid instrumentation (hybrid disabled), generated the WAVs. The
+unmodified pinned QSSTV-Experimental receiver identified both as
+`A/2.5/Lo/16/Long`, recovered distinct 4,998- and 4,992-byte JP2 objects,
+and reported 60 good MSC CRCs, zero bad CRCs and zero bad packets each.
+Full Decodium receivers replayed these WAVs over BlackHole and recovered
+the respective reference byte sequences exactly, with clean RX audio
+diagnostics. Receiver artifacts are `.../decodium-qsstv-drm-app-8h36hc96`
+and `.../decodium-qsstv-drm-app-j4_fo083`; WAVs, logs and QSSTV references
+are in `/tmp/decodium-qsstv-a25-normal16-ab-t7va6ptx`. The A/B WAV SHA-256
+values are `8b7bc782e7e7f33ac330ee5160d0f389a5644cc26c542ce074850ed54694d2bc`
+and `bd2ede5098e0d56ad4263b6c4faa5fd78954f6c274377ccfe225b38494c8269d`.
+The unmodified receiver's binary SHA-256 is
+`b2de73b06d2308e8363864555336f70eb0ba7603e7d3734c091da3da1a0cf1fa`.
+This is a file-mediated virtual-audio test using a modified transmitter,
+not a live unmodified QSSTV transmitter or RF test.
+
+The A/B WAVs above were also processed with FFmpeg `afreqshift` at -5 Hz
+and +5 Hz respectively. The pinned unmodified QSSTV batch receiver recovered
+the original JP2 references exactly, with 60 good MSC CRCs and no bad CRCs
+or bad packets per file. Full Decodium receivers using the standard profile
+also reconstructed the respective 4,998- and 4,992-byte objects exactly over
+BlackHole with clean RX audio diagnostics. Their artifacts are
+`.../decodium-qsstv-drm-app-w7ptjeqd` and `...-e6ccnlii`. The transformed
+WAV SHA-256 values are
+`f631ffd5e93575aed565517c40b95eb48e326e1c47036567b255278665392883`
+and `57fa0c9a99c986a61b7c4044da351e9482aa7be6430cd4045b7f191ce0ed728d`;
+QSSTV logs and WAVs are alongside the unshifted inputs above. FFmpeg's
+filter also alters phase, so these selected cases are not a frequency-only
+tolerance measurement and do not resolve the distinct A/2.3 failure below.
+
 ## A/2.3/normal/16-QAM/short: local A/B and QSSTV receiver
 
 Two Decodium application pairs transferred the A/B 225-byte JPEG fixtures
@@ -264,8 +478,10 @@ timing reconstructed both. With the operator-selected adaptive dual/fractional
 option, full Decodium application replays of both zero-shift-filtered files
 also matched the 277-byte QSSTV references exactly and reported clean audio
 diagnostics (`.../decodium-qsstv-drm-app-uc2rplrs` and
-`.../decodium-qsstv-drm-app-3ec5621u`). The default flat receiver remains
-unable to reconstruct these filtered inputs; causality is not yet proven.
+`.../decodium-qsstv-drm-app-3ec5621u`). The single flat receiver used at that
+stage did not reconstruct these filtered inputs; later ordinary application
+reception also runs independent automatic candidates, as described below.
+Causality is not yet proven.
 
 The filter itself was subsequently measured on two phase variants of nine
 one-second pure tones from 500 to 2500 Hz. Excluding the first and last 0.2 s,
@@ -292,6 +508,24 @@ groups from both timing paths. These observations isolate a second,
 phase-altering filter as a useful acquisition stress case; they do not prove
 which part of its transient or phase response causes failure, and are not
 full-application, independent-receiver or RF tests.
+
+A separate A/B experiment applied the same all-pass parameters (1500 Hz,
+Q=2) to the original 48 kHz stereo QSSTV-source WAVs, instead of the 12 kHz
+mono offline PCM. The pinned unmodified QSSTV receiver reconstructed both
+277-byte references exactly, reporting 27 good and 6 bad MSC CRCs for A,
+39 good and zero bad for B, and zero bad packets for both. Full Decodium
+receivers replayed these 48 kHz files through BlackHole: both the standard
+receiver and the operator-selected adaptive dual/fractional option recovered
+the exact references A/B, with clean RX audio diagnostics. Standard artifacts
+are `.../decodium-qsstv-drm-app-hv4e67r6` and `...-bd0626dp`; adaptive
+artifacts are `.../decodium-qsstv-drm-app-5z1fd9o0` and `...-484lb3in`.
+Files and logs are in `/tmp/decodium-qsstv-a23-allpass-q2-ab`; A/B WAV
+SHA-256 values are
+`8528e8c430fd67d1fb256d9229bff384b011cca8dbeffa9e8faec06bfe6a50ac`
+and `4afdf49b9b473953bab075e81dcc0f973a1a20083b6801e8d08505d16228cab2`.
+These inputs differ in filter sampling rate, channel count and resampling
+path from the failed 12 kHz offline inputs. Their success does not resolve
+the earlier failure or establish general phase tolerance.
 
 The source PCM and JP2 references are in `/tmp/decodium-qsstv-a23-offset-ab`
 and `/tmp/decodium-qsstv-a23-normal16-ab/decoded-{a,b}`. For each variant and
@@ -336,6 +570,16 @@ and rejected swapped reference files; artifacts are
 QSSTV receives a resampled version, whereas the Decodium diagnostic receives
 the 12 kHz PCM directly, so this comparison establishes successful independent
 decoding of these recordings, not identical samples at both demodulators.
+On the current build, the exact 48 kHz stereo WAVs from the independent
+QSSTV run `.../decodium-qsstv-allpass-ab-n_yyfsw2/{a,b}/capture.wav` were
+also replayed to full Decodium receivers over BlackHole. Both the standard
+and operator-selected adaptive configurations recovered both 277-byte
+references exactly with clean RX audio diagnostics. Standard A/B artifacts
+are `.../decodium-qsstv-drm-app-y3n999ma` and `...-9mwrl_1u`; adaptive A/B
+artifacts are `.../decodium-qsstv-drm-app-ybqydnwe` and `...-exv1ryer`.
+The application receives audio after further virtual-device capture and
+resampling, so this does not overturn or identify the cause of the 12 kHz
+offline failure. Command results are in `.../decodium-qsstv-q2-current-fkulfux4`.
 The pinned QSSTV source uses a multi-symbol two-dimensional pilot window;
 Decodium's experimental estimator currently interpolates pilots within each
 symbol. This is a candidate direction for investigation, not a proven cause
@@ -702,6 +946,51 @@ are `.../decodium-qsstv-drm-app-jetfslf9` and
 inline check before it was extracted into the shared validator; its captured
 log also passes the final shared validator. These checks do not turn the
 file-mediated transmitter into a live or unmodified QSSTV sender.
+
+## B/2.5/normal/4-QAM/short A/B
+
+On 2026-11-04, two isolated Decodium application pairs sent the distinct
+225-byte JPEG fixtures over BlackHole with `hamdrm-B-2500-normal-4-QAM-short`;
+both receivers reconstructed the appropriate image byte-for-byte. Artifacts
+are `.../decodium-hamdrm-two-app-a-xsucsvyh` and
+`.../decodium-hamdrm-two-app-b-4tk8tsbw`.
+
+Separate full Decodium transmitter runs were captured over BlackHole and
+fed to the pinned unmodified QSSTV-Experimental 10.0 batch receiver. QSSTV
+reported `B/2.5/Lo/4/Short` and recovered both input JPEGs byte-for-byte;
+each run reported 18 good and zero bad MSC CRCs. Its `pkt_bad=3` counter
+includes incomplete fragments as discussed elsewhere in this document.
+TX captures are `.../decodium-hamdrm-tx-a-nv9av2yi` and
+`.../decodium-hamdrm-tx-b-ysrxjfbr`; QSSTV outputs are
+`.../decodium-qsstv-drm-decode-rb1ra160` and
+`.../decodium-qsstv-drm-decode-05g_kyy1`. Capture SHA-256 values are
+`1278db9d20430416231561780fb1f7d98e71aa1a3d68786a3ebce037e0cea2de` and
+`ae8398be213b59d8068a44c929a5648ea33d019969942dedecffaed583a279da`.
+These are selected small-image tests in one direction through a recorded
+peer, not live EasyPal, reverse-direction, arbitrary-profile or RF evidence.
+
+For the reverse direction, the unmodified official QSSTV-Experimental 10.0
+binary encoded two distinct 320x240 JPEGs using B/2.5/low/4-QAM. Its CLI was
+requested with `--drm-interleave long`; the receiver identified Short, consistent
+with the documented CLI inversion. Encoder A exited normally and wrote a WAV.
+Encoder B remained running after 91 seconds and was interrupted; the existing
+RIFF repair helper corrected its stale container length without changing PCM.
+The unmodified QSSTV batch receiver decoded both recordings as
+`B/2.5/Lo/4/Short`, with 120 good and zero bad MSC CRCs and `pkt_bad=0` each.
+Its distinct outputs are 4,998 and 5,024 bytes; FFprobe identified both as
+320x240 JPEG2000. Full Decodium receivers replayed the recordings over
+BlackHole and recovered the respective QSSTV reference bytes exactly, with
+clean RX audio diagnostics and both automatic receiver candidates enabled.
+Decodium artifacts are `.../decodium-qsstv-drm-app-ozsrprdk` and
+`.../decodium-qsstv-drm-app-thgib7ql`; the independent WAVs, references and
+logs are under `/tmp/decodium-qsstv-b25-4qam-ab`. The A WAV SHA-256 is
+`a0559ebe1c00dbc1c392ae4021e05827fb0c63cb963009312c32e80441a0421e`;
+B's original and RIFF-repaired WAV hashes are
+`1d03f02ffc5d09c0c6c3c22b4422a849e03183f8398aaebf20d779a7beed0692` and
+`a76c990273bb04040c86b924f8ef91897a25469e420e33a4139642b7cffc35cf`.
+This establishes selected file-mediated QSSTV-to-Decodium A/B reception on
+the same named profile, with B's interrupted encoder explicitly qualified;
+it does not establish live EasyPal exchange or RF behaviour.
 
 ## FAC interleaver acquisition
 
@@ -1190,6 +1479,32 @@ can still introduce timing variation. The harness supports
 `DECODIUM_LAB_EXPECT_INCOMPLETE=1` to assert no image and clean audio without
 requiring zero decoded groups. It does not claim a general false-positive or
 noise-sensitivity rate.
+
+On 2026-11-04 these exact two relay recordings were replayed again through
+BlackHole into the current ordinary receiver, now with the automatic early and
+temporal candidates enabled. Both A and B reconstructed their respective
+225-byte JPEG reference exactly; RX audio diagnostics were clean and logs
+confirmed both automatic candidates. The successful runs are
+`.../decodium-qsstv-drm-app-im99yuv8` and
+`.../decodium-qsstv-drm-app-zc109i8c`. An initial B attempt stopped on a
+PortAudio playback error before finishing and is not a receiver result
+(`.../decodium-qsstv-drm-app-bvm5kkw8`); the fresh B replay passed. Compared
+with the earlier ordinary replays above, this is evidence of recovery for
+these two saved signals, not a claim about arbitrary channels, live EasyPal,
+or RF. The independent QSSTV result above applies to the saved signals.
+
+Further same-build controls disabled both automatic candidates while retaining
+the default primary receiver and frame timing tracking. Both recordings still
+reconstructed their respective exact 225-byte JPEGs and had clean audio
+diagnostics; the logs confirmed tracking and the absence of both automatic
+candidate markers. Artifacts are `.../decodium-qsstv-drm-app-9pbyw_pk` and
+`.../decodium-qsstv-drm-app-fkcomiq0`. The A harness had been configured to
+expect incomplete reception and therefore exited with an assertion failure
+when it unexpectedly produced an image; a separate check verified the exact
+bytes, diagnostics and candidate markers. B passed the ordinary exact-image
+check. Consequently these recordings do not establish that the automatic
+candidates caused the current improvement; the tracked primary alone was
+sufficient in these runs. Playback timing varies between separate runs.
 
 ## A/2.5/high/64-QAM with a synthetic echo
 

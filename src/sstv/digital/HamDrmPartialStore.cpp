@@ -2,6 +2,7 @@
 
 #include "HamDrmPartialStore.h"
 #include "HamDrmCrc.h"
+#include "HamDrmProfileRegistry.h"
 #include "channel/HamDrmChannelCrc.h"
 
 #include <QByteArray>
@@ -10,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QRegularExpression>
 
 #include <array>
 #include <cstddef>
@@ -22,9 +24,16 @@ namespace {
 
 constexpr std::array<char, 8> kMagic {'D', 'C', 'D', 'H', 'P', 'R', 'T', '1'};
 constexpr std::uint32_t kFormatVersion = 1U;
+constexpr std::uint32_t kProfileFormatVersion = 2U;
 constexpr std::size_t kDigestBytes = 32U;
 constexpr std::size_t kFixedBytes = kMagic.size() + 4U + 2U + 4U;
 constexpr std::size_t kEncodedGroupOverhead = 11U;
+
+bool groupExceedsLimit(std::size_t groupBytes, std::size_t segmentLimit) noexcept
+{
+    return groupBytes > kEncodedGroupOverhead
+        && groupBytes - kEncodedGroupOverhead > segmentLimit;
+}
 
 void append16(QByteArray& output, std::uint16_t value)
 {
@@ -56,24 +65,30 @@ std::uint32_t read32(const char* data) noexcept
         | bytes[3];
 }
 
-std::size_t maximumGroupCount(const HamDrmLimits& limits) noexcept
+std::optional<std::size_t> maximumGroupCount(const HamDrmLimits& limits) noexcept
 {
     // Header groups can be one byte each in adversarial input, but their
     // aggregate remains bounded by maximumHeaderBytes.
+    if (limits.maximumSegments > std::numeric_limits<std::size_t>::max() - limits.maximumHeaderBytes)
+        return std::nullopt;
     return limits.maximumSegments + limits.maximumHeaderBytes;
 }
 
 std::optional<std::size_t> maximumFileBytes(const HamDrmLimits& limits)
 {
-    const std::size_t groups = maximumGroupCount(limits);
-    if (groups > (std::numeric_limits<std::size_t>::max() - kFixedBytes
-                  - kDigestBytes - limits.maximumObjectBytes
-                  - limits.maximumHeaderBytes) / (4U + kEncodedGroupOverhead)) {
+    const auto groups = maximumGroupCount(limits);
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    std::size_t remaining = maximum - kFixedBytes - 4U - kDigestBytes;
+    if (!groups || limits.maximumObjectBytes > remaining) return std::nullopt;
+    remaining -= limits.maximumObjectBytes;
+    if (limits.maximumHeaderBytes > remaining) return std::nullopt;
+    remaining -= limits.maximumHeaderBytes;
+    if (*groups > remaining / (4U + kEncodedGroupOverhead)) {
         return std::nullopt;
     }
-    return kFixedBytes + kDigestBytes + limits.maximumObjectBytes
+    return kFixedBytes + 4U + kDigestBytes + limits.maximumObjectBytes
         + limits.maximumHeaderBytes
-        + groups * (4U + kEncodedGroupOverhead);
+        + *groups * (4U + kEncodedGroupOverhead);
 }
 
 HamDrmStatus ioFailure(const char* detail)
@@ -103,9 +118,33 @@ QString HamDrmPartialStore::pathForTransportId(
     return QDir(partialDirectory()).filePath(filename);
 }
 
-HamDrmStatus HamDrmPartialStore::save(
-    const HamDrmObjectAssembler& assembler) const
+std::vector<std::uint16_t> HamDrmPartialStore::savedTransportIds() const
 {
+    std::vector<std::uint16_t> ids;
+    const QDir directory(partialDirectory());
+    const QFileInfoList entries = directory.entryInfoList(
+        {QStringLiteral("*.hamdrm-partial")},
+        QDir::Files | QDir::NoSymLinks | QDir::Readable, QDir::Name);
+    static const QRegularExpression filename(
+        QStringLiteral("^([0-9a-f]{4})\\.hamdrm-partial$"));
+    for (const QFileInfo& entry : entries) {
+        const auto match = filename.match(entry.fileName());
+        if (!match.hasMatch()) continue;
+        bool ok = false;
+        const uint value = match.captured(1).toUInt(&ok, 16);
+        if (ok && value <= 0xffffU) ids.push_back(static_cast<std::uint16_t>(value));
+    }
+    return ids;
+}
+
+HamDrmStatus HamDrmPartialStore::save(
+    const HamDrmObjectAssembler& assembler, const QString& profileId) const
+{
+    const HamDrmProfile* profile = profileId.isEmpty() ? nullptr
+        : HamDrmProfileRegistry::findById(profileId.toStdString());
+    if (!profileId.isEmpty() && !profile)
+        return HamDrmStatus::failure(HamDrmErrorCode::UnsupportedProfile,
+                                     "partial snapshot profile is invalid");
     if (rootDirectory_.isEmpty()) {
         return HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument,
                                      "partial-store root is empty");
@@ -115,8 +154,10 @@ HamDrmStatus HamDrmPartialStore::save(
     if (!snapshot.ok()) {
         return snapshot.status;
     }
-    if (snapshot.value->empty()
-        || snapshot.value->size() > maximumGroupCount(limits_)) {
+    const auto maxGroups = maximumGroupCount(limits_);
+    if (!maxGroups || snapshot.value->empty()
+        || snapshot.value->size() > *maxGroups
+        || snapshot.value->size() > std::numeric_limits<std::uint32_t>::max()) {
         return HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
                                      "partial snapshot group count is invalid");
     }
@@ -130,13 +171,13 @@ HamDrmStatus HamDrmPartialStore::save(
     serialized.reserve(static_cast<qsizetype>(
         std::min<std::size_t>(*maximumBytes, 4U * 1024U * 1024U)));
     serialized.append(kMagic.data(), static_cast<qsizetype>(kMagic.size()));
-    append32(serialized, kFormatVersion);
+    append32(serialized, profile ? kProfileFormatVersion : kFormatVersion);
     append16(serialized, progress.transportId);
     append32(serialized, static_cast<std::uint32_t>(snapshot.value->size()));
+    if (profile) append32(serialized, profile->qsstvCompatibilityCode);
     for (const auto& group : *snapshot.value) {
         if (group.empty()
-            || group.size() > limits_.maximumSegmentBytes
-                    + kEncodedGroupOverhead
+            || groupExceedsLimit(group.size(), limits_.maximumSegmentBytes)
             || group.size() > std::numeric_limits<std::uint32_t>::max()) {
             return HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
                                          "partial group exceeds limit");
@@ -176,8 +217,9 @@ HamDrmStatus HamDrmPartialStore::save(
 }
 
 HamDrmValueResult<HamDrmObjectAssembler> HamDrmPartialStore::load(
-    std::uint16_t transportId) const
+    std::uint16_t transportId, QString* profileId) const
 {
+    if (profileId) profileId->clear();
     const auto maximumBytes = maximumFileBytes(limits_);
     if (!maximumBytes.has_value()) {
         return {std::nullopt,
@@ -210,15 +252,17 @@ HamDrmValueResult<HamDrmObjectAssembler> HamDrmPartialStore::load(
                                       "HAMDRM partial checksum failed")};
     }
     const char* data = bytes.constData();
+    const std::uint32_t version = read32(data + kMagic.size());
     if (!std::equal(kMagic.begin(), kMagic.end(), data)
-        || read32(data + kMagic.size()) != kFormatVersion
+        || (version != kFormatVersion && version != kProfileFormatVersion)
         || read16(data + kMagic.size() + 4U) != transportId) {
         return {std::nullopt,
                 HamDrmStatus::failure(HamDrmErrorCode::Malformed,
                                       "HAMDRM partial header is invalid")};
     }
     const std::uint32_t groupCount = read32(data + kMagic.size() + 6U);
-    if (groupCount == 0U || groupCount > maximumGroupCount(limits_)) {
+    const auto maxGroups = maximumGroupCount(limits_);
+    if (!maxGroups || groupCount == 0U || groupCount > *maxGroups) {
         return {std::nullopt,
                 HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
                                       "HAMDRM partial group count is invalid")};
@@ -227,6 +271,18 @@ HamDrmValueResult<HamDrmObjectAssembler> HamDrmPartialStore::load(
     HamDrmObjectAssembler assembler(transportId, limits_);
     std::size_t offset = kFixedBytes;
     const std::size_t payloadEnd = static_cast<std::size_t>(digestOffset);
+    QString savedProfile;
+    if (version == kProfileFormatVersion) {
+        if (payloadEnd - offset < 4U)
+            return {std::nullopt, HamDrmStatus::failure(HamDrmErrorCode::Truncated,
+                                                        "partial profile is truncated")};
+        const auto* profile = HamDrmProfileRegistry::findByCompatibilityCode(read32(data + offset));
+        if (!profile)
+            return {std::nullopt, HamDrmStatus::failure(HamDrmErrorCode::UnsupportedProfile,
+                                                        "partial profile is invalid")};
+        savedProfile = QString::fromStdString(profile->id);
+        offset += 4U;
+    }
     for (std::uint32_t index = 0U; index < groupCount; ++index) {
         if (offset > payloadEnd || payloadEnd - offset < 4U) {
             return {std::nullopt,
@@ -236,8 +292,7 @@ HamDrmValueResult<HamDrmObjectAssembler> HamDrmPartialStore::load(
         const std::size_t groupBytes = read32(data + offset);
         offset += 4U;
         if (groupBytes == 0U
-            || groupBytes > limits_.maximumSegmentBytes
-                    + kEncodedGroupOverhead
+            || groupExceedsLimit(groupBytes, limits_.maximumSegmentBytes)
             || groupBytes > payloadEnd - offset) {
             return {std::nullopt,
                     HamDrmStatus::failure(HamDrmErrorCode::Malformed,
@@ -273,6 +328,7 @@ HamDrmValueResult<HamDrmObjectAssembler> HamDrmPartialStore::load(
                 HamDrmStatus::failure(HamDrmErrorCode::Malformed,
                                       "partial file has trailing payload")};
     }
+    if (profileId) *profileId = savedProfile;
     return {std::move(assembler), HamDrmStatus::success()};
 }
 

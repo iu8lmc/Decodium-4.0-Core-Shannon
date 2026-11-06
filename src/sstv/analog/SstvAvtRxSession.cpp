@@ -25,6 +25,7 @@ SstvAvtDecoderConfig decoderConfig(const SstvAvtRxSessionConfig& config)
         config.maximumInterpolationGapPixels;
     result.maximumPendingDirtyEvents = config.maximumPendingDirtyEvents;
     result.variant = config.variant;
+    result.experimentalAvt24LastPixelTiming = config.experimentalAvt24LastPixelTiming;
     return result;
 }
 

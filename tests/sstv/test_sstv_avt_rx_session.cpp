@@ -231,6 +231,55 @@ private slots:
                  SstvAvtRxSessionState::Cancelled);
     }
 
+    void experimentalEdgeDiscontinuityStopsBothPartialFrames()
+    {
+        const auto variant = SstvAvtVariant::NarrowQrm;
+        const auto observations = allObservations(SstvAvtMode::Avt24, variant);
+        auto config = configFor(SstvAvtMode::Avt24);
+        config.variant = variant;
+        config.experimentalAvt24LastPixelTiming = true;
+        const auto spec = SstvAvtProtocol::spec(config.mode);
+        for (const std::size_t lines : {3U, 5U}) {
+            const std::size_t cut = static_cast<std::size_t>(spec.width) * 3U * lines;
+            SstvAvtRxSession session(config);
+            static_cast<void>(session.consume(observations.data(), cut));
+            QCOMPARE(session.notifyDiscontinuity(observations[cut].centreSample),
+                     SstvAvtRxSessionState::Partial);
+            const auto stopped = session.snapshot();
+            QVERIFY(stopped.coverage() > 0.0 && stopped.coverage() < 1.0);
+            QCOMPARE(session.metrics().discontinuities, std::uint64_t {1U});
+            QCOMPARE(session.consume(observations.data() + cut, 1U).state,
+                     SstvAvtRxSessionState::Partial);
+            QCOMPARE(session.finish(), SstvAvtRxSessionState::Partial);
+            QCOMPARE(session.snapshot().pixels, stopped.pixels);
+            QCOMPARE(session.snapshot().channelCoverage, stopped.channelCoverage);
+        }
+    }
+
+    void experimentalEdgeSparseFallbackPreservesImagesAB()
+    {
+        const auto variant = SstvAvtVariant::NarrowQrm;
+        for (bool invert : {false, true}) {
+            auto observations = allObservations(SstvAvtMode::Avt24, variant);
+            if (invert) {
+                for (auto& observation : observations)
+                    observation.rawFrequencyHz = observation.correctedFrequencyHz =
+                        3800.0 - observation.correctedFrequencyHz;
+            }
+            auto controlConfig = configFor(SstvAvtMode::Avt24);
+            controlConfig.variant = variant;
+            auto candidateConfig = controlConfig;
+            candidateConfig.experimentalAvt24LastPixelTiming = true;
+            SstvAvtRxSession control(controlConfig), candidate(candidateConfig);
+            consumeChunks(control, observations, 257U);
+            consumeChunks(candidate, observations, 113U);
+            QCOMPARE(control.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(candidate.finish(), SstvAvtRxSessionState::Complete);
+            QCOMPARE(candidate.snapshot().channelCoverage, control.snapshot().channelCoverage);
+            QCOMPARE(candidate.snapshot().pixels, control.snapshot().pixels);
+        }
+    }
+
     void chronologicalRegressionsAndOversizeCallsFailClosed()
     {
         const auto observations = allObservations(SstvAvtMode::Avt24);
@@ -256,6 +305,28 @@ private slots:
         invalid.observationSpanSamples = 0U;
         QVERIFY_THROWS_EXCEPTION(std::invalid_argument,
                                  SstvAvtRxSession {invalid});
+        invalid = configFor(SstvAvtMode::Avt90);
+        invalid.experimentalAvt24LastPixelTiming = true;
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, SstvAvtRxSession {invalid});
+        auto candidate = configFor(SstvAvtMode::Avt24);
+        candidate.variant = SstvAvtVariant::NarrowQrm;
+        candidate.experimentalAvt24LastPixelTiming = true;
+        SstvAvtRxSession supported(candidate);
+        QCOMPARE(supported.state(), SstvAvtRxSessionState::Receiving);
+        candidate.clockErrorPpm = 1;
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, SstvAvtRxSession {candidate});
+        candidate.clockErrorPpm = 0;
+        candidate.observationSpanSamples = 2;
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, SstvAvtRxSession {candidate});
+        candidate.observationSpanSamples = 1;
+        candidate.sampleRate = 48'000U;
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, SstvAvtRxSession {candidate});
+        candidate.sampleRate = 12'000U;
+        candidate.imageStartSample = 0U;
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, SstvAvtRxSession {candidate});
+        candidate.experimentalAvt24LastPixelTiming = false;
+        SstvAvtRxSession ordinaryAtZero(candidate);
+        QCOMPARE(ordinaryAtZero.state(), SstvAvtRxSessionState::Receiving);
         invalid = configFor(SstvAvtMode::Avt90);
         invalid.maximumInterpolationGapPixels =
             SstvAvtDecoder::MaximumInterpolationGapPixels + 1U;

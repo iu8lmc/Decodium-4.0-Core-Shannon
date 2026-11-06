@@ -389,8 +389,11 @@ non-regression or real device callback behavior.
 - central diagnostic allowlists, a 512-event ring and 1 MiB scalar-only export;
 - network-to-RF separation and existing TX ownership/watchdog/release.
 
-E2EE is not implemented. TLS-only provider endpoints can read content, and the
-UI/documentation says so.
+Experimental E2EE envelopes and optional pinned sender signatures are now
+implemented and have local two-application A/B evidence; see
+`E2EE_IMPLEMENTATION.md`. A TLS-only provider can read unencrypted content,
+and even an encrypted transfer exposes metadata to the provider. No compatible
+public provider or independent security audit has been verified.
 
 ## 15. Remote-sharing providers implemented
 

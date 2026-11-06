@@ -57,10 +57,14 @@ using namespace decodium::sstv::sharing;
 class InboxLookupLabFault final : public SstvShareFaultInjector
 {
 public:
+    explicit InboxLookupLabFault(QString releaseMarker = {}) : releaseMarker_(std::move(releaseMarker)) {}
     bool shouldFail(SstvShareFaultPoint point, const QString&) override
     {
-        return point == SstvShareFaultPoint::BeforeInboxLookup;
+        return point == SstvShareFaultPoint::BeforeInboxLookup
+            && (releaseMarker_.isEmpty() || !QFileInfo::exists(releaseMarker_));
     }
+private:
+    QString releaseMarker_;
 };
 
 constexpr qsizetype kUiQueryLimit = 100;
@@ -2311,7 +2315,9 @@ private:
         std::shared_ptr<SstvShareFaultInjector> labFault;
         if (QStandardPaths::isTestModeEnabled()
             && qEnvironmentVariableIntValue("DECODIUM_LAB_INBOX_UNAVAILABLE") == 1)
-            labFault = std::make_shared<InboxLookupLabFault>();
+            labFault = std::make_shared<InboxLookupLabFault>(
+                qEnvironmentVariableIntValue("DECODIUM_LAB_INBOX_UNAVAILABLE_UNTIL_EXPIRY") == 1
+                    ? m_labExpiryMarker : QString {});
         auto candidate = std::make_unique<SstvShareQueueManager>(configuration, labFault, labClock);
         if (withProvider) {
             std::shared_ptr<SstvShareProvider> provider = makeProvider(error);

@@ -26,8 +26,11 @@ developer evidence, not a captured on-air waveform or cross-application
 interoperability result. For Robot colour the fixture records an incompatible
 upstream layout/timing path instead of pretending it is an on-air oracle. The
 other four implemented Martin/Scottie modes also have self-generated fixtures
-only. AVT has a pinned Handbook/source-landmark fixture plus deterministic
-native PCM loopback, but no independent recording. The MMSSTV fixture records exact landmarks audited from the pinned source
+only. AVT has pinned Handbook/source landmarks and native PCM loopbacks;
+selected QRM and Narrow-QRM variants, plus AVT94 Narrow, also have A/B
+file-mediated comparisons with the pinned independent Revenant codec and
+two-Decodium virtual-audio checks. Their precise scope and remaining limits
+are recorded in [AVT_PROTOCOL.md](AVT_PROTOCOL.md). The MMSSTV fixture records exact landmarks audited from the pinned source
 mirror and QSSTV, but it contains no PCM and is not an independent live or
 cross-application vector. Every other catalogue row remains unavailable or
 explicitly blocked.
@@ -93,14 +96,14 @@ interoperability run.
 | AVT90 | `avt-90` | AVT/analog | 320×240 (effective 256×240) | 90.000000 | standard 68 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | pinned source landmarks; native prefix/runtime, countdown-prefix `101`, coordinator/WAV/Studio and 320-wire/256-effective geometry tests | Execute an independent waveform to confirm the selected 320 prepared/wire versus 256 effective interpretation; MMSSTV's erroneous `010` prefix is excluded. |
 | AVT94 | `avt-94` | AVT/analog | 320×200 | 93.750000 | standard 72 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | pinned source landmarks; native prefix/runtime, countdown-prefix `011`, coordinator/WAV/Studio and exact-duration tests | Obtain independent PCM plus cross-application/on-air proof for the continuous no-line-sync 320x200 scan. |
 | AVT24 Narrow | `avt-24-narrow` | AVT variant/analog | 128×120 | 22.500000 | standard 65 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | full in-process Studio PCM loopback with image error bound; VIS and TX PCM A/B tests | independent PCM, two-instance, cross-application and on-air proof pending |
-| AVT24 QRM | `avt-24-qrm` | AVT variant/analog | 128×120 | 22.500000 | standard 66 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | two-process BlackHole A/B image comparison; see AVT_PROTOCOL.md | independent PCM, cross-application and on-air proof pending; acquisition failure observed before VIS fix |
-| AVT24 Narrow QRM | `avt-24-narrow-qrm` | AVT variant/analog | 128×120 | 22.500000 | standard 67 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | two-process BlackHole A/B image comparison; see AVT_PROTOCOL.md | independent PCM, cross-application and on-air proof pending; acquisition failure observed before VIS fix |
+| AVT24 QRM | `avt-24-qrm` | AVT variant/analog | 128×120 | 22.500000 | standard 66 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Two Decodium sessions and pinned Revenant codec A/B in both directions; see AVT_PROTOCOL.md | Selected file-mediated comparisons only; live external GUI, broader conditions and RF remain unverified |
+| AVT24 Narrow QRM | `avt-24-narrow-qrm` | AVT variant/analog | 128×120 | 22.500000 | standard 67 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Two Decodium sessions and pinned Revenant codec A/B in both directions; see AVT_PROTOCOL.md | Selected file-mediated comparisons only; live external GUI, broader conditions and RF remain unverified |
 | AVT90 Narrow | `avt-90-narrow` | AVT variant/analog | 320×240 (effective 256×240) | 90.000000 | standard 69 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | full in-process Studio PCM loopback with image error bound; VIS and TX PCM A/B tests | independent PCM, two-instance, cross-application and on-air proof pending |
-| AVT90 QRM | `avt-90-qrm` | AVT variant/analog | 320×240 (effective 256×240) | 90.000000 | standard 70 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | two-process BlackHole A/B image comparison; see AVT_PROTOCOL.md | independent PCM, cross-application and on-air proof pending; acquisition failure observed before VIS fix |
-| AVT90 Narrow QRM | `avt-90-narrow-qrm` | AVT variant/analog | 320×240 (effective 256×240) | 90.000000 | standard 71 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | two-process BlackHole A/B image comparison; see AVT_PROTOCOL.md | independent PCM, cross-application and on-air proof pending; acquisition failure observed before VIS fix |
-| AVT94 Narrow | `avt-94-narrow` | AVT variant/analog | 320×200 | 93.750000 | standard 73 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | full in-process Studio PCM loopback with image error bound; VIS and TX PCM A/B tests | independent PCM, two-instance, cross-application and on-air proof pending |
-| AVT94 QRM | `avt-94-qrm` | AVT variant/analog | 320×200 | 93.750000 | standard 74 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | two-process BlackHole A/B image comparison; see AVT_PROTOCOL.md | independent PCM, cross-application and on-air proof pending; acquisition failure observed before VIS fix |
-| AVT94 Narrow QRM | `avt-94-narrow-qrm` | AVT variant/analog | 320×200 | 93.750000 | standard 75 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | two-process BlackHole A/B image comparison; see AVT_PROTOCOL.md | independent PCM, cross-application and on-air proof pending; acquisition failure observed before VIS fix |
+| AVT90 QRM | `avt-90-qrm` | AVT variant/analog | 320×240 (effective 256×240) | 90.000000 | standard 70 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Two Decodium sessions and pinned Revenant codec A/B in both directions; see AVT_PROTOCOL.md | Selected file-mediated comparisons use 320/256 horizontal resizing; live external GUI and RF remain unverified |
+| AVT90 Narrow QRM | `avt-90-narrow-qrm` | AVT variant/analog | 320×240 (effective 256×240) | 90.000000 | standard 71 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Two Decodium sessions and pinned Revenant codec A/B in both directions; see AVT_PROTOCOL.md | Selected file-mediated comparisons use 320/256 horizontal resizing; live external GUI and RF remain unverified |
+| AVT94 Narrow | `avt-94-narrow` | AVT variant/analog | 320×200 | 93.750000 | standard 73 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Decodium virtual-audio A/B and pinned Revenant file-mediated A/B in both directions; see AVT_PROTOCOL.md | Fresh captures passed the independent decoder gate; the original dropped-sample capture and its cause, external GUI and RF remain documented limits |
+| AVT94 QRM | `avt-94-qrm` | AVT variant/analog | 320×200 | 93.750000 | standard 74 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Two Decodium sessions and pinned Revenant codec A/B in both directions; see AVT_PROTOCOL.md | Selected file-mediated comparisons only; live external GUI, broader conditions and RF remain unverified |
+| AVT94 Narrow QRM | `avt-94-narrow-qrm` | AVT variant/analog | 320×200 | 93.750000 | standard 75 | impl. | impl. | impl. | unverified | unverified | not tested | deterministic tests | Two Decodium sessions and pinned Revenant codec A/B in both directions; see AVT_PROTOCOL.md | Selected file-mediated comparisons only; live external GUI, broader conditions and RF remain unverified |
 | MP73 | `mp-73` | MMSSTV extended/analog | 320×256 | 72.960000 | extended VIS 0x23/0x25 | impl. | impl. | impl. | unverified | unverified | upstream path observed | deterministic tests | pinned MMSSTV `8060b5` source-landmark fixture; native core/runtime/coordinator/WAV/Studio tests | Obtain independently generated PCM plus cross-application/on-air evidence for paired Y/Cr/Cb/Y and raw `0x25`. |
 | MP115 | `mp-115` | MMSSTV extended/analog | 320×256 | 115.456000 | extended VIS 0x23/0x29 | impl. | impl. | impl. | unverified | unverified | upstream path observed | deterministic tests | pinned MMSSTV `8060b5` source-landmark fixture; native deterministic tests | Obtain independently generated PCM plus cross-application/on-air evidence. |
 | MP140 | `mp-140` | MMSSTV extended/analog | 320×256 | 139.520000 | extended VIS 0x23/0x2a | impl. | impl. | impl. | unverified | unverified | upstream path observed | deterministic tests | pinned MMSSTV `8060b5` source-landmark fixture; native deterministic tests | Obtain independently generated PCM plus cross-application/on-air evidence. |
@@ -124,6 +127,13 @@ interoperability run.
 | HFFAX | `hffax` | FAX/related FAX | — | — | — | — | — | — | not available | not available | not tested | none | none | Enumerate authoritative IOC/RPM variants. |
 | WEFAX | `wefax` | FAX/related FAX | — | — | — | — | — | — | not available | not available | not tested | none | none | Enumerate authoritative IOC/RPM variants. |
 
+The three FAX rows above describe generic catalogue entries, not every
+experimental FAX path. Separately configured Radiofax RX/TX and explicit
+FAX480 profiles are available in the application; their selected A/B,
+independent-decoder results and limitations are recorded in
+[RADIOFAX_PROTOCOL.md](RADIOFAX_PROTOCOL.md). The generic registry rows do
+not claim that all HFFAX/WEFAX profiles are implemented or interoperable.
+
 ## Native analog Studio TX integration
 
 The post-VOX integration is complete without an external utility: coordinator
@@ -146,7 +156,7 @@ their sample counts.
 
 | Protocol/profile | RX | TX | BSR/resume | Independent interoperability | Status |
 |---|---:|---:|---:|---|---|
-| HAMDRM pinned native subset | impl. | impl. | impl. | unverified | Native clean-room MOT/BSR/channel/waveform adapters are wired to Decodium's shared RX tap and TX coordinator and pass deterministic self-roundtrip/controller tests. No independent QSSTV, RF, sound-card or on-air interoperability is claimed. |
+| HAMDRM pinned native subset | impl. | impl. | impl. | partial, selected profiles | Native RX/TX and BSR/resume have selected A/B evidence with independent QSSTV and EasyPal paths; see [compatibility matrix](HAMDRM_COMPATIBILITY_MATRIX.md) for the exact tests and accepted EasyPal limits. This is not full profile, physical-radio or RF interoperability. |
 | KG-STV | — | — | — | none | Public authoritative protocol/vector not yet established. |
 
 ## Registry synchronization contract

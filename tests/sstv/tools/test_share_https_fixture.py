@@ -46,6 +46,9 @@ def main():
                 raise RuntimeError('encrypted download did not reconstruct input')
             with server.lock:
                 assert len(server.uploads) == 1
+                identifier = next(iter(server.uploads))
+                if server.content_requests.get(identifier) != 1:
+                    raise RuntimeError('fixture failed to count the valid content request')
                 item = next(iter(server.uploads.values()))
                 payload = bytearray(item['payload'])
                 if data in payload:
@@ -60,6 +63,9 @@ def main():
             damaged = actor('receive', {'key': private})
             if damaged.returncode == 0 or damaged.stdout:
                 raise RuntimeError('modified ciphertext was accepted')
+            with server.lock:
+                if server.content_requests.get(identifier) != 2:
+                    raise RuntimeError('fixture failed to count the tampered content request')
         finally:
             server.shutdown()
             server.server_close()

@@ -4,11 +4,14 @@
 #ifdef DECODIUM_TEST_SHARE_CRYPTO
 #include "src/sstv/sharing/SstvShareSecureEnvelope.h"
 #include "src/sstv/sharing/SstvShareP256.h"
+#include "src/sstv/sharing/SstvShareRecipientEncryption.h"
+#include "src/sstv/sharing/SstvShareKeyAgreement.h"
 #endif
 
 #include <QCoreApplication>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -1354,18 +1357,39 @@ bool downloadExpiresWhileProviderRespondsAB()
 
 bool awaitingAcceptanceExpiryAB()
 {
-    for (const bool encrypted : {false, true}) {
+    for (const char imageSeed : {'a', 'b'}) for (const bool encrypted : {false, true}) {
         for (int scenario = 0; scenario < 7; ++scenario) {
             Fixture fixture;
             const auto backend = std::make_shared<FakeBackend>();
-            const QByteArray image = pngPayload(16, 12, encrypted ? 'b' : 'a');
-            const QByteArray wire = encrypted ? QByteArray("encrypted fixture") : image;
+            const QByteArray image = pngPayload(16, 12, imageSeed);
+            QByteArray wire = encrypted ? QByteArray("encrypted fixture") : image;
             auto manifest = manifestFor(wire, fixture.clock,
                 QStringLiteral("station:remote"), QStringLiteral("station:local"));
             manifest.width = 16; manifest.height = 12;
             manifest.expiresUtc = fixture.clock.utc.addSecs(10);
             if (encrypted) {
                 backend->encryptedEnvelopes = true;
+#ifdef DECODIUM_TEST_SHARE_CRYPTO
+                const auto recipient = sstvShareGenerateX25519KeyPair();
+                CHECK(recipient);
+                const auto sealed = sstvShareEncryptForRecipient(
+                    manifest, recipient->publicKey,
+                    sstvShareX25519Fingerprint(recipient->publicKey), image);
+                CHECK(sealed);
+                manifest = sealed->manifest;
+                wire = sealed->bytes;
+                const auto privateKey = recipient->privateKey;
+                CHECK(sstvShareDecryptForRecipient(manifest, privateKey, wire) == image);
+                auto altered = wire;
+                altered[0] = char(altered[0] ^ 1);
+                CHECK(!sstvShareDecryptForRecipient(manifest, privateKey, altered));
+                auto alteredManifest = manifest;
+                alteredManifest.sha256 = sha256Hex(altered);
+                CHECK(!sstvShareDecryptForRecipient(alteredManifest, privateKey, altered));
+                fixture.config.openEncryptedPayload = [privateKey](const SstvShareManifestV1& received, const QByteArray& input) {
+                    return sstvShareDecryptForRecipient(received, privateKey, input);
+                };
+#else
                 manifest.encryption.mode = SstvShareEncryptionMode::EndToEnd;
                 manifest.encryption.algorithm = QStringLiteral("aes-256-gcm");
                 manifest.encryption.keyId = QStringLiteral("test-key");
@@ -1375,6 +1399,7 @@ bool awaitingAcceptanceExpiryAB()
                 manifest.transport.providerCanReadContent = false;
                 fixture.config.openEncryptedPayload = [=](const SstvShareManifestV1&, const QByteArray& input)
                     -> std::optional<QByteArray> { return input == wire ? std::optional<QByteArray>(image) : std::nullopt; };
+#endif
             }
             const QString incoming = QStringLiteral("incoming:awaiting-expiry");
             backend->incoming = {incomingFor(incoming, manifest, fixture.clock)};
@@ -1396,6 +1421,10 @@ bool awaitingAcceptanceExpiryAB()
             }));
             auto record = manager->store().transfer(id);
             CHECK(record && QFileInfo::exists(record->destinationPath));
+            CHECK(readFile(record->destinationPath) == image);
+            const QString sentinel = QFileInfo(record->destinationPath).dir().filePath(QStringLiteral("unrelated-image.bin"));
+            const QByteArray sentinelBytes = QByteArrayLiteral("untouched-neighbour-") + imageSeed;
+            CHECK(writeFile(sentinel, sentinelBytes));
             CHECK(manager->validatedIncomingHandoff(id, &error));
             if (scenario == 3) CHECK(manager->acceptDownload(id, &error));
             std::shared_ptr<TestFaultInjector> pendingFault;
@@ -1424,6 +1453,8 @@ bool awaitingAcceptanceExpiryAB()
                 const auto beforeRetry = manager->store().transfer(id);
                 CHECK(beforeRetry && beforeRetry->state == SstvManagedTransferState::AwaitingAcceptance);
                 CHECK(QFileInfo::exists(record->destinationPath));
+                CHECK(readFile(record->destinationPath) == image);
+                CHECK(readFile(sentinel) == sentinelBytes);
                 CHECK(!manager->acceptDownload(id, &error));
                 CHECK(error == QStringLiteral("Gallery verification is pending"));
             }
@@ -1441,6 +1472,7 @@ bool awaitingAcceptanceExpiryAB()
                 const auto item = manager->store().inboxItem(QStringLiteral("queue-test"), incoming);
                 CHECK(item && item->disposition == SstvInboxDisposition::Expired);
             }
+            CHECK(readFile(sentinel) == sentinelBytes);
         }
     }
     return true;

@@ -351,6 +351,29 @@ SstvPage {
                                 model: [qsTr("None"), "RS1", "RS2", "RS3", "RS4"]
                             }
                         }
+                        Label {
+                            objectName: "hamdrmRsQsstvNotice"
+                            Layout.fillWidth: true
+                            visible: rsLevel.currentIndex > 0 && !hybridTxEnabled.checked
+                            text: qsTr("Some QSSTV versions may add trailing zero bytes to certain RS-protected images. Verify the received file if exact bytes matter.")
+                            color: root.secondaryTextColor
+                            wrapMode: Text.WordWrap
+                        }
+                        CheckBox {
+                            id: qsstvRsCompatibility
+                            objectName: "hamdrmQsstvRsCompatibility"
+                            visible: rsLevel.currentIndex > 0 && !hybridTxEnabled.checked
+                            enabled: root.controller && !root.controller.busy
+                            text: qsTr("QSSTV RS compatibility (JPEG only)")
+                        }
+                        Label {
+                            objectName: "hamdrmQsstvRsCompatibilityDetails"
+                            Layout.fillWidth: true
+                            visible: qsstvRsCompatibility.visible
+                            text: qsTr("When enabled, zero bytes may be added after the JPEG data, so the received file can differ in bytes from the original.")
+                            color: root.secondaryTextColor
+                            wrapMode: Text.WordWrap
+                        }
                         CheckBox {
                             id: hybridTxEnabled
                             objectName: "hamdrmHybridTxEnabled"
@@ -404,7 +427,9 @@ SstvPage {
                                          && !root.controller.busy
                                          && !hybridTxEnabled.checked
                                          && root.selectedTxImage.toString().length > 0
-                                onClicked: root.controller.startTxWithRs(root.selectedTxImage, rsLevel.currentIndex)
+                                onClicked: qsstvRsCompatibility.checked && qsstvRsCompatibility.visible
+                                           ? root.controller.startTxWithRsQsstvCompatibility(root.selectedTxImage, rsLevel.currentIndex)
+                                           : root.controller.startTxWithRs(root.selectedTxImage, rsLevel.currentIndex)
                             }
                             Button {
                                 objectName: "hamdrmCancelTx"
@@ -563,6 +588,41 @@ SstvPage {
                     RowLayout {
                         Layout.fillWidth: true
                         Label {
+                            text: qsTr("Saved partials")
+                            color: root.secondaryTextColor
+                        }
+                        ComboBox {
+                            id: savedPartials
+                            objectName: "hamdrmSavedPartials"
+                            property bool searched: false
+                            Layout.preferredWidth: 120
+                            model: []
+                            enabled: count > 0
+                            onActivated: resumeId.text = currentText
+                        }
+                        Button {
+                            objectName: "hamdrmFindSavedPartials"
+                            text: qsTr("Find saved")
+                            enabled: root.controller && root.controller.partialResumeAvailable
+                            onClicked: {
+                                savedPartials.model = root.controller.savedPartialIds()
+                                savedPartials.searched = true
+                                if (savedPartials.count > 0)
+                                    resumeId.text = savedPartials.currentText
+                            }
+                        }
+                        Label {
+                            objectName: "hamdrmNoSavedPartials"
+                            visible: savedPartials.searched && savedPartials.count === 0
+                            text: qsTr("No saved partials found")
+                            color: root.secondaryTextColor
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
                             text: qsTr("Resume transport ID (hex)")
                             color: root.secondaryTextColor
                         }
@@ -591,6 +651,8 @@ SstvPage {
                             objectName: "hamdrmBsrDialect"
                             model: [qsTr("QSSTV extended"), qsTr("EasyPal compact")]
                             enabled: root.controller && root.controller.canBuildBsr
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("For TRXAMADRM 3.6, select QSSTV extended: its BSR reader does not support compact ranges.")
                         }
                         Button {
                             objectName: "hamdrmBuildBsr"

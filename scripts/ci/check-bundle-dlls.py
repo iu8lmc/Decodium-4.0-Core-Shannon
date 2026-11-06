@@ -3,8 +3,9 @@
 
 Walks every .exe/.dll under the bundle (plugins and QML modules included), reads the
 import and delay-import tables, and reports each imported DLL that is neither in the
-bundle nor a Windows system DLL.  Used before packaging, so an installer built from the
-bundle (after the Inno Setup Excludes are applied) cannot ship with a missing library.
+application directory, the importing binary's directory or a Windows system DLL.
+This checks the installed layout as well as the portable bundle; it cannot prove
+arbitrary dynamically constructed LoadLibrary paths.
 
     python check-bundle-dlls.py <bundle-dir> [--exclude NAME ...] [--strings]
 
@@ -122,27 +123,43 @@ def main():
             if f.lower().endswith((".exe", ".dll")) and f.lower() not in excluded:
                 files.append(os.path.join(dp, f))
     present = {os.path.basename(f).lower() for f in files}
+    directories = {}
+    for f in files:
+        directories.setdefault(os.path.basename(f).lower(), set()).add(os.path.normcase(os.path.dirname(f)).lower())
+    application_dir = os.path.normcase(root).lower()
 
     missing = {}
+    unreadable = []
     for f in files:
         try:
             imports = pe_imports(f)
         except (OSError, struct.error):
+            unreadable.append(os.path.relpath(f, root))
+            continue
+        if imports is None:
+            unreadable.append(os.path.relpath(f, root))
             continue
         for name in imports or []:
             low = name.lower()
-            if low in present or system_has(name):
+            importer_dir = os.path.normcase(os.path.dirname(f)).lower()
+            visible = directories.get(low, set())
+            if application_dir in visible or importer_dir in visible or system_has(name):
                 continue
             missing.setdefault(name, set()).add(os.path.relpath(f, root))
 
     print("Bundle: %s  (%d binaries checked, %d names excluded)" % (root, len(files), len(excluded)))
+    if unreadable:
+        print("\nINVALID OR UNREADABLE PE BINARIES:")
+        for name in sorted(unreadable):
+            print("  " + name)
     if missing:
         print("\nUNRESOLVED IMPORTS:")
         for name in sorted(missing, key=str.lower):
             users = sorted(missing[name])
             print("  %-34s needed by %s%s" % (name, ", ".join(users[:4]), " ..." if len(users) > 4 else ""))
     else:
-        print("All imports resolve to the bundle or to Windows system DLLs.")
+        if not unreadable:
+            print("All imports resolve to accessible bundle locations or Windows system DLLs.")
 
     if args.orphans:
         by_name = {os.path.basename(f).lower(): f for f in files if os.path.dirname(f) == root}
@@ -179,7 +196,7 @@ def main():
         for nm in sorted(seen, key=str.lower):
             print("  %-34s in %s" % (nm, ", ".join(sorted(seen[nm])[:3])))
 
-    return 1 if missing else 0
+    return 1 if missing or unreadable else 0
 
 
 if __name__ == "__main__":

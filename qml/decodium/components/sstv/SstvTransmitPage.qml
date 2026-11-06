@@ -746,7 +746,7 @@ SstvPage {
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: qsTr("Uses the prepared image in grayscale; no FSK ID.")
+                    text: qsTr("Selected HFFAX/WEFAX profiles use the prepared image in grayscale; no FSK ID.")
                     color: root.secondaryTextColor
                     wrapMode: Text.Wrap
                 }

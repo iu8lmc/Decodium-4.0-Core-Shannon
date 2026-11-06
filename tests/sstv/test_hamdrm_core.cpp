@@ -472,6 +472,77 @@ void testMotHeaderAndObjectAssembly()
     CHECK(assembled.ok()
           && assembled.value->metadata.filename == metadata.filename);
 
+    // An unmarked last segment may be followed by a marked retransmission.
+    // A conflicting duplicate must not commit the terminal marker.
+    for (const std::size_t segmentSize : {82U, 100U}) {
+        const auto object = hamdrm::encodeHamDrmObject(metadata, body, segmentSize);
+        CHECK(object.ok());
+        if (!object.ok()) continue;
+        hamdrm::HamDrmObjectAssembler repair(metadata.transportId);
+        for (const auto& group : object.value->headerGroups)
+            CHECK(repair.ingest(group.data(), group.size()).ok());
+        for (const auto& bytes : object.value->bodyGroups) {
+            auto group = hamdrm::parseHamDrmMotDataGroup(bytes.data(), bytes.size());
+            CHECK(group.ok());
+            if (!group.ok()) continue;
+            group.value->lastSegment = false;
+            CHECK(repair.ingest(*group.value).ok());
+        }
+        CHECK(!repair.progress().bodyExtentKnown);
+        const auto& last = object.value->bodyGroups.back();
+        auto marker = hamdrm::parseHamDrmMotDataGroup(last.data(), last.size());
+        CHECK(marker.ok());
+        if (!marker.ok()) continue;
+        auto conflictingLast = *marker.value;
+        conflictingLast.payload.front() ^= 1U;
+        const auto rejected = repair.ingest(conflictingLast);
+        CHECK(!rejected.ok());
+        CHECK(rejected.status.code == hamdrm::HamDrmErrorCode::ConflictingDuplicate);
+        CHECK(!repair.progress().bodyExtentKnown);
+        CHECK(!repair.progress().objectComplete);
+        const auto accepted = repair.ingest(*marker.value);
+        CHECK(accepted.ok());
+        CHECK(accepted.ok() && *accepted.value == hamdrm::HamDrmIngestOutcome::ObjectCompleted);
+        CHECK(repair.progress().objectComplete);
+        const auto repaired = repair.assembledObject();
+        CHECK(repaired.ok() && repaired.value->originalBytes == body);
+    }
+
+    // Rejected new terminal segments must leave both bytes and extent intact.
+    for (const std::size_t segmentSize : {82U, 100U}) {
+        const auto object = hamdrm::encodeHamDrmObject(metadata, body, segmentSize);
+        CHECK(object.ok());
+        if (!object.ok()) continue;
+        for (const bool overLimit : {false, true}) {
+            hamdrm::HamDrmLimits limits;
+            limits.maximumObjectBytes = body.size();
+            hamdrm::HamDrmObjectAssembler repair(metadata.transportId, limits);
+            for (const auto& group : object.value->headerGroups)
+                CHECK(repair.ingest(group.data(), group.size()).ok());
+            for (std::size_t i = 0; i + 1 < object.value->bodyGroups.size(); ++i) {
+                const auto& bytes = object.value->bodyGroups[i];
+                CHECK(repair.ingest(bytes.data(), bytes.size()).ok());
+            }
+            const auto before = repair.progress();
+            const auto& last = object.value->bodyGroups.back();
+            auto marker = hamdrm::parseHamDrmMotDataGroup(last.data(), last.size());
+            CHECK(marker.ok());
+            if (!marker.ok()) continue;
+            auto invalid = *marker.value;
+            if (overLimit) invalid.payload.push_back(0);
+            else invalid.payload.pop_back();
+            CHECK(!repair.ingest(invalid).ok());
+            CHECK(!repair.progress().bodyExtentKnown);
+            CHECK(repair.progress().bodyBytesReceived == before.bodyBytesReceived);
+            CHECK(repair.progress().bodySegmentsReceived == before.bodySegmentsReceived);
+            const auto accepted = repair.ingest(*marker.value);
+            CHECK(accepted.ok());
+            CHECK(repair.progress().objectComplete);
+            const auto repaired = repair.assembledObject();
+            CHECK(repaired.ok() && repaired.value->originalBytes == body);
+        }
+    }
+
     hamdrm::HamDrmObjectAssembler partial(metadata.transportId);
     CHECK(partial.ingest(encodedObject.value->headerGroups[0].data(),
                          encodedObject.value->headerGroups[0].size()).ok());
@@ -517,6 +588,45 @@ void testMotHeaderAndObjectAssembly()
 
 void testBsr()
 {
+    // EasyPal 07/OCT/2014's actual saved request after a live partial RX.
+    {
+        std::ifstream in(std::string(DECODIUM_HAMDRM_FIXTURES_DIR)
+                         + "/easypal-2014-live/bsr-extended-a.bin", std::ios::binary);
+        const std::vector<std::uint8_t> raw((std::istreambuf_iterator<char>(in)), {});
+        CHECK(in.is_open());
+        const auto parsed = hamdrm::parseHamDrmBsr(raw.data(), raw.size());
+        CHECK(parsed.ok());
+        if (parsed.ok()) {
+            CHECK(parsed.value->transportId == 4167U);
+            CHECK(parsed.value->segmentSize == 1024U);
+            CHECK(parsed.value->missingSegments == std::vector<std::uint16_t>({0U, 1U, 2U}));
+            CHECK(parsed.value->filename == std::string("bsr-test-a.jpg"));
+            CHECK(parsed.value->qsstvCompatibilityCode == 11011U);
+        }
+        auto corrupt = raw;
+        const auto marker = std::search(corrupt.begin(), corrupt.end(),
+                                        std::begin("-99") , std::begin("-99") + 3);
+        CHECK(marker != corrupt.end());
+        if (marker != corrupt.end()) {
+            *marker = 'x';
+            CHECK(!hamdrm::parseHamDrmBsr(corrupt.data(), corrupt.size()).ok());
+        }
+    }
+    {
+        std::ifstream in(std::string(DECODIUM_HAMDRM_FIXTURES_DIR)
+                         + "/easypal-2014-live/bsr-extended-b.bin", std::ios::binary);
+        const std::vector<std::uint8_t> raw((std::istreambuf_iterator<char>(in)), {});
+        CHECK(in.is_open());
+        const auto parsed = hamdrm::parseHamDrmBsr(raw.data(), raw.size());
+        CHECK(parsed.ok());
+        if (parsed.ok()) {
+            CHECK(parsed.value->transportId == 4932U);
+            CHECK(parsed.value->segmentSize == 1024U);
+            CHECK(parsed.value->missingSegments == std::vector<std::uint16_t>({0U, 1U}));
+            CHECK(parsed.value->filename == std::string("bsr-test-b.jpg"));
+            CHECK(parsed.value->qsstvCompatibilityCode == 11011U);
+        }
+    }
     hamdrm::HamDrmBsrRequest request;
     request.transportId = 0x2345U;
     request.segmentSize = 82U;

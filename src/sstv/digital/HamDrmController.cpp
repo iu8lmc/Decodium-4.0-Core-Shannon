@@ -842,6 +842,29 @@ std::optional<std::size_t> HamDrmController::bsrSegmentSize(const InboxRecord& r
 {
     if (!record.assembler || !record.metadata || record.bodySegmentSize == 0U) return {};
     std::size_t segmentBytes = record.bodySegmentSize;
+    if (!record.progress.bodyExtentKnown) {
+        const std::size_t bytes = record.metadata->bodySize;
+        const std::size_t total = bytes / segmentBytes + (bytes % segmentBytes != 0U);
+        if (total < 2U || total > 65536U) return {};
+        const std::size_t finalBytes = bytes - (total - 1U) * segmentBytes;
+        bool regularPresent = false;
+        bool inconsistent = false;
+        record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
+                                             bool last, const std::vector<std::uint8_t>& payload) {
+            if (kind != HamDrmMotGroupKind::Body) return;
+            if (last || std::size_t(index) >= total) { inconsistent = true; return; }
+            if (std::size_t(index) == total - 1U) {
+                if (payload.size() != finalBytes) inconsistent = true;
+            } else if (payload.size() != segmentBytes) {
+                inconsistent = true;
+            } else {
+                regularPresent = true;
+            }
+        });
+        if (inconsistent || !regularPresent
+            || segmentBytes > std::numeric_limits<std::uint16_t>::max()) return {};
+        return segmentBytes;
+    }
     std::optional<std::size_t> finalIndex;
     std::size_t finalBytes = 0U;
     std::optional<std::size_t> regularBytes;
@@ -881,10 +904,17 @@ std::vector<std::uint16_t> HamDrmController::bsrMissingSegments(const InboxRecor
     record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
                                          bool last, const std::vector<std::uint8_t>& payload) {
         if (kind != HamDrmMotGroupKind::Body) return;
-        if (last || std::size_t(index) >= total - 1U || payload.size() != *segmentSize) {
+        if (last || std::size_t(index) >= total) {
             inconsistent = true;
             return;
         }
+        if (std::size_t(index) == total - 1U) {
+            // Its bytes may have arrived without a terminal marker. Request it
+            // again so completion still requires an explicit last segment.
+            if (payload.size() != bytes - (total - 1U) * *segmentSize) inconsistent = true;
+            return;
+        }
+        if (payload.size() != *segmentSize) { inconsistent = true; return; }
         present[index] = true;
     });
     if (inconsistent) return {};
@@ -1393,6 +1423,16 @@ bool HamDrmController::startHybridTx(const QUrl& localImage, const QString& call
 
 bool HamDrmController::startTxWithRs(const QUrl& localImage, int level)
 {
+    return startTxWithRsOptions(localImage, level, false);
+}
+
+bool HamDrmController::startTxWithRsQsstvCompatibility(const QUrl& localImage, int level)
+{
+    return startTxWithRsOptions(localImage, level, true);
+}
+
+bool HamDrmController::startTxWithRsOptions(const QUrl& localImage, int level, bool qsstvCompatibility)
+{
     if (!ownerThread()) {
         return false;
     }
@@ -1435,6 +1475,19 @@ bool HamDrmController::startTxWithRs(const QUrl& localImage, int level)
 
     auto metadata = candidate.value->metadata;
     auto body = byteVector(candidate.value->bytes);
+    if (qsstvCompatibility) {
+        if (level < 1 || level > 4 || metadata.mimeType != "image/jpeg")
+            return reject(QStringLiteral("tx"), tr("QSSTV RS compatibility requires a JPEG image and RS protection"));
+        const std::size_t k = 256U - 32U * static_cast<std::size_t>(level);
+        const std::size_t padding = k - body.size() % k;
+        if (padding >= 128U) {
+            const std::size_t extra = padding - 127U;
+            if (body.size() > config_.limits.maximumObjectBytes
+                || extra > config_.limits.maximumObjectBytes - body.size())
+                return reject(QStringLiteral("tx"), tr("QSSTV compatibility padding exceeds the image size limit"));
+            body.insert(body.end(), extra, 0U);
+        }
+    }
     const QString structuralLab = QStandardPaths::isTestModeEnabled()
         ? qEnvironmentVariable("DECODIUM_LAB_HAMDRM_STRUCTURAL_ONLY") : QString {};
     if (structuralLab == QStringLiteral("a") || structuralLab == QStringLiteral("b")) {
@@ -1721,7 +1774,7 @@ HamDrmStatus HamDrmController::persistRecord(InboxRecord& record)
         record.persisted = false;
         return HamDrmStatus::success();
     }
-    const HamDrmStatus status = partialStore_->save(*record.assembler);
+    const HamDrmStatus status = partialStore_->save(*record.assembler, record.receivedProfileId);
     record.persisted = status.ok();
     return status;
 }
@@ -1765,7 +1818,8 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
         }
         record.progress = record.assembler->progress();
         record.metadata = assembled.value->metadata;
-        record.receivedProfileId = selectedProfileId_;
+        if (record.receivedProfileId.isEmpty())
+            record.receivedProfileId = selectedProfileId_;
         record.persisted = false;
         record.hybridReference = hybridReference;
         record.completedObject = std::move(*assembled.value);
@@ -1883,7 +1937,8 @@ HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
     record.imageInfo = *image.value;
     record.imageDecoded = !galleryImage.isNull();
     record.galleryImage = std::move(galleryImage);
-    record.receivedProfileId = selectedProfileId_;
+    if (record.receivedProfileId.isEmpty())
+        record.receivedProfileId = selectedProfileId_;
     record.jpeg2000Decoded = jpegDecoded;
     record.persisted = false;
     record.completedObject = std::move(*assembled.value);
@@ -1979,7 +2034,7 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         return HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument,
                                      "empty HAMDRM MOT data group");
     }
-    const auto parsed = parseHamDrmMotDataGroup(
+    auto parsed = parseHamDrmMotDataGroup(
         reinterpret_cast<const std::uint8_t*>(encodedGroup.constData()),
         static_cast<std::size_t>(encodedGroup.size()), config_.limits);
     if (!parsed.ok()) {
@@ -1987,6 +2042,13 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         return parsed.status;
     }
     const std::uint16_t transportId = parsed.value->transportId;
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_TRACE_MOT") == 1) {
+        qInfo() << "[LAB][HAMDRM] MOT" << transportId
+                << (parsed.value->kind == HamDrmMotGroupKind::Body ? "body" : "header")
+                << parsed.value->segmentNumber << "final" << parsed.value->lastSegment
+                << "bytes" << parsed.value->payload.size();
+    }
     auto found = inbox_.find(transportId);
     bool bsrRollover = false;
     if (found != inbox_.end() && found->second->completedObject
@@ -2027,6 +2089,9 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         found = inbox_.emplace(
             transportId,
             std::make_unique<InboxRecord>(transportId, config_.limits)).first;
+        // Preserve the profile used for this partial object even if the
+        // operator selects another profile before constructing a BSR.
+        found->second->receivedProfileId = selectedProfileId_;
         found->second->bsrRollover = bsrRollover;
     }
     InboxRecord& record = *found->second;
@@ -2056,7 +2121,8 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         ? qEnvironmentVariable("DECODIUM_LAB_DROP_MOT_UNTIL") : QString {};
     if (!labDropUntil.isEmpty() && QDir::isAbsolutePath(labDropUntil)
         && !QFile::exists(labDropUntil) && record.metadata
-        && record.metadata->mimeType != "application/x-hamdrm-rs"
+        && (record.metadata->mimeType != "application/x-hamdrm-rs"
+            || qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_DROP_RS") == 1)
         && record.metadata->mimeType != "application/x-hamdrm-bsr"
         && parsed.value->kind == HamDrmMotGroupKind::Body
         && (qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_MOT_FINAL") == 1
@@ -2067,6 +2133,15 @@ HamDrmStatus HamDrmController::ingestMotGroup(
                     << "final" << parsed.value->lastSegment;
         }
         return HamDrmStatus::success();
+    }
+    if (!labDropUntil.isEmpty() && QDir::isAbsolutePath(labDropUntil)
+        && !QFile::exists(labDropUntil)
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_UNMARK_FINAL") == 1
+        && record.metadata && record.metadata->mimeType != "application/x-hamdrm-rs"
+        && record.metadata->mimeType != "application/x-hamdrm-bsr"
+        && parsed.value->kind == HamDrmMotGroupKind::Body && parsed.value->lastSegment) {
+        parsed.value->lastSegment = false;
+        qInfo() << "[LAB][HAMDRM] unmarked initial final MOT segment" << parsed.value->segmentNumber;
     }
 
     // Explicit two-application test mode can discard one received RS segment
@@ -2081,6 +2156,23 @@ HamDrmStatus HamDrmController::ingestMotGroup(
         labDroppedRsSegment_ = true;
         qInfo("[LAB][HAMDRM] discarded RS body segment %u", unsigned(parsed.value->segmentNumber));
         return HamDrmStatus::success();
+    }
+
+    if (QStandardPaths::isTestModeEnabled() && !labInjectedShortFinal_
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_INJECT_SHORT_FINAL") == 1
+        && !labDropUntil.isEmpty() && QFile::exists(labDropUntil)
+        && record.metadata && parsed.value->kind == HamDrmMotGroupKind::Body
+        && parsed.value->lastSegment && parsed.value->payload.size() > 1U) {
+        labInjectedShortFinal_ = true;
+        const auto before = record.assembler->progress();
+        auto invalid = *parsed.value;
+        invalid.payload.pop_back();
+        const auto rejected = record.assembler->ingest(invalid);
+        const auto after = record.assembler->progress();
+        const bool preserved = !rejected.ok() && before.bodyExtentKnown == after.bodyExtentKnown
+            && before.bodyBytesReceived == after.bodyBytesReceived
+            && before.bodySegmentsReceived == after.bodySegmentsReceived;
+        qInfo() << "[LAB][HAMDRM] short final rejected and state preserved" << preserved;
     }
 
     const auto ingested = record.assembler->ingest(*parsed.value);
@@ -2214,7 +2306,9 @@ QString HamDrmController::buildBsr(int transportId, bool qsstvExtended)
         return {};
     }
     const auto segmentBytes = bsrSegmentSize(*record);
-    const HamDrmProfile* profile = currentProfile();
+    const HamDrmProfile* profile = record->receivedProfileId.isEmpty()
+        ? currentProfile()
+        : HamDrmProfileRegistry::findById(record->receivedProfileId.toStdString());
     if (profile == nullptr || !segmentBytes) {
         static_cast<void>(reject(QStringLiteral("bsr"),
                                  tr("HAMDRM BSR profile or segment size is invalid")));
@@ -2357,6 +2451,15 @@ bool HamDrmController::startBsrRepair()
     return true;
 }
 
+QVariantList HamDrmController::savedPartialIds() const
+{
+    QVariantList result;
+    if (!ownerThread() || !partialStore_) return result;
+    for (const auto id : partialStore_->savedTransportIds())
+        result.append(QStringLiteral("%1").arg(id, 4, 16, QLatin1Char('0')).toUpper());
+    return result;
+}
+
 bool HamDrmController::resumePartial(int transportId)
 {
     if (!ownerThread()) {
@@ -2378,8 +2481,9 @@ bool HamDrmController::resumePartial(int transportId)
         return reject(QStringLiteral("resume"),
                       tr("HAMDRM inbox object bound is exhausted"));
     }
+    QString savedProfile;
     const auto loaded = partialStore_->load(
-        static_cast<std::uint16_t>(transportId));
+        static_cast<std::uint16_t>(transportId), &savedProfile);
     if (!loaded.ok()) {
         return reject(QStringLiteral("resume"),
                       statusDetail(loaded.status,
@@ -2388,6 +2492,7 @@ bool HamDrmController::resumePartial(int transportId)
 
     auto record = std::make_unique<InboxRecord>(
         static_cast<std::uint16_t>(transportId), config_.limits);
+    record->receivedProfileId = savedProfile;
     record->assembler = std::make_unique<HamDrmObjectAssembler>(
         *loaded.value);
     record->persisted = true;

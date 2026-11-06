@@ -424,7 +424,7 @@ SstvPage {
                     }
                     Label {
                         Layout.fillWidth: true
-                        text: qsTr("Set IOC and maximum image size before monitoring. Start and stop detection are approximate. The receiver automatically searches for the next image.")
+                        text: qsTr("Radiofax covers selected HFFAX and WEFAX profiles. Set IOC and maximum image size before monitoring. Start and stop detection are approximate. The receiver automatically searches for the next image.")
                         color: root.secondaryTextColor
                         font.pixelSize: 10
                         wrapMode: Text.Wrap
@@ -483,7 +483,7 @@ SstvPage {
                     SpinBox {
                         id: interferenceFrequency
                         objectName: "sstvInterferenceNotchHz"
-                        from: 900; to: 2500; editable: true
+                        from: 900; to: 3500; editable: true
                         value: Number(root.controls.interferenceNotchHz || 1700)
                         enabled: interferenceNotch.checked
                     }

@@ -254,6 +254,7 @@ public:
     Q_INVOKABLE bool startRx();
     Q_INVOKABLE bool startTx(const QUrl& localImage);
     Q_INVOKABLE bool startTxWithRs(const QUrl& localImage, int level);
+    Q_INVOKABLE bool startTxWithRsQsstvCompatibility(const QUrl& localImage, int level);
     Q_INVOKABLE bool startHybridTx(const QUrl& localImage, const QString& callsign,
                                    const QString& host, const QString& user,
                                    const QString& password, const QString& directory);
@@ -268,6 +269,7 @@ public:
     Q_INVOKABLE bool startBsrTx(int transportId, bool qsstvExtended = true);
     Q_INVOKABLE bool startBsrRepair();
     Q_INVOKABLE bool resumePartial(int transportId);
+    Q_INVOKABLE QVariantList savedPartialIds() const;
     Q_INVOKABLE bool discardObject(int transportId);
     Q_INVOKABLE bool downloadHybrid(int transportId, const QUrl& destination);
     Q_INVOKABLE bool downloadHybridIfUnchanged(int transportId, const QUrl& destination,
@@ -311,6 +313,7 @@ signals:
     void operationRejected(const QString& operation, const QString& detail);
 
 private:
+    bool startTxWithRsOptions(const QUrl& localImage, int level, bool qsstvCompatibility);
     struct InboxRecord;
     struct TxImageCandidate final
     {
@@ -379,6 +382,7 @@ private:
     HamDrmControllerConfig config_;
     bool labDroppedRsSegment_ {false};
     bool labDroppedMotSegment_ {false};
+    bool labInjectedShortFinal_ {false};
     HamDrmControllerBackends backends_;
     bool experimentalTiming_ {false};
     std::unique_ptr<HamDrmPartialStore> partialStore_;

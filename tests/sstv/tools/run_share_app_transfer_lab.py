@@ -3,6 +3,7 @@
 import argparse
 import base64
 import hashlib
+import http.client
 import json
 import os
 import platform
@@ -10,14 +11,40 @@ from pathlib import Path
 import secrets
 import shutil
 import sqlite3
+import ssl
 import subprocess
 import tempfile
 import threading
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from run_share_app_identity_lab import keychains
 from share_https_fixture import ShareFixture
+
+
+def check_loopback_provider(url, certificate, connection_factory=http.client.HTTPSConnection):
+    """Fail promptly if the isolated HTTPS fixture is unreachable or misconfigured."""
+    endpoint = urlsplit(url)
+    if endpoint.scheme != 'https' or endpoint.hostname != '127.0.0.1' or not endpoint.port:
+        raise ValueError('invalid isolated HTTPS endpoint')
+    context = ssl.create_default_context(cafile=str(certificate))
+    connection = connection_factory(endpoint.hostname, endpoint.port, timeout=5, context=context)
+    try:
+        connection.request('GET', '/api/v1/capabilities')
+        response = connection.getresponse()
+        if response.status != 200:
+            raise RuntimeError('isolated HTTPS capability preflight returned HTTP ' + str(response.status))
+        data = response.read(65537)
+        if len(data) > 65536:
+            raise RuntimeError('isolated HTTPS capability response is too large')
+        capabilities = json.loads(data)
+        if not isinstance(capabilities, dict) or capabilities.get('endToEndEncryptionEnvelope') is not True:
+            raise RuntimeError('isolated HTTPS fixture lacks E2EE capability')
+    except (OSError, http.client.HTTPException, ValueError) as exc:
+        raise RuntimeError('isolated HTTPS capability preflight failed: ' + str(exc)) from exc
+    finally:
+        connection.close()
 
 
 def image_bytes(path):
@@ -38,7 +65,7 @@ def main():
     attacks.add_argument('--tamper-payload', choices=('a', 'b'))
     attacks.add_argument('--tamper-manifest', choices=('a', 'b'))
     attacks.add_argument('--forge-sender', choices=('a', 'b'))
-    parser.add_argument('--tamper-manifest-field', choices=('sstvMode', 'expiresUtc', 'keyId', 'nonceBase64', 'senderId', 'senderSignatureBase64', 'senderSignatureHighS', 'senderAuth'), default='sstvMode')
+    parser.add_argument('--tamper-manifest-field', choices=('sstvMode', 'expiresUtc', 'keyId', 'nonceBase64', 'senderId', 'recipientId', 'senderSignatureBase64', 'senderSignatureHighS', 'senderAuth'), default='sstvMode')
     attacks.add_argument('--swap-payload', choices=('a', 'b'))
     attacks.add_argument('--replay-envelope', choices=('a', 'b'))
     parser.add_argument('--replay-after-restart', action='store_true')
@@ -52,6 +79,8 @@ def main():
     attacks.add_argument('--accept-restart-cleanup', choices=('a', 'b'))
     attacks.add_argument('--policy-awaiting', choices=('a', 'b'))
     attacks.add_argument('--invalid-before-valid', choices=('a', 'b'))
+    attacks.add_argument('--corrupt-recipient-pin', choices=('a', 'b'))
+    attacks.add_argument('--corrupt-sender-pin', choices=('a', 'b'))
     parser.add_argument('--legacy-invalid-record', action='store_true')
     parser.add_argument('--invalid-nonce-restart', action='store_true')
     parser.add_argument('--corrupt-gallery', action='store_true')
@@ -70,12 +99,15 @@ def main():
     parser.add_argument('--retired-unseen', choices=('a', 'b'))
     parser.add_argument('--expiry-after-first-chunk', action='store_true')
     parser.add_argument('--expiry-restart-cleanup', action='store_true')
+    parser.add_argument('--expiry-pending-restart', action='store_true')
     parser.add_argument('decodium', type=Path)
     parser.add_argument('certificate', type=Path)
     parser.add_argument('key', type=Path)
     parser.add_argument('image_a', type=Path)
     parser.add_argument('image_b', type=Path)
     args = parser.parse_args()
+    if args.expiry_pending_restart and (not args.expire_awaiting or platform.system() != 'Darwin'):
+        parser.error('--expiry-pending-restart requires --expire-awaiting and isolated macOS Keychain')
     if args.busy_refresh and not args.signed:
         parser.error('--busy-refresh requires --signed')
     if args.busy_exhaust and not args.busy_refresh:
@@ -105,6 +137,8 @@ def main():
         parser.error('--forge-sender requires --signed')
     if args.invalid_before_valid and not args.signed:
         parser.error('--invalid-before-valid requires --signed')
+    if (args.corrupt_recipient_pin or args.corrupt_sender_pin) and (not args.signed or platform.system() != 'Darwin'):
+        parser.error('corrupt-pin tests require signed mode and macOS')
     if args.invalid_nonce_restart and (not args.invalid_before_valid or args.legacy_invalid_record):
         parser.error('--invalid-nonce-restart requires invalid-before-valid without legacy injection')
     if args.legacy_invalid_record and (not args.invalid_before_valid or platform.system() != 'Darwin'):
@@ -191,6 +225,7 @@ def main():
     processes = []
     successful = False
     try:
+        check_loopback_provider(server.url, cert)
         shutil.copyfile(source_a, root / 'image-a.jpg')
         shutil.copyfile(source_b, root / 'image-b.jpg')
         (root / 'out').mkdir()
@@ -207,6 +242,42 @@ def main():
             for session in sessions.values():
                 session.update(signingIdentity=str(root / 'sender-signing.json'),
                                signingReady=str(root / 'signing-ready'))
+        if args.corrupt_recipient_pin or args.corrupt_sender_pin:
+            test_role = 'sender' if args.corrupt_recipient_pin else 'receiver'
+            other_role = 'receiver' if test_role == 'sender' else 'sender'
+            case = 'zero' if (args.corrupt_recipient_pin or args.corrupt_sender_pin) == 'a' else 'one'
+            sessions[test_role].update(corruptPinMarker=str(root / 'corrupt-pin-rejected'), corruptPinCase=case)
+            preflight = root / 'corrupt-pin-preflight.json'
+            preflight.write_text(json.dumps(sessions[test_role]))
+            denied = subprocess.run([str(binary), '--lab-share-keychain', str(root / (test_role + '.keychain-db')),
+                                     '--lab-share-session-file', str(preflight)], env=base_env,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'corrupt-pin-rejected').exists():
+                raise RuntimeError('corrupt-pin lab was accepted outside test mode')
+            outside_marker = root.parent / (root.name + '-outside-marker')
+            preflight.write_text(json.dumps(dict(sessions[test_role], corruptPinMarker=str(outside_marker))))
+            denied_env = base_env.copy()
+            denied_env['DECODIUM_LAB_SIGNED_ENVELOPE'] = '1'
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain', str(root / (test_role + '.keychain-db')),
+                                     '--lab-share-session-file', str(preflight)], env=denied_env,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or outside_marker.exists():
+                raise RuntimeError('corrupt-pin lab accepted a marker outside the isolated root')
+            preflight.write_text(json.dumps(sessions[test_role]))
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain', str(root / (other_role + '.keychain-db')),
+                                     '--lab-share-session-file', str(preflight)], env=denied_env,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'corrupt-pin-rejected').exists():
+                raise RuntimeError('corrupt-pin lab accepted the other actor keychain')
+            bad_dir = root / 'untrusted-keychain'
+            bad_dir.mkdir()
+            bad_keychain = bad_dir / (test_role + '.keychain-db')
+            bad_keychain.write_bytes(b'not a test keychain')
+            denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain', str(bad_keychain),
+                                     '--lab-share-session-file', str(preflight)], env=denied_env,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+            if denied.returncode != 2 or (root / 'corrupt-pin-rejected').exists():
+                raise RuntimeError('corrupt-pin lab accepted a keychain outside the isolated root')
         if args.rotate_recipient:
             sessions['receiver']['rotateRecipient'] = True
         if args.replace_recipient:
@@ -306,6 +377,35 @@ def main():
         if blocked.returncode != 2 or (root / 'receiver-ok').exists():
             raise RuntimeError('session lab did not reject a non-loopback endpoint')
         if args.expire_download:
+            if args.expiry_pending_restart:
+                hold_env = base_env.copy()
+                hold_env.update(DECODIUM_LAB_SIGNED_ENVELOPE='1', DECODIUM_LAB_EXPIRY_HOLD='1')
+                preflight = root / 'hold-preflight.json'
+                for case, config, test_mode in (
+                    ('non-test mode', sessions['receiver'], False),
+                    ('sender', sessions['sender'], True),
+                    ('missing marker', dict(sessions['receiver'], expiryMarker='', expiryTarget=''), True),
+                    ('outside marker', dict(sessions['receiver'], expiryMarker=str(root.parent / (root.name + '-outside-marker'))), True),
+                ):
+                    preflight.write_text(json.dumps(config))
+                    command = [str(binary)] + (['--test-mode'] if test_mode else []) + [
+                        '--lab-share-keychain', str(root / 'receiver.keychain-db'),
+                        '--lab-share-session-file', str(preflight)]
+                    denied = subprocess.run(command, env=hold_env, stdout=subprocess.DEVNULL,
+                                            stderr=subprocess.PIPE, timeout=10)
+                    if denied.returncode != 2 or (root / 'expiry-marker.ready').exists():
+                        raise RuntimeError('expiry hold preflight accepted ' + case)
+                preflight.write_text(json.dumps(sessions['receiver']))
+                other_dir = root / 'other-keychain'
+                other_dir.mkdir()
+                other_keychain = other_dir / 'receiver.keychain-db'
+                other_keychain.write_bytes(b'isolated invalid keychain')
+                for keychain in (root / 'sender.keychain-db', other_keychain):
+                    denied = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
+                        str(keychain), '--lab-share-session-file', str(preflight)], env=hold_env,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+                    if denied.returncode != 2 or (root / 'expiry-marker.ready').exists():
+                        raise RuntimeError('expiry hold preflight accepted a non-receiver Keychain')
             invalid.write_text(json.dumps(dict(sessions['receiver'], expiryMarker=str(root.parent / 'unsafe-marker'))))
             blocked = subprocess.run([str(binary), '--test-mode', '--lab-share-keychain',
                 str(root / 'receiver.keychain-db'), '--lab-share-session-file', str(invalid)],
@@ -326,6 +426,8 @@ def main():
             env = base_env.copy()
             if args.signed:
                 env['DECODIUM_LAB_SIGNED_ENVELOPE'] = '1'
+            if args.expiry_pending_restart and role == 'receiver':
+                env['DECODIUM_LAB_EXPIRY_HOLD'] = '1'
             if args.forge_sender and role == 'sender':
                 env['DECODIUM_LAB_SIGNED_FORGE'] = args.forge_sender
             env['QT_QUICK_BACKEND'] = 'software'
@@ -341,9 +443,63 @@ def main():
         deadline = time.monotonic() + 105
         legacy_transfer_id = None
         nonce_receiver_restarted = False
+        expiry_receiver_restarted = False
+        expiry_sentinel = None
         identity_before_nonce_restart = None
         while True:
             states = [process.poll() for process in processes]
+            if args.expiry_pending_restart and not expiry_receiver_restarted and (root / 'expiry-marker.ready').exists():
+                if states[0] is not None:
+                    raise RuntimeError('receiver stopped before expiry restart')
+                ready = json.loads((root / 'expiry-marker.ready').read_text())
+                transfer = str(uuid.UUID(ready['transferId']))
+                storage = Path(ready['storageFolder']).resolve(strict=True)
+                test_root = (Path.home() / '.qttest').resolve(strict=True)
+                expected_name = 'Decodium - SHARE' + suffix + 'receiver - test'
+                if test_root not in storage.parents or expected_name not in storage.parts or storage.name != 'sstv':
+                    raise RuntimeError('refusing non-isolated expiry storage')
+                database_path = (storage / 'sharing' / 'queue.sqlite').resolve(strict=True)
+                if storage not in database_path.parents:
+                    raise RuntimeError('expiry queue outside isolated storage')
+                processes[0].terminate()
+                processes[0].wait(timeout=10)
+                with sqlite3.connect('file:' + str(database_path) + '?mode=ro', uri=True) as db:
+                    row = db.execute('SELECT state,destination_path FROM sstv_share_transfers WHERE transfer_id=?', (transfer,)).fetchone()
+                if not row or row[0] != 'AwaitingAcceptance':
+                    raise RuntimeError('image was not awaiting acceptance at restart: ' + repr(row))
+                staged = Path(row[1]).resolve(strict=True)
+                if storage not in staged.parents:
+                    raise RuntimeError('expiry staged image outside isolated storage')
+                staged_bytes = staged.read_bytes()
+                if not staged_bytes:
+                    raise RuntimeError('expiry staged image is empty')
+                expiry_sentinel = staged.parent / ('sentinel-' + secrets.token_hex(8))
+                expiry_sentinel.write_bytes(b'preserve unrelated file')
+                restart_config = dict(sessions['receiver'], resumeExistingProvider=True)
+                restart_file = root / 'receiver-restart-expiry.json'
+                restart_file.write_text(json.dumps(restart_config))
+                restart_env = receiver_env.copy()
+                restart_env.update(DECODIUM_LAB_INBOX_UNAVAILABLE='1', DECODIUM_LAB_INBOX_UNAVAILABLE_UNTIL_EXPIRY='1')
+                receiver_cmd = receiver_cmd[:-1] + [str(restart_file)]
+                with (root / 'receiver.log').open('ab') as log:
+                    processes[0] = subprocess.Popen(receiver_cmd, env=restart_env, stdout=log, stderr=subprocess.STDOUT)
+                pending_deadline = time.monotonic() + 20
+                pending = None
+                while time.monotonic() < pending_deadline:
+                    if processes[0].poll() is not None:
+                        raise RuntimeError('receiver exited before pending verification')
+                    with sqlite3.connect('file:' + str(database_path) + '?mode=ro', uri=True) as db:
+                        pending = db.execute('SELECT state,last_error_redacted FROM sstv_share_transfers WHERE transfer_id=?', (transfer,)).fetchone()
+                    if pending == ('AwaitingAcceptance', 'Gallery verification temporarily unavailable'):
+                        break
+                    time.sleep(.05)
+                else:
+                    raise RuntimeError('receiver did not reach pending verification: ' + repr(pending))
+                if staged.read_bytes() != staged_bytes:
+                    raise RuntimeError('pending verification altered staged image')
+                (root / 'expiry-marker').write_text('expired\n')
+                expiry_receiver_restarted = True
+                continue
             if args.invalid_nonce_restart and server.invalid_before_marker.exists() and not nonce_receiver_restarted:
                 if states[0] is not None:
                     raise RuntimeError('receiver stopped before nonce attack restart')
@@ -425,12 +581,21 @@ def main():
                 log = (root / 'receiver.log').read_text(errors='replace')
                 if args.forge_sender:
                     with server.lock:
-                        forged = [item for item in server.uploads.values()
+                        forged = [(ident, item) for ident, item in server.uploads.items()
                                   if item['manifest']['safeDisplayFilename'] == 'image-' + args.forge_sender + '.png']
+                        requests = dict(server.content_requests)
                     pinned = json.loads((root / 'sender-signing.json').read_text())['fingerprint']
-                    if (len(forged) != 1 or forged[0]['manifest']['senderId'] != 'labtx'
-                            or forged[0]['manifest']['encryption'].get('senderKeyFingerprint') in (None, pinned)):
+                    if (len(forged) != 1 or forged[0][1]['manifest']['senderId'] != 'labtx'
+                            or forged[0][1]['manifest']['encryption'].get('senderKeyFingerprint') in (None, pinned)):
                         raise RuntimeError('independent signing-key impersonation was not produced')
+                    if requests.get(forged[0][0], 0):
+                        raise RuntimeError('forged sender content was requested before authentication')
+                    if args.forge_sender == 'b':
+                        with server.lock:
+                            valid_ids = [ident for ident, item in server.uploads.items()
+                                         if item['manifest']['safeDisplayFilename'] == 'image-a.png']
+                        if len(valid_ids) != 1 or requests.get(valid_ids[0], 0) < 1:
+                            raise RuntimeError('valid A content request was not observed')
                 if args.signed and args.tamper_manifest:
                     with server.lock:
                         changed = [item for item in server.uploads.values() if item.get('signed_before_tamper')]
@@ -455,13 +620,65 @@ def main():
                     with server.lock:
                         if server.stripped_signature_downloads:
                             raise RuntimeError('unsigned item content was requested')
-                elif args.signed and (args.tamper_manifest or args.forge_sender or args.tamper_payload):
+                elif args.signed and (args.tamper_manifest or args.forge_sender or args.tamper_payload or args.swap_payload):
                     if 'download: incoming sender signature could not be authenticated' not in log:
                         raise RuntimeError('receiver did not reject invalid sender signature before download')
                     if args.tamper_manifest:
                         with server.lock:
                             if server.signed_tampered_downloads:
                                 raise RuntimeError('content requested despite invalid sender signature')
+                    if args.tamper_payload:
+                        with server.lock:
+                            changed = [(ident, item) for ident, item in server.uploads.items()
+                                       if item['manifest']['safeDisplayFilename'] ==
+                                       'image-' + args.tamper_payload + '.png']
+                            requests = dict(server.content_requests)
+                            valid_ids = [ident for ident, item in server.uploads.items()
+                                         if item['manifest']['safeDisplayFilename'] == 'image-a.png']
+                        if len(changed) != 1:
+                            raise RuntimeError('missing targeted signed ciphertext')
+                        ident, item = changed[0]
+                        original = item.get('payload_before_tamper', b'')
+                        altered = item['payload']
+                        if (not original or len(original) != len(altered)
+                                or bytes([original[0] ^ 1]) + original[1:] != altered
+                                or item.get('digest_before_tamper') != hashlib.sha256(original).hexdigest()
+                                or item['manifest']['sha256'] != hashlib.sha256(altered).hexdigest()
+                                or not item.get('signature_before_payload_tamper')
+                                or item['manifest']['encryption'].get('senderSignatureBase64') !=
+                                   item['signature_before_payload_tamper']):
+                            raise RuntimeError('signed payload alteration was not constructed as expected')
+                        if requests.get(ident, 0):
+                            raise RuntimeError('altered signed content was requested before authentication')
+                        if args.tamper_payload == 'b' and (len(valid_ids) != 1 or requests.get(valid_ids[0], 0) < 1):
+                            raise RuntimeError('valid A content request was not observed')
+                    if args.swap_payload:
+                        with server.lock:
+                            swapped = [(ident, item) for ident, item in server.uploads.items()
+                                       if item['manifest']['safeDisplayFilename'] ==
+                                       'image-' + args.swap_payload + '.png']
+                            requests = dict(server.content_requests)
+                            valid_ids = [ident for ident, item in server.uploads.items()
+                                         if item['manifest']['safeDisplayFilename'] == 'image-a.png']
+                        if len(swapped) != 1:
+                            raise RuntimeError('missing signed swap target')
+                        ident, item = swapped[0]
+                        original = item.get('swap_original_manifest')
+                        if not original or not item.get('swap_original_payload'):
+                            raise RuntimeError('missing original signed swap evidence')
+                        unchanged = json.loads(json.dumps(item['manifest']))
+                        unchanged['sha256'] = original['sha256']
+                        unchanged['byteSize'] = original['byteSize']
+                        if (unchanged != original or item['payload'] != item.get('swap_other_payload')
+                                or item['payload'] == item['swap_original_payload']
+                                or item['manifest']['sha256'] != hashlib.sha256(item['payload']).hexdigest()
+                                or item['manifest']['byteSize'] != len(item['payload'])
+                                or not original['encryption'].get('senderSignatureBase64')):
+                            raise RuntimeError('signed ciphertext substitution was not constructed as expected')
+                        if requests.get(ident, 0):
+                            raise RuntimeError('substituted signed content was requested before authentication')
+                        if args.swap_payload == 'b' and (len(valid_ids) != 1 or requests.get(valid_ids[0], 0) < 1):
+                            raise RuntimeError('valid A content request was not observed')
                 elif 'download failed: encrypted payload authentication or decryption failed' not in log:
                     raise RuntimeError('receiver did not report authenticated-open failure')
                 successful = True
@@ -534,6 +751,12 @@ def main():
                                                    (original[0]['canonical'],)).fetchone()[0]
                 if legacy_row != ('Paused', forged['canonical']) or valid_count != 1:
                     raise RuntimeError('legacy row changed or valid transfer was not persisted')
+        if args.corrupt_recipient_pin or args.corrupt_sender_pin:
+            log = (root / (test_role + '.log')).read_text(errors='replace')
+            expected = ('corrupt recipient pin rejected' if args.corrupt_recipient_pin
+                        else 'corrupt sender signing pin rejected')
+            if not (root / 'corrupt-pin-rejected').is_file() or '[LAB][SHARE SESSION] ' + expected not in log:
+                raise RuntimeError('corrupt pin was not rejected and recovered')
         if args.replay_after_restart:
             if args.replay_after_accept:
                 details = json.loads((root / 'receiver-ok').read_text())
@@ -637,6 +860,13 @@ def main():
             elif restarted.returncode or not (root / 'receiver-restart-ok').exists():
                 raise RuntimeError('receiver restart did not reject the replay')
         if args.expire_download:
+            if args.expiry_pending_restart and not expiry_receiver_restarted:
+                raise RuntimeError('expiry pending restart was not exercised')
+            if args.expiry_pending_restart and (staged.exists() or not expiry_sentinel
+                    or expiry_sentinel.read_bytes() != b'preserve unrelated file'):
+                raise RuntimeError('expiry cleanup removed wrong files or left staged image')
+            if args.expiry_pending_restart:
+                expiry_sentinel.unlink()
             if server.expiry_count != (0 if expiry_while_awaiting else 1) or not (root / 'expiry-marker').exists():
                 raise RuntimeError('expiry was not injected exactly once during a download')
             if args.expiry_after_first_chunk and (len(server.expiry_offsets) != 2
@@ -690,8 +920,11 @@ def main():
             print('PASS: two Decodium applications rejected expired image ' + args.expire_download.upper()
                   + ('; restarted receiver removed simulated residual' if args.expiry_restart_cleanup else ''))
             return
-        if args.policy_awaiting and 'pending unsigned acceptance rejected by sender policy' not in (root / 'receiver.log').read_text(errors='replace'):
-            raise RuntimeError('pending unsigned acceptance was not rejected')
+        if args.policy_awaiting:
+            policy_log = ('pending signed acceptance allowed by sender policy' if args.signed
+                          else 'pending unsigned acceptance rejected by sender policy')
+            if policy_log not in (root / 'receiver.log').read_text(errors='replace'):
+                raise RuntimeError('pending sender policy check was not exercised')
         for label, original in (('a', source_a), ('b', source_b)):
             output = root / 'out' / ('image-' + label + '.png')
             if image_size(original) != image_size(output):
@@ -825,8 +1058,11 @@ def main():
                     expected_fingerprint = json.loads((root / 'receiver-public.json.rotated').read_text())['fingerprint']
                 if encryption.get('mode') != 'end-to-end' or encryption.get('algorithm') != 'aes-256-gcm':
                     raise RuntimeError('a transfer was not end-to-end encrypted')
+                recipient_was_tampered = (args.tamper_manifest_field == 'recipientId'
+                    and item['manifest']['safeDisplayFilename'] == 'image-{}.png'.format(args.tamper_manifest))
+                expected_recipient = 'altered' if recipient_was_tampered else 'labrx'
                 if (encryption.get('recipientKeyFingerprint') != expected_fingerprint
-                        or item['manifest']['recipientId'] != 'labrx'):
+                        or item['manifest']['recipientId'] != expected_recipient):
                     raise RuntimeError('transfer was not bound to the pinned recipient')
                 nonces.add(encryption.get('nonceBase64'))
                 key_ids.add(encryption.get('keyId'))

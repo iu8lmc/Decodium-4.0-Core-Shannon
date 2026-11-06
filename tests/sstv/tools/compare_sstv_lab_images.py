@@ -30,9 +30,15 @@ def main():
     parser.add_argument("--max-mae", type=float, required=True)
     parser.add_argument("--max-p95", type=int, required=True)
     parser.add_argument("--max-last-blue-error", type=int)
+    parser.add_argument("--max-last-column-error", type=int)
+    parser.add_argument("--max-first-column-error", type=int)
     args = parser.parse_args()
     if args.max_last_blue_error is not None and not 0 <= args.max_last_blue_error <= 255:
         parser.error("--max-last-blue-error must be between 0 and 255")
+    if args.max_last_column_error is not None and not 0 <= args.max_last_column_error <= 255:
+        parser.error("--max-last-column-error must be between 0 and 255")
+    if args.max_first_column_error is not None and not 0 <= args.max_first_column_error <= 255:
+        parser.error("--max-first-column-error must be between 0 and 255")
     first_shape, first = read_rgb(args.reference)
     second_shape, second = read_rgb(args.received)
     if first_shape != second_shape:
@@ -40,18 +46,41 @@ def main():
     errors = sorted(abs(a - b) for a, b in zip(first, second))
     mae = statistics.mean(errors)
     p95 = errors[int(len(errors) * 0.95)]
+    row_bytes = first_shape[0] * 3
+    first_column_errors = [abs(first[y * row_bytes + channel]
+                               - second[y * row_bytes + channel])
+                           for y in range(first_shape[1]) for channel in range(3)]
+    last_column_errors = [abs(first[y * row_bytes + row_bytes - 3 + channel]
+                              - second[y * row_bytes + row_bytes - 3 + channel])
+                          for y in range(first_shape[1]) for channel in range(3)]
+    first_column_errors.sort()
+    last_column_errors.sort()
     result = {"width": first_shape[0], "height": first_shape[1],
               "mean_absolute_error": mae, "median_error": errors[len(errors) // 2],
               "p95_error": p95, "maximum_error": errors[-1],
+              "first_column_maximum_error": max(first_column_errors),
+              "last_column_maximum_error": max(last_column_errors),
+              "first_column_mean_absolute_error": statistics.mean(first_column_errors),
+              "last_column_mean_absolute_error": statistics.mean(last_column_errors),
+              "first_column_p95_error": first_column_errors[int(len(first_column_errors) * 0.95)],
+              "last_column_p95_error": last_column_errors[int(len(last_column_errors) * 0.95)],
               "max_mae": args.max_mae, "max_p95": args.max_p95}
     if args.max_last_blue_error is not None:
         result.update(last_blue_reference=first[-1], last_blue_received=second[-1],
                       last_blue_error=abs(first[-1] - second[-1]),
                       max_last_blue_error=args.max_last_blue_error)
+    if args.max_last_column_error is not None:
+        result["max_last_column_error"] = args.max_last_column_error
+    if args.max_first_column_error is not None:
+        result["max_first_column_error"] = args.max_first_column_error
     print(json.dumps(result, sort_keys=True))
     return 0 if (mae <= args.max_mae and p95 <= args.max_p95
                  and (args.max_last_blue_error is None
-                      or result["last_blue_error"] <= args.max_last_blue_error)) else 1
+                      or result["last_blue_error"] <= args.max_last_blue_error)
+                 and (args.max_last_column_error is None
+                      or result["last_column_maximum_error"] <= args.max_last_column_error)
+                 and (args.max_first_column_error is None
+                      or result["first_column_maximum_error"] <= args.max_first_column_error)) else 1
 
 
 if __name__ == "__main__":

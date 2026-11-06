@@ -68,7 +68,7 @@ class ShareFixture(ThreadingHTTPServer):
         self.uploads = {}
         self.tamper = tamper
         self.tamper_manifest = tamper_manifest
-        if tamper_manifest_field not in ('sstvMode', 'expiresUtc', 'keyId', 'nonceBase64', 'senderId', 'senderSignatureBase64', 'senderSignatureHighS', 'senderAuth'):
+        if tamper_manifest_field not in ('sstvMode', 'expiresUtc', 'keyId', 'nonceBase64', 'senderId', 'recipientId', 'senderSignatureBase64', 'senderSignatureHighS', 'senderAuth'):
             raise ValueError('unsupported manifest tamper field')
         self.tamper_manifest_field = tamper_manifest_field
         self.downgrade_manifest = downgrade_manifest
@@ -76,6 +76,7 @@ class ShareFixture(ThreadingHTTPServer):
         self.downgraded_downloads = 0
         self.stripped_signature_downloads = 0
         self.signed_tampered_downloads = 0
+        self.content_requests = {}
         self.first_output = first_output
         self.tamper_count = 0
         self.expiry_target = expiry_target
@@ -171,6 +172,9 @@ class _Handler(BaseHTTPRequestHandler):
                     altered = bytearray(payload)
                     altered[0] ^= 1
                     changed_digest = hashlib.sha256(altered).hexdigest()
+                    item['payload_before_tamper'] = payload
+                    item['digest_before_tamper'] = digest
+                    item['signature_before_payload_tamper'] = item['manifest']['encryption'].get('senderSignatureBase64')
                     item['canonical'] = item['canonical'].replace(digest.encode(), changed_digest.encode())
                     item['manifest']['sha256'] = changed_digest
                     item['payload'] = bytes(altered)
@@ -341,6 +345,9 @@ class _Handler(BaseHTTPRequestHandler):
                             or target['manifest']['encryption']['nonceBase64'] == other['manifest']['encryption']['nonceBase64']
                             or target['manifest']['encryption']['keyId'] == other['manifest']['encryption']['keyId']):
                         return self._reply(500)
+                    target['swap_original_payload'] = target['payload']
+                    target['swap_original_manifest'] = json.loads(json.dumps(target['manifest']))
+                    target['swap_other_payload'] = other['payload']
                     target['payload'] = other['payload']
                     target['manifest']['byteSize'] = len(other['payload'])
                     target['manifest']['sha256'] = hashlib.sha256(other['payload']).hexdigest()
@@ -381,6 +388,8 @@ class _Handler(BaseHTTPRequestHandler):
                     self.server.stripped_signature_downloads += 1
                 if not item or not item['complete']:
                     return self._reply(404)
+                identifier = match.group(1)
+                self.server.content_requests[identifier] = self.server.content_requests.get(identifier, 0) + 1
                 payload = item['payload']
                 match_range = re.fullmatch(r'bytes=(\d+)-(\d+)', self.headers.get('Range', ''))
                 if not match_range:

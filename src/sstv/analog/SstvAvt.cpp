@@ -798,6 +798,12 @@ void SstvAvtDecoder::validateConfig(const SstvAvtDecoderConfig& config)
         || config.observationSpanSamples > MaximumObservationSpanSamples) {
         throw std::invalid_argument("invalid AVT observation span");
     }
+    if (config.experimentalAvt24LastPixelTiming
+        && (config.mode != SstvAvtMode::Avt24 || config.variant != SstvAvtVariant::NarrowQrm
+            || config.sampleRate != 12'000U || config.observationSpanSamples != 1U
+            || config.clockErrorPpm != 0 || config.imageStartSample == 0U)) {
+        throw std::invalid_argument("unsupported experimental AVT edge timing");
+    }
     if (!std::isfinite(config.frequencyOffsetHz)
         || std::abs(config.frequencyOffsetHz)
             > MaximumAbsoluteFrequencyOffsetHz) {
@@ -912,6 +918,28 @@ void SstvAvtDecoder::accumulate(const SstvAvtPosition& position,
     }
 }
 
+void SstvAvtDecoder::accumulateLastPixelFallback(const SstvAvtPosition& position,
+                                                  double frequencyHz,
+                                                  double confidence,
+                                                  bool edge) noexcept
+{
+    const auto component = componentIndex(position.component);
+    auto& marker = accumulators_[component * spec_.width + position.pixel];
+    if (marker.count == 0U) {
+        ++nonEmptyAccumulators_;
+        refreshBufferMetrics();
+    }
+    if (marker.count != std::numeric_limits<std::uint32_t>::max()) ++marker.count;
+    auto& fallback = lastPixelFallback_[component];
+    if (edge) {
+        fallback.edgeWeightedFrequencyHz += frequencyHz * confidence;
+        fallback.edgeConfidenceWeight += confidence;
+    } else {
+        fallback.weightedFrequencyHz += frequencyHz * confidence;
+        fallback.confidenceWeight += confidence;
+    }
+}
+
 bool SstvAvtDecoder::reconstructComponent(
     std::size_t base,
     std::vector<std::uint8_t>& values)
@@ -927,6 +955,12 @@ bool SstvAvtDecoder::reconstructComponent(
         } else if (accumulator.edgeConfidenceWeight > 0.0) {
             frequencies[pixel] = accumulator.edgeWeightedFrequencyHz
                 / accumulator.edgeConfidenceWeight;
+        } else if (pixel + 1U == width && config_.experimentalAvt24LastPixelTiming) {
+            const auto& fallback = lastPixelFallback_[base / width];
+            if (fallback.confidenceWeight > 0.0)
+                frequencies[pixel] = fallback.weightedFrequencyHz / fallback.confidenceWeight;
+            else if (fallback.edgeConfidenceWeight > 0.0)
+                frequencies[pixel] = fallback.edgeWeightedFrequencyHz / fallback.edgeConfidenceWeight;
         }
     }
 
@@ -1015,6 +1049,7 @@ void SstvAvtDecoder::clearAccumulators() noexcept
     std::fill(accumulators_.begin(),
               accumulators_.end(),
               PixelAccumulator {});
+    lastPixelFallback_.fill(PixelAccumulator {});
     nonEmptyAccumulators_ = 0U;
     refreshBufferMetrics();
 }
@@ -1087,9 +1122,22 @@ std::size_t SstvAvtDecoder::consume(
         const bool edge = config_.observationSpanSamples == 1U && pixelLength >= 4U
             && (relativeSample == position.segmentStartSample
                 || relativeSample + 1U == position.segmentEndSample);
-        accumulate(position,
-                   observation.correctedFrequencyHz,
-                   observation.confidence, edge);
+        const bool experiment = config_.experimentalAvt24LastPixelTiming;
+        if (!experiment || position.pixel + 1U != spec_.width) {
+            accumulate(position, observation.correctedFrequencyHz, observation.confidence, edge);
+        } else accumulateLastPixelFallback(position, observation.correctedFrequencyHz, observation.confidence, edge);
+        if (experiment && relativeSample + 1U < mapper_.imageSampleCount()) {
+            const auto shifted = mapper_.positionAtSample(relativeSample + 1U);
+            const auto shiftedSample = relativeSample + 1U;
+            if (shifted.valid() && shifted.line == position.line && shifted.pixel + 1U == spec_.width
+                && shifted.segmentEndSample - shiftedSample > 2U) {
+                const auto length = shifted.segmentEndSample - shifted.segmentStartSample;
+                const bool shiftedEdge = length >= 4U
+                    && (shiftedSample == shifted.segmentStartSample
+                        || shiftedSample + 1U == shifted.segmentEndSample);
+                accumulate(shifted, observation.correctedFrequencyHz, observation.confidence, shiftedEdge);
+            }
+        }
         saturatingAdd(metrics_.acceptedObservations);
         ++accepted;
     }

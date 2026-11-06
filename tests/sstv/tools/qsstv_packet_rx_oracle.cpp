@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
         if (decoded.isNull() || decoded.size()!=QSize(16,16)) return 13;
     }
 
-    int variant, kind, segment, last, transport, count, rows=0, corruptedRows=0, packets=0, objects=0, continuityErrors=0;
+    int variant, kind, segment, last, transport, count, rows=0, corruptedRows=0, packets=0, objects=0, continuityErrors=0, wideRows=0, wideCorrupt=0, wideContinuity=0;
     std::string payloadHex;
     sourceDecoder decoder;
     std::array<QByteArray,2> bodies;
@@ -80,10 +80,21 @@ int main(int argc, char** argv) {
             crc16_bytewise(&bad,reinterpret_cast<unsigned char*>(corrupted.data()),corrupted.size());
             if (std::fabs(bad)<=DBL_EPSILON) return 5;
             const bool complete=decoder.setupDataBlock(reinterpret_cast<unsigned char*>(wire.data()),true,wire.size());
-            if (complete != (i==count-1 && variant<2)) return 6;
-            if (variant>=4 && i>=1 && decoder.lastContinuityIndex!=-1) return 16;
+            if (complete != (i==count-1 && (variant<2 || variant==6 || variant==7))) return 6;
+            if ((variant==4 || variant==5 || variant==10 || variant==11)
+                && i>=1 && decoder.lastContinuityIndex!=-1) return 16;
             ++packets;
         }
+        if (variant==6 || variant==7) {
+            const auto& p=decoder.currentDataPacket;
+            if (count!=2 || int(p.dataGroupType)!=kind || p.segmentNumber!=segment
+                || int(p.lastSegment)!=last || p.transportID!=transport
+                || p.ba.toHex()!=QByteArray::fromStdString(payloadHex)) return 17;
+            ++wideRows;
+            continue;
+        }
+        if (variant==8 || variant==9) { ++wideCorrupt; continue; }
+        if (variant==10 || variant==11) { ++wideContinuity; continue; }
         if (variant>=4) { ++continuityErrors; sawContinuityFailure[variant-4]=true; continue; }
         if (variant>=2) { ++corruptedRows; continue; }
         const auto& p=decoder.currentDataPacket;
@@ -105,8 +116,12 @@ int main(int argc, char** argv) {
         }
         ++rows;
     }
-    if (rows!=24 || corruptedRows!=24 || objects!=4 || continuityErrors<2
+    if (rows!=24 || corruptedRows!=24 || objects!=4 || continuityErrors<2 || wideRows!=2
+        || wideCorrupt!=2 || wideContinuity!=2
         || !sawContinuityFailure[0] || !sawContinuityFailure[1]) return 8;
     std::cout << "PASS: " << rows << " native MOT groups, " << packets
-              << " packets, " << objects << " A/B objects; " << corruptedRows << " corrupted MOT groups and " << continuityErrors << " continuity errors rejected by QSSTV RX functions\n";
+              << " packets, " << objects << " A/B objects, " << wideRows
+              << " split-PPI A/B groups, " << wideCorrupt << " corrupt and "
+              << wideContinuity << " discontinuous split-PPI controls; " << corruptedRows << " corrupted MOT groups and "
+              << continuityErrors << " continuity errors rejected by QSSTV RX functions\n";
 }

@@ -39,7 +39,14 @@ if len(sys.argv)==4 and sys.argv[3]=='pattern':
 else:
     fixture=(Path(sys.argv[3]) if len(sys.argv)==4 else Path('tests/sstv/fixtures/qsstv-image-'+variant+'.jpg')).resolve(strict=True)
 if not fixture.is_file(): raise SystemExit('image path must be a file')
-duration_ms=35000 if mode == 'robot-c12' else (60000 if mode.startswith('avt-24') else 130000)
+try:
+    tx_delay_ms = int(os.environ.get('DECODIUM_LAB_AVT_TX_MS', '14000'))
+except ValueError:
+    raise SystemExit('DECODIUM_LAB_AVT_TX_MS must be an integer')
+if not 1000 <= tx_delay_ms <= 30000:
+    raise SystemExit('DECODIUM_LAB_AVT_TX_MS must be between 1000 and 30000')
+duration_ms=(35000 if mode == 'robot-c12' else (60000 if mode.startswith('avt-24') else 130000))
+duration_ms += max(0, tx_delay_ms - 14000)
 common=['--test-mode','--lab-no-cat','--lab-audio-input','BlackHole 2ch',
         '--lab-reapply-ms','500']
 tx_output=os.environ.get('DECODIUM_LAB_AVT_TX_OUTPUT','BlackHole 2ch')
@@ -53,6 +60,9 @@ class Params(c.Structure):
     _fields_=[('device',c.c_int),('channels',c.c_int),('format',c.c_ulong),
               ('latency',c.c_double),('hostinfo',c.c_void_p)]
 capture_enabled=os.environ.get('DECODIUM_LAB_AVT_NO_CAPTURE')!='1'
+require_continuous_capture = os.environ.get('DECODIUM_LAB_AVT_REQUIRE_CONTINUOUS_CAPTURE') == '1'
+if require_continuous_capture and not capture_enabled:
+    raise SystemExit('continuous capture cannot be required when capture is disabled')
 pa=None; stream=c.c_void_p(); thread=None
 if capture_enabled:
     pa=c.CDLL(ctypes.util.find_library('portaudio') or '/opt/homebrew/lib/libportaudio.dylib')
@@ -93,7 +103,7 @@ try:
                    '--lab-sstv-rx-image-file',str(root/'received.png'),'--lab-quit-ms',str(duration_ms+5000)]
             if mode != 'robot-c12': args += ['--lab-sstv-rx-mode', mode]
         else:
-            args+=['--lab-no-monitor','--lab-sstv-tx-ms','4000','--lab-sstv-mode',mode,
+            args+=['--lab-no-monitor','--lab-sstv-tx-ms',str(tx_delay_ms),'--lab-sstv-mode',mode,
                    '--lab-sstv-tx-wait-file',str(root/'ready'),'--lab-sstv-tx-wait-timeout-ms','20000',
                    '--lab-sstv-image',str(fixture),'--lab-sstv-tx-image-file',str(root/'reference.png'),
                    '--lab-sstv-vox','--lab-quit-ms',str(duration_ms)]
@@ -139,6 +149,11 @@ try:
                for line in tx.splitlines() if 'tx.completed {' in line):
         raise RuntimeError('TX did not report completion; artifacts '+str(root))
     rx=(root/'rx.log').read_text(errors='replace')
+    if os.environ.get('DECODIUM_LAB_VERIFY_MONITOR_ISOLATION') == '1':
+        if ('[LAB] startup auto-monitor suppressed by --lab-no-monitor' not in tx
+            or 'SoundInput::start' in tx
+            or '[LAB] monitor requested active= true' not in rx):
+            raise RuntimeError('lab monitor isolation was not maintained; artifacts '+str(root))
     lines=[json.loads(line.split(' RX diagnostics ',1)[1]) for line in rx.splitlines()
            if '[LAB][SSTV] RX diagnostics ' in line]
     if (not lines or not lines[-1]['imageComplete'] or lines[-1]['imageMode'] != mode
@@ -148,6 +163,15 @@ try:
     notch=env.get('DECODIUM_LAB_SSTV_NOTCH_HZ')
     if notch and ('[LAB][SSTV] manual interference notch '+notch+' Q 300') not in rx:
         raise RuntimeError('requested notch was not active; artifacts '+str(root))
+    if env.get('DECODIUM_LAB_AVT24_WINDOW') == '1' and (
+        mode != 'avt-24-narrow-qrm' or '[LAB][AVT] AVT24 edge window diagnostic enabled' not in rx):
+        raise RuntimeError('requested AVT24 diagnostic window was not applied; artifacts '+str(root))
+    if env.get('DECODIUM_LAB_AVT24_SPLIT_EDGE') == '1' and (
+        mode != 'avt-24-narrow-qrm' or '[LAB][AVT] AVT24 split-edge diagnostic enabled' not in rx):
+        raise RuntimeError('requested AVT24 split-edge diagnostic was not applied; artifacts '+str(root))
+    shift=env.get('DECODIUM_LAB_AVT_ANCHOR_SHIFT')
+    if shift is not None and ('[LAB][AVT] anchor shift '+shift) not in rx:
+        raise RuntimeError('requested AVT anchor shift was not applied; artifacts '+str(root))
     if not (root/'received.png').exists(): raise RuntimeError('RX did not save image; artifacts '+str(root))
     compare=[sys.executable,'tests/sstv/tools/compare_sstv_lab_images.py',
              str(root/'reference.png'),str(root/'received.png'),
@@ -155,9 +179,13 @@ try:
     last_blue_limit=env.get('DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR')
     if last_blue_limit is not None:
         compare += ['--max-last-blue-error',last_blue_limit]
+    last_column_limit=env.get('DECODIUM_LAB_AVT_MAX_LAST_COLUMN_ERROR')
+    if last_column_limit is not None:
+        compare += ['--max-last-column-error',last_column_limit]
+    first_column_limit=env.get('DECODIUM_LAB_AVT_MAX_FIRST_COLUMN_ERROR')
+    if first_column_limit is not None:
+        compare += ['--max-first-column-error',first_column_limit]
     subprocess.run(compare,check=True,timeout=30)
-    print('PASS two Decodium apps:',mode,'coverage',lines[-1]['imageCoverage'],
-          'discontinuities',lines[-1]['discontinuities'],'artifacts',root,flush=True)
 finally:
     for process in processes:
         if process.poll() is None:
@@ -167,3 +195,13 @@ finally:
     if thread: thread.join(timeout=5)
     if pa:
         pa.Pa_StopStream(stream);pa.Pa_CloseStream(stream);pa.Pa_Terminate()
+
+if capture_enabled:
+    print('Capture integrity (internal exact-zero runs; may be intentional):', flush=True)
+    integrity = [sys.executable, 'tests/sstv/tools/check_avt_capture_integrity.py', str(capture_path)]
+    if require_continuous_capture:
+        integrity.append('--fail-on-gap')
+    subprocess.run(integrity, check=True, timeout=30)
+print('PASS two Decodium apps:',mode,'edge limits',
+      {'first':first_column_limit,'last':last_column_limit},'coverage',lines[-1]['imageCoverage'],
+      'rx_discontinuities',lines[-1]['discontinuities'],'artifacts',root,flush=True)

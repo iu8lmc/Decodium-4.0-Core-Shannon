@@ -31671,6 +31671,30 @@ Costa CPU extra durante i QSO. Default: OFF.</translation>
 <context>
     <name>SstvDigitalPage</name>
     <message>
+        <source>Saved partials</source>
+        <translation>Oggetti parziali salvati</translation>
+    </message>
+    <message>
+        <source>Find saved</source>
+        <translation>Cerca salvati</translation>
+    </message>
+    <message>
+        <source>No saved partials found</source>
+        <translation>Nessun oggetto parziale salvato trovato</translation>
+    </message>
+    <message>
+        <source>Some QSSTV versions may add trailing zero bytes to certain RS-protected images. Verify the received file if exact bytes matter.</source>
+        <translation>Alcune versioni di QSSTV possono aggiungere byte zero in coda a determinate immagini protette con RS. Verifica il file ricevuto se è importante che i byte siano identici.</translation>
+    </message>
+    <message>
+        <source>QSSTV RS compatibility (JPEG only)</source>
+        <translation>Compatibilità RS con QSSTV (solo JPEG)</translation>
+    </message>
+    <message>
+        <source>When enabled, zero bytes may be added after the JPEG data, so the received file can differ in bytes from the original.</source>
+        <translation>Se attivata, possono essere aggiunti byte zero dopo i dati JPEG; il file ricevuto può quindi differire dall’originale nei byte.</translation>
+    </message>
+    <message>
         <source>Select an encoded HAMDRM image object</source>
         <translation type="vanished">Seleziona un oggetto immagine HAMDRM codificato</translation>
     </message>
@@ -40413,6 +40437,14 @@ Fare clic con il tasto destro per inserire ed eliminare le opzioni.</translation
 </context>
 <context>
     <name>decodium::sstv::hamdrm::HamDrmController</name>
+    <message>
+        <source>QSSTV RS compatibility requires a JPEG image and RS protection</source>
+        <translation>La compatibilità RS con QSSTV richiede un’immagine JPEG e la protezione RS</translation>
+    </message>
+    <message>
+        <source>QSSTV compatibility padding exceeds the image size limit</source>
+        <translation>I byte aggiuntivi per la compatibilità QSSTV superano il limite di dimensione dell’immagine</translation>
+    </message>
     <message>
         <source>Native bounded JPEG2000 decode and lossless encode are linked</source>
         <translation type="vanished">La decodifica JPEG2000 nativa entro i limiti e la codifica senza perdita sono collegate</translation>

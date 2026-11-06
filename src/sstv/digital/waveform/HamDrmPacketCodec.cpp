@@ -84,15 +84,13 @@ HamDrmValueResult<HamDrmPacketizedDataUnit> hamDrmPacketizeDataUnit(
     while (offset < dataUnit.size()) {
         const std::size_t remaining = dataUnit.size() - offset;
         const bool padded = remaining < parameters.bodyBytes;
-        const bool last = remaining <= parameters.bodyBytes;
-        const std::size_t useful = std::min(remaining,
-                                            parameters.bodyBytes);
-        if (padded && (useful > 255U
-                       || useful + 1U > parameters.bodyBytes)) {
-            return {std::nullopt,
-                    failure(HamDrmErrorCode::UnsupportedProfile,
-                            "HAMDRM PPI cannot represent the final packet fragment")};
-        }
+        // PPI carries only eight bits of useful-byte count. A wide packet
+        // can leave a remainder larger than 255 bytes: split it into two
+        // padded packets instead of rejecting an otherwise valid data unit.
+        const std::size_t useful = padded
+            ? std::min<std::size_t>(remaining, 255U)
+            : parameters.bodyBytes;
+        const bool last = useful == remaining;
 
         std::vector<std::uint8_t> protectedBytes;
         protectedBytes.reserve(1U + parameters.bodyBytes);
@@ -156,15 +154,11 @@ HamDrmPacketReassembler::push(const std::vector<std::uint8_t>& packet)
     const std::uint8_t packetId = static_cast<std::uint8_t>(
         (header >> 4U) & 3U);
     const std::uint8_t continuity = header & 7U;
-    if (packetId != parameters_.packetId || (padded && !last)) {
+    if (packetId != parameters_.packetId) {
         reset();
         return {std::nullopt,
-                failure(packetId != parameters_.packetId
-                            ? HamDrmErrorCode::TransportMismatch
-                            : HamDrmErrorCode::Malformed,
-                        packetId != parameters_.packetId
-                            ? "HAMDRM packet ID does not match FAC/configuration"
-                            : "HAMDRM non-final packet uses PPI")};
+                failure(HamDrmErrorCode::TransportMismatch,
+                        "HAMDRM packet ID does not match FAC/configuration")};
     }
 
     if (first) {

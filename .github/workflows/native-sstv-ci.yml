@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           brew update
-          brew install qt gcc fftw libusb boost hamlib openjpeg openssl@3 pkg-config libomp
+          brew install qt gcc fftw libusb boost hamlib openjpeg openssl@3 pkg-config libomp ffmpeg
           echo "$(brew --prefix qt)/bin" >> "${GITHUB_PATH}"
           echo "CMAKE_PREFIX_PATH=$(brew --prefix qt);$(brew --prefix hamlib);$(brew --prefix openjpeg);$(brew --prefix openssl@3);$(brew --prefix libomp)" >> "${GITHUB_ENV}"
 
@@ -146,6 +146,12 @@ jobs:
               decodium_regression_test_binaries \
               translations \
             --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Check signed sharing application test inventory
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-native-sstv --show-only=json-v1 -R '^test_sstv_share_app_signed_' \
+            | python3 tests/sstv/tools/check_macos_share_tests.py
 
       - name: Run native SSTV suite
         env:

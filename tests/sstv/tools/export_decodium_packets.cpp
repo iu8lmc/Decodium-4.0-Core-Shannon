@@ -64,4 +64,43 @@ int main(int argc, char** argv) {
             }
         }
     }
+    // Exercise wide PPI data units that require a padded non-final packet.
+    // These are MOT groups rather than full JPEG objects; the independent
+    // QSSTV methods must return their exact payload and metadata.
+    for (int variant=0; variant<2; ++variant) {
+        HamDrmMotDataGroup group;
+        group.kind=HamDrmMotGroupKind::Body;
+        group.transportId=static_cast<std::uint16_t>(0x3344U+variant);
+        group.segmentNumber=static_cast<std::uint16_t>(variant);
+        group.lastSegment=true;
+        const std::size_t wanted=variant ? 300U : 256U;
+        group.payload.resize(wanted-11U);
+        for (std::size_t i=0;i<group.payload.size();++i)
+            group.payload[i]=static_cast<std::uint8_t>(i*31U+variant);
+        const auto raw=encodeHamDrmMotDataGroup(group);
+        if (!raw.ok() || raw.value->size()!=wanted) return 7;
+        const auto packets=hamDrmPacketizeDataUnit(*raw.value,{311U,1U,16384U},7U);
+        if (!packets.ok() || packets.value->packets.size()!=2U
+            || (packets.value->packets[0][0] & 0x48U)!=0x08U) return 8;
+        auto corruptGroup=*raw.value;
+        corruptGroup.back() ^= 1U;
+        const auto damaged=hamDrmPacketizeDataUnit(corruptGroup,{311U,1U,16384U},7U);
+        if (!damaged.ok()) return 9;
+        auto broken=packets.value->packets;
+        auto fragment=broken[1];
+        fragment.resize(fragment.size()-2U);
+        fragment[0] ^= 1U;
+        broken[1]=channel::hamDrmAppendChannelCrc16(fragment);
+        for (int mode=0; mode<3; ++mode) {
+            const auto& selected = mode==0 ? packets.value->packets
+                : mode==1 ? damaged.value->packets : broken;
+            std::printf("%d %u %u %u %u ",variant+6+mode*2,unsigned(group.kind),
+                        unsigned(group.segmentNumber),unsigned(group.lastSegment),
+                        unsigned(group.transportId));
+            hex(group.payload);
+            std::printf(" %zu",selected.size());
+            for (const auto& packet:selected) { std::putchar(' ');hex(packet); }
+            std::putchar('\n');
+        }
+    }
 }

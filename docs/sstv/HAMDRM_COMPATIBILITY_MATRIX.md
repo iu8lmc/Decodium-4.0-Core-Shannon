@@ -26,17 +26,348 @@ deterministic tests. It does not mean independent over-the-air interoperability.
 | Native waveform TX backend | Implemented for the pinned native subset and wired locally | `HamDrmNativeTxBackend` converts validated MOT groups to bounded 48 kHz PCM and hands a pull source to `SstvTxCoordinator`; adapter tests cover source bounds, played-audio completion, cancellation, configured FAC identity and the shared PTT release barrier. The Bridge supplies the existing output/CAT/PTT hooks. | For two nine-frame JPEG sequences, native TX samples match independently generated QSSTV-stage PCM within signed-16-bit quantization; QSSTV FAC and MSC receiver stages decoded native vectors, and its receive map recovered native interleaved frames across all six profiles and both depths. Selected live A/B reception by the official QSSTV application with the settings-isolation shim is detailed below; other profiles, physical output, CAT/radio and on-air exchange remain unverified. |
 | Native Decodium QML page | Implemented, capability-gated | `test_hamdrm_controller`, `test_hamdrm_waveform_adapters` and offscreen `test_sstv_digital_qml` pass; the full `decodium_qml` target compiles and links with the Bridge-owned native RX/TX backends | The page exposes named profiles, real connected waveform capability, object/missing/BSR/resume state and cancellation. Packaged-platform rendering and live station checks remain. |
 | QSSTV interoperability | Partial evidence | File-mediated A/B in multiple profiles in both directions; A/B live image exchange with the official QSSTV-Experimental 10.0 binary in both directions over virtual audio, with an injected settings-isolation shim; and live receive/request/repair with an instrumented upstream QSSTV peer after a three-second audio mute. Both peers reconstructed selected images exactly. See the oracle and architecture. | The isolation shim changes process configuration, and other profiles, uninstrumented live repair, EasyPal and RF remain unverified. |
-| EasyPal interoperability | Partial recorded-signal evidence | Two public recordings labelled EasyPal were decoded by QSSTV. Ordinary Decodium RX recovered the second object's unpadded bytes; the explicitly selected experimental adaptive path recovered both, with the first matching QSSTV byte-for-byte and the second matching its prefix before 199 zero bytes. Source versions and transmission paths are unknown. See the oracle. | Ordinary reception of the first recording, independently verified EasyPal versions, live application exchange, compact BSR behavior and RF remain unverified; do not inspect proprietary code. |
+| EasyPal interoperability | Partial live bidirectional evidence | EasyPal 07/OCT/2014 under Wine and Decodium exchanged two images in each direction over BlackHole, with operator confirmation of both EasyPal RX images. Pixel comparisons and one independently decoded captured signal are detailed below. Additional public recordings were compared with QSSTV references. | One profile and adapted runtime only; live EasyPal BSR repair, hybrid exchange, other profiles, native Windows and RF remain unverified; do not inspect proprietary code. |
 | EasyPal-style hybrid radio/file-server mode | Partial: `de_` FTP upload, reference transmission and manual download; `.de` receive | [TRXAMADRM author's documentation](https://pa0mbo.nl/ties/public_html/hamradio/txamadrm/txamanew.pdf) describes a radio header referencing a file uploaded separately to a server; instrumented QSSTV exchanged A/B hybrid messages with Decodium in both directions via WAV and local FTP. | Decodium's separate HTTPS remote sharing and E2EE are not evidence of this on-air format. Unmodified live QSSTV, EasyPal and RF tests remain open. |
 | KG-STV | Not implemented | None | HAMDRM is not KG-STV. An authoritative public specification and independent vectors have not been established. |
+
+The Windows 11 EasyPal 07/OCT/2014 experiment over SonoBus PCM and Wi-Fi
+did not reconstruct an image in Decodium. The same recorded audio was also
+processed by QSSTV-Experimental 10.0: it reported six good and six bad CRC
+blocks, no header segment and no decoded image. Thus this experiment does not
+isolate a Decodium interoperability defect from the audio path. The WAV and
+QSSTV log were retained locally at `/tmp/decodium-native-easypal-rx4/`;
+they are temporary laboratory artifacts, not committed fixtures. The user
+accepted partial EasyPal interoperability as the completion criterion; the
+unverified cases in the table remain limitations, not passing results.
+
+The corresponding Decodium log explicitly reports HAMDRM RX started with
+`hamdrm-B-2500-high-16-QAM-long`; the unrelated `profile=W2300` in the
+general laboratory audio overrides is not the HAMDRM RX profile. This confirms
+the receiver configuration in that run, not the actual transmitted FAC
+parameters or the cause of the failed transfer. A direct Windows WAV bypassing
+SonoBus is still needed to distinguish source and network effects.
+The two channels of the retained 120-second, 48 kHz signed-16-bit recording
+are sample-for-sample identical, so selecting the other recorded channel cannot
+recover information absent from this capture. This does not rule out loss or
+distortion before recording.
+Five-second RMS windows show a sustained higher-level interval roughly from
+20 to 100 seconds within the 120-second capture, with lower-level audio before
+and after it. This makes a simple start/end truncation less evident, but level
+alone cannot prove that the complete EasyPal transmission or its header was
+captured; no conclusion about signal completeness follows from this check.
+
+As a decoder control, the current offline analyzer was run with the same
+B/2500/high/16-QAM/long settings and pilot thresholds on the retained EasyPal
+Wine B recording and on the Windows/SonoBus capture. The Wine recording
+reconstructed its reference exactly (101 groups, one complete object); the
+network capture produced no accepted frames or objects and 1,391 pilot
+failures. Logs are in the temporary directory
+`.../decodium-easypal-compare.wzAQey`. The two recordings are different
+transmissions, so this comparison checks the analyzer and describes the
+observed failure; it cannot attribute the failure to Windows, the source,
+the network or a particular receiver limitation. QSSTV's independently
+reported CRC blocks above remain a separate observation.
+
+The same two recordings were then analyzed with `adaptive-early` under the
+same profile and thresholds. The Wine control again recovered its reference
+exactly (101 groups). The Windows/SonoBus capture yielded 69 accepted frames
+and five data groups for a partial transport, but no header and no complete
+image; the analyzer reported `exact=0`. This is closer to QSSTV's partial
+result and shows that the flat-only offline diagnostic above does not describe
+all receiver candidates. It does not prove that the live application would
+reconstruct the image. Logs are in
+`.../decodium-easypal-adaptive.BfcGtL`.
+The `timing-hybrid` diagnostic also recovered the Wine control exactly,
+and reported 69 frames and five groups without a header for the network
+capture; it did not complete the image. Its logs are in
+`.../decodium-easypal-timing.NiKqiZ`.
+An exploratory A/B check with `adaptive-early` raised the pilot-error limit
+from 0.12 to 0.30 and 1.00 and used a 0.70 corrupted-pilot fraction. The
+Wine control still decoded exactly for both settings, while the network
+capture still produced only five groups without a header; FAC failures rose
+to 4 and 52 respectively. Logs are in
+`.../decodium-easypal-pilots.JeCoaX`. These two trials provide no basis for
+loosening production thresholds or for diagnosing the audio path.
+With frame tracking and temporal-candidate merging enabled in the offline
+analyzer, the Wine control again decoded exactly; the network recording
+yielded five groups without a header, so the additional candidate did not
+complete that image. Logs are retained in
+`.../decodium-easypal-temporal.z1uWOK`. The recordings are different
+transmissions and this remains a diagnostic rather than a controlled test of
+the same signal before and after SonoBus.
+
+Controller-level compact and extended BSR A/B tests additionally switch to
+another valid profile after receiving a repair request. Repair is refused
+while that profile is selected; after restoring the original profile, the
+same request repairs the image byte-for-byte. These tests use in-process
+controller backends and do not establish over-the-air behaviour or define
+how another application's extended BSR profile field should be interpreted.
+
+For an in-memory partial object, Decodium now retains the profile selected
+when the first MOT group was received. The extended BSR uses that stored
+profile even if the operator selects another one before requesting repair.
+Controller tests cover compact and extended requests, with two different
+images, and verify that switching profiles leaves the request unchanged and
+that the normal selective repair reconstructs the original bytes. The
+version-2 partial-object persistence format now records the profile; older
+version-1 snapshots remain readable and, because they have no recorded
+profile, still fall back to the currently selected profile. Older Decodium
+versions are not guaranteed to read new version-2 snapshots. The stored
+profile is the locally selected receiver profile, not independently
+detected FAC metadata. A locally available instrumented QSSTV Experimental
+source snapshot associates its extended BSR mode code with the receive-side
+transport block; its inspected `processFIX` does not use the extension.
+That source snapshot is modified, so this inspection is not a new live peer
+interoperability result.
+
+The partial-store A/B tests save and restore two different profiles and
+reject an unknown profile even when the file checksum has been recalculated.
+The controller A/B tests destroy and recreate the receiver controller,
+select a different profile, resume the partial image and verify that its
+extended BSR still matches the original. They also finish the image; existing
+version-1 and historical CRC snapshot tests continue to pass. These are
+local controller/storage tests, not an RF test.
+An additional A/B controller test starts a separate process to save each
+partial and a second process to resume it with a different selected profile.
+The second process checks the original extended BSR profile, completes the
+object and compares its bytes. These are real process boundaries around the
+controller and store. The later application test described below also covers
+full Decodium process restarts.
+The digital page can now discover saved partial transport IDs and place a
+selected ID into the existing manual resume field. The discovery list only
+includes regular, non-symlink files whose names match the partial-store naming
+scheme; listing a name does not validate its contents. Resume still performs
+the full checksum and structural checks. Local A/B QML tests create saved
+partials in an isolated directory, choose between two IDs through the page
+and resume the chosen object; a store test checks two IDs and ignores an
+unrelated filename. Two-Decodium A/B transmissions after this change both
+reconstructed the expected bytes over virtual audio; they did not exercise
+the discovery controls in the full application's visible interface.
+The A/B QML tests also discard the first restored object, refresh the list,
+resume the remaining object, and verify that an empty refresh preserves a
+manually entered ID. An attempt to inspect the full macOS application via
+the available UI automation timed out, so it provides no visual evidence.
+The local storage test additionally created a symbolic link with a valid
+partial filename: it was excluded from discovery and rejected by load. On
+platforms where the test cannot create a symbolic link, that specific check
+is skipped rather than asserting unsupported filesystem behaviour.
+The same separate-process A/B check also rewrites each saved snapshot in
+the legacy version-1 format before restarting. Both legacy objects resume
+and complete; their extended BSR uses the newly selected profile, because
+the legacy snapshot contains no original-profile information.
+
+Two additional A/B tests now launch the full Decodium application twice in
+test mode, using an isolated HAMDRM partial-store root. The first process
+seeds a partial image with one profile; after it exits, the second selects
+the other profile, locates and resumes the saved partial, checks that the
+extended BSR contains the first profile's compatibility code, and completes
+the image with byte-for-byte verification. The tests use generated MOT
+groups and an application-only laboratory hook; they do not exercise radio,
+the visible QML controls or a peer transmitter. The A/B cases are registered
+as `test_hamdrm_partial_restart_app_a` and `_b` on macOS.
+The laboratory now sets an isolated macOS home and verifies that application
+data and the HAMDRM store are inside its temporary directory, preventing
+successive runs from accumulating persistent operator-profile data.
+The partial-store size calculation now checks additions and multiplication
+before evaluating the maximum snapshot size. A/B tests use overflowing
+object/header limits, require a bounded failure on save and load, and verify
+the pre-existing snapshot is unchanged. The isolated full-application
+restart A/B regressions also passed after this change.
+The per-group limit check likewise avoids overflowing when adding protocol
+overhead to an extreme configured segment limit. A/B storage tests save and
+reload a normal partial with two such limits; ordinary HAMDRM and the two
+isolated application restart regressions passed after the change.
+After adding version-2 persistence, the two-Decodium audio-loss A/B repair
+regressions also passed again, reconstructing 7,745/3,905 bytes exactly.
+Those audio runs exercise repair with the new build; they do not restart the
+receiver or verify profile changes across processes.
+
+On completion, the controller now also preserves the stored receive profile
+when emitting the decoded image to the Gallery. Previously it replaced that
+profile with the current selection. A/B controller tests with real JPEGs
+reproduced the wrong Gallery profile before the fix and verify the correct
+profile after restoring a partial with a different current selection. After
+the change, two Decodium processes exchanged A/B images exactly over virtual
+audio. Those application runs did not change profiles or resume partials;
+those operations were tested in the controller.
+
+After the in-memory profile fix, two local application sessions repeated
+the A/B selective-repair laboratory with ten seconds of the saved initial
+waveform muted. BSR and repair travelled over BlackHole 16ch and the
+reconstructed A/B files matched 7,745/3,905 expected bytes respectively.
+Those live runs did not change profiles during reception; profile switching
+is covered by the controller tests above, not by these audio runs.
+
+On 2026-11-04 two further public recordings were checked. The uploader of
+[sample A](https://www.youtube.com/watch?v=bRqvrdQeC8Q) says it was produced
+with EasyPal; [sample B](https://www.youtube.com/watch?v=OB2Tp2opBV4) is
+presented by its uploader as an EasyPal reception test, but does not explicitly
+identify the transmitter. Neither identifies the EasyPal version, and these
+claims were not independently verified. The downloaded audio hashes are
+`4be316b6c8d528dcaba379690d408a8e4fdea4bda2c10065c99a025f4bc5ce3a`
+(A, WebM) and
+`cdd0467ecd7a495813725242740991b7163456eeccb27c188d22399f73c9a6eb`
+(B, M4A). After conversion to 48 kHz mono PCM WAV, their SHA-256 values are
+`5ba69af79820c9bbe068d685e94866810384ba2686b22326c1e50b0a7bb0219f` and
+`c342ca241620c5278197b8604e42e54d71eafbb3300134100c72409dbd37074d`.
+The locally built QSSTV-Experimental batch decoder recovered reference JP2
+objects, identifying A/2.5/high/64-QAM/long and B/2.5/high/16-QAM/long.
+QSSTV reported Jasper image-decoding errors for both, despite saving the JP2
+objects; FFmpeg identified their image dimensions. The QSSTV reference hashes
+are `55fa95f664d82cf0d0cb5a57a545cb661e071aa3c33de431cedb9db7960a62fd`
+(105,957 bytes) and
+`a2642ca6c2244134bc04ad7d6922465200274d82b56bbf0a71120862ad65e38a`
+(21,220 bytes). The native offline analyzer matched both references exactly;
+the A case reconstructed an RS2 container with 83 missing body segments.
+Crossed-reference negative controls reported `exact=0` for both recordings.
+The full Decodium application also recovered both exact files through
+BlackHole with its ordinary receiver; artifacts are
+`.../decodium-qsstv-drm-app-3q2i0pnh` and
+`.../decodium-qsstv-drm-app-91gzr569`. Audio and reference files are retained
+under `/tmp/decodium-easypal-video-oracle` and
+`/tmp/decodium-easypal-video-oracle-b`. These are recorded-signal comparisons
+against QSSTV, not original source-file comparisons, independently verified
+EasyPal versions, a live two-way EasyPal exchange, or RF tests.
+
+`tests/sstv/tools/check_public_easypal_recordings.py` checks the four external
+WAV/reference hashes, repeats both offline comparisons and the crossed-reference
+negative controls, and optionally repeats both full-application BlackHole
+replays with `--live`. It does not download or redistribute third-party audio.
+The offline A/B and hash-mismatch negative control passed on 2026-11-04.
+Both full-app logs also reported successful Gallery storage. The resulting
+Gallery PNGs have dimensions 3,648×2,736 and 480×480, and their decoded RGB
+pixel hashes match the respective QSSTV JP2 references exactly. The optional
+`--gallery-a` and `--gallery-b` arguments repeat this pixel check; crossed
+Gallery images were rejected as a negative control. These checks validate the
+stored images, not interactive rendering of the Gallery UI.
 
 An archived Windows installer named `EasyPal-07-OCT-2014-Setup.exe` was
 downloaded from the [QSL.net public archive](https://qsl.net/lw7dfm/Software/SSTV/)
 for later independent testing. Its SHA-256 is
 `7190ef73f643d60afa5f064fa238b6055e48f5cd18fbc08cd861ac55cb8d4763`;
-`file` identifies a 32-bit Windows GUI executable. The archive is a third-party
-mirror, not proof of publisher authenticity. It has not been installed or
-executed, and no EasyPal compatibility result follows from its availability.
+`file` identifies a 32-bit Windows GUI executable. On 2026-11-04 the installer
+linked by the [Gympie Communications & Electronics Group](https://www.gceginc.org.au/sstv/sstv.php),
+which identifies EasyPal's author as a former member, and the independent
+[Western Australian SSTV mirror](https://www.wasstv.net/wasstv.net/EasyPal-07-OCT-2014-Setup.exe)
+both had the same SHA-256 as the QSL.net copy. This corroborates distribution
+history but is not a publisher signature or proof that the binary is safe.
+On 2026-11-04 the installer was run into an isolated temporary Wine prefix on
+Apple Silicon macOS 27.0.1, using MetalSharp Wine 5.0 (Wine 11.20). The Wine
+archive matched its published SHA-256 and macOS Gatekeeper accepted its
+notarized Developer ID signature. A sandbox denied IP network access and reads
+or writes under the user's home directory; a TCP connection to an external IP
+was rejected. The installer exited successfully, but EasyPal itself reported
+unhandled exception `0x0eedfade` during startup. The same exception occurred
+when launching the extracted executable directly, including after copying its
+supplied user data. As a basic 32-bit control in the same sandbox, Wine's
+`syswow64\cmd.exe /c echo` returned the expected output and exit code zero.
+The cause has not been established: this is not evidence
+of an EasyPal protocol incompatibility or of successful audio exchange.
+
+A Wine startup trace identified `REGDB_E_CLASSNOTREG` for
+`{22D6F312-B0F6-11D0-94AB-0080C74C7E95}` immediately before the first
+exception. This is the Windows Media Player 6 ActiveX class; a historical
+[WineHQ report](https://www.winehq.org/pipermail/wine-bugs/2015-August/419602.html)
+describes the same missing class in an older EasyPal version. The `msdxmocx`
+package listed by [Winetricks](https://github.com/Winetricks/winetricks/blob/master/src/winetricks)
+was downloaded from its listed mirror and matched its published SHA-256
+`a39b2b9735cedd513fcb78f8634695d35073e9d7e865e536a0da6db38c7225e4`.
+Only `msdxm.ocx` was extracted and registered inside the temporary prefix.
+The next startup passed that failure but hit an unimplemented Wine
+`msvcp60.dll` export. The Microsoft VC6 redistributable identified by the
+same Winetricks source matched SHA-256
+`c2eb91d9c4448d50e46a32fecbcc3b418706d002beab9b5f4981de552098cee7`;
+only its `msvcp60.dll` was extracted into the isolated prefix and selected
+as a native override. EasyPal then remained running without either reported
+exception, but its usable GUI and audio have not yet been verified. These
+steps change only the test environment, not Decodium or the independent
+application's protocol implementation.
+
+The macOS automation interface timed out when selecting the Wine application.
+The same timeout occurred for Wine's Notepad control both with the sandbox and
+in a separate unsandboxed control run; the EasyPal run itself remained confined.
+Thus the timeout alone does not identify an EasyPal or sandbox failure. The
+Notepad control process and its Wine server were stopped after the comparison.
+
+On 2026-11-04, a separate temporary macOS application bundle containing the
+current Decodium development executable was launched with an isolated test
+profile and CAT and monitoring disabled. macOS listed that process as running,
+but the same automation interface timed out when asked to select its window.
+The observation was repeated with both isolated Gallery test profiles and
+both processes were stopped afterwards. This establishes that the observed
+window-selection timeout also affects this separate Qt application in the
+current automation environment; it does not establish why it happens, whether
+either window was visually usable, or that EasyPal itself is malfunctioning.
+The same automation interface subsequently selected macOS Finder and a
+separately running DecoDXLog Qt application successfully. Thus this is not a
+general inability to select every macOS or Qt window; the cause for the two
+timed-out processes remains unconfirmed.
+
+The same Mac has VirtualBox 7.2.18 installed, but `VBoxManage list vms`
+returned no configured guests on 2026-11-04. This does not supply a Windows
+environment for the missing EasyPal test. A sandboxed EasyPal process was
+subsequently launched and the operator was asked whether its window is visible;
+until that observation is available, process liveness alone is not GUI proof.
+
+The operator subsequently reported that the EasyPal window is visible. The
+automation interface still could not select it. A separate test-mode Decodium
+receiver was started on BlackHole 2ch with E/2.5 kHz/high/16-QAM/long, CAT
+disabled, and synthetic A/B JPEG files were copied into the isolated EasyPal
+`TxFiles` directory. Manual transmitter configuration and transmission were
+requested; until actual audio and received file contents are observed, this
+preparation is not a successful direct interoperability test. The receiver's
+temporary logs and readiness record are in `/tmp/decodium-easypal-live-manual`.
+
+The operator later configured the original EasyPal 07/OCT/2014 application
+running under the isolated MetalSharp Wine prefix to send audio to BlackHole
+2ch and manually transmitted two distinct 320×240 24-bit BMP test images.
+The full Decodium receiver, on the same virtual device and configured for
+B/2.5 kHz/high/16-QAM/long, received both and saved JPEG2000 objects and
+Gallery images. Comparing RGB pixels with the actual BMP inputs gave A MAE
+0 and maximum difference 0; B MAE 0.000143 and maximum difference 2 on the
+0–255 scale. Crossed-image controls gave MAE 137.519 for both. The received
+JP2 SHA-256 values are
+`0a83a79ebab42a2e2ffd28510131f2c5843fe35f595c48c5f1078b06227f168c` and
+`f76a3ea88d28465a166c5bab991c188e8a4133afdec201d238fb72135d8fe2a3`.
+The receiver's diagnostic snapshots reported zero discontinuities, dropped
+chunks, rejected HAMDRM chunks, queue overflows and processing failures.
+
+The B audio was separately captured from BlackHole through PortAudio; the
+locally built QSSTV-Experimental batch receiver decoded the identical JP2
+bytes and identified B/2.5/high/16-QAM/long. Its Jasper display decoder
+reported an IHDR component-type warning after saving the JP2. The earlier A
+capture through AVFoundation did not acquire in QSSTV and remains an
+unresolved capture or decoding limitation, although the full Decodium RX
+received A correctly. Test files and logs are in
+`/tmp/decodium-easypal-live-mode-b`. This proves two live EasyPal-to-Decodium
+transfers for one profile through local virtual audio, not yet the reverse
+direction, other profiles, native Windows or RF operation.
+
+For the reverse direction, two 320×240 JPEG images were sent by full Decodium
+application instances through BlackHole to that same EasyPal installation,
+using B/2.5 kHz/high/16-QAM/long and no Decodium CAT. Both transmitters
+reported `Completed`, EasyPal saved `reverse-a.jpg` and `reverse-b.jpg` under
+its isolated `RxFiles`, and the operator reported seeing the colour grid and
+colour bars in the RX window. The saved JPEGs are not byte-identical to the
+transmitted JPEGs: their pixel MAE is 2.01056 and 1.00608 respectively,
+with p95 differences 7 and 5 on the 0–255 scale. Crossed-reference pixel MAEs
+were 136.662 and 137.028. The output hashes are
+`5f4db3445e8ee295a72459ea8dbf29d0061ae34f6d00d6ca81181833bb2fa83c`
+and `aa3db457a84de0e49e16e7d6d0dd324139c01a86be8c90a8dfbf5edaa9476c0a`;
+source hashes are
+`df0749a94eff9d9f7219087d9b5c3bc60dcd3cf0942ee53abee0b8a7c02720c0`
+and `6d0c7174ebb82b3f6f0eba3a70456b86dd215fd27db23c8c0d78c64bde9cf4ec`.
+Preserved copies are in `/tmp/decodium-easypal-live-mode-b`, and TX logs are
+under `/tmp/decodium-easypal-live-reverse-a2` and
+`/tmp/decodium-easypal-live-reverse-b`. An initial BMP transmission was
+stopped because the uncompressed file would take too long; it is not counted.
+These A/B checks demonstrate selected live bidirectional image interoperability
+with EasyPal 07/OCT/2014 under Wine via virtual audio. They do not establish
+EasyPal-originated BSR audio, hybrid exchange, other settings, native Windows or RF.
+The synthetic input images, received image files and a lossless cropped B
+audio capture are also retained under `tests/sstv/fixtures/easypal-2014-live`
+(approximately 1.5 MiB total), with provenance in its README. The cropped
+capture was decoded byte-exactly by both QSSTV and the Decodium analyzer.
 
 The public [easypal-toolkit](https://github.com/milesburton/easypal-toolkit)
 was inspected as another possible independent peer at commit
@@ -63,6 +394,25 @@ browser workflow fails. The generated files and probe are under
 `/tmp/decodium-easypal-toolkit-execution`; no toolkit code was imported into
 Decodium. The toolkit cannot yet serve as a trustworthy independent oracle
 for this goal on this evidence.
+
+Another potential independent implementation is described in the
+[Rafe HamDRM documentation](https://patrick.lidstone.net/wiki/protocols/hamdrm/),
+which gives Python TX/RX APIs and says its tables are extracted from QSSTV.
+The document describes internal loopback and explicitly leaves live
+EasyPal/QSSTV interoperability unverified. Its installation page uses the
+placeholder `git clone <this-repo>` rather than a public repository URL; no
+executable source or pinned release was identified in this investigation.
+It is a lead, not an executed comparison or proof of compatibility.
+
+Another possible independent peer, [OnAir v3.5.0](https://github.com/adswill/OnAir/tree/v3.5.0)
+(commit `b7cf9ac054e6e392e30e6c265b5810071644f6f1`), was inspected on
+2026-11-04. Although its UI describes HamDRM/EasyPal, its
+`core/include/dect2/hfdig/hfdig_hamdrm.h` explicitly says its cell layout and
+data groups do not follow QSSTV/EasyPal's exact bit layout and were not tested
+against their recordings. Its `hfdig_hamdrm_int.h` uses 38 FAC cells rather
+than the 45 in Decodium's independently QSSTV-checked cell plan. This is
+source inspection, not an executed cross-decoding test; the application cannot
+be counted as evidence of EasyPal compatibility merely from its mode name.
 
 Another candidate is PA0MBO's TRXAMADRM: its
 [author's documentation](https://www.pa0mbo.nl/ties/public_html/hamradio/txamadrm/index.html)
@@ -127,6 +477,224 @@ the original file and extension. Crossed-image controls failed for all four
 levels. The hash-pinned `run_trxamadrm_rs_oracle.sh` now reproduces the full
 RS1–RS4 comparison. This covers these two small files and the archived source
 build; it is not a live TRXAMADRM or EasyPal exchange.
+
+An isolated BSR comparison on 2026-11-04 extracted the segment-reading loop
+unchanged from this hash-pinned TRXAMADRM 3.6 `DABMOTbsr.cpp`. A guarded
+array made the effect of out-of-range indices observable without corrupting
+the harness. With separated missing segments, Decodium compact and extended
+requests both yielded the expected indices. With consecutive missing
+segments, the compact request contains `-1` as a range marker: this historic
+reader instead uses it directly as an array index and writes before the
+array, while the extended request lists each missing segment and is read
+correctly. Actual A/B BSRs received by two Decodium app pairs over BlackHole
+showed the same result: extended A requested 1, 2 and 3 successfully; compact
+B requested 1 through 3 but the historical loop recorded only 1 and 3 and
+touched the guard. App artifacts are
+`.../decodium-hamdrm-two-app-a-w326lord` and
+`.../decodium-hamdrm-two-app-b-h06rqbz0`. The default Decodium selection is
+QSSTV extended. `tests/sstv/tools/run_trxamadrm_bsr_oracle.sh ARCHIVE [A B]`
+reproduces the isolated checks; this is not a live TRXAMADRM repair and does
+not establish how EasyPal handles its compact range marker.
+
+For a live transmitter comparison, the same hash-pinned TRXAMADRM 3.6
+archive was built natively on Apple Silicon with PortAudio. The laboratory
+patch `tests/sstv/fixtures/trxamadrm-3.6-macos-lab.patch` corrects a reversed
+`memset` in that historical PortAudio backend and requires an explicitly
+supplied temporary configuration instead of reading the user's home. The
+unsupported Clang option `-fno-for-scope` was removed through a build flag;
+the HAMDRM codec was not edited. The resulting `drm` executable has SHA-256
+`ce071e9babd926f769dc7935ac5bf6f5f6a9f057ca8e576a41f5b5c6697ec0e5`.
+
+Two distinct 225-byte JPEGs were transmitted by that running independent
+application over BlackHole 2ch into full Decodium receivers using the selected
+E/2.5/high/16-QAM/long profile. Both outputs matched byte-for-byte and RX
+audio diagnostics were clean; the transmitter logs confirmed BlackHole.
+CAT and PTT were disabled in the lab. The repeatable runs are
+`.../decodium-trxamadrm-live-a-zv6qwk50` and
+`.../decodium-trxamadrm-live-b-4mkuaeow`, made with
+`tests/sstv/tools/run_trxamadrm_live_tx_lab.py`. An earlier run passed an
+absolute source filename, which the historical transmitter put in the MOT
+header; Decodium rejected this unsafe path. The successful tests use a plain
+filename. This is live one-way TRXAMADRM-to-Decodium audio with a modified
+laboratory build, not a live repair, EasyPal exchange, or RF test.
+
+The reverse direction was also tested with the archive's RXAMADRM receiver
+built natively for this Mac. The separate laboratory patch
+`tests/sstv/fixtures/trxamadrm-3.6-macos-rx-lab.patch` replaces the ALSA
+capture with blocking PortAudio input restricted to the unique BlackHole 2ch
+device, disables X11 waterfall drawing, and supplies a macOS `malloc.h`
+compatibility include. Its existing signal conversion, demodulation, channel
+decoding and MOT assembly are retained. This is therefore an instrumented
+historical receiver, not the unmodified Linux application. The receiver was
+confined to a temporary working directory, with IP networking and the user's
+home denied; CAT and PTT were disabled in Decodium.
+
+In two separate live tests Decodium transmitted distinct 225-byte JPEGs over
+BlackHole using E/2.5/high/16-QAM/long. The historical receiver reconstructed
+each exact file; Decodium reported its TX completed in both tests. The
+prepared receiver SHA-256 is
+`81de7bc40d3ae716aca8924ee3fba89a5d0ea3f6b7f858eb36fdcd7101120dbc`;
+the filter file is checked separately by the harness. Artifacts are
+`.../decodium-trxamadrm-live-rx-a-2n4crxj9` and
+`.../decodium-trxamadrm-live-rx-b-aa7p93yp`, and
+`tests/sstv/tools/run_trxamadrm_live_rx_lab.py` repeats the test with that
+prepared receiver. Together with the two preceding TX tests, this establishes
+selected live virtual-audio exchange in both directions with adapted
+TRXAMADRM/RXAMADRM builds; it does not establish BSR repair, unmodified Linux
+runtime behaviour, EasyPal, other profiles or RF.
+
+The selected live image exchange was additionally repeated in both directions
+using E/2.5 kHz/4-QAM/high/long instead of 16-QAM. Two different 225-byte
+images arrived byte-for-byte at the receiving application in each direction.
+TRXAMADRM-to-Decodium artifacts are `.../decodium-trxamadrm-live-a-6_yxz0rt`
+and `.../decodium-trxamadrm-live-b-tk7b3hrc`; the reverse artifacts are
+`.../decodium-trxamadrm-live-rx-a-9jwkjj2i` and
+`.../decodium-trxamadrm-live-rx-b-fe4yulm7`. Both live harnesses accept
+`--qam 4` for this profile; their default remains 16-QAM. These selected
+virtual-audio transfers do not establish other profiles or EasyPal exchange.
+
+The same four-directional A/B check also passed with E/2.5 kHz/64-QAM/
+high/long: each 225-byte image was recovered exactly. Independent transmitter
+artifacts are `.../decodium-trxamadrm-live-a-12qvn6qn` and
+`.../decodium-trxamadrm-live-b-g3_m5u73`; independent receiver artifacts are
+`.../decodium-trxamadrm-live-rx-a-zdc6bsks` and
+`.../decodium-trxamadrm-live-rx-b-m1dpy9nf`. The live harnesses repeat these
+cases with `--qam 64`. Together with the selected 4- and 16-QAM tests, this
+covers the three constellations for this particular profile and clean virtual
+audio path, not all profiles, RF conditions or a live EasyPal exchange.
+
+The E/2.5 kHz/16-QAM/normal/short profile was then exercised with two
+distinct images in both live virtual-audio directions. TRXAMADRM-to-Decodium
+artifacts are `.../decodium-trxamadrm-live-a-0cp0ouhb` and
+`.../decodium-trxamadrm-live-b-8dqg9fkp`; the reverse artifacts are
+`.../decodium-trxamadrm-live-rx-a-ywxqsxxq` and
+`.../decodium-trxamadrm-live-rx-b-w6z8a_b3`. Each receiver recovered the exact
+225 bytes. The live harnesses expose `--interleaver short --protection normal`
+for repetition; previous defaults remain long and high. This is one additional
+profile and does not establish direct EasyPal or RF interoperability.
+
+Decodium then sent its extended A and compact B BSR fixtures over BlackHole
+to the adapted historical receiver. It saved both `bsr.bin` objects exactly
+and Decodium reported completed TX. Artifacts are
+`.../decodium-trxamadrm-live-rx-a-tq1ly1pq` and
+`.../decodium-trxamadrm-live-rx-b-d8mhw2yd`; the existing live RX harness
+repeats these with `--bsr`. Passing these received objects to the guarded
+historical TX parser reproduced the extended-success and compact-range
+out-of-bounds results described above.
+
+For a further selected-transmission check, the extended BSR recovered by the
+historical receiver was placed in the isolated historical transmitter's
+`picsrx/bsr.bin`. On two different 2,225-byte source JPEG fixtures, the
+running transmitter confirmed acceptance of its three requested indices and
+logged data segments 0, 1, 2, 3 and 14, skipping 4 through 13. The filename
+was chosen to match the BSR transport ID. Notably, this test BSR advertises
+64-byte segments while the transmitter uses 154-byte segments; its historical
+reader does not validate that field. The process was stopped after observing
+selection, and the repaired image was not reconstructed. Artifacts are
+`/tmp/dtrxs-a-hqfcuaao` and `/tmp/dtrxs-b-5an7y_2s`;
+`tests/sstv/tools/run_trxamadrm_selective_bsr_lab.py` repeats the check.
+These are transport and selected-transmission observations, not proof of a
+complete BSR repair exchange or of EasyPal interoperability.
+
+The size discrepancy was then removed in a new A/B laboratory run. The
+test-mode-only `DECODIUM_LAB_BSR_SEGMENT_SIZE=154` fixture creates five
+154-byte segments; without it the original 64-byte fixture remains the
+default. Two Decodium pairs transmitted the corresponding extended and compact
+requests exactly (`.../decodium-hamdrm-two-app-a-3nojks66` and
+`.../decodium-hamdrm-two-app-b-8_iwgvld`). Two further default-size controls
+also passed (`.../decodium-hamdrm-two-app-a-_np523c2` and
+`.../decodium-hamdrm-two-app-b-mhu8l9f2`).
+
+The adapted historic receiver recovered both 154-byte BSR objects over
+BlackHole exactly (`.../decodium-trxamadrm-live-rx-a-wgzl_2o0` and
+`.../decodium-trxamadrm-live-rx-b-x88p4n50`). The recovered extended request
+was then used with two distinct historical TX image fixtures, whose actual
+body segment size is also 154 bytes. The TX accepted the request and logged
+segments 0, 1, 2, 3 and 14 while skipping 4–13; artifacts are
+`/tmp/dtrxs-a-hahppaw6` and `/tmp/dtrxs-b-o5aizia_`. The compact request was
+not handed to the unsafe historical TX parser outside the guarded comparison.
+These checks eliminate the size mismatch but still do not reconstruct an
+incomplete image after repair or establish live EasyPal interoperability.
+
+A later full repair test does reconstruct the missing image with the adapted
+historical peer. On each of two distinct 2,225-byte images, Decodium discarded
+body segment 1, sent its extended BSR over BlackHole, and the historical
+receiver saved the exact request. The historical transmitter accepted that
+request and sent a repair; Decodium reconstructed the original bytes exactly.
+The historical sender's laboratory-only PortAudio adapter now waits for buffer
+space rather than dropping generated samples; its codec remains unchanged.
+The pinned transmitter SHA-256 for this run is
+`0c3ddf320a11a8e47db62ea0eab79430af0a25bbe63a7fdc4b2f8c5dccc07ee0`.
+The repository harness `tests/sstv/tools/run_trxamadrm_live_repair_lab.py`
+reproduced A and B (`.../decodium-trxamadrm-repair-a-gwoiz0sx` and
+`.../decodium-trxamadrm-repair-b-yc5bjzou`). This establishes the selected
+extended-BSR exchange with the adapted historical software, not EasyPal,
+compact BSR interoperability, or RF performance.
+
+The archived transmitter's separate hybrid executable was compiled on macOS
+with the same laboratory PortAudio and configuration adaptations; its SHA-256
+is `46100c5bc9b76d511d0979fd9d7ba3e3fbfa926e82c3da8f23bfe4a730e744e0`.
+In two live virtual-audio runs, the sandboxed executable transmitted distinct
+synthetic `de_` references. Decodium identified each as a hybrid reference
+and recovered its 186 or 210 body bytes exactly. The input bodies are generated
+by the local test harness, so this proves selected independent historical MOT
+framing and waveform reception, not independent encoding of the reference body.
+Artifacts are `.../decodium-trxamadrm-live-a-8kzgfhyp` and
+`.../decodium-trxamadrm-live-b-x3yq3z4k`; the existing live TX harness supports
+repetition with `--hybrid`. Ordinary historical image transmission controls
+also passed for A and B after the harness changes. These tests do not prove an
+FTP transaction, live EasyPal interoperability, or RF behaviour.
+
+The same independently framed historical hybrid transmitter was then paired
+with a loopback-only pyftpdlib 2.1.0 server and the full Decodium receiver.
+For two distinct image/reference pairs, Decodium decoded the audio reference,
+authenticated with the synthetic credentials it contained, and downloaded
+the corresponding 225-byte image exactly. The server logs confirm the two
+separate directories and successful RETR operations. TX remained sandboxed
+against IP access; the server and download were local to the Mac. Artifacts
+are `.../decodium-trxamadrm-live-a-vv28y17m`,
+`.../decodium-trxamadrm-live-b-a_fdtuca`,
+`.../decodium-trx-hybrid-ftp-a-7128tg62` and
+`.../decodium-trx-hybrid-ftp-b-um6sh_hv`.
+`tests/sstv/tools/run_trxamadrm_hybrid_ftp_lab.py` repeats the test with the
+hash-pinned transmitter and pyftpdlib. The harness generated the reference
+body and placed the images on the FTP server: this is not an independent
+historical upload, an EasyPal exchange, or an RF test.
+
+For the reverse audio direction, Decodium transmitted two synthetic hybrid
+references to the adapted historical RX. The independent receiver saved
+`de_TEST1-1-image-a.jpg` and `de_TEST2-1-image-b.jpg` with the exact 186 and
+210 reference bytes, and Decodium reported completed transmission. Artifacts
+are `.../decodium-trxamadrm-live-rx-a-caw5xumb` and
+`.../decodium-trxamadrm-live-rx-b-gfmk8wmf`. The RX harness supports `--hybrid`
+to repeat these checks. The saved objects are references, not image downloads;
+this does not prove that the historical receiver performs an FTP retrieval.
+
+The reverse path was also exercised with a real Decodium hybrid upload to an
+independent loopback pyftpdlib server followed by audio reference transmission
+to the historical RX. In each A/B run, the server received the exact 225-byte
+image and the RX saved the exact reference body with the same generated
+filename as the uploaded object. The historical RX was sandboxed from IP
+network access; its FTP download was not exercised. Artifacts are
+`.../decodium-trxamadrm-live-rx-a-k3jd0zif`,
+`.../decodium-trxamadrm-live-rx-b-mlqlpnzv`,
+`.../decodium-trx-hybrid-upload-a-gniwllhk`, and
+`.../decodium-trx-hybrid-upload-b-ac7kf8jg`. The test is repeatable via
+`tests/sstv/tools/run_trxamadrm_hybrid_upload_lab.py` with the pinned RX and
+pyftpdlib. It does not establish direct EasyPal interoperability or RF use.
+
+The BSR selector now has a tooltip directing TRXAMADRM 3.6 operators to the
+extended format. The QML test exercising both selections passed, and after
+rebuilding, two new Decodium pairs transmitted the extended and compact A/B
+requests exactly (`.../decodium-hamdrm-two-app-a-627u0jyf` and
+`.../decodium-hamdrm-two-app-b-2imyeg5w`). Feeding those actual received
+requests to the same guarded historical loop repeated the results above.
+The A/B QML controller test also evaluates the tooltip text and confirms it
+mentions both TRXAMADRM 3.6 and the extended choice. An attempted synthetic
+hover did not reach the selector in the test window, so the tooltip has not
+been visually checked by hovering in the application. The local build is not
+a cross-platform packaging test.
+
 The archived encoders were additionally compared on 28 deterministic
 synthetic payloads at `k-7`, `k-1`, `k`, `k+1`, `2k-7`, `2k` and `2k+1`
 bytes for each level's RS data size `k`. All containers matched and decoded
@@ -386,6 +954,232 @@ fresh PCM. Artifacts are `.../decodium-hamdrm-two-app-a-31ezaq_q` and
 transfers, not hybrid or external-peer tests.
 
 ## Profile-space status
+
+### EasyPal RS2 receive experiment
+
+In the opposite direction, EasyPal's own AutosaveTX RS2 containers from the
+two earlier live transmissions decode in Decodium exactly to the A/B JP2
+objects it received; Decodium also reproduces both containers byte-for-byte
+from those complete objects. EasyPal appended 11 bytes after each original
+JP2 before protection, and those bytes are retained in the received fixtures.
+The regression `test_hamdrm_rs` checks these two independent containers and
+crossed-image negatives. This evidence covers the saved EasyPal A/B output;
+the earlier audio capture independently covers only B.
+
+Two distinct Decodium JPEGs were transmitted as RS2 over local BlackHole audio
+to EasyPal 07/OCT/2014 under Wine, using B/2.5 kHz/high/16-QAM/long. For A,
+EasyPal's log reports OK and its saved image has 3.080 RGB mean absolute error
+on a 0–255 scale relative to the source; the received JPEG is retained as
+`received-rs2-a.jpg`. For B, Decodium reported TX complete but EasyPal's log
+reports FAIL and no decoded JPEG appeared. No cause has been established, so
+this is not a passing A/B RS2 interoperability result. The operator could not
+confirm the display because the Wine window disappeared after being moved to
+a second monitor; restarting the application restored the window.
+
+Both RS2 files in EasyPal's Autosave are byte-identical to Decodium's RS2
+encoding of the respective source JPEGs, including the failed B. The archived
+TRXAMADRM 3.6 RS2 encoder independently generated those same bytes for A and
+B, and its decoder recovered both source JPEGs byte-for-byte from EasyPal's
+saved containers. This rules out an altered saved container as the explanation
+for B's failure; it does not establish what EasyPal's UI or internal receive
+state did at the time. The two captured containers are retained as
+`received-rs2-a.rs2` and `received-rs2-b.rs2`.
+
+Repeating B after restarting EasyPal again produced FAIL. A subsequent test
+using the same B JPEG with appended padding was interrupted during reception
+after EasyPal displayed an access violation in `rscoder.dll` under Wine.
+The operator dismissed the dialog and reported the application usable again.
+The interrupted padded test is not a successful or completed transfer, and
+the error does not by itself distinguish a file-dependent issue, the EasyPal
+DLL, or the Wine runtime.
+
+As a controlled comparison, two Decodium applications exchanged these same
+7,606-byte A and 3,900-byte B JPEGs with RS2 using B/2.5 kHz/high/16-QAM/long
+over BlackHole 16ch. Both receivers saved byte-exact originals, and their
+monitor was kept off to avoid sending the test into EasyPal. Artifacts are
+`.../decodium-hamdrm-two-app-a-9x7bq1h3` and
+`.../decodium-hamdrm-two-app-b-5e5p6_ya`. This isolates a successful local
+Decodium path for both inputs; it does not explain the EasyPal B failure.
+
+The same A/B RS2 waveforms were independently decoded by the pinned official
+QSSTV-Experimental 10.0 batch receiver. A was byte-exact. B began with the
+entire 3,900-byte original but had 125 additional zero bytes; therefore B is
+not an exact interoperability pass. The RS2 padding header byte is 74 for A
+and 132 for B. In a locally available QSSTV source tree, the padding byte is
+converted from `char` to `int` without an unsigned conversion; on this Mac,
+`char` is signed, so 132 becomes -124. This is consistent with the observed
+extra bytes, but the source-to-binary match was not established for this
+specific receiver and it does not establish the cause of EasyPal's FAIL.
+The exact 16-bit PCM recordings are preserved in lossless FLAC and the pinned
+receiver observation is repeatable with
+`python3 tests/sstv/tools/check_qsstv_rs2_padding_observation.py`.
+Two further controls changed only the end-of-file padding on B before RS2
+encoding. Adding five zero bytes produced RS2 padding field 127 and QSSTV
+returned the 3,905-byte input exactly. Adding four produced field 128 and
+QSSTV returned the complete 3,904-byte input plus 121 zeros. The same
+recording with field 127 initially failed acquisition at one start offset;
+other offsets decoded exactly, and the regression allows up to three attempts
+only when QSSTV returns no image. This controlled boundary strengthens the
+signed-byte hypothesis for QSSTV, not for EasyPal. The source JPEGs were
+deliberately changed for the test; this is not a production workaround.
+
+For a direct A/B test of that hypothesis, two local receivers were built with
+the same compiler and source tree at base commit
+`a84584248d3307bfa081362031ff20f365337633`, including the pre-existing local
+hybrid laboratory changes. They differed only in interpreting the RS2 padding
+byte as unsigned before subtraction. With the same four saved recordings,
+the baseline produced exact A and field-127 results, B plus 125 zeros, and
+field-128 plus 121 zeros. The patched receiver returned all four inputs
+byte-exactly. All eight decodes succeeded on the first acquisition attempt.
+The minimal experimental patch is `fixtures/qsstv-rs2-unsigned-padding.patch`
+under `tests/sstv`, and `check_qsstv_rs2_unsigned_fix.py` repeats the
+comparison when given both executable paths. This establishes the cause in
+these local QSSTV builds, not in EasyPal, and does not modify Decodium's
+standard RS2 payload or claim that the external project has applied the fix.
+The Decodium TX page displays a scoped QSSTV trailing-zero notice when RS1–RS4
+is selected; it does not block TX or change the file. The QML regression checks
+all levels, no protection and hybrid mode. After rebuilding, two Decodium
+application pairs exchanged separate 225-byte RS2 images exactly over
+BlackHole 16ch with the monitor off (`.../decodium-hamdrm-two-app-a-5l867cfi`,
+`.../decodium-hamdrm-two-app-b-x5u8yku8`). These are local audio controls,
+not evidence that EasyPal's independent RX issue is resolved.
+
+Using a synthetic waveform exporter and the same two local QSSTV builds, the
+127/128 padding boundary was independently exercised for RS1, RS3 and RS4.
+For each level the baseline returned the field-127 input exactly and the
+field-128 input with 121 extra zeros, whereas the patched build returned both
+inputs exactly. All twelve decodes succeeded on their first acquisition
+attempt. These are file-mediated waveform checks, not live external audio or
+EasyPal evidence. They can be reproduced with
+`check_qsstv_rs_levels_boundary.py` after building
+`export_hamdrm_rs_boundary_wave` and providing the two receiver paths.
+After extending the notice, further two-application controls transmitted
+image A with RS1 and image B with RS4 over BlackHole 16ch; both 225-byte
+images were recovered byte-exactly (`.../decodium-hamdrm-two-app-a-qpp112jh`
+and `.../decodium-hamdrm-two-app-b-jza4ay6m`).
+
+The TX page also offers an explicitly selected, default-off QSSTV RS
+compatibility option for JPEG. When the original RS padding field would be at
+least 128, it appends enough zero bytes after the JPEG data to reduce the field
+to 127. The pixels remain the same, but the transmitted file is not
+byte-identical to the selected file; the UI identifies the added bytes. The
+default path leaves every byte unchanged. Non-JPEG input is rejected when the
+option is selected. Controller A/B tests cover all four RS levels at fields
+127 and 128, with and without the option and with pixel comparison. Two full
+Decodium app pairs transmitted distinct RS2 JPEGs whose field was 128 and
+received the deliberately one-byte-longer transmitted files exactly
+(`.../decodium-hamdrm-two-app-a-14uh7jbl`,
+`.../decodium-hamdrm-two-app-b-y7kd8fnc`). The pinned unmodified
+QSSTV-Experimental 10.0 batch receiver also recovered those A/B transmitted
+bytes exactly from actual BlackHole 16ch recordings; their pixels match the
+original images. `check_qsstv_rs_compat_ab.py` replays the saved FLAC files.
+The same end-to-end control was then run for A and B at RS1, RS3 and RS4,
+with the field again set to 128 before the opted-in one-byte adjustment. The
+pinned official QSSTV batch receiver reconstructed all six recordings exactly
+and their decoded pixels matched the original JPEGs. Combined with RS2 this
+provides A/B evidence at all four levels for the selected B/2.5/high/16/long
+profile, not for all profiles, EasyPal repair, native Windows or RF. The
+same replay script covers all eight recordings.
+The complementary no-change control used two actual Decodium application
+pairs with the option enabled and two JPEGs whose RS2 padding field was already
+127. Both were received byte-for-byte unchanged over BlackHole 16ch
+(`.../decodium-hamdrm-two-app-a-lo2qiind`,
+`.../decodium-hamdrm-two-app-b-e_w5jfni`).
+The QML regression also invokes the actual Start TX button with the checkbox
+both off and on for two JPEGs. The controller's captured RS objects decode to
+the exact unchanged source in the default case and to the source plus the
+single expected zero when compatibility is selected. This exercises the
+selection-to-controller wiring in addition to checking checkbox visibility.
+The new compatibility labels and error messages have active Italian catalog
+entries. The QML regression loads the compiled Italian catalog and verifies
+the notice against English and Italian controls, including the explanation
+that selected and received file bytes may differ.
+For a selective-repair interaction, two full Decodium application pairs used
+the opted-in RS2 path with A/B JPEGs set to padding field 128. The laboratory
+dropped MOT body segment 1 after demodulation during initial RX; each receiver
+then sent a BSR over BlackHole 16ch and obtained the repair over the same
+virtual audio. Both reconstructed the exact 2,753-byte transmitted JPEG,
+including the one intentionally appended byte. A used the extended BSR form
+and B used the compact form. Artifacts are
+`.../decodium-hamdrm-repair-a-yqsid68g` and
+`.../decodium-hamdrm-repair-b-ftr24x7k`; an unprotected default-path control
+also passed (`.../decodium-hamdrm-repair-a-lr_mz58i`). The test-only RS
+segment drop is guarded by Qt test mode and is not an audio-loss or external
+peer test. Repeat with `DECODIUM_LAB_HAMDRM_RS_LEVEL=2`,
+`DECODIUM_LAB_HAMDRM_QSSTV_COMPAT=1`,
+`DECODIUM_LAB_REPAIR_DEVICE='BlackHole 16ch'`, and
+`run_hamdrm_repair_two_app_lab.py a live` or `b live`.
+
+An additional A/B test injected loss before demodulation: previously recorded
+Decodium compatibility-mode A/B waveforms were replayed to a fresh Decodium
+receiver on BlackHole 16ch with a ten-second interval muted, containing
+467,987 and 467,945 active 48 kHz frames respectively. The receiver reported
+four missing segments in each case, transmitted a BSR over virtual audio, and
+the live sender transmitted the requested repair. The resulting 7,745-byte A
+and 3,905-byte B files matched the exact transmitted compatibility payloads.
+The sender and receiver were checked for the intended virtual device. Evidence
+is `.../decodium-rs-compat-audio-loss-a-8y8o_wn9` and
+`.../decodium-rs-compat-audio-loss-b-exqsc1xa`. The repeatable laboratory is
+`run_hamdrm_rs_compat_audio_loss_lab.py a|b` and needs numpy, PortAudio, ffmpeg,
+and BlackHole 16ch. The initial waveform is a recording, while the BSR and
+repair are live between the applications. It is not an RF or EasyPal test.
+
+One later replay trial requested BlackHole 16ch but the RX log reported that
+the requested device was not found and the ready marker identified the
+fallback BlackHole 2ch. That run was stopped and was not counted. Two fresh,
+isolated startup controls subsequently opened the requested BlackHole 16ch
+without fallback (`.../decodium-audio-device-start-ab-_pcsxy5z/a` and `/b`).
+The device was visible to PortAudio during investigation, but the cause of
+the intermittent mismatch was not determined. The replay harness checks the
+actual sender and receiver devices before proceeding; the healthy A/B controls
+do not prove that the intermittent fallback cannot recur.
+
+Maximum-adjustment controls used A/B JPEGs positioned at the largest padding
+field for each RS level. The explicit compatibility transformation added
+97, 65, 33 or 1 zeros for RS1–RS4 respectively. In sixteen file-mediated
+synthetic waveform decodes, pinned QSSTV 10.0 reconstructed each compatible
+payload byte-exactly with the original pixels; the corresponding standard
+controls showed its 217, 185, 153 or 121 additional zeros. This comparison is
+repeatable with `check_qsstv_rs_compat_max_padding.py`. It generates the
+adjusted input in the harness; the separate controller and full-application
+tests above verify the production option.
+
+### EasyPal 2014 partial-image repair, local audio
+
+For two different JPEGs, EasyPal created extended BSR files after deliberate
+audio loss in Decodium's B/2.5 kHz/high/16-QAM/long-interleaver transmission.
+Their exact bytes were then encoded as HAMDRM audio by a Decodium laboratory
+helper and played into the sending Decodium instance. It accepted each BSR
+and transmitted the requested repair through BlackHole to EasyPal. EasyPal
+saved both repaired images after the repair, with pixel mean absolute errors
+of 3.29 and 1.52 levels out of 255 versus their respective inputs. For A,
+the observed EasyPal display progressed from five of eight segments initially
+to eight of eight after repair. For B, the operator likewise confirmed zero
+segments remaining after the repair.
+EasyPal's BSR list selection was not recognised in this Wine environment and
+its Fast BSR attempt yielded no measurable audio. Consequently these tests do
+not establish EasyPal-originated BSR audio transmission, RF operation, or
+general interoperability across profiles. The saved BSR payloads are retained
+in `tests/sstv/fixtures/easypal-2014-live/`.
+
+An additional interrupted image C generated a fresh extended BSR in EasyPal.
+Its list did not recognise even a double-click. Fast BSR returned to RX after
+an instant and a simultaneous BlackHole 2ch capture recorded peak amplitude
+0.0; Decodium logged no incoming BSR. This does not identify the cause or test
+Decodium's behaviour for an EasyPal-transmitted BSR signal.
+An isolated clone of the Wine prefix was also launched using a Wine virtual
+desktop. The operator reported the BSR entry still was not recognised as
+selected there. Attempting to load the saved request as `bsr.bin` through
+EasyPal's LoadAny produced an `illegal filename` message upon confirming the
+selected file, as reported by the operator. Neither observation
+establishes the underlying cause.
+
+A targeted search for an independently attributable EasyPal BSR waveform did
+not produce a usable request recording. The `BSR.wav` mentioned in an
+[older EasyPal guide](https://manualzz.com/doc/4700768/vk4aes-easypal-digital-sstv-anleitung)
+is described as an optional waterfall-text sound played before the request;
+it is not evidence of the encoded BSR itself. This search does not establish
+that no suitable independent recording exists.
 
 The registry contains A/B/amateur-E x 2.3/2.5 kHz x high/normal protection x
 4/16/64-QAM x long/short interleaving, for 72 stable named tuples. Registry

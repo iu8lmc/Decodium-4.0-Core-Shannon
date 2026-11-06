@@ -4,12 +4,31 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <vector>
 
 using namespace decodium::sstv::hamdrm;
 
 int main()
 {
+    const auto read = [](const std::string& path) {
+        std::ifstream file(path, std::ios::binary);
+        return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), {});
+    };
+    for (const auto variant : {'a', 'b'}) {
+        const std::string root = std::string(DECODIUM_HAMDRM_FIXTURES_DIR) + "/easypal-2014-live/";
+        const auto container = read(root + "easypal-tx-" + variant + ".rs2");
+        const auto image = read(root + "received-" + variant + ".jp2");
+        if (container.empty() || image.empty()) return 13;
+        const auto decoded = decodeHamDrmRs(container, 2U);
+        const auto encoded = encodeHamDrmRs(image, "jp2", 2U);
+        if (!decoded.ok() || decoded.value->bytes != image || decoded.value->extension != "jp2"
+            || !encoded.ok() || *encoded.value != container) return 14;
+        const auto other = read(root + "received-" + (variant == 'a' ? 'b' : 'a') + ".jp2");
+        if (other.empty() || decoded.value->bytes == other) return 15;
+    }
     for (unsigned level = 1; level <= 4; ++level) {
         const std::size_t k = std::array<std::size_t, 4> {224U, 192U, 160U, 128U}[level - 1U];
         for (const auto length : {k - 7U, k - 6U, k - 1U, k, k + 1U, 2U * k - 7U, 2U * k}) {

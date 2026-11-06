@@ -3180,6 +3180,15 @@ void DecodiumBridge::initialiseSstvRuntime()
             config.partialStoreRoot = QDir(appData).absoluteFilePath(
                 QStringLiteral("sstv/hamdrm/partial"));
         }
+        if (QStandardPaths::isTestModeEnabled()) {
+            const QFileInfo labRoot(qEnvironmentVariable("DECODIUM_LAB_SETTINGS_DIR"));
+            const QFileInfo partialRoot(qEnvironmentVariable("DECODIUM_LAB_HAMDRM_PARTIAL_ROOT"));
+            if (labRoot.isAbsolute() && labRoot.isDir() && !labRoot.isSymLink()
+                && partialRoot.isAbsolute() && partialRoot.isDir() && !partialRoot.isSymLink()
+                && partialRoot.dir().canonicalPath() == labRoot.canonicalFilePath()) {
+                config.partialStoreRoot = partialRoot.canonicalFilePath();
+            }
+        }
         decodium::sstv::hamdrm::HamDrmControllerBackends backends;
         decodium::sstv::hamdrm::waveform::HamDrmNativeRxHooks rxHooks;
         rxHooks.activateSharedAudioTap = [this]() {

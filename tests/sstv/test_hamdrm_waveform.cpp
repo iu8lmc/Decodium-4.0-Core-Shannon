@@ -3,6 +3,7 @@
 #include "../../src/sstv/digital/HamDrmMotCodec.h"
 #include "../../src/sstv/digital/HamDrmObjectAssembler.h"
 #include "../../src/sstv/digital/HamDrmImageValidator.h"
+#include "../../src/sstv/digital/HamDrmProfileRegistry.h"
 #include <QImage>
 #include "../../src/sstv/digital/channel/HamDrmChannelCrc.h"
 #include "../../src/sstv/digital/waveform/HamDrmPacketCodec.h"
@@ -261,10 +262,80 @@ void testPacketFraming()
             "packet after broken continuity was accepted");
 
     const HamDrmPacketParameters wide {311U, 0U, 4'096U};
-    const std::vector<std::uint8_t> unrepresentable(300U, 0x55U);
-    require(hamDrmPacketizeDataUnit(unrepresentable, wide, 0U).status.code
-                == HamDrmErrorCode::UnsupportedProfile,
-            "unrepresentable one-byte PPI length was accepted");
+    for (const std::size_t size : {256U, 300U}) {
+        std::vector<std::uint8_t> input(size);
+        for (std::size_t i = 0; i < size; ++i)
+            input[i] = static_cast<std::uint8_t>(i * 37U + size);
+        const auto split = hamDrmPacketizeDataUnit(input, wide, 7U);
+        require(split.ok() && split.value->packets.size() == 2U,
+                "wide padded fragment was not split");
+        require(split.value->nextContinuityIndex == 1U,
+                "split packet continuity did not wrap");
+        HamDrmPacketReassembler receiver(wide);
+        const auto first = receiver.push(split.value->packets[0]);
+        const auto last = receiver.push(split.value->packets[1]);
+        require(first.ok() && !first.value->dataUnit.has_value()
+                    && last.ok() && last.value->dataUnit == input,
+                "split padded fragment did not reassemble exactly");
+
+        auto damagedFirst = split.value->packets[0];
+        damagedFirst[2] ^= 1U;
+        receiver.reset();
+        require(receiver.push(damagedFirst).status.code == HamDrmErrorCode::CrcMismatch,
+                "corrupt non-final padded packet passed CRC");
+        require(receiver.push(split.value->packets[1]).status.code == HamDrmErrorCode::Incomplete,
+                "last packet accepted after corrupt padded fragment");
+
+        auto protectedFirst = hamDrmVerifyAndStripChannelCrc16(split.value->packets[0]);
+        require(protectedFirst.ok(), "valid split packet CRC failed");
+        (*protectedFirst.value)[2U + 255U] = 1U; // first padding byte
+        auto nonZeroFill = hamDrmAppendChannelCrc16(*protectedFirst.value);
+        receiver.reset();
+        require(receiver.push(nonZeroFill).status.code == HamDrmErrorCode::Malformed,
+                "non-final padded packet accepted non-zero fill");
+        require(receiver.push(split.value->packets[1]).status.code == HamDrmErrorCode::Incomplete,
+                "last packet accepted after invalid padding");
+        const auto retryFirst = receiver.push(split.value->packets[0]);
+        const auto retryLast = receiver.push(split.value->packets[1]);
+        require(retryFirst.ok() && retryLast.ok() && retryLast.value->dataUnit == input,
+                "receiver did not recover after rejected split packets");
+    }
+
+    // Exercise the one-byte PPI boundary on both sides of a full packet,
+    // including remainders that need more than two padded packets.
+    for (const std::size_t body : {255U, 256U, 257U, 311U, 512U}) {
+        const HamDrmPacketParameters boundary {body, 1U, 4096U};
+        for (const std::size_t size : {std::size_t{1}, std::size_t{254},
+                                      std::size_t{255}, std::size_t{256},
+                                      std::size_t{257}, body - 1U, body,
+                                      body + 1U, body + 255U, body + 256U,
+                                      2U * body - 1U}) {
+            std::vector<std::uint8_t> input(size);
+            for (std::size_t i = 0; i < size; ++i)
+                input[i] = static_cast<std::uint8_t>(i * 17U + body);
+            const auto packets = hamDrmPacketizeDataUnit(input, boundary, 6U);
+            require(packets.ok() && !packets.value->packets.empty(),
+                    "packet boundary input failed to encode");
+            HamDrmPacketReassembler rx(boundary);
+            std::optional<std::vector<std::uint8_t>> result;
+            for (std::size_t i = 0; i < packets.value->packets.size(); ++i) {
+                const auto& packet = packets.value->packets[i];
+                require(packet.size() == body + kHamDrmPacketOverheadBytes,
+                        "packet boundary produced wrong fixed length");
+                const auto decoded = rx.push(packet);
+                require(decoded.ok(), "packet boundary reassembly rejected a valid packet");
+                if (decoded.value->dataUnit.has_value()) {
+                    require(i + 1U == packets.value->packets.size(),
+                            "packet boundary emitted an early data unit");
+                    result = decoded.value->dataUnit;
+                }
+            }
+            require(result == input, "packet boundary data unit differs");
+            require(packets.value->nextContinuityIndex
+                        == ((6U + packets.value->packets.size()) & 7U),
+                    "packet boundary continuity mismatch");
+        }
+    }
 }
 
 void testCapacityAndExactScheduling()
@@ -300,6 +371,50 @@ void testCapacityAndExactScheduling()
                     "HAMDRM symbol/frame scheduler mismatch");
         }
     }
+}
+
+void testPpiRegisteredProfilesAB()
+{
+    std::size_t profiles = 0U;
+    std::size_t wideProfiles = 0U;
+    for (const auto& profile : HamDrmProfileRegistry::all()) {
+        HamDrmWaveformConfig config;
+        config.robustness = profile.robustness;
+        config.occupiedBandwidth = profile.occupiedBandwidth;
+        config.constellation = profile.constellation;
+        config.protection = profile.protection;
+        config.interleaver = profile.interleaver;
+        const auto capacity = hamDrmWaveformCapacity(config);
+        require(capacity.ok(), "registered profile lacks waveform capacity");
+        const auto body = capacity.value->packetBodyBytes;
+        wideProfiles += body > 256U;
+        if (body > 256U)
+            std::cout << "PPI wide profile=" << profile.id
+                      << " body=" << body << '\n';
+        const HamDrmPacketParameters params {body, config.packetId, 4096U};
+        for (const std::size_t length : {std::size_t{256}, body + 256U}) {
+            std::vector<std::uint8_t> input(length);
+            for (std::size_t i = 0; i < length; ++i)
+                input[i] = static_cast<std::uint8_t>(i * 23U + length);
+            const auto packets = hamDrmPacketizeDataUnit(input, params, 7U);
+            require(packets.ok(), "registered profile rejected a PPI boundary");
+            HamDrmPacketReassembler receiver(params);
+            std::optional<std::vector<std::uint8_t>> reconstructed;
+            for (const auto& packet : packets.value->packets) {
+                const auto result = receiver.push(packet);
+                require(result.ok(), "registered profile rejected its PPI packet");
+                if (result.value->dataUnit) reconstructed = result.value->dataUnit;
+            }
+            require(reconstructed == input, "registered profile changed PPI data");
+            if (body > 256U)
+                require(packets.value->packets.size() == (length == 256U ? 2U : 3U),
+                        "wide registered profile did not split the PPI remainder");
+        }
+        ++profiles;
+    }
+    require(profiles == 72U && wideProfiles > 0U,
+            "registered PPI profile matrix was not fully exercised");
+    std::cout << "PPI profiles=" << profiles << " wide=" << wideProfiles << '\n';
 }
 
 void testIndependentQsstvSuperframesFailClosed()
@@ -591,6 +706,44 @@ void testCleanLongInterleaverLoopback()
     require(batch.statistics.receivedFrames == 5U
                 && batch.statistics.validatedDataGroups == 1U,
             "clean loopback statistics mismatch");
+}
+
+void testWidePaddedWaveformAB()
+{
+    const auto overhead = makeMotGroup(1U).size() - 1U;
+    std::size_t wideProfiles = 0U;
+    for (const auto& profile : HamDrmProfileRegistry::all()) {
+        HamDrmWaveformConfig config;
+        config.robustness = profile.robustness;
+        config.occupiedBandwidth = profile.occupiedBandwidth;
+        config.protection = profile.protection;
+        config.constellation = profile.constellation;
+        config.interleaver = profile.interleaver;
+        const auto capacity = hamDrmWaveformCapacity(config);
+        require(capacity.ok(), "registered waveform capacity is unavailable");
+        if (capacity.value->packetBodyBytes <= 256U) continue;
+        ++wideProfiles;
+        for (const std::size_t size : {std::size_t{256}, capacity.value->packetBodyBytes - 1U}) {
+            const auto group = makeMotGroup(size - overhead,
+                                            static_cast<std::uint16_t>(size));
+            require(group.size() == size, "unexpected MOT group overhead");
+            const auto packets = hamDrmPacketizeDataUnit(
+                group, {capacity.value->packetBodyBytes, config.packetId, 4096U}, 0U);
+            require(packets.ok() && packets.value->packets.size() == 2U,
+                    "wide waveform fixture did not trigger split PPI");
+            require((packets.value->packets.front()[0] & 0x48U) == 0x08U,
+                    "wide waveform first packet is not non-final PPI");
+            const auto pcm = transmit(config, {group, group, group});
+            std::vector<std::vector<std::uint8_t>> recovered;
+            const auto batch = receive(config, pcm, 911U, recovered);
+            require(batch.status.ok() && !recovered.empty(),
+                    "split PPI waveform produced no valid group");
+            require(std::all_of(recovered.begin(), recovered.end(),
+                                [&group](const auto& value) { return value == group; }),
+                    "split PPI waveform changed the data group");
+        }
+    }
+    require(wideProfiles == 6U, "wide PPI waveform matrix did not cover six profiles");
 }
 
 void testFacInterleaverAcquisition()
@@ -1491,12 +1644,13 @@ void testCancelResetAndBounds()
 
 int main()
 {
-    const std::array<std::pair<const char*, void (*)()>, 32U> tests {{
+    const std::array<std::pair<const char*, void (*)()>, 34U> tests {{
         {"temporal varying channel A/B", testTemporalVaryingChannelAB},
         {"temporal pilots all-pass A/B", testTemporalPilotAllpassAB},
         {"fractional delay chunking A/B", testFractionalDelayChunkingAB},
         {"packet framing", testPacketFraming},
         {"capacity and scheduling", testCapacityAndExactScheduling},
+        {"registered PPI profiles A/B", testPpiRegisteredProfilesAB},
         {"QSSTV independent JPEG images", testIndependentQsstvImageAssembly},
         {"selective repair waveform A/B", testSelectiveRepairWaveform},
         {"QSSTV independent MOT object", testIndependentQsstvObjectAssembly},
@@ -1504,6 +1658,7 @@ int main()
         {"QSSTV valid FAC superframes", testIndependentQsstvValidFac},
         {"QSSTV synthetic superframes", testIndependentQsstvSuperframesFailClosed},
         {"clean long loopback", testCleanLongInterleaverLoopback},
+        {"wide padded waveform A/B", testWidePaddedWaveformAB},
         {"FAC interleaver acquisition", testFacInterleaverAcquisition},
         {"interrupted interleaver change A/B", testInterruptedInterleaverChangeAB},
         {"out-of-range frequency reacquisition A/B", testReacquireAfterOutOfRangeFrequencyAB},

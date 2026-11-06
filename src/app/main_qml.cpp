@@ -1813,6 +1813,21 @@ int main(int argc, char* argv[])
                 && QFileInfo(cert).isAbsolute() && cert.open(QIODevice::ReadOnly) && cert.size() <= 64 * 1024
                 && QDir::isAbsolutePath(field("identity")) && QDir::isAbsolutePath(field("result"))
                 && (role == QStringLiteral("sender") || role == QStringLiteral("receiver"));
+            if (qEnvironmentVariableIntValue("DECODIUM_LAB_EXPIRY_HOLD") == 1) {
+                const QFileInfo identity(field("identity"));
+                const QFileInfo marker(field("expiryMarker"));
+                const QString temporaryRoot = QFileInfo(QDir::tempPath()).canonicalFilePath();
+                const QString labDirectory = keychain.dir().canonicalPath();
+                valid = valid && role == QStringLiteral("receiver")
+                    && earlyLabShareConfig.value(QStringLiteral("expiryWhileAwaiting")).toBool()
+                    && marker.fileName() == QStringLiteral("expiry-marker")
+                    && keychain.fileName() == QStringLiteral("receiver.keychain-db")
+                    && !temporaryRoot.isEmpty() && !labDirectory.isEmpty()
+                    && labDirectory.startsWith(temporaryRoot + QLatin1Char('/'))
+                    && QFileInfo(labDirectory).fileName().startsWith(QStringLiteral("decodium-share-transfer-"))
+                    && marker.dir().canonicalPath() == labDirectory
+                    && identity.dir().canonicalPath() == labDirectory;
+            }
             if (earlyLabShareConfig.value(QStringLiteral("rotateRecipient")).toBool())
                 valid = valid && role == QStringLiteral("receiver")
                     && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
@@ -1867,6 +1882,25 @@ int main(int argc, char* argv[])
                     valid = valid && image.isAbsolute() && image.isFile();
                 }
                 valid = valid && !field("recipient").isEmpty();
+                if (!field("corruptPinMarker").isEmpty() || !field("corruptPinCase").isEmpty()) {
+#if defined(Q_OS_MACOS)
+                    const QFileInfo identity(field("identity"));
+                    const QFileInfo marker(field("corruptPinMarker"));
+                    const QString temporaryRoot = QFileInfo(QDir::tempPath()).canonicalFilePath();
+                    const QString labDirectory = keychain.dir().canonicalPath();
+                    valid = valid && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1
+                        && (field("corruptPinCase") == QStringLiteral("zero") || field("corruptPinCase") == QStringLiteral("one"))
+                        && marker.isAbsolute() && !marker.exists() && !marker.isSymLink()
+                        && marker.dir().canonicalPath() == identity.dir().canonicalPath()
+                        && !temporaryRoot.isEmpty() && !labDirectory.isEmpty()
+                        && labDirectory.startsWith(temporaryRoot + QLatin1Char('/'))
+                        && QFileInfo(labDirectory).fileName().startsWith(QStringLiteral("decodium-share-transfer-"))
+                        && keychain.fileName() == QStringLiteral("sender.keychain-db")
+                        && labDirectory == identity.dir().canonicalPath();
+#else
+                    valid = false;
+#endif
+                }
                 if (!field("resignTarget").isEmpty() || !field("resignOutput").isEmpty()) {
                     const QFileInfo target(field("resignOutput"));
                     const QFileInfo identity(field("identity"));
@@ -1876,6 +1910,25 @@ int main(int argc, char* argv[])
                         && target.dir().canonicalPath() == identity.dir().canonicalPath();
                 }
             } else if (valid) {
+                if (!field("corruptPinMarker").isEmpty() || !field("corruptPinCase").isEmpty()) {
+#if defined(Q_OS_MACOS)
+                    const QFileInfo identity(field("identity"));
+                    const QFileInfo marker(field("corruptPinMarker"));
+                    const QString temporaryRoot = QFileInfo(QDir::tempPath()).canonicalFilePath();
+                    const QString labDirectory = keychain.dir().canonicalPath();
+                    valid = valid && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1
+                        && (field("corruptPinCase") == QStringLiteral("zero") || field("corruptPinCase") == QStringLiteral("one"))
+                        && marker.isAbsolute() && !marker.exists() && !marker.isSymLink()
+                        && marker.dir().canonicalPath() == identity.dir().canonicalPath()
+                        && !temporaryRoot.isEmpty() && !labDirectory.isEmpty()
+                        && labDirectory.startsWith(temporaryRoot + QLatin1Char('/'))
+                        && QFileInfo(labDirectory).fileName().startsWith(QStringLiteral("decodium-share-transfer-"))
+                        && keychain.fileName() == QStringLiteral("receiver.keychain-db")
+                        && labDirectory == identity.dir().canonicalPath();
+#else
+                    valid = false;
+#endif
+                }
                 valid = valid && field("resignTarget").isEmpty() && field("resignOutput").isEmpty();
                 const QFileInfo output(field("outputDir"));
                 valid = valid && output.isAbsolute() && output.isDir();
@@ -3193,6 +3246,9 @@ int main(int argc, char* argv[])
     }
     bool const labNoMonitor = parser.isSet(labNoMonitorOption);
     if (labNoMonitor) {
+        if (QStandardPaths::isTestModeEnabled()) {
+            app.setProperty("decodiumLabNoMonitor", true);
+        }
         qInfo() << "[LAB] RX monitor forced off by --lab-no-monitor";
     }
     auto const parseLabDelayMs = [&parser](QCommandLineOption const& option, int fallbackMs) {
@@ -3898,6 +3954,75 @@ int main(int argc, char* argv[])
                         return;
                     }
                 }
+                const QString partialLab = QStandardPaths::isTestModeEnabled()
+                    ? qEnvironmentVariable("DECODIUM_LAB_PARTIAL_PHASE") : QString {};
+                if (!partialLab.isEmpty()) {
+                    using namespace decodium::sstv::hamdrm;
+                    const QFileInfo root(qEnvironmentVariable("DECODIUM_LAB_SETTINGS_DIR"));
+                    const QFileInfo inputInfo(qEnvironmentVariable("DECODIUM_LAB_PARTIAL_INPUT"));
+                    const QFileInfo outputInfo(qEnvironmentVariable("DECODIUM_LAB_PARTIAL_OUTPUT"));
+                    if ((partialLab != QStringLiteral("seed") && partialLab != QStringLiteral("resume"))
+                        || !root.isAbsolute() || !root.isDir() || root.isSymLink()
+                        || !inputInfo.isFile() || inputInfo.isSymLink()
+                        || inputInfo.dir().canonicalPath() != root.canonicalFilePath()
+                        || !outputInfo.isAbsolute() || outputInfo.exists() || outputInfo.isSymLink()
+                        || outputInfo.dir().canonicalPath() != root.canonicalFilePath()) {
+                        qWarning() << "[LAB][PARTIAL] invalid isolated paths or phase"; return;
+                    }
+                    QFile input(inputInfo.absoluteFilePath());
+                    if (!input.open(QIODevice::ReadOnly) || input.size() <= 0 || input.size() > 1024 * 1024) {
+                        qWarning() << "[LAB][PARTIAL] invalid input"; return;
+                    }
+                    const QByteArray bytes = input.readAll();
+                    HamDrmMotObjectMetadata metadata;
+                    metadata.transportId = 0x4a31U;
+                    metadata.filename = "partial-lab.jpg";
+                    const auto object = encodeHamDrmObject(metadata,
+                        std::vector<std::uint8_t>(bytes.cbegin(), bytes.cend()), 256U);
+                    if (!object.ok() || object.value->bodyGroups.size() < 3U) {
+                        qWarning() << "[LAB][PARTIAL] cannot construct partial"; return;
+                    }
+                    auto ingest = [digital](const std::vector<std::uint8_t>& group) {
+                        return digital->ingestMotGroup(QByteArray(
+                            reinterpret_cast<const char*>(group.data()), qsizetype(group.size()))).ok();
+                    };
+                    QJsonObject result {{QStringLiteral("phase"), partialLab},
+                                        {QStringLiteral("selectedProfile"), digital->selectedProfileId()},
+                                        {QStringLiteral("appData"), QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)}};
+                    if (partialLab == QStringLiteral("seed")) {
+                        for (const auto& group : object.value->headerGroups)
+                            if (!ingest(group)) { qWarning() << "[LAB][PARTIAL] header failed"; return; }
+                        if (!ingest(object.value->bodyGroups.front()) || !digital->canBuildBsr()) {
+                            qWarning() << "[LAB][PARTIAL] seed failed"; return;
+                        }
+                    } else {
+                        if (!digital->savedPartialIds().contains(QStringLiteral("4A31"))
+                            || !digital->resumePartial(metadata.transportId)) {
+                            qWarning() << "[LAB][PARTIAL] resume failed" << digital->error(); return;
+                        }
+                        const QByteArray bsr = digital->buildBsr(metadata.transportId, true).toLatin1();
+                        const auto parsed = parseHamDrmBsr(
+                            reinterpret_cast<const std::uint8_t*>(bsr.constData()), std::size_t(bsr.size()));
+                        if (!parsed.ok() || !parsed.value->qsstvCompatibilityCode) {
+                            qWarning() << "[LAB][PARTIAL] BSR failed"; return;
+                        }
+                        result.insert(QStringLiteral("bsrProfileCode"), static_cast<qint64>(*parsed.value->qsstvCompatibilityCode));
+                        for (std::size_t i = 1; i < object.value->bodyGroups.size(); ++i)
+                            if (!ingest(object.value->bodyGroups[i])) { qWarning() << "[LAB][PARTIAL] completion failed"; return; }
+                        const auto completed = digital->completedObject(metadata.transportId);
+                        if (!completed.ok() || completed.value->originalBytes != std::vector<std::uint8_t>(bytes.cbegin(), bytes.cend())) {
+                            qWarning() << "[LAB][PARTIAL] reconstructed bytes differ"; return;
+                        }
+                        result.insert(QStringLiteral("complete"), true);
+                    }
+                    QSaveFile output(outputInfo.absoluteFilePath());
+                    const QByteArray json = QJsonDocument(result).toJson(QJsonDocument::Compact);
+                    if (!output.open(QIODevice::WriteOnly) || output.write(json) != json.size() || !output.commit()) {
+                        qWarning() << "[LAB][PARTIAL] output failed"; return;
+                    }
+                    qInfo() << "[LAB][PARTIAL] completed" << partialLab;
+                    return;
+                }
                 QObject::connect(digital, &decodium::sstv::hamdrm::HamDrmController::objectCompleted,
                     &bridge, [digital, labSstvRxImageFile, &bridge](quint16 id, const QString& filename) {
                         const auto object = digital->completedObject(id);
@@ -4144,8 +4269,10 @@ int main(int argc, char* argv[])
                         const QVariantList missing = digital->missingSegments();
                         const bool audioLoss = qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_AUDIO_LOSS") == 1;
                         const bool missingFinal = qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_MOT_FINAL") == 1;
+                        const bool unmarkedFinal = qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_UNMARK_FINAL") == 1;
                         if (missing.isEmpty() || (!audioLoss && (missing.size() != 1
-                            || (!missingFinal && missing.front().toInt() != 1)))) {
+                            || (!missingFinal && missing.front().toInt() != 1))
+                            && !(unmarkedFinal && missing.size() == 2 && missing.front().toInt() == 1))) {
                             qWarning() << "[LAB][REPAIR] unexpected live missing segments" << missing;
                             timer->stop(); timer->deleteLater(); return;
                         }
@@ -4402,7 +4529,16 @@ int main(int argc, char* argv[])
                     HamDrmMotObjectMetadata metadata;
                     metadata.transportId = bsrLab == QStringLiteral("a") ? 0x2451 : 0x5372;
                     metadata.filename = bsrLab == QStringLiteral("a") ? "probe-a.jpg" : "probe-b.jpg";
-                    const auto partial = encodeHamDrmObject(metadata, std::vector<std::uint8_t>(320, 0x42), 64);
+                    bool customSegmentSize = false;
+                    const int requestedSegmentSize = qEnvironmentVariableIntValue(
+                        "DECODIUM_LAB_BSR_SEGMENT_SIZE", &customSegmentSize);
+                    const int segmentSize = customSegmentSize ? requestedSegmentSize : 64;
+                    if (segmentSize != 64 && segmentSize != 154) {
+                        qWarning() << "[LAB][HAMDRM] invalid BSR fixture segment size"; return;
+                    }
+                    const auto partial = encodeHamDrmObject(metadata,
+                        std::vector<std::uint8_t>(static_cast<std::size_t>(segmentSize) * 5U, 0x42),
+                        static_cast<std::size_t>(segmentSize));
                     if (!partial.ok() || partial.value->bodyGroups.size() != 5) {
                         qWarning() << "[LAB][HAMDRM] BSR fixture encoding failed"; return;
                     }
@@ -4535,10 +4671,13 @@ int main(int argc, char* argv[])
                 const auto imageUrl = QUrl::fromLocalFile(QFileInfo(labSstvImage).absoluteFilePath());
                 const bool hybridUploadLab = QStandardPaths::isTestModeEnabled()
                     && qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_UPLOAD") == 1;
+                const bool qsstvRsCompat = QStandardPaths::isTestModeEnabled()
+                    && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_QSSTV_COMPAT") == 1;
                 const bool started = hybridUploadLab
                     ? digital->startHybridTx(imageUrl, QStringLiteral("TEST1"), QStringLiteral("127.0.0.1"),
                                              QStringLiteral("operator"), QStringLiteral("dummy"), QStringLiteral("radio"))
-                    : digital->startTxWithRs(imageUrl, rsLevel);
+                    : qsstvRsCompat ? digital->startTxWithRsQsstvCompatibility(imageUrl, rsLevel)
+                                    : digital->startTxWithRs(imageUrl, rsLevel);
                 if (hybridUploadLab) qInfo() << "[LAB][HAMDRM] hybrid upload and TX started" << started;
                 if (hybridUploadLab && started && qEnvironmentVariableIntValue("DECODIUM_LAB_CANCEL_HYBRID_UPLOAD") == 1) {
                     QTimer::singleShot(750, digital, [digital] {

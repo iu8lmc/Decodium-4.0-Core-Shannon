@@ -382,6 +382,10 @@ jobs:
           fi
           mkdir -p "${DIST}/sqldrivers"
           cp -f "${QSQLITE_PLUGIN}" "${DIST}/sqldrivers/qsqlite.dll"
+          # Decodium uses SQLite. The installer already excludes these optional
+          # database drivers; keep the portable bundle consistent so it does
+          # not ship plugins whose third-party client DLLs are absent.
+          rm -f "${DIST}/sqldrivers/qsqlibase.dll" "${DIST}/sqldrivers/qsqlmysql.dll" "${DIST}/sqldrivers/qsqlpsql.dll"
 
           SEARCH_DIRS=(
             "${QT_PREFIX}/bin"
@@ -546,6 +550,8 @@ jobs:
           test -f "${DIST}/imageformats/qjpeg.dll"
           test -f "${DIST}/imageformats/qtiff.dll"
           test -f "${DIST}/imageformats/qwebp.dll"
+          python scripts/ci/test_check_bundle_dlls.py
+          python scripts/ci/check-bundle-dlls.py "${DIST}"
 
           printf '%s\n' "Runtime DLLs bundled:" > "${DIST}/runtime-dll-report.txt"
           find "${DIST}" -maxdepth 1 -type f -iname '*.dll' -printf '%f\n' | sort -fu >> "${DIST}/runtime-dll-report.txt"
@@ -595,6 +601,8 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "Installer failed with exit code $($process.ExitCode)" }
           if (-not (Test-Path (Join-Path $installed 'libcrypto-3-x64.dll'))) { throw 'Installed OpenSSL crypto DLL is missing' }
           if (-not (Test-Path (Join-Path $installed 'decodium.exe'))) { throw 'Installed executable is missing' }
+          python scripts/ci/test_check_bundle_dlls.py
+          if ($LASTEXITCODE -ne 0) { throw 'DLL location checker regression tests failed' }
           python scripts/ci/check-bundle-dlls.py $installed
           if ($LASTEXITCODE -ne 0) { throw 'Installed application has unresolved DLL imports' }
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"

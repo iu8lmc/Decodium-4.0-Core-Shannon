@@ -298,9 +298,9 @@ Peer/relay remains design-only behind `SstvShareProvider`. Audit the existing
 DecoPort/WebSocket control channels before any reuse decision. A relay would be
 a separately deployed, explicitly configured service with independently
 verified identity, authentication, limits, retention, privacy and operations;
-no fictional production service or URL is embedded. E2EE remains unavailable
-until an audited crypto dependency, key lifecycle, envelope vectors and
-maintained-platform packaging exist.
+no fictional production service or URL is embedded. Experimental E2EE and
+its local A/B evidence are described in `E2EE_IMPLEMENTATION.md`; a compatible
+public provider and independent security review have not been verified.
 
 Remaining gate: exercise provider delete/block/revoke and provider-event handling
 against a deployed endpoint; prove provider events cannot reach TX/PTT; extend

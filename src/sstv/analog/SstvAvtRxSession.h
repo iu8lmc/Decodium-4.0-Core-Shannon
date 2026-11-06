@@ -23,6 +23,7 @@ struct SstvAvtRxSessionConfig final
     std::size_t maximumPendingDirtyEvents {
         SstvImageFrame::kDefaultMaximumDirtyEvents};
     SstvAvtVariant variant {SstvAvtVariant::Normal};
+    bool experimentalAvt24LastPixelTiming {false};
 };
 
 enum class SstvAvtRxSessionState : std::uint8_t

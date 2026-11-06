@@ -45,12 +45,25 @@ HamDrmValueResult<HamDrmIngestOutcome> HamDrmObjectAssembler::ingest(
         ? header_ : body_;
     const std::size_t byteLimit = group.kind == HamDrmMotGroupKind::Header
         ? limits_.maximumHeaderBytes : limits_.maximumObjectBytes;
+    const auto existing = collection.segments.find(group.segmentNumber);
+    if (existing != collection.segments.end() && existing->second != group.payload) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::ConflictingDuplicate,
+                                      "duplicate MOT segment differs")};
+    }
+    if (existing == collection.segments.end()
+        && group.payload.size() > byteLimit - collection.storedBytes) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
+                                      "stored MOT segments exceed object limit")};
+    }
     if (collection.totalSegments.has_value()
         && group.segmentNumber >= *collection.totalSegments) {
         return {std::nullopt,
                 HamDrmStatus::failure(HamDrmErrorCode::InconsistentObject,
                                       "segment lies beyond declared last segment")};
     }
+    const bool newTerminalMarker = group.lastSegment && !collection.totalSegments.has_value();
     if (group.lastSegment) {
         const std::size_t declaredTotal =
             static_cast<std::size_t>(group.segmentNumber) + 1U;
@@ -69,34 +82,51 @@ HamDrmValueResult<HamDrmIngestOutcome> HamDrmObjectAssembler::ingest(
         collection.totalSegments = declaredTotal;
     }
 
-    const auto existing = collection.segments.find(group.segmentNumber);
     if (existing != collection.segments.end()) {
-        if (existing->second != group.payload) {
-            return {std::nullopt,
-                    HamDrmStatus::failure(HamDrmErrorCode::ConflictingDuplicate,
-                                          "duplicate MOT segment differs")};
+        if (!newTerminalMarker) {
+            return {HamDrmIngestOutcome::DuplicateIgnored, HamDrmStatus::success()};
         }
-        return {HamDrmIngestOutcome::DuplicateIgnored,
-                HamDrmStatus::success()};
-    }
-    if (group.payload.size() > byteLimit - collection.storedBytes) {
-        return {std::nullopt,
-                HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
-                                      "stored MOT segments exceed object limit")};
+        const bool headerWasComplete = metadata_.has_value();
+        if (collection.segments.size() == *collection.totalSegments) {
+            const auto status = validateCompleteCollection(
+                collection, group.kind == HamDrmMotGroupKind::Header);
+            if (!status.ok()) {
+                collection.totalSegments.reset();
+                return {std::nullopt, status};
+            }
+        }
+        if (const auto status = updateMetadataIfReady(); !status.ok()) {
+            collection.totalSegments.reset();
+            if (!headerWasComplete) metadata_.reset();
+            return {std::nullopt, status};
+        }
+        if (isComplete()) return {HamDrmIngestOutcome::ObjectCompleted, HamDrmStatus::success()};
+        if (!headerWasComplete && metadata_.has_value())
+            return {HamDrmIngestOutcome::HeaderCompleted, HamDrmStatus::success()};
+        return {HamDrmIngestOutcome::SegmentAdded, HamDrmStatus::success()};
     }
     collection.storedBytes += group.payload.size();
     collection.segments.emplace(group.segmentNumber, group.payload);
+
+    const bool headerWasComplete = metadata_.has_value();
+    const auto rollbackSegment = [&] {
+        collection.segments.erase(group.segmentNumber);
+        collection.storedBytes -= group.payload.size();
+        if (newTerminalMarker) collection.totalSegments.reset();
+        if (!headerWasComplete) metadata_.reset();
+    };
 
     if (collection.totalSegments.has_value()
         && collection.segments.size() == *collection.totalSegments) {
         if (const auto status = validateCompleteCollection(
                 collection, group.kind == HamDrmMotGroupKind::Header);
             !status.ok()) {
+            rollbackSegment();
             return {std::nullopt, status};
         }
     }
-    const bool headerWasComplete = metadata_.has_value();
     if (const auto status = updateMetadataIfReady(); !status.ok()) {
+        rollbackSegment();
         return {std::nullopt, status};
     }
     if (isComplete()) {

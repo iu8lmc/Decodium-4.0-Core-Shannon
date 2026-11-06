@@ -683,18 +683,107 @@ void testControllerUsesNativeAdapters()
             "controller did not wait for coordinated TX completion");
 }
 
+void testWidePpiSourceLengthAB()
+{
+    const auto* profile = HamDrmProfileRegistry::findById(
+        "hamdrm-A-2500-normal-64-QAM-short");
+    require(profile != nullptr, "wide PPI profile is missing");
+    std::array<std::uint64_t, 2U> totals {};
+    for (std::size_t variant = 0; variant < totals.size(); ++variant) {
+        HamDrmMotDataGroup body;
+        body.kind = HamDrmMotGroupKind::Body;
+        body.lastSegment = true;
+        body.transportId = 0x4545U;
+        body.payload.assign(1U, 0U);
+        const auto minimal = encodeHamDrmMotDataGroup(body);
+        require(minimal.ok(), "cannot determine MOT header size");
+        const auto overhead = minimal.value->size() - 1U;
+        const std::size_t targetSize = 255U + variant;
+        require(overhead < targetSize, "MOT header is too large");
+        body.payload.assign(targetSize - overhead,
+                            static_cast<std::uint8_t>(0x50U + variant));
+        auto encoded = encodeHamDrmMotDataGroup(body);
+        require(encoded.ok() && encoded.value->size() == targetSize,
+                "wide PPI fixture has the wrong size");
+        auto object = makeObject();
+        object.bodyGroups = {*encoded.value};
+
+        std::unique_ptr<SstvPcm16Source> captured;
+        HamDrmNativeTxHooks hooks;
+        hooks.configuredCallsign = []() { return std::string("9H1TEST"); };
+        hooks.startPreparedAudio = [&captured](std::unique_ptr<SstvPcm16Source> source,
+                                              std::string) {
+            captured = std::move(source);
+            return SstvTxCoordinatorResult {true, SstvTxErrorCode::None, {}, 77U};
+        };
+        hooks.cancelAudio = [](std::uint64_t) { return true; };
+        HamDrmNativeTxBackend backend(std::move(hooks));
+        TxSink sink;
+        require(backend.start(*profile, std::move(object), 31U + variant, sink).ok()
+                    && captured,
+                "wide PPI adapter source did not start");
+        totals[variant] = captured->totalSamples();
+        std::array<std::int16_t, 1777U> pcm {};
+        std::uint64_t drained = 0U;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!captured->complete()) {
+            const auto count = captured->pullPcm16(pcm.data(), pcm.size());
+            drained += count;
+            if (!count && !captured->complete()) {
+                require(std::chrono::steady_clock::now() < deadline,
+                        "wide PPI source did not drain");
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+        require(drained == totals[variant], "wide PPI source length was inaccurate");
+        backend.cancel(31U + variant);
+
+        // Use A's exact frame budget for both cases. B must be rejected
+        // before audio starts because its split PPI needs one extra frame.
+        HamDrmNativeAdapterLimits limits;
+        limits.maximumTxFrames = static_cast<std::size_t>(
+            totals[0] / kHamDrmNativePcmSamplesPerFrame);
+        std::unique_ptr<SstvPcm16Source> limitedSource;
+        HamDrmNativeTxHooks limitedHooks;
+        limitedHooks.configuredCallsign = []() { return std::string("9H1TEST"); };
+        limitedHooks.startPreparedAudio = [&limitedSource](
+            std::unique_ptr<SstvPcm16Source> source, std::string) {
+            limitedSource = std::move(source);
+            return SstvTxCoordinatorResult {true, SstvTxErrorCode::None, {}, 78U};
+        };
+        limitedHooks.cancelAudio = [](std::uint64_t) { return true; };
+        HamDrmNativeTxBackend limited(std::move(limitedHooks), limits);
+        auto limitedObject = makeObject();
+        limitedObject.bodyGroups = {*encoded.value};
+        TxSink limitedSink;
+        const auto limitedStatus = limited.start(*profile, std::move(limitedObject),
+                                                  41U + variant, limitedSink);
+        if (variant == 0U) {
+            require(limitedStatus.ok() && limitedSource,
+                    "exact PPI frame budget was rejected");
+            limited.cancel(41U);
+        } else {
+            require(limitedStatus.code == HamDrmErrorCode::LimitExceeded && !limitedSource,
+                    "split PPI exceeded its frame budget without rejection");
+        }
+    }
+    require(totals[1] == totals[0] + kHamDrmNativePcmSamplesPerFrame,
+            "split PPI did not add exactly one 48 kHz frame");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     QCoreApplication application(argc, argv);
-    const std::array<std::pair<const char*, void (*)()>, 5U> tests {{
+    const std::array<std::pair<const char*, void (*)()>, 6U> tests {{
         {"adapter configuration/chunk hard limits",
          testAdapterConfigurationAndChunkHardLimits},
         {"RX adapter loopback/bounds", testRxAdapterLoopbackAndBounds},
         {"TX adapter source/completion", testTxAdapterPreparedSourceAndCompletion},
         {"prepared coordinator authority", testPreparedCoordinatorUsesSharedAuthority},
         {"controller native adapters", testControllerUsesNativeAdapters},
+        {"wide PPI source length A/B", testWidePpiSourceLengthAB},
     }};
     try {
         for (const auto& test : tests) {

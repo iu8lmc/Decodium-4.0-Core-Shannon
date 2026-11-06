@@ -6,16 +6,20 @@
 #include "../../src/sstv/analog/SstvAvtRxSession.h"
 
 #include "../../src/sstv/core/SstvTimingAccumulator.h"
+#include "../../src/sstv/dsp/SstvResampler.h"
+#include "../../src/sstv/dsp/SstvPreprocessor.h"
 
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTextStream>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -856,6 +860,9 @@ private slots:
         }
         QVERIFY(detection.has_value());
         QCOMPARE(detection->counter, std::uint8_t {0U});
+        qInfo("AVT countdown detected image start offset: %lld samples",
+              static_cast<long long>(detection->imageStartSample)
+                  - static_cast<long long>(encoder.headerSamples()));
         const std::uint64_t error = detection->imageStartSample
                 > encoder.headerSamples()
             ? detection->imageStartSample - encoder.headerSamples()
@@ -868,20 +875,117 @@ private slots:
     void fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively_data()
     {
         QTest::addColumn<int>("variant");
-        QTest::newRow("normal") << static_cast<int>(SstvAvtVariant::Normal);
-        QTest::newRow("narrow") << static_cast<int>(SstvAvtVariant::Narrow);
-        QTest::newRow("qrm") << static_cast<int>(SstvAvtVariant::Qrm);
-        QTest::newRow("narrow-qrm") << static_cast<int>(SstvAvtVariant::NarrowQrm);
+        QTest::addColumn<int>("mode");
+        QTest::addColumn<int>("pattern");
+        const int avt24 = static_cast<int>(SstvAvtMode::Avt24);
+        const int avt90 = static_cast<int>(SstvAvtMode::Avt90);
+        QTest::newRow("normal") << static_cast<int>(SstvAvtVariant::Normal) << avt24 << 0;
+        QTest::newRow("narrow") << static_cast<int>(SstvAvtVariant::Narrow) << avt24 << 0;
+        QTest::newRow("qrm") << static_cast<int>(SstvAvtVariant::Qrm) << avt24 << 0;
+        QTest::newRow("narrow-qrm") << static_cast<int>(SstvAvtVariant::NarrowQrm) << avt24 << 0;
+        QTest::newRow("24-narrow-qrm-pattern-a") << static_cast<int>(SstvAvtVariant::NarrowQrm) << avt24 << 11;
+        QTest::newRow("24-narrow-qrm-pattern-b") << static_cast<int>(SstvAvtVariant::NarrowQrm) << avt24 << 12;
+        QTest::newRow("24-narrow-qrm-blocks-a") << static_cast<int>(SstvAvtVariant::NarrowQrm) << avt24 << 13;
+        QTest::newRow("24-narrow-qrm-blocks-b") << static_cast<int>(SstvAvtVariant::NarrowQrm) << avt24 << 14;
+        QTest::newRow("90-qrm-a") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 1;
+        QTest::newRow("90-qrm-b") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 2;
+        QTest::newRow("90-qrm-gradient-a") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 3;
+        QTest::newRow("90-qrm-gradient-b") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 4;
+        QTest::newRow("90-qrm-extreme-a") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 5;
+        QTest::newRow("90-qrm-extreme-b") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 6;
+        QTest::newRow("90-qrm-smooth-a") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 7;
+        QTest::newRow("90-qrm-smooth-b") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 8;
+        QTest::newRow("90-qrm-random-a") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 9;
+        QTest::newRow("90-qrm-random-b") << static_cast<int>(SstvAvtVariant::Qrm) << avt90 << 10;
     }
 
     void fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively()
     {
         QFETCH(int, variant);
+        QFETCH(int, mode);
+        QFETCH(int, pattern);
         const auto avtVariant = static_cast<SstvAvtVariant>(variant);
-        const std::vector<SstvRgbPixel> expected = pixelsFor(
-            SstvAvtMode::Avt24);
+        const auto avtMode = static_cast<SstvAvtMode>(mode);
+        const auto spec = SstvAvtProtocol::spec(avtMode);
+        std::vector<SstvRgbPixel> expected = pixelsFor(avtMode);
+        if (pattern == 1 || pattern == 2) {
+            const SstvRgbPixel colour = pattern == 1
+                ? SstvRgbPixel {80, 120, 255} : SstvRgbPixel {170, 200, 0};
+            std::fill(expected.begin(), expected.end(), colour);
+            expected.back().blue = pattern == 1 ? 0 : 255;
+        }
+        if (pattern == 4) {
+            for (auto& pixel : expected) {
+                pixel.red = 255U - pixel.red;
+                pixel.green = 255U - pixel.green;
+                pixel.blue = 255U - pixel.blue;
+            }
+        }
+        if (pattern == 5 || pattern == 6) {
+            const SstvRgbPixel colour = pattern == 5
+                ? SstvRgbPixel {0, 255, 0} : SstvRgbPixel {255, 0, 255};
+            std::fill(expected.begin(), expected.end(), colour);
+        }
+        if (pattern == 7 || pattern == 8) {
+            for (std::uint32_t y = 0; y < spec.height; ++y) {
+                for (std::uint32_t x = 0; x < spec.width; ++x) {
+                    const auto r = static_cast<std::uint8_t>(x * 255U / (spec.width - 1U));
+                    const auto g = static_cast<std::uint8_t>(y * 255U / (spec.height - 1U));
+                    const auto b = static_cast<std::uint8_t>((static_cast<unsigned>(r) + g) / 2U);
+                    expected[static_cast<std::size_t>(y) * spec.width + x] = pattern == 7
+                        ? SstvRgbPixel {r, g, b}
+                        : SstvRgbPixel {static_cast<std::uint8_t>(255U-r),
+                                        static_cast<std::uint8_t>(255U-g),
+                                        static_cast<std::uint8_t>(255U-b)};
+                }
+            }
+        }
+        if (pattern == 9 || pattern == 10 || pattern == 13 || pattern == 14) {
+            std::uint32_t state = pattern == 9 || pattern == 13 ? 0x12345678U : 0x9abcdef0U;
+            const auto next = [&state]() {
+                state = 1664525U * state + 1013904223U;
+                return static_cast<std::uint8_t>(state >> 24U);
+            };
+            for (std::uint32_t y = 0; y < spec.height; ++y) {
+                for (std::uint32_t x = 0; x < spec.width; x += 8U) {
+                    const SstvRgbPixel color {next(), next(), next()};
+                    for (std::uint32_t offset = 0; offset < 8U && x + offset < spec.width; ++offset)
+                        expected[static_cast<std::size_t>(y) * spec.width + x + offset] = color;
+                }
+            }
+        }
+        if (pattern == 11 || pattern == 12) {
+            for (std::uint32_t y = 0; y < spec.height; ++y) {
+                for (std::uint32_t x = 0; x < spec.width; ++x) {
+                    const SstvRgbPixel color = pattern == 11
+                        ? SstvRgbPixel {static_cast<std::uint8_t>((x * 2U + y / 3U) % 256U),
+                                        static_cast<std::uint8_t>((y * 2U + x / 2U) % 256U),
+                                        static_cast<std::uint8_t>(((x / 16U + y / 12U) % 2U) * 160U + (x + y) % 96U)}
+                        : SstvRgbPixel {static_cast<std::uint8_t>((255U - 2U * x + y) % 256U),
+                                        static_cast<std::uint8_t>(((x / 12U + y / 15U) % 2U) * 150U + y % 106U),
+                                        static_cast<std::uint8_t>((255U - 2U * y + x) % 256U)};
+                    expected[static_cast<std::size_t>(y) * spec.width + x] = color;
+                }
+            }
+        }
+        const QString referencePath = qEnvironmentVariable("DECODIUM_AVT_EXPORT_REFERENCE");
+        if (!referencePath.isEmpty()) {
+            QFile reference(referencePath);
+            QVERIFY(reference.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            const QByteArray header = QByteArray("P6\n") + QByteArray::number(spec.width)
+                + ' ' + QByteArray::number(spec.height) + "\n255\n";
+            QCOMPARE(reference.write(header), qint64(header.size()));
+            for (const auto& pixel : expected) {
+                const char rgb[3] {static_cast<char>(pixel.red), static_cast<char>(pixel.green),
+                                   static_cast<char>(pixel.blue)};
+                QCOMPARE(reference.write(rgb, 3), qint64(3));
+            }
+        }
+        QFile audioExport(qEnvironmentVariable("DECODIUM_AVT_EXPORT_F32"));
+        const bool exportAudio = !audioExport.fileName().isEmpty();
+        if (exportAudio) QVERIFY(audioExport.open(QIODevice::WriteOnly | QIODevice::Truncate));
         SstvAvtEncoder encoder(expected,
-                               {SstvAvtMode::Avt24,
+                               {avtMode,
                                 kSampleRate,
                                 0,
                                 0.7,
@@ -893,12 +997,67 @@ private slots:
         demodConfig.hopSamples = 1U;
         SstvFrequencyDemodulator demodulator(demodConfig);
 
+        const bool loopPreprocess = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_PREPROCESS") == 1;
+        const bool loopSplitEdge = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_SPLIT_EDGE") == 1;
+        const int loopDropPeriod = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_DROP_PERIOD");
+        QVERIFY(loopDropPeriod == 0 || (loopSplitEdge && loopDropPeriod >= 3 && loopDropPeriod <= 100));
+        QVERIFY(!loopSplitEdge || (loopPreprocess && avtMode == SstvAvtMode::Avt24
+                                   && avtVariant == SstvAvtVariant::NarrowQrm));
+        const int loopAnchorShift = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_ANCHOR_SHIFT");
+        QVERIFY(loopAnchorShift >= -8 && loopAnchorShift <= 8);
+        const int loopLastPixelLead = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_LAST_PIXEL_LEAD");
+        const int loopLastPixelTail = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_LAST_PIXEL_TAIL");
+        const int loopFirstPixelLead = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_FIRST_PIXEL_LEAD");
+        const int loopFirstPixelTail = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_FIRST_PIXEL_TAIL");
+        QVERIFY(loopLastPixelLead >= 0 && loopLastPixelLead <= 4
+                && loopLastPixelTail >= 0 && loopLastPixelTail <= 4
+                && loopFirstPixelLead >= 0 && loopFirstPixelLead <= 4
+                && loopFirstPixelTail >= 0 && loopFirstPixelTail <= 4);
+        const bool loopDualEdge = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_DUAL_EDGE") == 1;
+        const bool adaptiveEdge = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_ADAPTIVE_EDGE") == 1;
+        const bool midpointEdge = qEnvironmentVariableIntValue("DECODIUM_AVT_LOOP_MIDPOINT_EDGE") == 1;
+        const int midpointTarget = qEnvironmentVariable("DECODIUM_AVT_LOOP_MIDPOINT_TARGET", "6").toInt();
+        const int loopEdgeDelay = qEnvironmentVariable("DECODIUM_AVT_LOOP_EDGE_DELAY", "4").toInt();
+        const double loopEdgeBlend = qEnvironmentVariable("DECODIUM_AVT_LOOP_EDGE_BLEND", "0").toDouble();
+        QVERIFY(!loopDualEdge || (loopPreprocess && avtMode == SstvAvtMode::Avt90));
+        QVERIFY(loopEdgeDelay >= 0 && loopEdgeDelay <= 5);
+        QVERIFY(std::isfinite(loopEdgeBlend) && loopEdgeBlend >= -1.0 && loopEdgeBlend <= 1.0);
+        QVERIFY(loopEdgeBlend == 0.0 || loopEdgeDelay < 5);
+        QVERIFY(!adaptiveEdge || (loopDualEdge && loopEdgeDelay == 3 && loopEdgeBlend == 0.0));
+        QVERIFY(!midpointEdge || (loopDualEdge && !adaptiveEdge && loopEdgeDelay == 3 && loopEdgeBlend == 0.0));
+        QVERIFY(midpointTarget >= 4 && midpointTarget <= 8);
+        SstvPreprocessorConfig loopConfig;
+        loopConfig.bandPassLowHz = qEnvironmentVariable("DECODIUM_AVT_LOOP_LOW_HZ", "900").toDouble();
+        loopConfig.bandPassHighHz = qEnvironmentVariable("DECODIUM_AVT_LOOP_HIGH_HZ", "2500").toDouble();
+        const double loopInterferenceHz = qEnvironmentVariable("DECODIUM_AVT_LOOP_INTERFERENCE_HZ", "0").toDouble();
+        const double loopInterferencePeak = qEnvironmentVariable("DECODIUM_AVT_LOOP_INTERFERENCE_PEAK", "0").toDouble();
+        QVERIFY(std::isfinite(loopConfig.bandPassLowHz) && std::isfinite(loopConfig.bandPassHighHz)
+                && loopConfig.bandPassLowHz >= 100 && loopConfig.bandPassHighHz > loopConfig.bandPassLowHz
+                && loopConfig.bandPassHighHz <= 5500);
+        QVERIFY(std::isfinite(loopInterferenceHz) && loopInterferenceHz >= 0 && loopInterferenceHz <= 5000
+                && std::isfinite(loopInterferencePeak) && loopInterferencePeak >= 0 && loopInterferencePeak <= 0.2);
+        SstvPreprocessor loopPreprocessor(loopConfig);
+        SstvPreprocessorConfig loopSecondaryConfig;
+        loopSecondaryConfig.bandPassLowHz = 500.0;
+        loopSecondaryConfig.bandPassHighHz = 3500.0;
+        SstvPreprocessor loopSecondaryPreprocessor(loopSecondaryConfig);
+        SstvFrequencyDemodulator loopSecondaryDemodulator(demodConfig);
+        std::vector<SstvFrequencyObservation> loopPreviousSecondary;
+        const auto adaptiveDelay = [adaptiveEdge](const auto& values, std::size_t index, int fallback) {
+            if (!adaptiveEdge || index < 8U) return fallback;
+            const auto& before = values[index - 8U];
+            const auto& three = values[index - 3U];
+            const auto& four = values[index - 4U];
+            if (!before.valid() || !three.valid() || !four.valid()) return fallback;
+            return std::abs(three.correctedFrequencyHz - before.correctedFrequencyHz)
+                    <= std::abs(four.correctedFrequencyHz - before.correctedFrequencyHz) ? 3 : 4;
+        };
         SstvTimingAccumulator timing(kSampleRate);
         static_cast<void>(timing.samplesFor(
             SstvAvtProtocol::TripleVisDuration));
         const std::uint64_t countdownStart = timing.totalSamples();
         SstvAvtCountdownDetectorConfig detectorConfig;
-        detectorConfig.expectedMode = SstvAvtMode::Avt24;
+        detectorConfig.expectedMode = avtMode;
         detectorConfig.variant = avtVariant;
         detectorConfig.sampleRate = kSampleRate;
         detectorConfig.searchStartSample = countdownStart - 64U;
@@ -906,12 +1065,27 @@ private slots:
             demodConfig.averagingSamples);
         SstvAvtCountdownDetector detector(detectorConfig);
         std::unique_ptr<SstvAvtRxSession> session;
+        std::unique_ptr<SstvAvtRxSession> splitControlSession;
+        std::unique_ptr<SstvAvtRxSession> earlierSession;
+        std::unique_ptr<SstvAvtRxSession> laterSession;
+        std::unique_ptr<SstvAvtRxSession> boundarySession;
+        std::unique_ptr<SstvAvtRxSession> edgeEarlySession;
+        std::unique_ptr<SstvAvtMapper> boundaryMapper;
+        std::uint64_t boundaryImageStart = 0U;
+        std::uint64_t lastInteriorValid = 0U;
+        std::uint64_t lastInteriorInvalid = 0U;
+        std::uint64_t otherInteriorValid = 0U;
+        std::uint64_t otherInteriorInvalid = 0U;
+        std::array<double, 4U> transitionFractionSum {};
+        std::array<std::uint64_t, 4U> transitionFractionCount {};
+        std::vector<SstvFrequencyObservation> diagnosticObservations;
 
         constexpr std::array<std::size_t, 6U> chunks {{
             1U, 73U, 2'048U, 8'192U, 509U, 4'093U}};
         std::vector<std::int16_t> pcm(8'192U);
         std::vector<float> floating(8'192U);
         std::size_t chunkIndex = 0U;
+        std::uint64_t loopSampleIndex = 0U;
         while (!encoder.complete()) {
             const std::size_t request = chunks[
                 chunkIndex++ % chunks.size()];
@@ -920,29 +1094,169 @@ private slots:
             QVERIFY(produced > 0U);
             for (std::size_t index = 0U; index < produced; ++index) {
                 floating[index] = static_cast<float>(pcm[index])
-                    / 32'768.0F;
+                    / 32'768.0F + static_cast<float>(loopInterferencePeak * std::sin(
+                        2.0 * 3.141592653589793 * loopInterferenceHz * loopSampleIndex / kSampleRate));
+                ++loopSampleIndex;
             }
-            const std::vector<SstvFrequencyObservation> observations =
-                demodulator.consume(floating.data(), produced);
+            if (exportAudio) {
+                const auto bytes = static_cast<qint64>(produced * sizeof(float));
+                QCOMPARE(audioExport.write(reinterpret_cast<const char*>(floating.data()), bytes), bytes);
+            }
+            const std::vector<float> loopInput(floating.begin(), floating.begin() + produced);
+            const auto prepared = loopPreprocess ? loopPreprocessor.process(loopInput) : loopInput;
+            const std::vector<SstvFrequencyObservation> observations = demodulator.consume(prepared);
+            const auto loopSecondary = loopDualEdge
+                ? loopSecondaryDemodulator.consume(loopSecondaryPreprocessor.process(loopInput))
+                : std::vector<SstvFrequencyObservation> {};
+            std::vector<SstvFrequencyObservation> loopDelayed = loopPreviousSecondary;
+            if (loopDualEdge) {
+                QCOMPARE(loopSecondary.size(), observations.size());
+                loopDelayed.insert(loopDelayed.end(), loopSecondary.begin(), loopSecondary.end());
+            }
             QVERIFY(observations.size()
                     <= SstvAvtCountdownDetector::MaximumObservationsPerConsume);
             if (!session) {
                 const auto detection = detector.consume(observations);
                 if (detection.has_value()) {
+                    qInfo("AVT variant %d detected image start offset: %lld samples",
+                          variant, static_cast<long long>(detection->imageStartSample)
+                              - static_cast<long long>(encoder.headerSamples()));
                     SstvAvtRxSessionConfig sessionConfig;
                     sessionConfig.mode = detection->mode;
                     sessionConfig.variant = detection->variant;
                     sessionConfig.sampleRate = kSampleRate;
-                    sessionConfig.imageStartSample =
-                        detection->imageStartSample;
+                    QVERIFY(static_cast<std::int64_t>(detection->imageStartSample) + loopAnchorShift > 0);
+                    sessionConfig.imageStartSample = static_cast<std::uint64_t>(
+                        static_cast<std::int64_t>(detection->imageStartSample) + loopAnchorShift);
                     sessionConfig.observationSpanSamples =
                         static_cast<std::uint32_t>(demodConfig.hopSamples);
+                    sessionConfig.experimentalAvt24LastPixelTiming = loopSplitEdge;
                     session = std::make_unique<SstvAvtRxSession>(
                         sessionConfig);
+                    sessionConfig.experimentalAvt24LastPixelTiming = false;
+                    if (loopSplitEdge)
+                        splitControlSession = std::make_unique<SstvAvtRxSession>(sessionConfig);
+                    boundaryImageStart = sessionConfig.imageStartSample;
+                    boundarySession = std::make_unique<SstvAvtRxSession>(sessionConfig);
+                    boundaryMapper = std::make_unique<SstvAvtMapper>(
+                        SstvAvtMapperConfig {avtMode, kSampleRate, 0, avtVariant});
+                    QVERIFY(sessionConfig.imageStartSample > 0U);
+                    --sessionConfig.imageStartSample;
+                    earlierSession = std::make_unique<SstvAvtRxSession>(sessionConfig);
+                    sessionConfig.imageStartSample += 2U;
+                    laterSession = std::make_unique<SstvAvtRxSession>(sessionConfig);
+                    if (avtMode == SstvAvtMode::Avt90) {
+                        sessionConfig.imageStartSample = boundaryImageStart - 2U;
+                        edgeEarlySession = std::make_unique<SstvAvtRxSession>(sessionConfig);
+                    }
                 }
             }
             if (session) {
-                static_cast<void>(session->consume(observations));
+                if (avtMode == SstvAvtMode::Avt90)
+                    diagnosticObservations.insert(diagnosticObservations.end(), observations.begin(), observations.end());
+                auto imageObservations = observations;
+                if (loopDualEdge) {
+                    for (std::size_t i = 0; i < observations.size(); ++i) {
+                        const auto centre = observations[i].centreSample;
+                        if (centre < boundaryImageStart) continue;
+                        const auto relative = centre - boundaryImageStart;
+                        if (relative >= boundaryMapper->imageSampleCount() || relative % 1500U < 1490U) continue;
+                        const auto pixel = boundaryMapper->positionAtSample(relative);
+                        const auto delayedIndex = loopPreviousSecondary.size() + i;
+                        if (pixel.pixel == 319U && delayedIndex >= static_cast<std::size_t>(midpointEdge ? 5 : loopEdgeDelay + (loopEdgeBlend != 0.0))) {
+                            const int chosenDelay = midpointEdge
+                                ? std::clamp(midpointTarget - int(pixel.segmentEndSample - relative), 0, 5)
+                                : adaptiveDelay(loopDelayed, delayedIndex, loopEdgeDelay);
+                            imageObservations[i] = loopDelayed[delayedIndex - chosenDelay];
+                            if (loopEdgeBlend != 0.0) {
+                                const auto& previous = loopDelayed[delayedIndex - loopEdgeDelay - 1U];
+                                if (imageObservations[i].valid() && previous.valid())
+                                    imageObservations[i].correctedFrequencyHz =
+                                        (1.0 - loopEdgeBlend) * imageObservations[i].correctedFrequencyHz
+                                        + loopEdgeBlend * previous.correctedFrequencyHz;
+                            }
+                            imageObservations[i].centreSample = centre;
+                            imageObservations[i].sequence = observations[i].sequence;
+                        }
+                    }
+                }
+                if (loopLastPixelLead || loopLastPixelTail || loopFirstPixelLead || loopFirstPixelTail) {
+                    imageObservations.erase(std::remove_if(imageObservations.begin(), imageObservations.end(),
+                        [&](const SstvFrequencyObservation& item) {
+                            if (item.centreSample < boundaryImageStart) return false;
+                            const auto sample = item.centreSample - boundaryImageStart;
+                            if (sample >= boundaryMapper->imageSampleCount()) return false;
+                            const auto position = boundaryMapper->positionAtSample(sample);
+                            if (!position.valid()) return false;
+                            const bool first = position.pixel == 0U;
+                            if (!first && position.pixel + 1U != spec.width) return false;
+                            const int lead = first ? loopFirstPixelLead : loopLastPixelLead;
+                            const int tail = first ? loopFirstPixelTail : loopLastPixelTail;
+                            return sample - position.segmentStartSample < static_cast<std::uint64_t>(lead)
+                                || position.segmentEndSample - sample <= static_cast<std::uint64_t>(tail);
+                        }), imageObservations.end());
+                }
+                std::vector<SstvFrequencyObservation> controlObservations;
+                if (splitControlSession) controlObservations = observations;
+                if (loopDropPeriod) {
+                    const auto drop = [loopDropPeriod](const SstvFrequencyObservation& item) {
+                        return item.centreSample % static_cast<std::uint64_t>(loopDropPeriod) == 0U;
+                    };
+                    imageObservations.erase(std::remove_if(imageObservations.begin(), imageObservations.end(), drop),
+                                            imageObservations.end());
+                    controlObservations.erase(std::remove_if(controlObservations.begin(), controlObservations.end(), drop),
+                                              controlObservations.end());
+                }
+                static_cast<void>(session->consume(imageObservations));
+                if (splitControlSession) static_cast<void>(splitControlSession->consume(controlObservations));
+                static_cast<void>(earlierSession->consume(observations));
+                static_cast<void>(laterSession->consume(observations));
+                if (edgeEarlySession) static_cast<void>(edgeEarlySession->consume(observations));
+                std::vector<SstvFrequencyObservation> filtered;
+                filtered.reserve(observations.size());
+                for (const auto& item : observations) {
+                    if (item.centreSample >= boundaryImageStart) {
+                        const auto sample = item.centreSample - boundaryImageStart;
+                        if (sample < boundaryMapper->imageSampleCount()) {
+                            const auto pos = boundaryMapper->positionAtSample(sample);
+                            const auto length = pos.segmentEndSample - pos.segmentStartSample;
+                            const bool interior = length >= 4U
+                                && sample > pos.segmentStartSample
+                                && sample + 1U < pos.segmentEndSample;
+                            if (interior) {
+                                auto& count = pos.pixel + 1U == spec.width
+                                    ? (item.valid() ? lastInteriorValid : lastInteriorInvalid)
+                                    : (item.valid() ? otherInteriorValid : otherInteriorInvalid);
+                                ++count;
+                                if ((pattern == 5 || pattern == 6)
+                                    && pos.pixel + 1U == spec.width && item.valid()
+                                    && (pos.component == ColourComponent::Red
+                                        || pos.component == ColourComponent::Green)) {
+                                    const auto distance = pos.segmentEndSample - sample;
+                                    if (distance < transitionFractionSum.size()) {
+                                        const bool rising = (pos.component == ColourComponent::Red)
+                                            == (pattern == 5);
+                                        const double fraction = rising
+                                            ? (item.correctedFrequencyHz - 1500.0) / 800.0
+                                            : (2300.0 - item.correctedFrequencyHz) / 800.0;
+                                        transitionFractionSum[distance] += fraction;
+                                        ++transitionFractionCount[distance];
+                                    }
+                                }
+                            }
+                            if (pos.pixel + 1U == spec.width && length >= 4U
+                                && sample >= pos.segmentStartSample + (length + 1U) / 2U) {
+                                continue;
+                            }
+                        }
+                    }
+                    filtered.push_back(item);
+                }
+                static_cast<void>(boundarySession->consume(filtered));
+            }
+            if (loopDualEdge) {
+                const auto keep = std::min<std::size_t>(9U, loopDelayed.size());
+                loopPreviousSecondary.assign(loopDelayed.end() - keep, loopDelayed.end());
             }
         }
         QVERIFY(session != nullptr);
@@ -952,24 +1266,257 @@ private slots:
         // samples are not part of the encoded AVT payload.
         std::vector<float> silence(256U, 0.0F);
         const std::vector<SstvFrequencyObservation> trailing =
-            demodulator.consume(silence);
+            demodulator.consume(loopPreprocess ? loopPreprocessor.process(silence) : silence);
         QVERIFY(trailing.size()
                 <= SstvAvtCountdownDetector::MaximumObservationsPerConsume);
-        static_cast<void>(session->consume(trailing));
+        auto imageTrailing = trailing;
+        if (loopDualEdge) {
+            const auto secondaryTrailing = loopSecondaryDemodulator.consume(loopSecondaryPreprocessor.process(silence));
+            QCOMPARE(secondaryTrailing.size(), trailing.size());
+            auto delayed = loopPreviousSecondary;
+            delayed.insert(delayed.end(), secondaryTrailing.begin(), secondaryTrailing.end());
+            for (std::size_t i = 0; i < trailing.size(); ++i) {
+                const auto centre = trailing[i].centreSample;
+                if (centre < boundaryImageStart) continue;
+                const auto relative = centre - boundaryImageStart;
+                if (relative >= boundaryMapper->imageSampleCount() || relative % 1500U < 1490U) continue;
+                const auto delayedIndex = loopPreviousSecondary.size() + i;
+                const auto pixel = boundaryMapper->positionAtSample(relative);
+                if (pixel.pixel == 319U
+                    && delayedIndex >= static_cast<std::size_t>(midpointEdge ? 5 : loopEdgeDelay + (loopEdgeBlend != 0.0))) {
+                    const int chosenDelay = midpointEdge
+                        ? std::clamp(midpointTarget - int(pixel.segmentEndSample - relative), 0, 5)
+                        : adaptiveDelay(delayed, delayedIndex, loopEdgeDelay);
+                    imageTrailing[i] = delayed[delayedIndex - chosenDelay];
+                    if (loopEdgeBlend != 0.0) {
+                        const auto& previous = delayed[delayedIndex - loopEdgeDelay - 1U];
+                        if (imageTrailing[i].valid() && previous.valid())
+                            imageTrailing[i].correctedFrequencyHz =
+                                (1.0 - loopEdgeBlend) * imageTrailing[i].correctedFrequencyHz
+                                + loopEdgeBlend * previous.correctedFrequencyHz;
+                    }
+                    imageTrailing[i].centreSample = centre;
+                    imageTrailing[i].sequence = trailing[i].sequence;
+                }
+            }
+        }
+        static_cast<void>(session->consume(imageTrailing));
+        if (splitControlSession) static_cast<void>(splitControlSession->consume(trailing));
+        static_cast<void>(earlierSession->consume(trailing));
+        static_cast<void>(laterSession->consume(trailing));
+        static_cast<void>(boundarySession->consume(trailing));
+        if (edgeEarlySession) static_cast<void>(edgeEarlySession->consume(trailing));
+        if (avtMode == SstvAvtMode::Avt90)
+            diagnosticObservations.insert(diagnosticObservations.end(), trailing.begin(), trailing.end());
+        const auto tracePath = qEnvironmentVariable("DECODIUM_AVT_BOUNDARY_TRACE");
+        if (!tracePath.isEmpty()) {
+            QVERIFY(avtMode == SstvAvtMode::Avt90 && loopPreprocess);
+            QFile trace(tracePath);
+            QVERIFY(trace.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text));
+            QTextStream out(&trace);
+            out << "row,component,target";
+            for (int d = -8; d <= 4; ++d) out << ",f" << d;
+            out << '\n';
+            const auto sampleFor = [&](std::uint64_t wanted) -> const SstvFrequencyObservation* {
+                const auto it = std::lower_bound(diagnosticObservations.begin(), diagnosticObservations.end(), wanted,
+                    [](const auto& item, std::uint64_t value) { return item.centreSample < value; });
+                return it != diagnosticObservations.end() && it->centreSample == wanted && it->valid() ? &*it : nullptr;
+            };
+            for (std::uint64_t end = 1500U; end + 4U < boundaryMapper->imageSampleCount(); end += 1500U) {
+                const auto pixel = boundaryMapper->positionAtSample(end - 1U);
+                const auto source = expected[std::size_t(pixel.line) * spec.width + pixel.pixel];
+                const int channel = pixel.component == ColourComponent::Red ? 0
+                    : pixel.component == ColourComponent::Green ? 1 : 2;
+                const int value = channel == 0 ? source.red : channel == 1 ? source.green : source.blue;
+                std::array<const SstvFrequencyObservation*, 13U> samples {};
+                bool valid = true;
+                for (int d = -8; d <= 4; ++d) {
+                    samples[static_cast<std::size_t>(d + 8)] = sampleFor(boundaryImageStart + end + d);
+                    valid = valid && samples[static_cast<std::size_t>(d + 8)] != nullptr;
+                }
+                if (!valid) continue;
+                out << pixel.line << ',' << channel << ',' << value;
+                for (const auto* sample : samples) out << ',' << sample->correctedFrequencyHz;
+                out << '\n';
+            }
+            out.flush();
+            QVERIFY(out.status() == QTextStream::Ok);
+        }
         QCOMPARE(session->finish(), SstvAvtRxSessionState::Complete);
+        if (splitControlSession) QCOMPARE(splitControlSession->finish(), SstvAvtRxSessionState::Complete);
+        QCOMPARE(earlierSession->finish(), SstvAvtRxSessionState::Complete);
+        QCOMPARE(laterSession->finish(), SstvAvtRxSessionState::Complete);
+        QCOMPARE(boundarySession->finish(), SstvAvtRxSessionState::Complete);
+        if (edgeEarlySession) QCOMPARE(edgeEarlySession->finish(), SstvAvtRxSessionState::Complete);
         QCOMPARE(session->decoderMetrics().linesPublished,
-                 std::uint64_t {120U});
+                 static_cast<std::uint64_t>(spec.height));
 
         const SstvImageSnapshot actual = session->snapshot();
+        const SstvImageSnapshot splitControl = splitControlSession ? splitControlSession->snapshot() : SstvImageSnapshot {};
+        const SstvImageSnapshot earlier = earlierSession->snapshot();
+        const SstvImageSnapshot later = laterSession->snapshot();
+        const SstvImageSnapshot boundary = boundarySession->snapshot();
+        SstvImageSnapshot edgeEarlySnapshot;
+        if (edgeEarlySession) edgeEarlySnapshot = edgeEarlySession->snapshot();
+        SstvImageSnapshot correctedSnapshot;
+        if (avtMode == SstvAvtMode::Avt90) {
+            double nextToneError = 0.0;
+            double uncorrectedToneError = 0.0;
+            double correctedToneError = 0.0;
+            std::uint64_t diagnosticCount = 0U;
+            // Offline diagnostic only: estimate the next tone from a future
+            // observation and undo an empirically observed 11% mixture.
+            // This is not a production algorithm or a calibrated channel model.
+            for (auto& item : diagnosticObservations) {
+                if (!item.valid() || item.centreSample < boundaryImageStart) continue;
+                const auto sample = item.centreSample - boundaryImageStart;
+                if (sample >= boundaryMapper->imageSampleCount()) continue;
+                const auto pos = boundaryMapper->positionAtSample(sample);
+                if (pos.pixel + 1U != spec.width || pos.segmentEndSample - sample != 2U
+                    || pos.segmentEndSample + 2U >= boundaryMapper->imageSampleCount()) continue;
+                const auto wanted = boundaryImageStart + pos.segmentEndSample + 2U;
+                const auto next = std::lower_bound(diagnosticObservations.begin(), diagnosticObservations.end(), wanted,
+                    [](const auto& observation, std::uint64_t target) { return observation.centreSample < target; });
+                if (next == diagnosticObservations.end() || next->centreSample != wanted || !next->valid()) continue;
+                const auto sourceFrequency = [&](const SstvAvtPosition& position) {
+                    const auto pixel = expected[static_cast<std::size_t>(position.line) * spec.width + position.pixel];
+                    const auto value = position.component == ColourComponent::Red ? pixel.red
+                        : position.component == ColourComponent::Green ? pixel.green : pixel.blue;
+                    return SstvAvtProtocol::frequencyForValue(value, avtVariant);
+                };
+                const auto futurePosition = boundaryMapper->positionAtSample(pos.segmentEndSample + 2U);
+                const double currentExpected = sourceFrequency(pos);
+                const double futureExpected = sourceFrequency(futurePosition);
+                const double candidate = (item.correctedFrequencyHz - 0.11 * next->correctedFrequencyHz) / 0.89;
+                nextToneError += std::abs(next->correctedFrequencyHz - futureExpected);
+                uncorrectedToneError += std::abs(item.correctedFrequencyHz - currentExpected);
+                correctedToneError += std::abs(candidate - currentExpected);
+                ++diagnosticCount;
+                item.correctedFrequencyHz = candidate;
+            }
+            QVERIFY(diagnosticCount > 0U);
+            qInfo("AVT de-mix observation mean abs Hz next/before/after: %.2f/%.2f/%.2f over %llu",
+                  nextToneError / diagnosticCount, uncorrectedToneError / diagnosticCount,
+                  correctedToneError / diagnosticCount, static_cast<unsigned long long>(diagnosticCount));
+            SstvAvtRxSessionConfig candidateConfig;
+            candidateConfig.mode = avtMode;
+            candidateConfig.variant = avtVariant;
+            candidateConfig.sampleRate = kSampleRate;
+            candidateConfig.imageStartSample = boundaryImageStart;
+            candidateConfig.observationSpanSamples = 1U;
+            SstvAvtRxSession candidate(candidateConfig);
+            for (std::size_t offset = 0; offset < diagnosticObservations.size(); offset += 8192U) {
+                const auto count = std::min<std::size_t>(8192U, diagnosticObservations.size() - offset);
+                static_cast<void>(candidate.consume(diagnosticObservations.data() + offset, count));
+            }
+            QCOMPARE(candidate.finish(), SstvAvtRxSessionState::Complete);
+            correctedSnapshot = candidate.snapshot();
+        }
         QVERIFY(actual.isComplete());
-        QCOMPARE(actual.width, std::uint32_t {128U});
-        QCOMPARE(actual.height, std::uint32_t {120U});
+        QCOMPARE(actual.width, spec.width);
+        QCOMPARE(actual.height, spec.height);
         std::uint64_t absoluteError = 0U;
+        std::uint64_t earlierError = 0U;
+        std::uint64_t boundaryError = 0U;
+        std::uint64_t splitControlBoundaryError = 0U;
+        std::uint64_t firstColumnError = 0U;
+        int boundaryMax = 0;
+        int firstColumnMax = 0;
+        std::uint32_t boundaryMaxRow = 0;
+        int boundaryMaxChannel = 0;
+        std::uint64_t earlierBoundaryError = 0U;
+        std::uint64_t laterError = 0U;
+        std::uint64_t laterBoundaryError = 0U;
+        std::uint64_t boundaryFilteredError = 0U;
+        std::uint64_t boundaryFilteredColumnError = 0U;
+        std::uint64_t correctedError = 0U;
+        std::uint64_t correctedColumnError = 0U;
+        std::uint64_t earlyColumnError = 0U;
+        std::uint64_t estimatedNeighbourBefore = 0U, estimatedNeighbourAfter = 0U;
+        int estimatedNeighbourMax = 0;
+        int earlyColumnMax = 0;
         for (std::uint32_t y = 0U; y < actual.height; ++y) {
             for (std::uint32_t x = 0U; x < actual.width; ++x) {
                 const std::size_t index = static_cast<std::size_t>(y)
                     * actual.width + x;
                 const SstvRgbPixel decoded = actual.pixel(x, y);
+                const SstvRgbPixel shifted = earlier.pixel(x, y);
+                const SstvRgbPixel delayed = later.pixel(x, y);
+                const SstvRgbPixel filteredPixel = boundary.pixel(x, y);
+                const auto componentError = [](const SstvRgbPixel& a, const SstvRgbPixel& b) {
+                    return std::abs(int(a.red) - int(b.red))
+                        + std::abs(int(a.green) - int(b.green))
+                        + std::abs(int(a.blue) - int(b.blue));
+                };
+                if (splitControlSession) {
+                    const auto control = splitControl.pixel(x, y);
+                    if (x + 1U != actual.width) {
+                        QCOMPARE(decoded.red, control.red);
+                        QCOMPARE(decoded.green, control.green);
+                        QCOMPARE(decoded.blue, control.blue);
+                    } else {
+                        splitControlBoundaryError += componentError(control, expected[index]);
+                    }
+                }
+                earlierError += componentError(shifted, expected[index]);
+                laterError += componentError(delayed, expected[index]);
+                boundaryFilteredError += componentError(filteredPixel, expected[index]);
+                if (avtMode == SstvAvtMode::Avt90) {
+                    const auto error = componentError(correctedSnapshot.pixel(x, y), expected[index]);
+                    correctedError += error;
+                    if (x + 1U == actual.width) correctedColumnError += error;
+                }
+                if (x + 1U == actual.width) {
+                    if (avtMode == SstvAvtMode::Avt90) {
+                        const auto first = actual.pixel(0U, y);
+                        const auto nextLine = y == 238U ? 1U : y + 2U;
+                        const auto nextFirst = y == 239U ? first : actual.pixel(0U, nextLine);
+                        const std::array<int, 3U> current {{decoded.red, decoded.green, decoded.blue}};
+                        const std::array<int, 3U> next {{first.green, first.blue, nextFirst.red}};
+                        const auto source = expected[index];
+                        const std::array<int, 3U> wanted {{source.red, source.green, source.blue}};
+                        for (std::size_t channel = 0; channel < 3U; ++channel) {
+                            if (channel == 2U && y == 239U) continue;
+                            const int corrected = std::clamp(static_cast<int>(std::lround(
+                                (current[channel] - 0.33 * next[channel]) / 0.67)), 0, 255);
+                            estimatedNeighbourBefore += std::abs(current[channel] - wanted[channel]);
+                            const int error = std::abs(corrected - wanted[channel]);
+                            estimatedNeighbourAfter += error;
+                            estimatedNeighbourMax = std::max(estimatedNeighbourMax, error);
+                        }
+                    }
+                    boundaryError += componentError(decoded, expected[index]);
+                    const auto source = expected[index];
+                    const std::array<int, 3U> errors {{std::abs(int(decoded.red) - int(source.red)),
+                        std::abs(int(decoded.green) - int(source.green)),
+                        std::abs(int(decoded.blue) - int(source.blue))}};
+                    for (int channel = 0; channel < 3; ++channel) {
+                        if (errors[channel] > boundaryMax) {
+                            boundaryMax = errors[channel];
+                            boundaryMaxRow = y;
+                            boundaryMaxChannel = channel;
+                        }
+                    }
+                    earlierBoundaryError += componentError(shifted, expected[index]);
+                    laterBoundaryError += componentError(delayed, expected[index]);
+                    boundaryFilteredColumnError += componentError(filteredPixel, expected[index]);
+                    if (edgeEarlySession) {
+                        const auto early = edgeEarlySnapshot.pixel(x, y);
+                        earlyColumnError += componentError(early, expected[index]);
+                        earlyColumnMax = std::max({earlyColumnMax,
+                            std::abs(int(early.red) - int(expected[index].red)),
+                            std::abs(int(early.green) - int(expected[index].green)),
+                            std::abs(int(early.blue) - int(expected[index].blue))});
+                    }
+                }
+                if (x == 0U) {
+                    firstColumnError += componentError(decoded, expected[index]);
+                    const auto source = expected[index];
+                    firstColumnMax = std::max({firstColumnMax,
+                        std::abs(int(decoded.red) - int(source.red)),
+                        std::abs(int(decoded.green) - int(source.green)),
+                        std::abs(int(decoded.blue) - int(source.blue))});
+                }
                 absoluteError += static_cast<std::uint64_t>(std::abs(
                     static_cast<int>(decoded.red)
                     - static_cast<int>(expected[index].red)));
@@ -983,9 +1530,435 @@ private slots:
         }
         const double meanAbsoluteError = static_cast<double>(absoluteError)
             / static_cast<double>(expected.size() * 3U);
+        if (!loopPreprocess && (pattern == 7 || pattern == 8)) {
+            QVERIFY2(meanAbsoluteError < 0.05,
+                     qPrintable(QStringLiteral("AVT90 smooth loopback MAE: %1")
+                                    .arg(meanAbsoluteError, 0, 'f', 5)));
+        }
+        if (!loopPreprocess && (pattern == 5 || pattern == 6)) {
+            // The extreme A/B images are constant per component, so their
+            // clean loopback should be much more accurate than a gradient.
+            // The remaining boundary error is included in this whole-image
+            // metric; it is not evidence of pixel-perfect decoding.
+            QVERIFY2(meanAbsoluteError < 0.05,
+                     qPrintable(QStringLiteral("AVT90 extreme loopback MAE: %1")
+                                    .arg(meanAbsoluteError, 0, 'f', 5)));
+        }
+        qInfo("AVT variant %d normal/earlier total error: %llu/%llu; last-column: %llu/%llu",
+              variant, static_cast<unsigned long long>(absoluteError),
+              static_cast<unsigned long long>(earlierError),
+              static_cast<unsigned long long>(boundaryError),
+              static_cast<unsigned long long>(earlierBoundaryError));
+        qInfo("AVT diagnostic last-column max component %d row %u channel %d",
+              boundaryMax, boundaryMaxRow, boundaryMaxChannel);
+        if (pattern >= 11 && pattern <= 14) {
+            qInfo("AVT24 Narrow-QRM first/last-column maxima %d/%d", firstColumnMax, boundaryMax);
+            qInfo("AVT24 Narrow-QRM first/last-column MAE %.3f/%.3f",
+                  double(firstColumnError) / (actual.height * 3.0),
+                  double(boundaryError) / (actual.height * 3.0));
+            if (loopSplitEdge && loopInterferencePeak == 0.0) {
+                QVERIFY(splitControlBoundaryError > 0U);
+                QVERIFY2(boundaryError * 100U < splitControlBoundaryError * 60U,
+                         "experimental edge timing did not reduce clean last-column error");
+            }
+            if (loopSplitEdge && loopInterferencePeak == 0.1
+                && (loopInterferenceHz == 430.0 || loopInterferenceHz == 2900.0)) {
+                QVERIFY(splitControlBoundaryError > 0U);
+                QVERIFY2(boundaryError * 100U < splitControlBoundaryError * 98U,
+                         "experimental edge timing did not reduce disturbed last-column error");
+            }
+            if ((pattern == 11 || pattern == 12) && !loopPreprocess && loopAnchorShift == 0 && loopInterferencePeak == 0.0
+                && loopLastPixelLead == 0 && loopLastPixelTail == 0
+                && loopFirstPixelLead == 0 && loopFirstPixelTail == 0) {
+                QVERIFY2(firstColumnMax <= 20 && boundaryMax <= 20,
+                         qPrintable(QStringLiteral("AVT24 unfiltered edge errors %1/%2")
+                                        .arg(firstColumnMax).arg(boundaryMax)));
+            }
+        }
+        if (!loopPreprocess && (pattern == 3 || pattern == 4 || pattern == 7 || pattern == 8)) {
+            QVERIFY2(boundaryMax <= 20,
+                     qPrintable(QStringLiteral("AVT90 unfiltered last-column error %1 at row %2 channel %3")
+                                    .arg(boundaryMax).arg(boundaryMaxRow).arg(boundaryMaxChannel)));
+        }
+        if (!loopPreprocess && (pattern == 1 || pattern == 2 || pattern == 9 || pattern == 10)) {
+            // The terminal sample can have higher error when the final
+            // pixel contrasts with its neighbours, including random blocks.
+            QVERIFY2(boundaryMax <= 40,
+                     qPrintable(QStringLiteral("AVT90 terminal-pixel error %1 at row %2 channel %3")
+                                    .arg(boundaryMax).arg(boundaryMaxRow).arg(boundaryMaxChannel)));
+        }
+        qInfo("AVT variant %d later total error: %llu; last-column: %llu",
+              variant, static_cast<unsigned long long>(laterError),
+              static_cast<unsigned long long>(laterBoundaryError));
+        qInfo("AVT variant %d filtered total error: %llu; last-column: %llu",
+              variant, static_cast<unsigned long long>(boundaryFilteredError),
+              static_cast<unsigned long long>(boundaryFilteredColumnError));
+        if (avtMode == SstvAvtMode::Avt90)
+            qInfo("AVT diagnostic de-mix total error: %llu; last-column: %llu",
+                  static_cast<unsigned long long>(correctedError),
+                  static_cast<unsigned long long>(correctedColumnError));
+        if (avtMode == SstvAvtMode::Avt90)
+            qInfo("AVT estimated-neighbour correction original/corrected last-column error %llu/%llu; max %d",
+                  static_cast<unsigned long long>(estimatedNeighbourBefore),
+                  static_cast<unsigned long long>(estimatedNeighbourAfter), estimatedNeighbourMax);
+        if (edgeEarlySession)
+            qInfo("AVT diagnostic early-only last column: %llu; max component: %d",
+                  static_cast<unsigned long long>(earlyColumnError), earlyColumnMax);
+        qInfo("AVT interior observations last pixel valid/invalid: %llu/%llu; other pixels: %llu/%llu",
+              static_cast<unsigned long long>(lastInteriorValid),
+              static_cast<unsigned long long>(lastInteriorInvalid),
+              static_cast<unsigned long long>(otherInteriorValid),
+              static_cast<unsigned long long>(otherInteriorInvalid));
+        QVERIFY(lastInteriorValid > 0U);
+        QVERIFY(otherInteriorValid > 0U);
+        if (pattern == 5 || pattern == 6) {
+            for (std::size_t distance = 2U; distance < transitionFractionSum.size(); ++distance) {
+                QVERIFY(transitionFractionCount[distance] > 0U);
+                qInfo("AVT extreme distance-to-end %zu mean next-tone fraction %.5f (%llu observations)",
+                      distance, transitionFractionSum[distance] / transitionFractionCount[distance],
+                      static_cast<unsigned long long>(transitionFractionCount[distance]));
+            }
+        }
         QVERIFY2(meanAbsoluteError < 35.0,
                  qPrintable(QStringLiteral("AVT24 loopback MAE: %1")
                                 .arg(meanAbsoluteError, 0, 'f', 3)));
+    }
+
+    void offlineCapturedAvt90TimingDiagnostic()
+    {
+        const QString path = qEnvironmentVariable("DECODIUM_AVT_CAPTURE");
+        if (path.isEmpty()) QSKIP("Optional captured-audio diagnostic");
+        const QString variant = qEnvironmentVariable("DECODIUM_AVT_CAPTURE_VARIANT");
+        QVERIFY(variant == QStringLiteral("a") || variant == QStringLiteral("b"));
+        const double interferenceHz = qEnvironmentVariable("DECODIUM_AVT_INTERFERENCE_HZ", "0").toDouble();
+        const double interferencePeak = qEnvironmentVariable("DECODIUM_AVT_INTERFERENCE_PEAK", "0").toDouble();
+        const double notchHz = qEnvironmentVariable("DECODIUM_AVT_NOTCH_HZ", QString::number(interferenceHz)).toDouble();
+        const double notchQ = qEnvironmentVariable("DECODIUM_AVT_NOTCH_Q", "20").toDouble();
+        const double noisePeak = qEnvironmentVariable("DECODIUM_AVT_NOISE_PEAK", "0").toDouble();
+        QVERIFY(std::isfinite(interferenceHz) && interferenceHz >= 0.0 && interferenceHz <= 5000.0);
+        QVERIFY(std::isfinite(interferencePeak) && interferencePeak >= 0.0 && interferencePeak <= 0.2);
+        QVERIFY(std::isfinite(noisePeak) && noisePeak >= 0.0 && noisePeak <= 0.2);
+        std::uint32_t noiseState = variant == "a" ? 0x12345678U : 0x9abcdef0U;
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray data = file.readAll();
+        QVERIFY(!data.isEmpty() && data.size() % 8 == 0);
+        SstvResampler resampler(48'000U);
+        const QString preprocessing = qEnvironmentVariable("DECODIUM_AVT_PREPROCESS_CASE", "off");
+        QVERIFY(preprocessing == "off" || preprocessing == "default" || preprocessing == "bandpass-off"
+                || preprocessing == "dc-off" || preprocessing == "level-off"
+                || preprocessing == "bandpass-wide" || preprocessing == "bandpass-wider"
+                || preprocessing == "bandpass-custom"
+                || preprocessing == "bandpass-highwide" || preprocessing == "bandpass-lowwide"
+                || preprocessing == "bandpass-high5000" || preprocessing == "bandpass-high5500"
+                || preprocessing == "fir9" || preprocessing == "fir17" || preprocessing == "fir33"
+                || preprocessing == "allpass4" || preprocessing == "allpass6" || preprocessing == "allpass8"
+                || preprocessing == "outside-notch" || preprocessing == "equalizer");
+        SstvPreprocessorConfig preprocessorConfig;
+        if (preprocessing == "bandpass-custom") {
+            const double lowHz = qEnvironmentVariable("DECODIUM_AVT_BANDPASS_LOW", "900").toDouble();
+            const double highHz = qEnvironmentVariable("DECODIUM_AVT_BANDPASS_HIGH", "2500").toDouble();
+            QVERIFY(std::isfinite(lowHz) && std::isfinite(highHz)
+                    && lowHz >= 100.0 && highHz > lowHz && highHz <= 5500.0);
+            preprocessorConfig.bandPassLowHz = lowHz;
+            preprocessorConfig.bandPassHighHz = highHz;
+        }
+        const QStringList equalizerValues = qEnvironmentVariable("DECODIUM_AVT_EQUALIZER").split(',', Qt::SkipEmptyParts);
+        const int firTaps = preprocessing == "equalizer" ? equalizerValues.size()
+            : preprocessing == "fir9" ? 9 : preprocessing == "fir17" ? 17
+            : preprocessing == "fir33" ? 33 : 0;
+        if (preprocessing == "equalizer") QVERIFY(firTaps >= 1 && firTaps <= 33);
+        if (firTaps && preprocessing != "equalizer") preprocessorConfig.bandPassEnabled = false;
+        if (preprocessing == "outside-notch") preprocessorConfig.bandPassEnabled = false;
+        if (preprocessing == "bandpass-off") preprocessorConfig.bandPassEnabled = false;
+        if (preprocessing == "dc-off") preprocessorConfig.dcBlockerEnabled = false;
+        if (preprocessing == "level-off") preprocessorConfig.levelControlEnabled = false;
+        if (preprocessing == "bandpass-wide") {
+            preprocessorConfig.bandPassLowHz = 500.0;
+            preprocessorConfig.bandPassHighHz = 3500.0;
+        }
+        if (preprocessing == "bandpass-wider") {
+            preprocessorConfig.bandPassLowHz = 300.0;
+            preprocessorConfig.bandPassHighHz = 4500.0;
+        }
+        if (preprocessing == "bandpass-highwide") preprocessorConfig.bandPassHighHz = 4500.0;
+        if (preprocessing == "bandpass-lowwide") preprocessorConfig.bandPassLowHz = 300.0;
+        if (preprocessing == "bandpass-high5000") preprocessorConfig.bandPassHighHz = 5000.0;
+        if (preprocessing == "bandpass-high5500") preprocessorConfig.bandPassHighHz = 5500.0;
+        SstvPreprocessor preprocessor(preprocessorConfig);
+        const bool dualPath = qEnvironmentVariableIntValue("DECODIUM_AVT_DUAL_PATH") == 1;
+        const bool dualEdge = qEnvironmentVariableIntValue("DECODIUM_AVT_DUAL_EDGE") == 1;
+        const int dualEdgeDelay = qEnvironmentVariableIntValue("DECODIUM_AVT_DUAL_EDGE_DELAY");
+        QVERIFY(!(dualPath && dualEdge));
+        QVERIFY(dualEdgeDelay >= 0 && dualEdgeDelay <= 5);
+        SstvPreprocessorConfig secondaryConfig;
+        secondaryConfig.bandPassEnabled = false;
+        if (qEnvironmentVariableIntValue("DECODIUM_AVT_DUAL_EDGE_FILTER") == 1) {
+            secondaryConfig.bandPassEnabled = true;
+            secondaryConfig.bandPassLowHz = qEnvironmentVariable("DECODIUM_AVT_DUAL_EDGE_LOW", "500").toDouble();
+            secondaryConfig.bandPassHighHz = qEnvironmentVariable("DECODIUM_AVT_DUAL_EDGE_HIGH", "3500").toDouble();
+            QVERIFY(std::isfinite(secondaryConfig.bandPassLowHz)
+                    && std::isfinite(secondaryConfig.bandPassHighHz)
+                    && secondaryConfig.bandPassLowHz >= 100.0
+                    && secondaryConfig.bandPassHighHz > secondaryConfig.bandPassLowHz
+                    && secondaryConfig.bandPassHighHz <= 5500.0);
+        }
+        SstvPreprocessor secondaryPreprocessor(secondaryConfig);
+        std::vector<double> firCoefficients(static_cast<std::size_t>(firTaps));
+        std::vector<float> firHistory(static_cast<std::size_t>(firTaps), 0.0F);
+        const int allpassStages = preprocessing == "allpass4" ? 4 : preprocessing == "allpass6" ? 6
+            : preprocessing == "allpass8" ? 8 : 0;
+        std::array<double, 8U> allpassState {};
+        double notchZ1 = 0.0, notchZ2 = 0.0;
+        double notchB0 = 0.0, notchB1 = 0.0, notchB2 = 0.0, notchA1 = 0.0, notchA2 = 0.0;
+        if (preprocessing == "outside-notch") {
+            QVERIFY(std::isfinite(notchHz) && notchHz >= 100.0 && notchHz <= 5000.0);
+            QVERIFY(std::isfinite(notchQ) && notchQ >= 2.0 && notchQ <= 100.0);
+            const double omega = 2.0 * 3.141592653589793 * notchHz / 12000.0;
+            const double alpha = std::sin(omega) / (2.0 * notchQ);
+            const double a0 = 1.0 + alpha;
+            notchB0 = 1.0 / a0; notchB1 = -2.0 * std::cos(omega) / a0; notchB2 = notchB0;
+            notchA1 = notchB1; notchA2 = (1.0 - alpha) / a0;
+        }
+        std::size_t firCursor = 0U;
+        if (preprocessing == "equalizer") {
+            double absoluteSum = 0.0;
+            for (int i = 0; i < firTaps; ++i) {
+                bool valid = false;
+                const double value = equalizerValues.at(i).toDouble(&valid);
+                QVERIFY(valid && std::isfinite(value));
+                firCoefficients[static_cast<std::size_t>(i)] = value;
+                absoluteSum += std::abs(value);
+            }
+            QVERIFY(absoluteSum <= 5.0);
+        } else if (firTaps) {
+            constexpr double pi = 3.141592653589793;
+            const int centre = (firTaps - 1) / 2;
+            double gain = 0.0;
+            for (int i = 0; i < firTaps; ++i) {
+                const int offset = i - centre;
+                const double ideal = offset == 0 ? 2.0 * (2500.0 - 900.0) / 12000.0
+                    : (std::sin(2.0 * pi * 2500.0 * offset / 12000.0)
+                       - std::sin(2.0 * pi * 900.0 * offset / 12000.0)) / (pi * offset);
+                const double window = 0.54 - 0.46 * std::cos(2.0 * pi * i / (firTaps - 1));
+                firCoefficients[static_cast<std::size_t>(i)] = ideal * window;
+                gain += ideal * window * std::cos(2.0 * pi * 1900.0 * offset / 12000.0);
+            }
+            QVERIFY(std::abs(gain) > 0.1);
+            for (double& coefficient : firCoefficients) coefficient /= gain;
+        }
+        auto demodConfig = SstvFrequencyDemodulatorConfig::sstvDefaults();
+        const int diagnosticHilbertTaps = qEnvironmentVariableIntValue("DECODIUM_AVT_HILBERT_TAPS");
+        if (diagnosticHilbertTaps != 0) {
+            QVERIFY(diagnosticHilbertTaps >= 15 && diagnosticHilbertTaps <= 255
+                    && diagnosticHilbertTaps % 2 == 1);
+            demodConfig.hilbertTaps = static_cast<std::size_t>(diagnosticHilbertTaps);
+        }
+        demodConfig.averagingSamples = 3U;
+        demodConfig.hopSamples = 1U;
+        SstvFrequencyDemodulator demodulator(demodConfig);
+        SstvFrequencyDemodulator secondaryDemodulator(demodConfig);
+        SstvAvtCountdownDetectorConfig detectorConfig;
+        detectorConfig.expectedMode = SstvAvtMode::Avt90;
+        detectorConfig.variant = SstvAvtVariant::Qrm;
+        detectorConfig.observationSpanSamples = 3U;
+        qsizetype onset = -1;
+        for (qsizetype position = 0; position < data.size(); position += 8) {
+            float sample = 0;
+            std::memcpy(&sample, data.constData() + position, 4U);
+            if (std::abs(sample) > 0.02F) { onset = position; break; }
+        }
+        QVERIFY(onset >= 0);
+        detectorConfig.searchStartSample = static_cast<std::uint64_t>(onset / 8) / 4U + kSampleRate;
+        SstvAvtCountdownDetector detector(detectorConfig);
+        std::array<std::unique_ptr<SstvAvtRxSession>, 9U> sessions;
+        std::uint64_t acquiredImageStart = 0U;
+        const SstvAvtMapper edgeMapper({SstvAvtMode::Avt90, kSampleRate, 0, SstvAvtVariant::Qrm});
+        std::vector<SstvFrequencyObservation> previousSecondary;
+        constexpr std::size_t framesPerBlock = 4096U;
+        for (qsizetype position = 0; position < data.size(); position += framesPerBlock * 8U) {
+            const auto frames = std::min<std::size_t>(framesPerBlock,
+                static_cast<std::size_t>(data.size() - position) / 8U);
+            std::vector<float> mono(frames);
+            for (std::size_t i = 0; i < frames; ++i) {
+                float left = 0, right = 0;
+                std::memcpy(&left, data.constData() + position + i * 8U, 4U);
+                std::memcpy(&right, data.constData() + position + i * 8U + 4U, 4U);
+                const double time = (static_cast<double>(position / 8) + i) / 48000.0;
+                noiseState = 1664525U * noiseState + 1013904223U;
+                const double noise = (static_cast<double>(noiseState >> 8U) / 16777215.0 * 2.0 - 1.0) * noisePeak;
+                mono[i] = (left + right) * 0.5F + static_cast<float>(
+                    noise + interferencePeak * std::sin(2.0 * 3.141592653589793 * interferenceHz * time));
+            }
+            const auto converted = resampler.process(mono);
+            auto processed = preprocessing == "off" ? converted : preprocessor.process(converted);
+            if (firTaps) {
+                for (float& sample : processed) {
+                    firHistory[firCursor] = sample;
+                    double filtered = 0.0;
+                    for (std::size_t i = 0; i < firCoefficients.size(); ++i)
+                        filtered += firCoefficients[i] * firHistory[(firCursor + firHistory.size() - i) % firHistory.size()];
+                    firCursor = (firCursor + 1U) % firHistory.size();
+                    sample = static_cast<float>(filtered);
+                }
+            }
+            if (allpassStages) {
+                for (float& sample : processed) {
+                    double value = sample;
+                    for (int stage = 0; stage < allpassStages; ++stage) {
+                        const double next = 0.4 * value + allpassState[static_cast<std::size_t>(stage)];
+                        allpassState[static_cast<std::size_t>(stage)] = value - 0.4 * next;
+                        value = next;
+                    }
+                    sample = static_cast<float>(value);
+                }
+            }
+            if (preprocessing == "outside-notch") {
+                for (float& sample : processed) {
+                    const double filtered = notchB0 * sample + notchZ1;
+                    notchZ1 = notchB1 * sample - notchA1 * filtered + notchZ2;
+                    notchZ2 = notchB2 * sample - notchA2 * filtered;
+                    sample = static_cast<float>(filtered);
+                }
+            }
+            const auto observations = demodulator.consume(processed);
+            const auto secondaryObservations = (dualPath || dualEdge)
+                ? secondaryDemodulator.consume(secondaryPreprocessor.process(converted))
+                : std::vector<SstvFrequencyObservation> {};
+            if (!sessions[0] && detector.state() == SstvAvtCountdownDetectorState::Searching) {
+                const auto found = detector.consume(observations);
+                if (found) {
+                    QVERIFY(found->imageStartSample >= 6U);
+                    acquiredImageStart = found->imageStartSample;
+                    qInfo("Captured AVT image start: %llu", static_cast<unsigned long long>(found->imageStartSample));
+                    for (std::size_t index = 0; index < sessions.size(); ++index) {
+                        SstvAvtRxSessionConfig config;
+                        config.mode = SstvAvtMode::Avt90;
+                        config.variant = SstvAvtVariant::Qrm;
+                        config.sampleRate = kSampleRate;
+                        config.imageStartSample = found->imageStartSample + index - 6U;
+                        config.observationSpanSamples = 1U;
+                        sessions[index] = std::make_unique<SstvAvtRxSession>(config);
+                    }
+                }
+            }
+            if (sessions[0]) {
+                std::vector<SstvFrequencyObservation> edgeObservations;
+                if (dualEdge) {
+                    QCOMPARE(secondaryObservations.size(), observations.size());
+                    edgeObservations = observations;
+                    std::vector<SstvFrequencyObservation> delayedSecondary = previousSecondary;
+                    delayedSecondary.insert(delayedSecondary.end(), secondaryObservations.begin(), secondaryObservations.end());
+                    for (std::size_t i = 0; i < observations.size(); ++i) {
+                        QCOMPARE(secondaryObservations[i].centreSample, observations[i].centreSample);
+                        const auto centre = observations[i].centreSample;
+                        if (centre < acquiredImageStart) continue;
+                        const auto relative = centre - acquiredImageStart;
+                        if (relative >= edgeMapper.imageSampleCount() || relative % 1500U < 1490U) continue;
+                        const auto pixel = edgeMapper.positionAtSample(relative);
+                        const auto delayedIndex = previousSecondary.size() + i;
+                        if (pixel.pixel == 319U && delayedIndex >= static_cast<std::size_t>(dualEdgeDelay)) {
+                            edgeObservations[i] = delayedSecondary[delayedIndex - dualEdgeDelay];
+                            edgeObservations[i].centreSample = observations[i].centreSample;
+                            edgeObservations[i].sequence = observations[i].sequence;
+                        }
+                    }
+                    const auto keep = std::min<std::size_t>(5U, delayedSecondary.size());
+                    previousSecondary.assign(delayedSecondary.end() - keep, delayedSecondary.end());
+                }
+                for (std::size_t index = 0; index < sessions.size(); ++index)
+                    static_cast<void>(sessions[index]->consume(dualPath ? secondaryObservations
+                        : (dualEdge && index == 6U) ? edgeObservations : observations));
+            }
+        }
+        QVERIFY2(sessions[0] != nullptr, "captured countdown was not acquired");
+        for (std::size_t index = 0; index < sessions.size(); ++index) {
+            QCOMPARE(sessions[index]->finish(), SstvAvtRxSessionState::Complete);
+            const auto image = sessions[index]->snapshot();
+            std::uint64_t total = 0;
+            int edgeMax = 0;
+            int firstMax = 0;
+            std::array<int, 3U> lastChannelMax {};
+            std::array<std::uint32_t, 3U> lastChannelMaxRow {};
+            std::array<std::uint32_t, 3U> lastChannelOver20 {};
+            std::array<double, 3U> edgeDeltaSquared {};
+            std::array<double, 3U> edgeDeltaError {};
+            std::array<double, 3U> edgeErrorSquared {};
+            std::uint64_t compensatedError = 0U;
+            std::uint64_t originalEdgeError = 0U;
+            int compensatedMax = 0;
+            std::uint32_t compensatedOver20 = 0U;
+            for (std::uint32_t y = 0; y < 240U; ++y) {
+                for (std::uint32_t x = 0; x < 320U; ++x) {
+                    const int r = x * 255U / 319U, g = y * 255U / 239U, b = (r + g) / 2;
+                    const auto actual = image.pixel(x, y);
+                    const std::array<int, 3U> values {{actual.red, actual.green, actual.blue}};
+                    const std::array<int, 3U> expected {{variant == "a" ? r : 255-r,
+                                                        variant == "a" ? g : 255-g,
+                                                        variant == "a" ? b : 255-b}};
+                    for (std::size_t component = 0; component < 3U; ++component) {
+                        const int error = std::abs(values[component] - expected[component]);
+                        total += error;
+                        if (x == 0U) firstMax = std::max(firstMax, error);
+                        if (x == 319U) {
+                            edgeMax = std::max(edgeMax, error);
+                            if (error > lastChannelMax[component]) {
+                                lastChannelMax[component] = error;
+                                lastChannelMaxRow[component] = y;
+                            }
+                            if (error > 20) ++lastChannelOver20[component];
+                            // The next transmitted component starts at x=0.
+                            // The smooth source has r(0)=0 and b(0)=g/2;
+                            // QRM line reordering does not change r(0).
+                            const int nextA = component == 0U ? g
+                                : component == 1U ? g / 2 : 0;
+                            const int next = variant == "a" ? nextA : 255 - nextA;
+                            const double delta = next - expected[component];
+                            const double signedError = values[component] - expected[component];
+                            edgeDeltaSquared[component] += delta * delta;
+                            edgeDeltaError[component] += delta * signedError;
+                            edgeErrorSquared[component] += signedError * signedError;
+                            if (!(component == 2U && y == 239U)) {
+                                const std::uint32_t nextRow = y == 238U ? 1U : y + 2U;
+                                const auto nextPixel = component == 2U
+                                    ? image.pixel(0U, nextRow) : image.pixel(0U, y);
+                                const int nextDecoded = component == 0U ? nextPixel.green
+                                    : component == 1U ? nextPixel.blue : nextPixel.red;
+                                const int corrected = std::clamp(
+                                    static_cast<int>(std::lround((values[component] - 0.33 * nextDecoded) / 0.67)),
+                                    0, 255);
+                                const int correctedError = std::abs(corrected - expected[component]);
+                                compensatedError += correctedError;
+                                originalEdgeError += error;
+                                compensatedMax = std::max(compensatedMax, correctedError);
+                                if (correctedError > 20) ++compensatedOver20;
+                            }
+                        }
+                    }
+                }
+            }
+            qInfo("Captured AVT shift %d: MAE %.4f first/last-column max %d/%d",
+                  static_cast<int>(index) - 6, double(total) / (320.0 * 240.0 * 3.0), firstMax, edgeMax);
+            if (index == 6U) {
+                for (std::size_t channel = 0; channel < 3U; ++channel)
+                    qInfo("Captured AVT last column channel %zu: max %d at row %u; %u rows above 20",
+                          channel, lastChannelMax[channel], lastChannelMaxRow[channel],
+                          lastChannelOver20[channel]);
+                for (std::size_t channel = 0; channel < 3U; ++channel) {
+                    const double slope = edgeDeltaSquared[channel] > 0.0
+                        ? edgeDeltaError[channel] / edgeDeltaSquared[channel] : 0.0;
+                    const double residual = edgeErrorSquared[channel]
+                        - 2.0 * slope * edgeDeltaError[channel]
+                        + slope * slope * edgeDeltaSquared[channel];
+                    qInfo("Captured AVT last column channel %zu next-tone slope %.4f residual RMS %.3f",
+                          channel, slope, std::sqrt(std::max(0.0, residual) / 240.0));
+                }
+                qInfo("Captured AVT estimated-neighbour correction original/corrected error %llu/%llu; corrected max %d, above 20 %u",
+                      static_cast<unsigned long long>(originalEdgeError),
+                      static_cast<unsigned long long>(compensatedError), compensatedMax,
+                      compensatedOver20);
+            }
+        }
     }
 
     void malformedInputAndWrongModeFailClosed()

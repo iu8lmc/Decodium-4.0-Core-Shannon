@@ -82,7 +82,8 @@ int main(int argc, char** argv)
     const auto stats = decoder->stats();
     std::cerr << "mode=" << label << " opened=" << opened << " complete=" << complete
               << " rows=" << rows << " width=" << width << " vis=" << stats.last_vis
-              << " ratio=" << std::setprecision(12) << stats.last_period_ratio << '\n';
+              << " ratio=" << std::setprecision(12) << stats.last_period_ratio
+              << " offset_hz=" << stats.last_offset_hz << '\n';
     if (!complete || opened != 1 || label != argv[4]
         || pixels.size() != static_cast<std::size_t>(width) * rows * components) return 8;
     std::ofstream output(argv[3], std::ios::binary);

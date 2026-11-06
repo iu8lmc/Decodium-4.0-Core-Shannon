@@ -47,13 +47,19 @@ if expected_fac_interleaver not in (None, 'short', 'long'):
 tx_output = os.environ.get('DECODIUM_LAB_HAMDRM_TX_OUTPUT', 'BlackHole 2ch')
 if tx_output not in ('BlackHole 2ch', 'BlackHole 16ch'):
     raise SystemExit('unsupported laboratory TX output')
+rx_input = os.environ.get('DECODIUM_LAB_HAMDRM_RX_INPUT', 'BlackHole 2ch')
+if rx_input not in ('BlackHole 2ch', 'BlackHole 16ch'):
+    raise SystemExit('unsupported laboratory RX input')
 root=Path(tempfile.mkdtemp(prefix='decodium-hamdrm-two-app-'+variant+'-'))
 binary=Path('build/decodium').resolve(strict=True)
 image_override = os.environ.get('DECODIUM_LAB_HAMDRM_IMAGE')
 duration_override = os.environ.get('DECODIUM_LAB_HAMDRM_DURATION_MS')
-if (image_override or duration_override) and (rs_level or bsr):
-    raise SystemExit('custom image and duration are only supported for ordinary image transfer')
+if (image_override or duration_override) and (bsr or drop_segment or hybrid):
+    raise SystemExit('custom image and duration require an ordinary or complete RS transfer')
 fixture=Path(image_override or 'tests/sstv/fixtures/qsstv-image-'+variant+'.jpg').resolve(strict=True)
+qsstv_rs_compat = os.environ.get('DECODIUM_LAB_HAMDRM_QSSTV_COMPAT') == '1'
+if qsstv_rs_compat and (not rs_level or bsr or hybrid or drop_segment or fixture.suffix.lower() not in ('.jpg', '.jpeg')):
+    raise SystemExit('QSSTV RS compatibility requires a complete JPEG RS transfer')
 ftp_server = None
 epsv_delimiter = os.environ.get('DECODIUM_LAB_FTP_EPSV_DELIMITER', '|')
 if len(epsv_delimiter) != 1 or not 33 <= ord(epsv_delimiter) <= 126:
@@ -144,7 +150,13 @@ if drop_segment:
     expanded = root / ('image-' + variant + '.jpg')
     expanded.write_bytes(fixture.read_bytes() + bytes(2500))
     fixture = expanded
-common=['--test-mode','--lab-no-cat','--lab-audio-input','BlackHole 2ch',
+expected_image_bytes = fixture.read_bytes()
+if qsstv_rs_compat:
+    k = 256 - 32 * rs_level
+    padding = k - len(expected_image_bytes) % k
+    if padding >= 128:
+        expected_image_bytes += bytes(padding - 127)
+common=['--test-mode','--lab-no-cat','--lab-audio-input',rx_input,
         '--lab-reapply-ms','500']
 processes=[]
 try:
@@ -197,7 +209,7 @@ try:
                     raise RuntimeError('RX did not become ready; artifacts '+str(root))
                 time.sleep(.1)
             ready=json.loads((root/'ready').read_text())
-            if ready.get('sourceDevice')!='BlackHole 2ch':
+            if ready.get('sourceDevice')!=rx_input:
                 raise RuntimeError('wrong RX audio device: '+str(ready.get('sourceDevice')))
             if os.environ.get('DECODIUM_LAB_FAIL_STORAGE_INIT') == '1':
                 if int(os.environ.get('DECODIUM_LAB_SSTV_STORAGE_DELAY_MS', '0')) < 10000:
@@ -359,7 +371,7 @@ try:
         lines=[line for line in payload.decode('ascii').splitlines() if line]
         expected_id=0x2451 if variant=='a' else 0x5372
         missing = (['2','3'] if variant=='a' else ['2','-1','3']) if repeat else (['1','2','3'] if variant=='a' else ['1','-1','3'])
-        expected=[str(expected_id),'H_OK','64'] + missing + ['-99']
+        expected=[str(expected_id),'H_OK',os.environ.get('DECODIUM_LAB_BSR_SEGMENT_SIZE', '64')] + missing + ['-99']
         if lines[:len(expected)] != expected:
             raise RuntimeError('HAMDRM BSR requested unexpected blocks; artifacts '+str(root))
         if variant=='a' and (len(lines)!=len(expected)+2 or lines[-2]!='probe-a.jpg'):
@@ -419,12 +431,12 @@ try:
             or '[LAB][HAMDRM] structural-only image fixture selected' not in tx
             or '[LAB][HAMDRM] image structural-only true' not in rx):
             raise RuntimeError('structural-only control did not remain distinguishable; artifacts '+str(root))
-    elif received.read_bytes()!=fixture.read_bytes():
+    elif received.read_bytes()!=expected_image_bytes:
         raise RuntimeError('HAMDRM object bytes differ; artifacts '+str(root))
     if os.environ.get('DECODIUM_LAB_VERIFY_HAMDRM_SAVE') == '1':
         saved = root/'received.jpg.user-saved'
         if ('[LAB][HAMDRM] completed image saved by controller true' not in rx
-            or not saved.exists() or saved.read_bytes() != fixture.read_bytes()):
+            or not saved.exists() or saved.read_bytes() != expected_image_bytes):
             raise RuntimeError('controller did not save the received image exactly; artifacts '+str(root))
     if os.environ.get('DECODIUM_LAB_VERIFY_HAMDRM_GALLERY') == '1':
         rows = [json.loads(line.split('[LAB][HAMDRM] received Gallery result ', 1)[1])

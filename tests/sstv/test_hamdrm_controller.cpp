@@ -11,6 +11,8 @@
 #include <QFile>
 #include <QImage>
 #include <QJsonDocument>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -240,6 +242,88 @@ class TestHamDrmController final : public QObject
     Q_OBJECT
 
 private slots:
+    void partialProfileSurvivesProcessRestart()
+    {
+        const QString phase = qEnvironmentVariable("DECODIUM_TEST_PARTIAL_PHASE");
+        if (phase.isEmpty()) {
+            QTemporaryDir root;
+            QVERIFY(root.isValid());
+            for (const QString& variant : {QStringLiteral("a"), QStringLiteral("b"),
+                                           QStringLiteral("legacy-a"), QStringLiteral("legacy-b")}) {
+                const QString directory = root.filePath(variant);
+                QVERIFY(QDir().mkpath(directory));
+                for (const QString& action : {QStringLiteral("seed"), QStringLiteral("resume")}) {
+                    QProcess child;
+                    auto environment = QProcessEnvironment::systemEnvironment();
+                    environment.insert(QStringLiteral("DECODIUM_TEST_PARTIAL_PHASE"), action);
+                    environment.insert(QStringLiteral("DECODIUM_TEST_PARTIAL_VARIANT"), variant);
+                    environment.insert(QStringLiteral("DECODIUM_TEST_PARTIAL_ROOT"), directory);
+                    child.setProcessEnvironment(environment);
+                    child.start(QCoreApplication::applicationFilePath(),
+                                {QStringLiteral("partialProfileSurvivesProcessRestart")});
+                    QVERIFY(child.waitForFinished(15000));
+                    const QByteArray output = child.readAllStandardOutput() + child.readAllStandardError();
+                    QVERIFY2(child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0,
+                             output.constData());
+                }
+            }
+            return;
+        }
+        QVERIFY(phase == QStringLiteral("seed") || phase == QStringLiteral("resume"));
+        const QString variant = qEnvironmentVariable("DECODIUM_TEST_PARTIAL_VARIANT");
+        QVERIFY(variant == QStringLiteral("a") || variant == QStringLiteral("b")
+                || variant == QStringLiteral("legacy-a") || variant == QStringLiteral("legacy-b"));
+        const QString root = qEnvironmentVariable("DECODIUM_TEST_PARTIAL_ROOT");
+        QVERIFY(QDir::isAbsolutePath(root));
+        hamdrm::HamDrmControllerConfig config;
+        config.partialStoreRoot = root;
+        hamdrm::HamDrmController controller(config, {});
+        const auto& profiles = hamdrm::HamDrmProfileRegistry::all();
+        QVERIFY(profiles.size() >= 2U);
+        const bool legacy = variant.startsWith(QStringLiteral("legacy-"));
+        const std::size_t source = variant.endsWith(QLatin1Char('a')) ? 0U : 1U;
+        const QString sourceId = QString::fromStdString(profiles[source].id);
+        const QString otherId = QString::fromStdString(profiles[1U - source].id);
+        constexpr std::uint16_t transportId = 0x4271U;
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = transportId;
+        metadata.filename = "restart.jpg";
+        const auto image = jpegFixture(48U, 32U, source == 0U ? 192U : 224U);
+        const auto encoded = hamdrm::encodeHamDrmObject(metadata, image, 24U);
+        QVERIFY(encoded.ok());
+        QVERIFY(encoded.value->bodyGroups.size() > 2U);
+        if (phase == QStringLiteral("seed")) {
+            controller.setSelectedProfileId(sourceId);
+            for (const auto& group : encoded.value->headerGroups)
+                QVERIFY(controller.ingestMotGroup(bytes(group)).ok());
+            QVERIFY(controller.ingestMotGroup(bytes(encoded.value->bodyGroups.front())).ok());
+            QVERIFY(controller.canBuildBsr());
+            QCOMPARE(controller.savedPartialIds(), QVariantList {QStringLiteral("4271")});
+            if (legacy) {
+                const hamdrm::HamDrmPartialStore store(root);
+                const auto snapshot = store.load(transportId);
+                QVERIFY(snapshot.ok());
+                QVERIFY(store.save(*snapshot.value).ok());
+            }
+        } else {
+            controller.setSelectedProfileId(otherId);
+            QCOMPARE(controller.savedPartialIds(), QVariantList {QStringLiteral("4271")});
+            QVERIFY(controller.resumePartial(transportId));
+            const QByteArray bsr = controller.buildBsr(transportId, true).toLatin1();
+            const auto request = hamdrm::parseHamDrmBsr(
+                reinterpret_cast<const std::uint8_t*>(bsr.constData()), std::size_t(bsr.size()));
+            QVERIFY(request.ok());
+            QVERIFY(request.value->qsstvCompatibilityCode.has_value());
+            QCOMPARE(*request.value->qsstvCompatibilityCode,
+                     profiles[legacy ? 1U - source : source].qsstvCompatibilityCode);
+            for (std::size_t i = 1U; i < encoded.value->bodyGroups.size(); ++i)
+                QVERIFY(controller.ingestMotGroup(bytes(encoded.value->bodyGroups[i])).ok());
+            const auto complete = controller.completedObject(transportId);
+            QVERIFY(complete.ok());
+            QCOMPARE(complete.value->originalBytes, image);
+            QVERIFY(controller.savedPartialIds().isEmpty());
+        }
+    }
     void experimentalTimingRequiresIdleBackend()
     {
         auto rx = std::make_shared<FakeRxBackend>();
@@ -569,8 +653,16 @@ private slots:
         }
     }
 
+    void partialMotObjectPersistsResumesBuildsBsrAndCompletes_data()
+    {
+        QTest::addColumn<bool>("alternateSourceProfile");
+        QTest::newRow("a-default") << false;
+        QTest::newRow("b-alternate") << true;
+    }
+
     void partialMotObjectPersistsResumesBuildsBsrAndCompletes()
     {
+        QFETCH(bool, alternateSourceProfile);
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -578,7 +670,13 @@ private slots:
         hamdrm::HamDrmMotObjectMetadata metadata;
         metadata.transportId = transportId;
         metadata.filename = "resume.jpg";
-        const std::vector<std::uint8_t> image = jpegFixture(48U, 32U, 192U);
+        QImage sourceImage(48, 32, QImage::Format_RGB32);
+        sourceImage.fill(alternateSourceProfile ? QColor(20, 130, 240) : QColor(220, 90, 30));
+        QByteArray imageBytes;
+        QBuffer buffer(&imageBytes);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(sourceImage.save(&buffer, "JPG"));
+        const std::vector<std::uint8_t> image(imageBytes.cbegin(), imageBytes.cend());
         const auto encoded = hamdrm::encodeHamDrmObject(
             metadata, image, 24U);
         QVERIFY2(encoded.ok(), encoded.status.detail.c_str());
@@ -587,9 +685,22 @@ private slots:
         hamdrm::HamDrmControllerConfig config;
         config.partialStoreRoot = temporary.path();
         auto rx = std::make_shared<FakeRxBackend>();
+        QString originalProfile;
+        QString alternateProfile;
+        QString expectedBsr;
         {
             hamdrm::HamDrmController controller(
                 config, backends(rx, {}));
+            originalProfile = controller.selectedProfileId();
+            for (const QVariant& item : controller.profiles()) {
+                const QString id = item.toMap().value(QStringLiteral("id")).toString();
+                if (id != originalProfile) { alternateProfile = id; break; }
+            }
+            QVERIFY(!alternateProfile.isEmpty());
+            if (alternateSourceProfile) {
+                controller.setSelectedProfileId(alternateProfile);
+                std::swap(originalProfile, alternateProfile);
+            }
             QVERIFY(controller.partialResumeAvailable());
             QVERIFY(controller.startRx());
             rx->group(encoded.value->headerGroups.front());
@@ -603,6 +714,7 @@ private slots:
                      static_cast<qsizetype>(
                          encoded.value->bodyGroups.size() - 2U));
             const QString bsr = controller.buildBsr(transportId, true);
+            expectedBsr = bsr;
             QVERIFY(!bsr.isEmpty());
             QVERIFY(bsr.contains(QStringLiteral("resume.jpg")));
             QVERIFY(controller.inbox().front().toMap()
@@ -616,27 +728,34 @@ private slots:
         auto resumedRx = std::make_shared<FakeRxBackend>();
         hamdrm::HamDrmController resumed(
             config, backends(resumedRx, {}));
+        resumed.setSelectedProfileId(alternateProfile);
+        QCOMPARE(resumed.selectedProfileId(), alternateProfile);
         QVERIFY(resumed.resumePartial(transportId));
         QCOMPARE(resumed.missingSegments().size(),
                  static_cast<qsizetype>(
                      encoded.value->bodyGroups.size() - 2U));
         QVERIFY(resumed.canBuildBsr());
+        QCOMPARE(resumed.buildBsr(transportId, true), expectedBsr);
         QVERIFY(resumed.startRx());
 
         QSignalSpy completed(&resumed,
                              &hamdrm::HamDrmController::objectCompleted);
+        QSignalSpy gallery(&resumed,
+                           &hamdrm::HamDrmController::receivedImageReady);
         for (std::size_t index = 1U;
              index + 1U < encoded.value->bodyGroups.size(); ++index) {
             resumedRx->group(encoded.value->bodyGroups[index]);
         }
         QCOMPARE(completed.size(), 1);
+        QCOMPARE(gallery.size(), 1);
+        QCOMPARE(gallery.front().at(1).toString(), originalProfile);
         QCOMPARE(completed.front().at(0).toUInt(),
                  static_cast<uint>(transportId));
         QVERIFY(!QFile::exists(store.pathForTransportId(transportId)));
         QCOMPARE(resumed.inbox().size(), 1);
         QCOMPARE(resumed.inbox().front().toMap()
                      .value(QStringLiteral("state")).toString(),
-                 QStringLiteral("complete-structural"));
+                 QStringLiteral("complete"));
 
         const auto assembled = resumed.takeCompletedObject(transportId);
         QVERIFY2(assembled.ok(), assembled.status.detail.c_str());
@@ -672,6 +791,56 @@ private slots:
                 QCOMPARE(bytes(received.value->originalBytes), original);
             }
         }
+    }
+
+    void qsstvCompatibleRsIsExplicitAndPreservesPixels()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        for (int level = 1; level <= 4; ++level) {
+            for (int header : {127, 128, 256 - 32 * level}) {
+                for (unsigned variant = 0; variant < 2; ++variant) {
+                    QImage image(48, 32, QImage::Format_RGB32);
+                    image.fill(variant ? QColor(20, 140, 80) : QColor(150, 30, 90));
+                    const QString path = temporary.filePath(QStringLiteral("compat-%1.jpg").arg(variant));
+                    QVERIFY(image.save(path, "JPEG"));
+                    QFile file(path);
+                    QVERIFY(file.open(QIODevice::ReadWrite));
+                    QByteArray original = file.readAll();
+                    const qsizetype k = 256 - 32 * level;
+                    const qsizetype adjustment = (k - header - original.size() % k + k) % k;
+                    original.append(QByteArray(adjustment, '\0'));
+                    QVERIFY(file.resize(0));
+                    QVERIFY(file.seek(0));
+                    QCOMPARE(file.write(original), original.size());
+                    file.close();
+                    for (const bool compatible : {false, true}) {
+                        auto tx = std::make_shared<FakeTxBackend>();
+                        hamdrm::HamDrmController sender({}, backends({}, tx));
+                        const auto url = QUrl::fromLocalFile(path);
+                        QVERIFY(compatible ? sender.startTxWithRsQsstvCompatibility(url, level)
+                                           : sender.startTxWithRs(url, level));
+                        QVERIFY(tx->object.has_value());
+                        hamdrm::HamDrmController receiver({}, backends({}, {}));
+                        for (const auto& group : tx->object->headerGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                        for (const auto& group : tx->object->bodyGroups) QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+                        const auto received = receiver.takeCompletedObject(tx->object->metadata.transportId);
+                        QVERIFY(received.ok());
+                        const QByteArray actual = bytes(received.value->originalBytes);
+                        QCOMPARE(actual, original + (compatible && header >= 128 ? QByteArray(header - 127, '\0') : QByteArray()));
+                        QCOMPARE(QImage::fromData(actual), QImage::fromData(original));
+                    }
+                }
+            }
+        }
+        QImage png(16, 16, QImage::Format_RGB32);
+        png.fill(Qt::red);
+        const QString pngPath = temporary.filePath(QStringLiteral("unsupported.png"));
+        QVERIFY(png.save(pngPath, "PNG"));
+        auto tx = std::make_shared<FakeTxBackend>();
+        hamdrm::HamDrmController sender({}, backends({}, tx));
+        QVERIFY(!sender.startTxWithRsQsstvCompatibility(QUrl::fromLocalFile(pngPath), 2));
+        QVERIFY(!tx->object.has_value());
     }
 
     void receivesCompleteRsContainers()
@@ -1003,6 +1172,51 @@ private slots:
         }
     }
 
+    void bsrWithUnmarkedFinalSegment_data()
+    {
+        QTest::addColumn<int>("payloadSize");
+        QTest::addColumn<bool>("extended");
+        QTest::newRow("A-short-final-extended") << 925 << true;
+        QTest::newRow("B-short-final-compact") << 900 << false;
+        QTest::newRow("C-full-final-extended") << 924 << true;
+    }
+
+    void bsrWithUnmarkedFinalSegment()
+    {
+        QFETCH(int, payloadSize);
+        QFETCH(bool, extended);
+        hamdrm::HamDrmMotObjectMetadata metadata;
+        metadata.transportId = 0x2451;
+        metadata.filename = "repair.jpg";
+        const auto original = jpegFixture(32, 24, static_cast<std::size_t>(payloadSize));
+        const auto object = hamdrm::encodeHamDrmObject(metadata, original, 154);
+        QVERIFY(object.ok());
+        auto backend = std::make_shared<FakeTxBackend>();
+        hamdrm::HamDrmController receiver({}, backends({}, backend));
+        for (const auto& group : object.value->headerGroups)
+            QVERIFY(receiver.ingestMotGroup(bytes(group)).ok());
+        const std::size_t last = object.value->bodyGroups.size() - 1U;
+        for (std::size_t i = 0; i < last; ++i)
+            if (i != 1U) QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[i])).ok());
+        auto unmarked = hamdrm::parseHamDrmMotDataGroup(
+            object.value->bodyGroups[last].data(), object.value->bodyGroups[last].size());
+        QVERIFY(unmarked.ok());
+        unmarked.value->lastSegment = false;
+        const auto wire = hamdrm::encodeHamDrmMotDataGroup(*unmarked.value);
+        QVERIFY(wire.ok());
+        QVERIFY(receiver.ingestMotGroup(bytes(*wire.value)).ok());
+        QVERIFY(!receiver.completedObject(metadata.transportId).ok());
+        QVERIFY(receiver.canBuildBsr());
+        QCOMPARE(receiver.missingSegments(), QVariantList({1, static_cast<int>(last)}));
+        QVERIFY(!receiver.buildBsr(metadata.transportId, extended).isEmpty());
+        QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[1])).ok());
+        QVERIFY(!receiver.completedObject(metadata.transportId).ok());
+        QVERIFY(receiver.ingestMotGroup(bytes(object.value->bodyGroups[last])).ok());
+        const auto completed = receiver.completedObject(metadata.transportId);
+        QVERIFY(completed.ok());
+        QCOMPARE(completed.value->originalBytes, original);
+    }
+
     void completedCarouselManySegments_data()
     {
         QTest::addColumn<int>("segmentSize");
@@ -1097,12 +1311,16 @@ private slots:
 
         // A received request must identify this image and valid body segments.
         // Exercise both wire dialects before accepting the genuine request.
-        for (int mismatch = 0; mismatch < (extended ? 4 : 3); ++mismatch) {
+        for (int mismatch = 0; mismatch < (extended ? 5 : 4); ++mismatch) {
             hamdrm::HamDrmBsrRequest request;
             request.transportId = static_cast<std::uint16_t>(imageId + (mismatch == 0));
             request.segmentSize = mismatch == 1 ? 127 : 128;
             request.missingSegments = {static_cast<std::uint16_t>(
                 mismatch == 2 ? sent.bodyGroups.size() : 1)};
+            // A request containing a valid segment first must still be
+            // rejected if a later segment is outside the transmitted body.
+            if (mismatch == (extended ? 4 : 3))
+                request.missingSegments.push_back(static_cast<std::uint16_t>(sent.bodyGroups.size()));
             if (extended) {
                 request.filename = mismatch == 3 ? "different.jpg" : sent.metadata.filename;
                 request.qsstvCompatibilityCode = 0;
@@ -1139,6 +1357,19 @@ private slots:
         QCOMPARE(receiver.missingSegments().size(), 2);
         QVERIFY(receiver.canBuildBsr());
         QCOMPARE(receiver.missingSegmentsText().contains(QStringLiteral("inferred from header")), missingFinal);
+        const QString receivedProfile = receiver.selectedProfileId();
+        const QString expectedBsr = receiver.buildBsr(imageId, extended);
+        QVERIFY(!expectedBsr.isEmpty());
+        QString alternateReceiveProfile;
+        for (const QVariant& item : receiver.profiles()) {
+            const QString id = item.toMap().value(QStringLiteral("id")).toString();
+            if (id != receivedProfile) { alternateReceiveProfile = id; break; }
+        }
+        QVERIFY(!alternateReceiveProfile.isEmpty());
+        receiver.setSelectedProfileId(alternateReceiveProfile);
+        QCOMPARE(receiver.selectedProfileId(), alternateReceiveProfile);
+        QCOMPARE(receiver.buildBsr(imageId, extended), expectedBsr);
+        receiver.setSelectedProfileId(receivedProfile);
         QVERIFY(receiver.startBsrTx(imageId, extended));
         QVERIFY(replyTx->object.has_value());
         auto replyObject = *replyTx->object;
@@ -1155,6 +1386,23 @@ private slots:
         }
         for (const auto& group : replyObject.headerGroups) QVERIFY(sender.ingestMotGroup(bytes(group)).ok());
         for (const auto& group : replyObject.bodyGroups) QVERIFY(sender.ingestMotGroup(bytes(group)).ok());
+        QVERIFY(sender.canRepairReceivedBsr());
+        // A repair must use the profile of the retained transmission. Check
+        // that temporarily selecting another valid profile blocks it without
+        // losing the request, then restore the original profile and repair.
+        const QString originalProfile = sender.selectedProfileId();
+        QString alternativeProfile;
+        for (const QVariant& item : sender.profiles()) {
+            const QString id = item.toMap().value(QStringLiteral("id")).toString();
+            if (id != originalProfile) { alternativeProfile = id; break; }
+        }
+        QVERIFY(!alternativeProfile.isEmpty());
+        sender.setSelectedProfileId(alternativeProfile);
+        QCOMPARE(sender.selectedProfileId(), alternativeProfile);
+        QVERIFY(!sender.canRepairReceivedBsr());
+        QVERIFY(!sender.startBsrRepair());
+        sender.setSelectedProfileId(originalProfile);
+        QCOMPARE(sender.selectedProfileId(), originalProfile);
         QVERIFY(sender.canRepairReceivedBsr());
         QVERIFY(sender.startBsrRepair());
         QVERIFY(tx->object.has_value());

@@ -117,6 +117,19 @@ try:
     lines = [json.loads(line.split(' RX diagnostics ', 1)[1])
              for line in (root / 'rx.log').read_text(errors='replace').splitlines()
              if '[LAB][SSTV] RX diagnostics ' in line]
+    if (env.get('DECODIUM_LAB_AVT_BANDPASS') == 'off'
+            and '[LAB][AVT] band-pass disabled for diagnostic' not in (root / 'rx.log').read_text(errors='replace')):
+        raise RuntimeError('requested diagnostic band-pass bypass was not applied; artifacts ' + str(root))
+    log_text = (root / 'rx.log').read_text(errors='replace')
+    if env.get('DECODIUM_LAB_AVT24_WINDOW') == '1':
+        if mode != 'avt-24-narrow-qrm' or '[LAB][AVT] AVT24 edge window diagnostic enabled' not in log_text:
+            raise RuntimeError('requested AVT24 diagnostic window was not applied; artifacts ' + str(root))
+    if env.get('DECODIUM_LAB_AVT24_SPLIT_EDGE') == '1':
+        if mode != 'avt-24-narrow-qrm' or '[LAB][AVT] AVT24 split-edge diagnostic enabled' not in log_text:
+            raise RuntimeError('requested AVT24 split-edge diagnostic was not applied; artifacts ' + str(root))
+    requested_shift = env.get('DECODIUM_LAB_AVT_ANCHOR_SHIFT')
+    if requested_shift is not None and ('[LAB][AVT] anchor shift ' + requested_shift) not in log_text:
+        raise RuntimeError('requested AVT anchor shift was not applied; artifacts ' + str(root))
     requested_notch = os.environ.get('DECODIUM_LAB_SSTV_NOTCH_HZ')
     if requested_notch and ('[LAB][SSTV] manual interference notch ' + requested_notch + ' Q 300') not in (root / 'rx.log').read_text(errors='replace'):
         raise RuntimeError('requested manual notch was not enabled; artifacts ' + str(root))
@@ -161,8 +174,19 @@ try:
         if is_fax:
             raise RuntimeError('AVT terminal-component check cannot be used for FAX')
         compare += ['--max-last-blue-error', last_blue_limit]
+    last_column_limit = env.get('DECODIUM_LAB_AVT_MAX_LAST_COLUMN_ERROR')
+    if last_column_limit is not None:
+        if is_fax:
+            raise RuntimeError('AVT last-column check cannot be used for FAX')
+        compare += ['--max-last-column-error', last_column_limit]
+    first_column_limit = env.get('DECODIUM_LAB_AVT_MAX_FIRST_COLUMN_ERROR')
+    if first_column_limit is not None:
+        if is_fax:
+            raise RuntimeError('AVT first-column check cannot be used for FAX')
+        compare += ['--max-first-column-error', first_column_limit]
     subprocess.run(compare, check=True, timeout=30)
-    print('PASS AVT replay', mode, 'tone', frequency, 'peak', amplitude,
+    print('PASS AVT replay', mode, 'edge limits',
+          {'first': first_column_limit, 'last': last_column_limit}, 'tone', frequency, 'peak', amplitude,
           'mixture peak', peak, 'discontinuities', lines[-1].get('discontinuities'), 'artifacts', root, flush=True)
 finally:
     if process and process.poll() is None:

@@ -351,6 +351,258 @@ against the 256-column inputs resized to 320. Artifacts are
 `/tmp/decodium-revenant-avt-test`. These A/B results remain file-mediated,
 resized comparisons, not live GUI-to-GUI or RF evidence.
 
+### AVT94 Narrow A/B between Decodium applications
+
+Two distinct images were transmitted through BlackHole between separate
+Decodium applications in AVT94 Narrow, with full 320×200 coverage and no
+reported audio discontinuities. A/B whole-image MAE was 0.127599/0.127688,
+p95 was 0/0, and maximum component error was 58/58. Prepared reference PNGs
+had distinct SHA-256 values `362d80384a34c9e9be34d636519be592a9dcabb6196b4048c1d30de70098862c`
+and `e30845fe7326926a4c699a0b6e37d4844552c6d5dce373e80abe4fca6a24e54a`.
+Artifacts are `.../decodium-avt-two-app-avt-94-narrow-15btpbb_` and
+`...-v_6zqy4m`. The selected input images are not exhaustive, edge maxima
+were not gated, and this is virtual-audio Decodium-to-Decodium evidence,
+not independent codec, external application or RF verification.
+
+The captured A/B signals were then decoded by the pinned Revenant codec
+rebuilt from revision `67da9f8767b2a250792a6f5a5b2a69f5bc992b6d` after
+checking its codec sources. Both were identified as AVT94 Narrow, VIS 73,
+and completed all 200 rows. Against the corresponding prepared images,
+A had MAE/p95/max 0.510/2/38 and passed the exploratory 5/15 gates; B had
+6.928/9/80 and failed the MAE gate. The crossed B-versus-A comparison had
+MAE 109.183. Revenant's own generated A/B signals decoded to MAE 0.099/0.099
+and p95 0/0 against the same respective inputs. Its separate general A/B
+self-controls and wrong-mode/crossed negatives also passed. These results
+show a selected independent-decoder discrepancy for B, without identifying
+its cause or proving an implementation defect. The decoded files and logs
+are under `.../decodium-avt94n-independent.91JDTR`; no RF is involved.
+
+The diagnostic adapter now also prints the independent decoder's reported
+frequency offset without changing its codec. For the recorded A/B signals it
+reported +3.502/-13.128 Hz respectively, versus effectively zero for each
+of its own self-generated signals. Re-decoding with this print-only change
+produced byte-identical A/B PPM files and the existing self/negative controls
+passed. On B, the reference red and green channels are both zero, whereas
+the independently decoded values are 8 or 9 throughout those channels.
+This is consistent with a frequency-estimation difference but does not prove
+why the offset estimates differ or establish which side is responsible.
+
+As a diagnostic only, a temporary copy of the Revenant decoder was rebuilt
+with its measured VIS-leader offset forced to zero; the captured signals
+were unchanged. For A/B it then produced MAE 0.100/0.119, p95 0/0 and
+maxima 36/76. The separate generic A/B self-controls and crossed-image /
+wrong-mode negatives passed. Fourier inspection found stable 100 ms windows
+near 1900 Hz in both captures, but does not establish which exact window the
+decoder used. This links the B discrepancy to that decoder's offset value on
+these recordings; it does not justify disabling frequency correction for real
+signals or turn B into an unmodified-decoder pass. The diagnostic source and
+binary are `/tmp/decodium-revenant-zero-offset.cpp` and
+`/tmp/decodium-revenant-zero-offset`; output PPMs are in the artifact
+directory above.
+
+In the reverse file-mediated direction, unmodified Revenant generated A/B
+AVT94 Narrow signals from the same distinct prepared images. Both were
+replayed through BlackHole to full Decodium receivers and completed with no
+reported discontinuities; MAE/p95 was 0.128/0 for each, with isolated
+maximum component errors of 77. Crossed-reference comparisons failed the
+5/15 gates as intended, with MAE about 105.8. The received artifacts are
+`.../decodium-avt-interference-2tfpwq5m` and `...-qa6bbp4x`. This verifies
+selected independent signals through application RX; it does not establish
+live GUI-to-GUI or RF operation or make the original captured B a passing
+unmodified Revenant RX result.
+
+As an input-alignment control, one and three silent 48 kHz samples were
+prepended to each captured A/B signal before decoding with unmodified
+Revenant. For A the estimated offsets were +3.993/+3.502 Hz and MAE
+0.713/0.510; for B they were -13.127/-13.128 Hz and MAE 6.928/6.928.
+Both B checks remained outside the 5-level exploratory MAE gate. The original
+audio bytes after the inserted silence were unchanged. Artifacts are
+`.../decodium-avt94n-alignment-7ln60uwe`. These two alignments do not explain
+the offset discrepancy, nor rule out other acquisition timing effects.
+
+A trace-only build of the pinned independent decoder located its VIS-leader
+measurement windows. Each original capture contains exactly 512 consecutive
+zero samples (10.667 ms at 48 kHz) within that window: at 10.496 s for A and
+10.005333 s for B. On diagnostic copies only, those zeros were replaced with
+a 1900 Hz sinusoid fitted to the preceding 50 ms; bytes outside the interval
+were checked identical to the originals. The unmodified decoder then reported
+offsets approximately zero and MAE/p95 0.100/0 and 0.119/0, respectively.
+This isolates the observed offset estimates on these captures to the missing
+leader samples and the decoder's handling of them. It does not establish why
+the zeros were recorded, prove normal receiver behaviour on real dropouts, or
+turn the original B recording into a passing unmodified-decoder result.
+The filled diagnostic audio and images are in the artifact directory above;
+the trace-only source is `/tmp/decodium-revenant-trace-offset.cpp`.
+
+`tests/sstv/tools/check_avt_capture_integrity.py` now reports exact internal
+stereo-zero runs of at least 480 frames, ignoring initial and final silence;
+`--fail-on-gap` makes such a finding fail a capture-integrity check. On the
+original A/B captures it correctly reported the 512-frame runs at 503808 and
+480256. On the two diagnostic filled captures converted to stereo it reported
+no internal zero runs. Internal silence can be intentional, so this check
+flags evidence requiring investigation rather than diagnosing its source. RX
+diagnostics and PortAudio capture status had reported no errors; that does not
+identify whether the silence arose in TX, the virtual device or capture.
+The two-application laboratory now runs this capture check after closing the
+capture and labels receiver-reported discontinuities separately. Fresh AVT24
+Narrow-QRM A/B transfers both completed with full coverage and zero reported
+RX discontinuities, but their captured audio each contained an internal
+512-frame zero run (at frames 513536 and 496640). Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-_in2_qlr` and `...-hn0uxnhn`.
+The successful image results and capture findings describe different paths;
+these observations do not locate the source of the silence.
+
+For an A/B source-side control, `render_avt94_native` was extended to render
+AVT94 Narrow directly from the same two prepared RGB images. Neither direct
+encoder output contained an internal run of 480 or more exact zero frames.
+The unmodified pinned Revenant decoder completed both with approximately zero
+estimated offset and MAE/p95 0.100/0 for each; maximum component error was 36.
+The existing-output guard also rejected an overwrite. These direct encoder
+files and PPMs are in `.../decodium-avt94n-independent.91JDTR`. This excludes
+the direct encoder as the cause for these inputs and pull sizes, but does not
+exercise the live TX coordinator, sink, virtual device or capture; it cannot
+identify which later stage produced the missing 512-frame blocks.
+
+The coordinator integration suite now also reads the first two seconds of
+AVT94 Narrow through the real `SstvTxAudioDevice` with a 750 ms VOX pre-key,
+for red and blue A/B inputs. Neither stream contains a 480-frame zero run;
+the complete coordinator CTest passed. This exercises the in-process VOX,
+protocol source and QIODevice under the test's pull pattern. It does not
+exercise SoundOutput, the operating-system sink, virtual audio or PortAudio,
+and does not reproduce or exclude runtime scheduling-dependent faults.
+
+As a separate virtual-device control, two three-second 48 kHz stereo tones
+at 1900 and 1700 Hz were played and captured using a PortAudio full-duplex
+stream on BlackHole 2ch, without Decodium. Both captures had nonzero signal,
+no PortAudio status flags and no internal exact-zero run of 480 frames or
+more. Artifacts are `.../decodium-blackhole-control-xn0x2g42`. This does
+not reproduce the application arrangement: the original tests used Qt
+SoundOutput and a separate PortAudio input stream for substantially longer.
+It only shows that the selected full-duplex control did not reproduce the gap.
+
+An attempted separate-input/separate-output PortAudio control in a single
+Python process was inconclusive: CoreAudio reported `-10863` (cannot do in
+current context), the blocking capture did not stop within five seconds, and
+the isolated process was terminated. No comparison capture was produced. This
+observation is limited to that control arrangement and does not establish the
+cause of the 512-frame gaps or a general BlackHole incompatibility.
+
+A separate bounded control used a standalone Qt `QAudioSink` with a QBuffer
+to play three-second 1900/1700 Hz stereo tones through BlackHole while a
+PortAudio input callback captured them in another process. Both Qt runs
+consumed the complete buffer with `NoError`; capture reported no input flags,
+the expected tone frequencies were observed, and neither recording contained
+an internal exact-zero run of 480 frames or more. The temporary control source
+is `/tmp/decodium-qt-tone-control.cpp`, with captures under
+`.../decodium-qt-audio-control-k0g96jty`. Unlike the Decodium test this did
+not use its streaming QIODevice, legacy backend or concurrent RX application;
+it does not exclude a scheduling or interaction-dependent issue there.
+
+The standalone Qt/PortAudio control was repeated with a sequential tone
+QIODevice returning at most 4096 frames per read instead of QBuffer. Both
+1900/1700 Hz A/B outputs delivered 144000 frames without Qt or capture
+errors; frequency checks passed and neither capture had an internal exact-zero
+run of 480 or more frames. Source is `/tmp/decodium-qt-stream-control.cpp`
+and captures are `.../decodium-qt-stream-control-stn7gyi8`. This is a simple
+synthetic device with a bounded pull, not the actual `SstvTxAudioDevice` or
+the complete legacy application setup, and is not a long-duration test.
+
+Another A/B synthetic control started a second Qt audio input one second
+after starting the sequential output, while PortAudio captured independently.
+Both Qt input and output reported no error; the input reported active and
+250 ms processed (its buffer was not drained). The 1900/1700 Hz outputs
+completed and neither capture contained an internal exact-zero run of at
+least 480 frames. Artifacts are
+`.../decodium-qt-second-input-verified-cqpsl6eu`; temporary source is
+`/tmp/decodium-qt-stream-second-input.cpp`. This short control does not
+simulate the continuously drained Decodium legacy input or its application
+startup, so it cannot exclude an interaction there.
+
+The second-input control was then repeated with `readyRead` draining its Qt
+input throughout the test. A/B input processing reached 2.84/2.68 seconds,
+Qt and PortAudio reported no errors, and neither capture had an internal
+exact-zero run of 480 or more frames. Artifacts are
+`.../decodium-qt-drained-input-5olklwyo`; source is
+`/tmp/decodium-qt-stream-drained-input.cpp`. This remains a short synthetic
+Qt input and does not use Decodium's macOS AudioQueue legacy input, its
+startup timers or a concurrent full receiver application.
+
+A further isolated control replaced the Qt input with a native macOS
+AudioQueue input matching the legacy path's 48 kHz stereo Int16 format,
+four 960-frame buffers and BlackHole UID; it started one second after the Qt
+tone output while PortAudio captured independently. Native callbacks ran and
+Qt, AudioQueue and PortAudio reported no errors in all four A/B trials. One
+of four captures (B in the first pair) contained a 7680-frame / 160 ms exact
+zero run approximately 0.94 seconds after its first nonzero output; the other
+three contained no internal runs of 480 or more frames. The first pair's
+artifacts are `.../decodium-qt-native-input-tvatki5j`, the repeat is
+`.../decodium-qt-native-repeat-fw4vpg_e`, and the temporary source is
+`/tmp/decodium-qt-native-input.cpp`. This reproduces an intermittent capture
+gap in a standalone native-input/Qt-output setup near the scheduled input
+start, not the original 512-frame gap or its precise cause. It does not
+establish whether the interruption is in Qt output, AudioQueue, BlackHole,
+PortAudio capture, or their interaction.
+
+An A/B startup-timing experiment delayed Decodium's lab TX request from 4 to
+14 seconds. The TX logs show its legacy input starting before the TX request,
+whereas it started during TX in the earlier 4-second A/B runs. Both delayed
+AVT24 Narrow-QRM images completed with full coverage and no reported RX
+discontinuities; both captures had no internal zero run of 480 or more
+frames. This result was observed once with a temporary lab copy and repeated
+once using the updated lab script; final artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-4i2nthqw` and `...-olc7vsfe`.
+The earlier 4-second runs each contained a 512-frame zero run. These limited
+observations associate the capture gap with startup timing but do not prove
+which component produced it or guarantee the delay prevents every gap.
+The two-application lab now defaults to 14 seconds and supports
+`DECODIUM_LAB_AVT_TX_MS` from 1000 through 30000; it still reports capture
+integrity separately. The timing change is test-only and does not delay
+normal product TX.
+
+The earlier lab's `--lab-no-monitor` was found to stop current monitoring
+but not suppress a pending startup auto-monitor timer. In test mode only,
+the option now sets an application property checked by that timer, so the
+transmitter lab does not start its legacy input after TX begins. Fresh early
+(4-second) AVT24 Narrow-QRM A/B application pairs both reported the suppression
+marker, did not log a transmitter `SoundInput::start`, completed their images,
+and passed the opt-in continuous-capture check. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-ol6von52` and `...-itnjpvsh`.
+This corrects a test-mode startup race and supports the startup-interaction
+hypothesis for these runs; it does not prove a general audio root cause or
+change ordinary startup and TX behavior.
+
+The lab now offers `DECODIUM_LAB_VERIFY_MONITOR_ISOLATION=1` to check that
+the TX startup-suppression marker is present, TX did not start SoundInput,
+and the RX monitor was requested and active. With that check and the
+continuous-capture gate both enabled, early-start AVT24 Narrow-QRM A/B
+transfers passed with complete RX images and no internal exact-zero runs.
+Artifacts are `.../decodium-avt-two-app-avt-24-narrow-qrm-oz3_xf3l` and
+`...-4ktgxzo7`. This verifies the lab's monitored RX and suppressed TX
+startup in these runs, not ordinary production startup or physical audio.
+
+The same two-application lab optionally enforces the capture check with
+`DECODIUM_LAB_AVT_REQUIRE_CONTINUOUS_CAPTURE=1`; it rejects disabling capture
+at the same time and prints PASS only after the integrity check succeeds.
+Fresh AVT24 Narrow-QRM A/B process-pair runs passed with this option, full
+coverage and no reported RX discontinuities; artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-j8ta2ls0` and `...-6lte4bn3`.
+The diagnostic's synthetic A/B positive and negative controls also passed.
+Exact digital silence may be intentional for other test scenarios, so the
+enforcement remains opt-in and does not establish general signal quality.
+
+With that lab startup ordering, fresh full AVT94 Narrow A/B Decodium TX/RX
+transfers both completed with no reported RX discontinuity, and the two
+captured signals had no internal exact-zero run of 480 frames or more. The
+pinned, unmodified Revenant codec decoded both original captures as VIS 73
+and completed 200 rows. A/B MAE/p95/max were 0.120/0/78 and 0.119/0/76;
+both passed the exploratory 5/15 gates. Crossed-reference comparisons failed
+as intended with MAE about 105.8. Application artifacts are
+`.../decodium-avt-two-app-avt-94-narrow-8b0ns5tg` and `...-2qxz6yka`;
+independent outputs are `.../decodium-avt94n-clean-oracle.MoH4Sq`. This is
+selected file-mediated A/B evidence over virtual audio. It does not identify
+the original zero-block source, establish RF or live GUI-to-GUI behaviour, or
+erase the earlier failing capture.
+
 ### AVT94 QRM A/B at native 320×200 resolution
 
 Both Decodium-to-Decodium A/B transmissions completed at 320×200 with no
@@ -1342,6 +1594,24 @@ The AVT core and RX session tests also passed after the helper changes.
 
 ### AVT94 Narrow-QRM: terminal-pixel discrepancy
 
+Two additional AVT24 Narrow-QRM A/B application pairs exercised the same
+terminal-component guard with distinct 128 x 120 colour gradients. A ends
+with blue 0 after 255; B ends with blue 255 after 0. A 1900 Hz peak-0.10
+tone was added through the BlackHole relay, with the receiver's manual notch
+enabled and gain 0.8. Both pairs received complete images with no reported
+audio discontinuities or relay errors. Last-blue received/reference values
+were 0/0 and 247/255, within the independently checked limit of 20. Full
+image MAE/p95/max were 4.520/14/71 and 4.483/14/71; both pass the existing
+5/15 limits with limited margin. Crossed-reference MAEs were 86.876 and
+86.757, confirming the selected A/B images were distinguishable. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-8ikz2l0t` and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-ooyh3_vz`; relay captures are
+`.../decodium-avt-live-interference-c58wx8o7` and
+`.../decodium-avt-live-interference-4df0yax8`. The selected input fixtures are
+`/tmp/decodium-avt24-narrow-terminal/{a,b}.ppm`. This verifies local
+virtual-audio behaviour for these patterns and interference, not arbitrary
+RF conditions or independent-receiver interoperability.
+
 Two local Decodium process pairs transmitted A/B images using AVT94
 Narrow-QRM through the 1900 Hz peak-0.10 interference relay and receiver
 notch. Both had full reported coverage, no relay errors, and MAE/p95
@@ -1457,3 +1727,1079 @@ not an independent receiver or RF result. Application artifacts are
 `DECODIUM_LAB_AVT_MAX_LAST_BLUE_ERROR=20 python3
 tests/sstv/tools/run_avt_two_app_interference_lab.py a IMAGE 1 1900
 avt-90-qrm`, repeated with B and its image.
+
+An additional clean A/B comparison used the same inputs and terminal limit
+with two Decodium applications over BlackHole 2ch, without the interference
+relay or notch. Both runs reported full coverage and zero discontinuities.
+The final blue component was 20 versus reference 0 for A, and 250 versus
+reference 255 for B; image MAE was 0.138 and 0.155, respectively. Therefore
+the A terminal error at the configured threshold also occurs without the
+test interferer and notch. These observations do not establish the cause or
+justify changing pixel values. Artifacts are
+`.../decodium-avt-two-app-avt-90-qrm-o664kbym` and
+`.../decodium-avt-two-app-avt-90-qrm-sfzfo6hs` under the macOS temporary
+directory. This is a local virtual-audio comparison, not an RF or independent
+receiver test.
+
+For these clean AVT90 QRM results, an additional RGB comparison of the last
+five blue components on the final line found A reference/received pairs
+`255/255, 255/255, 255/252, 255/185, 0/20` and B pairs
+`0/0, 0/0, 0/0, 0/64, 255/250`. The largest nearby discrepancy therefore
+appears at the abrupt transition, not only in the final component. This is
+consistent with transition smearing but does not establish whether its source
+is timing, demodulation, resampling or another part of the path; no production
+correction is inferred from this observation alone.
+
+The clean A/B images were subsequently compared over all blue components.
+Each image has exactly 240 blue components with absolute error above 20:
+239 occur at x=319 on lines 0 through 238, and the remaining one is x=318
+on the final line. The mean absolute blue error in column 319 is 57.01 for
+A and 48.79 for B; green also exceeds 20 at 240 components in each image.
+This reveals a broader line-boundary effect in these fixtures, not merely
+an isolated terminal pixel. It does not yet identify whether the transmitter,
+timing mapper or receiver demodulator is responsible. Source and received
+images are the clean A/B artifacts identified above; no pixel correction
+was applied.
+
+For the first 238 lines of the same clean fixtures, the final red, green and
+blue component values were compared with the first value of the following
+component in transmission order (R to G, G to B, B to R). The average
+fractional shift toward that following value was 0.303/0.301/0.327 for A
+and 0.314/0.303/0.288 for B. The patterns have different component levels;
+both show a similar direction and magnitude of cross-boundary mixing. This
+is evidence for a systematic component-boundary timing or filtering effect,
+not proof of a particular implementation defect. In particular, applying a
+fixed colour correction from these two constant-colour fixtures would be
+unjustified.
+
+An experimental AVT24 in-memory encoder/demodulator comparison decoded the
+same observations twice: once using the detected countdown image start and
+once one 12 kHz sample earlier. The earlier start increased both the total
+RGB absolute error and the last-column error for normal, narrow, QRM and
+narrow-QRM in the existing gradient fixture. For example, QRM total error
+changed from 71,330 to 191,841 and last-column error from 534 to 1,219;
+narrow-QRM changed from 72,387 to 213,115 and 602 to 1,421. Thus the one-sample
+countdown offset alone does not justify advancing the production receiver.
+This controlled comparison is AVT24 in memory, not a measurement of the
+complete AVT90 application path. The test reports both totals in
+`fullAvt24PcmLoopbackIsChunkedAndCompletesProgressively`.
+
+The same diagnostic also tested a start one sample later than detected.
+This increased the total and last-column errors in all four variants of the
+same gradient fixture as well: for QRM the sums were 187,910 and 1,384,
+compared with 71,330 and 534 at the detected start; for Narrow-QRM they were
+207,212 and 1,725, compared with 72,387 and 602. This rules out either
+one-sample direction as a general improvement for this controlled AVT24 case;
+it does not rule out a separate timing issue in the AVT90 application path.
+
+A follow-up synthetic transition probe uses the same generated 48 kHz input
+for both paths: direct every-fourth-sample decimation and the production
+48-to-12 kHz resampler. For transitions A/B and offsets 0, 1 and 2 output
+samples, the measured fractional shifts toward the next tone differed by at
+most 0.01 between paths. The previous diagnostic generated the two inputs
+at different rates and phases, so its larger differences cannot be attributed
+to the resampler alone. This probe uses clean synthetic tones and does not
+exclude resampling effects for other signals or in the complete application.
+
+The same three-way in-memory comparison now also covers AVT90 QRM constant
+colour patterns A/B with opposite final-blue transitions. The detected start
+was again one sample later than the encoder header. Moving it one sample
+earlier reduced last-column error sums from 1,570 to 847 for A and 2,520 to
+1,203 for B, but increased total RGB error from 5,077 to 15,743 and 7,387 to
+18,694, respectively. A one-sample later start worsened both metrics. The
+improvement at one edge therefore comes with a substantial whole-image
+regression; neither shift is adopted as a production fix. This in-memory
+comparison does not include the resampler or the application's audio path.
+
+An additional test-only session retained the detected image start but omitted
+the latter half of observations in each last component pixel (for pixels at
+least four samples long). For the in-memory AVT90 QRM A/B constant-colour
+patterns, total RGB error decreased from 5,077/7,387 to 4,518/6,617 and
+last-column error from 1,570/2,520 to 1,011/1,750. However, on the existing
+AVT24 gradient, QRM last-column error increased from 534 to 873 and
+Narrow-QRM from 602 to 818. This is a diagnostic tradeoff, not a production
+algorithm or evidence of a general improvement. The test-only filter does not
+modify the encoded signal or the production decoder.
+
+Two further AVT90 QRM in-memory patterns use a varying RGB gradient and its
+inverse. The same filter worsened last-column error from 2,191 to 2,495 for
+A and from 2,164 to 2,295 for B; total error also increased in both cases.
+Therefore even restricting the filter to AVT90 QRM would not be justified
+by the preceding constant-colour improvement. Both generated streams reached
+complete receiver snapshots; no production filtering change was made.
+
+A synthetic boundary diagnostic compared direct decimation of a 48 kHz tone
+with the production 48-to-12 kHz resampler, feeding the same input samples
+to both paths and the production frequency demodulator afterwards. Across
+eight initial phases, two opposite frequency transitions and observation
+shifts of zero to two output samples, the maximum difference in the measured
+next-tone fraction was 0.0092 for A and 0.0107 for B. This narrow synthetic
+experiment does not reproduce the full application audio path and does not
+establish the cause of the observed AVT90 edge mixing. Direct decimation is
+used here only as a comparison for these band-limited test tones.
+
+The same diagnostic was extended to extreme 1500-to-2300 Hz and
+2300-to-1500 Hz transitions (C/D). Among windows with both observations
+valid in both paths, maximum differences were 0.0075/0.0133 respectively.
+However, C had 2/24 incomplete windows (direct 0, resampled 2), while D
+had 4/24 (direct 4, resampled 2; counts overlap). A window is incomplete
+when either path supplies fewer than two valid observations. These cases
+must not be silently treated as comparable frequency estimates: the result
+also exposes a validity difference near the extreme transitions, and does
+not by itself determine its effect on a decoded image.
+
+To check whether this observation carries over to a complete AVT stream, the
+in-memory encoder-to-demodulator loopback now counts valid and invalid
+observations in the interior of the final pixel of every component and in
+other pixels. It includes AVT90 QRM uniform A/B, inverse gradient A/B, and
+two additional extreme-colour images, RGB (0,255,0) and (255,0,255). Each
+AVT90 run counted 2,157 valid and zero invalid final-pixel interior
+observations, and 617,033 valid and zero invalid other-pixel interior
+observations before the encoder ended. The extreme A/B runs completed;
+their aggregate final-column RGB errors were 2,419 and 2,439 respectively.
+Thus the visible border error in these clean, directly generated 12 kHz
+streams occurs without rejected interior observations. These counts exclude
+pixel edges and trailing flush observations, and the loopback does not
+include the application audio path or resampler. They do not rule out
+invalid observations in those other conditions.
+
+For the two extreme images, the test also measures the valid interior
+observations in the final red and green pixels, normalising each frequency
+between the current and following component tones. At two samples before the
+detected pixel end the mean fraction towards the next tone was 0.11152 for
+both A and B; at three samples before the end it was -0.00163 for both
+(480 observations per distance and image). This directly shows a bias near
+the estimated component boundary in these clean full-image loopbacks.
+These are ensemble means for constant-colour inputs, not a guaranteed
+correction coefficient: the gradient tests above already demonstrate that
+discarding late observations can worsen other images. The detected image
+start is one sample after the generated header in this setup; distances are
+relative to that detected boundary, not necessarily the transmitted one.
+
+An offline, test-only candidate attempted to undo an 11% contribution from
+the next component tone, using a future demodulated observation. In AVT90
+QRM clean loopbacks, final-column aggregate RGB error decreased from
+1,570/2,520 to 1,490/2,387 on uniform A/B and from 2,419/2,439 to 259/279
+on extreme A/B. However, inverse gradient A/B errors increased from
+2,191/2,164 to 2,563/2,360; their total image errors also increased. The
+coefficient was chosen from the preceding simple experiment and is not a
+calibrated channel model. This candidate is therefore rejected for
+production. It uses future observations offline and is not a streaming or
+two-application test.
+
+The same offline experiment now compares each adjusted observation against
+the known source frequencies. Across 719 component boundaries per AVT90
+image, the mean absolute frequency error of the chosen next-tone observation
+was 15.35/17.15 Hz for gradient A/B. The corrected observation itself
+improved from 18.79/20.58 Hz to 17.67/18.04 Hz on average, even though the
+final-column image error worsened as recorded above. This demonstrates that
+an improvement in a single observation's mean error is not sufficient to
+justify changing the aggregated pixel output. The measurements use known
+synthetic source pixels and do not establish a correction for unknown images.
+
+The earlier gradient fixture changes by 29 levels per adjacent pixel with
+8-bit wraparound; it is a rapidly varying pattern, not a smooth gradient.
+Two further AVT90 QRM in-memory A/B fixtures use a gradual horizontal red
+ramp, vertical green ramp and mixed blue ramp, plus their inverse. The
+ordinary decoder's aggregate final-column RGB errors were 1,877/2,385; the
+offline de-mix candidate changed them to 2,198/2,099. Whole-image mean
+absolute error for the ordinary decoder remained below 0.05 RGB levels in
+both cases. Since the candidate worsens A, these additional cases still do
+not support enabling it. This is a clean in-memory comparison, not a
+two-process or RF test.
+
+The smooth A/B gradients were then transmitted between two Decodium
+applications over BlackHole 2ch, without added interference. Both runs had
+full coverage and no reported discontinuities, with overall MAE 0.159/0.137
+and p95 0/0. These aggregate metrics conceal a significant boundary defect:
+the maximum absolute component error in the final column was 83/75, at red
+pixel (x=319, y=1) in each image. There were 568/524 components with error
+greater than 20, of which 532/524 lay in the last column. They do not pass a
+20-level last-column limit, despite passing the previous global limits.
+Artifacts are `.../decodium-avt-two-app-avt-90-qrm-u6nt8u_g` and
+`.../decodium-avt-two-app-avt-90-qrm-ve17byjv` in the macOS temporary
+directory. These are virtual-audio observations, not RF or independent-peer
+tests. The image comparator now always reports the last-column maximum and
+accepts an optional `--max-last-column-error` guard; the AVT laboratory
+exposes it through `DECODIUM_LAB_AVT_MAX_LAST_COLUMN_ERROR`. Comparator A/B
+tests confirm that localised column errors can fail the guard even when the
+global mean and p95 pass. No production decoder correction is implied.
+
+The same captured A/B transmissions were independently decoded by a freshly
+rebuilt Revenant adapter from pinned commit `67da9f8767b2a250792a6f5a5b2a69f5bc992b6d`.
+Its AVT and FAX A/B self-controls and crossed-image/wrong-mode negatives
+passed first; its codec source hashes matched those documented above. After
+mono conversion, it reported complete AVT90 QRM images, VIS 70, 256×240.
+Against the prepared references explicitly bilinearly resized to 256×240,
+the A/B MAE was 0.116/0.212, p95 0/1 and last-column maxima 25/21. These
+do not meet a 20-level last-column guard either, but are lower than the
+83/75 maxima observed in Decodium's native 320×240 images. Because the
+decoders use different horizontal resolutions and explicit resizing, this
+is supporting independent evidence, not a pixel-identical attribution of
+all error to either transmitter or receiver. Outputs and resized references
+are in `/tmp/decodium-avt90-smooth-independent`.
+
+The image comparator now also reports `first_column_maximum_error` and
+accepts `--max-first-column-error`; the two-application and replay labs
+expose it as `DECODIUM_LAB_AVT_MAX_FIRST_COLUMN_ERROR`. Their success lines
+show the configured first and last edge limits, including `None` when no
+limit was requested, so an aggregate-only pass is identifiable. Synthetic
+A/B positive and negative controls exercise both edge guards independently.
+Applied to the earlier shifted two-application replays, a 20-level first
+column limit rejects A/B with errors 70/76, although the broad MAE/p95
+limits pass. This is a measurement guard, not a production decoding fix.
+
+An offline diagnostic fed each captured waveform through the production
+resampler, frequency demodulator, countdown detector and AVT session, while
+varying the detected anchor by -2 through +2 samples. For A/B, the detected
+anchor produced overall MAE 0.0262/0.0270 and last-column maximum 8/14;
+the +2 shift produced MAE 0.1388/0.1370 and last-column maximum 88/84.
+The offline path does not reproduce every runtime audio-processing step or
+the runtime's VIS-driven arming, so similarity to the live image is an
+investigative clue, not proof of the cause.
+
+The identical saved waveforms were also replayed through the full Decodium
+receiver over BlackHole at gain 0.8, without added interference. A
+test-mode-only bounded anchor adjustment compared zero against -2 samples.
+First/last/middle-column maximum errors were 24/83/5 versus 70/23/4 for A,
+and 11/75/7 versus 76/22/7 for B. At -2, both images still exceeded a
+20-level last-column guard, and first-column errors increased substantially.
+Thus moving the whole anchor is not an acceptable production correction.
+Replay files are `.../decodium-avt-interference-s7f9ht3a` and
+`.../decodium-avt-interference-3s4btcy7` (A zero/-2), and
+`.../decodium-avt-interference-9g78r8cd` and
+`.../decodium-avt-interference-6ee2v_ea` (B zero/-2). These are separate
+virtual-audio replays, not sample-identical receiver input or RF tests.
+
+An offline composite kept the zero-shift replay image and replaced only its
+last column with the -2 replay column. Its overall maximum component error
+was 24/22 for the smooth A/B images (MAE 0.06734/0.05063), compared with
+83/75 in the zero-shift images. This is an analysis of two separately
+received images, not a streaming implementation.
+
+The same idea was checked against complete in-memory AVT90 QRM A/B streams
+using a second decoder with an anchor two samples earlier. Replacing only
+the last column improves the smooth and constant-colour cases, but raises
+aggregate last-column error on the rapidly varying A/B images from 2,191/2,164
+to 10,637/11,323. In another A image with an intentionally distinct final
+blue pixel the early column has a maximum error of 101. Therefore this
+spatially selective shift cannot be enabled generally without damaging
+legitimate detail; no production decoder change was made.
+
+The captured A/B waveforms were analysed offline through the actual 12 kHz
+preprocessor before demodulation. With the default preprocessor, last-column
+maximum errors were 94/80. Disabling only its band-pass reduced these to
+8/14; disabling only the DC blocker gave 95/81, and disabling only automatic
+level control gave 94/80. Widening the band-pass to 500–3500 Hz gave 36/34;
+300–4500 Hz gave 19/21. These comparisons use the same captured source and
+indicate the band-pass is a major contributor under these conditions.
+
+Two full-application replays of the same captured A/B signals with the
+band-pass disabled by a test-mode-only switch produced last-column maxima
+9/16, versus 83/75 in the normal-filter replays. Overall maximum errors were
+33/28; no discontinuities were reported. These are separately replayed
+virtual-audio signals, not identical receiver samples or RF proof. Disabling
+the band-pass is not adopted in production: an offline stress comparison
+with a 400 Hz peak-0.15 interferer failed to acquire the countdown for both
+images with the band-pass disabled and with the 300–4500 Hz band. The
+default filter acquired both but still produced high MAE 7.51/7.39 and
+last-column maxima 106/89. These results test only the specified interference
+and do not establish general noise resilience. The test-only application
+replays are `.../decodium-avt-interference-3obt4hhe` and
+`.../decodium-avt-interference-tm05w13q`.
+
+Further offline A/B tests widened one cutoff at a time. With 900–4500 Hz,
+clean last-column maxima were 35/32 and a 400 Hz peak-0.15 interferer still
+allowed countdown acquisition, though MAE was 6.57/6.54. With 300–2500 Hz,
+clean maxima were 71/59 and that interferer prevented acquisition. Raising
+the upper cutoff further to 5000 or 5500 Hz yielded clean maxima 38/34 and
+41/37, respectively; neither met the 20-level guard. At 3300 Hz peak 0.15,
+900–4500 Hz failed to acquire either countdown, while the default band
+acquired both but had MAE 16.42/16.35. With the wider upper cutoff and an
+additional -1 sample shift, clean first/last-column maxima were 39/14 and
+46/13: the gain at one boundary still damages the other. These are bounded
+offline experiments, not a general interference test or a production change.
+
+An offline diagnostic also compared test-only 9-, 17- and 33-tap symmetric
+Hamming-window FIR band-passes (900–2500 Hz, normalised at 1900 Hz). On the
+clean captured A/B signals, first/last-column maximum errors were 41/27 and
+41/29 with 9 taps; 37/81 and 36/73 with 17; 29/113 and 14/111 with 33.
+With the 400 Hz peak-0.15 interferer, 9 taps failed countdown acquisition for
+both images; 17 taps acquired both with MAE 7.61/7.53, and 33 taps acquired
+both with MAE 1.00/0.99, but its last-column maxima remained 113/113.
+Thus linear phase alone does not resolve the tradeoff: the longer tested
+filter rejects the chosen interferer better while smearing the short AVT90
+pixels. This filter exists only in the offline diagnostic and is not a
+production implementation or a proof for other signals.
+
+Another offline A/B experiment used the default filtered path to acquire the
+countdown and a parallel, unfiltered-band image path, with a -4 sample
+relative anchor. On the clean captured A/B signals the resulting first/last
+column maxima were 21/8 and 17/14, with overall MAE 0.0349/0.0341. With a
+peak-0.15 interferer at 400 Hz, the countdown still acquired but image MAE
+rose to 34.53/34.16; at 3300 Hz it rose to 36.30/36.36. Retaining selective
+acquisition alone therefore does not protect the image path. This diagnostic
+does not include automatic path selection, application runtime or RF tests;
+the split is not enabled in production.
+
+An offline-only second-order notch experiment disabled the normal band-pass
+and used a known interferer frequency (Q=20). With a peak-0.15 tone exactly
+at the notch, 400 Hz produced first/last-column maxima 22/8 and 18/14 on
+A/B; 3300 Hz produced 28/8 and 22/14. This presupposes perfect knowledge of
+the tone. With the 400 Hz notch and a 410 or 430 Hz tone, neither countdown
+was acquired. With the 3300 Hz notch and a 3320 Hz tone, A/B acquired but
+image MAE rose to 14.11/14.15; a 3400 Hz tone prevented acquisition. This
+does not demonstrate a general interference solution, a frequency estimator,
+or an application/RF test, and no production filter was changed.
+
+Wider test-only notches (Q=2 and Q=5) tolerate more detuning but do not
+solve the tradeoff. With a 400 Hz notch and a 410 Hz peak-0.15 tone, Q=2
+acquired both A/B images with MAE 3.41/3.40; a 430 Hz tone raised MAE to
+9.63/9.63. For a 3300 Hz notch and a 3320 Hz tone, Q=2 gave MAE 1.66/1.65;
+a 3400 Hz tone raised it to 8.03/8.02. Q=5 was worse in these detuned
+examples, and one 430 Hz case failed acquisition. Even without interference,
+Q=2 changed first/last-column maxima to 28/8 and 27/13 for the 400 Hz notch,
+and 38/28 and 34/32 for the 3300 Hz notch. This remains an offline test
+using known candidate frequencies, not automatic detection or a safe
+replacement for the band-pass.
+
+A separate offline spectral diagnostic measures the largest 100–800 Hz or
+3000–5000 Hz peak in one second of captured 48 kHz audio, relative to the
+largest 1500–2300 Hz peak. Synthetic A/B tests verify the frequency-bin
+measurement for two fractional-frequency tones. On the two smooth captured
+images, four clean windows each had outside/inside peak ratios from 0.00128
+to 0.00196. Adding a single peak-0.15 tone at any of 400, 410, 430, 3300,
+3320 or 3400 Hz yielded the injected integer frequency in the inspected
+25-second window; adding 410.37 or 3320.37 Hz yielded the nearest 1 Hz bin.
+The corresponding peak ratios were approximately 0.60–0.77, depending on
+the image and tone. These numbers depend on this signal and window; they are
+not an operating threshold or evidence against false positives.
+
+Using the nearest-bin frequencies as manually supplied Q=20 notch centres,
+separate offline A/B decodes with injected 410.37 Hz produced MAE 1.2804/
+1.2794 and first/last-column maxima 24/10 and 20/16. With 3320.37 Hz, MAE was
+0.1483/0.1422 and first/last maxima 28/9 and 23/14. These are two-stage
+laboratory experiments with a stationary injected tone; the estimator and
+notch are not connected in a streaming receiver. Multiple, drifting,
+in-band or broadband interferers, false positives and real RF remain
+unverified. Neither component changes production reception.
+
+The offline spectrum diagnostic now also reports integrated outside/inside
+band power, because a single-peak measurement alone can miss distributed
+noise. In one-second windows from the captured smooth A/B signals, adding
+independent Gaussian noise with RMS 0.08 changed the outside/inside peak
+ratios from 0.00170/0.00156 to 0.01265/0.01064, while integrated power
+ratios changed from approximately 0.00002/0.00003 to 0.00223/0.00232.
+Separately, full offline A/B decodes with deterministic uniform noise of
+peak 0.13856 (approximately the same RMS) gave MAE 4.57/4.56 with the
+default band-pass and 8.47/8.46 with the band-pass disabled. The noise
+realisations and distributions differ between the measurement and decode
+experiments. These examples show why an isolated spectral peak cannot be the
+only criterion for enabling a less-filtered image path; no production
+threshold or automatic switching policy has been established.
+
+The previous spectrum diagnostic also omitted the adjacent ranges 801–1400
+and 2400–2999 Hz. On the captured A/B image windows, adding a 0.15-peak
+900 or 2600 Hz tone barely changed its distant-band ratios: it reported
+peaks around 779/3021 Hz rather than the injected tones. With the 900 Hz
+tone, neither the default nor the bypassed offline frontend acquired the
+countdown. With 2600 Hz, the default path acquired but produced whole-image
+MAE 17.67/17.58; the bypassed path did not acquire. The diagnostic now
+reports adjacent guard-band peak and power ratios separately: on these
+windows it identified 900/2600 Hz and the peak ratio rose from clean
+0.0231/0.0188 to 0.623–0.763. A/B pure-tone controls cover both adjacent
+bands and are registered as `test_sstv_avt_spectral_guard_bands` when
+NumPy and the diagnostic dependencies are present. These ranges can also
+contain legitimate SSTV synchronisation or transition energy; the figures
+are not a validated classifier or a production switching rule.
+
+`DECODIUM_SSTV_NUMPY_PYTHON` is an optional CMake path to a Python that can
+import NumPy for the AVT spectral diagnostic; other tests retain their
+existing interpreter. With it unset the diagnostic uses the usual Python if
+NumPy is available. An explicitly configured interpreter that cannot import
+NumPy fails configuration rather than silently omitting the diagnostic.
+On the local Mac, selecting the existing NumPy-enabled Python registered the
+test and CTest passed its A/B controls; explicitly selecting `/usr/bin/python3`
+without NumPy failed configuration as intended, after which the working
+configuration was restored. This affects diagnostic test discovery only.
+
+For the default 900/2500 Hz second-order Butterworth cascade, numerical
+evaluation of its coefficients gives approximate group delays of 2.677,
+2.290 and 2.073 samples at 1500, 1900 and 2300 Hz respectively, at 12 kHz.
+To test whether flattening that variation is sufficient, the offline
+diagnostic added four, six or eight first-order all-pass stages (coefficient
+0.4) after the existing preprocessor. On the clean captured A/B signals, the
+unshifted first/last-column maxima were 14/85 and 9/73 with four stages,
+13/81 and 9/71 with six, and 11/79 and 9/69 with eight. For eight stages,
+a -1 sample shift yielded 31/44 and 32/41; -2 yielded 65/20 and 78/23.
+None met a 20-level bound at both edges. These are small exploratory
+all-pass configurations, not an exhaustive phase-equaliser design or an
+application/RF experiment; no production filter was changed.
+
+An additional least-squares FIR equalisation probe kept the existing
+band-pass and used nine, thirteen or seventeen real taps. The reproducible
+coefficient generator is `tests/sstv/tools/design_avt_equalizer_probe.py`;
+the coefficients are supplied only to the optional offline capture test.
+At its acquired anchor, first/last-column maxima for clean A/B were 33/111
+and 31/112 with nine taps, 38/115 and 38/114 with thirteen, and 19/136 and
+15/136 with seventeen. All three worsen the last-column error compared with
+the unequalised offline result (94/80). No interference tests or production
+changes are justified by these clean-signal results; these few designs do
+not exhaust equalisation possibilities.
+
+The optional offline capture diagnostic also permits varying the Hilbert
+transform length using `DECODIUM_AVT_HILBERT_TAPS` (odd values 15 through
+255). With the default preprocessor, the same clean A/B captures and the
+acquired anchor, 15 taps produced first/last-column maxima of 18/95 and
+8/82; 23 taps produced 16/96 and 10/80; and 47 taps produced 16/94 and
+10/80. The standard 31-tap setup had last-column maxima 94/80. The test
+run reports successful execution, not passage of the image-quality bound:
+all these last-column results exceed 20. Changing only the Hilbert length
+therefore does not establish a fix. These are offline diagnostics, not new
+application or RF tests, and no production demodulator setting was changed.
+
+At the acquired anchor, per-channel inspection of the captured smooth A/B
+last columns found errors above 20 on respectively 186/178 red, 125/126
+green, and 239/239 blue rows out of 240. Maximum errors were 94/80 red,
+49/41 green, and 93/79 blue. With only the band-pass disabled in this
+offline diagnostic, none of the 240 rows in any channel exceeded 20 for
+either capture; the overall last-column maxima were 8/14. This identifies
+the extent and colour distribution of the defect for these two patterns,
+and supports a filtering contribution. It does not establish that removing
+the band-pass is safe: the interference counterexamples above still apply.
+
+For these known smooth inputs, a further offline diagnostic compares the
+signed last-pixel error with the known jump to the next transmitted colour
+component. A zero-intercept least-squares slope for red/green/blue was
+0.363/0.353/0.344 for A and 0.310/0.327/0.311 for B with the default filter;
+without the band-pass it was 0.014/0.012/0.005 and 0.030/0.022/0.016.
+This is consistent with substantial next-component leakage into the last
+pixel under the tested filter. The calculation uses known source pixels,
+includes the last transmitted image line, and is not a causal proof or a
+validated correction: arbitrary images, noise, and the final boundary need
+separate testing before applying any compensation to production decoding.
+
+An exploratory image-level correction uses 0.33 as the estimated leakage
+and the decoded first pixel of the next transmitted component, excluding
+the final blue boundary because there is no next image component. On the
+filtered smooth captures A/B, the sum of last-column component errors fell
+from 32234/28935 to 4961/1372, but the corrected maxima were 23/12 and A
+still had 14 components over 20. On the same captures with the band-pass
+disabled, the correction made the sums worse, from 1689/2229 to
+17683/17899, with maxima of 85. On generated filtered A/B rapidly varying
+patterns, the sums fell from 19289/18210 to 9168/6826, but corrected maxima
+remained 56/51; on the two mostly constant contrast patterns they fell
+from 28951/31595 to 3108/2591 with maxima of 16/16. These are offline or
+in-memory diagnostics, and their QTest pass status only confirms execution.
+They do not validate a general correction: the fixed coefficient depends
+on the signal path, the next decoded pixel may itself be erroneous, and
+the final image boundary is untreated. No production change was made.
+
+The offline capture diagnostic accepts `bandpass-custom` with bounded
+`DECODIUM_AVT_BANDPASS_LOW` and `DECODIUM_AVT_BANDPASS_HIGH` values to
+compare intermediate filter bands. On clean A/B captures, first/last-column
+maxima at the acquired anchor were 14/63 and 11/56 for 700–3000 Hz,
+21/57 and 14/51 for 900–3000 Hz, and 21/60 and 10/51 for 700–2700 Hz.
+For 900–3000 Hz, shifting the anchor one sample earlier gave 43/27 and
+46/24, while two samples earlier gave 78/10 and 90/10. None meets 20 at
+both edges on both images. These clean-only experiments do not demonstrate
+interference resistance and did not alter the production band-pass.
+
+The extreme constant-colour in-memory A/B patterns also measure the mean
+fraction of an 800 Hz transition visible in the last pixel's interior
+observations. At two/three samples before the component end, the fractions
+were 0.1115/-0.0016 without the preprocessor and 0.5212/0.3318 with its
+default settings, matching across opposite A/B patterns. The exploratory
+fixed correction gave maximum last-column error 18 with preprocessing and
+zero without on these saturated inputs. Saturation and clamping make that
+result insufficient for general images, as the rapidly varying and smooth
+counterexamples above show. The optional preprocessed loop skips the strict
+unprocessed whole-image MAE assertion, so a successful test execution there
+must not be interpreted as passing that quality bound.
+
+An offline dual-path probe retains the default preprocessor for countdown
+acquisition and all image pixels except the last pixel of each component,
+where it substitutes observations from a second path with the band-pass
+disabled. It explicitly carries up to five prior observations across
+chunks and tests a whole-sample delay when aligning the paths; only the
+zero-anchor session uses the substitution. With zero delay the clean A/B
+last-column maxima were 240/244. At delays two, three and four samples they
+were 86/81, 31/35 and 8/14 respectively; at delay four, first-column
+maxima were 16/10. The 1500-sample component and 320-column selection is
+specific to this 12 kHz AVT90 diagnostic. With a 0.15-peak 400 Hz added
+tone, delay four gave last-column maxima 58/61 and whole-image MAE
+7.466/7.341; with a 3300 Hz tone the maxima were 61/62 and MAE
+16.418/16.374. Those interference results do not meet the clean-edge
+quality bound. These figures do not prove general signal-path alignment or
+safe switching, and no production decoder path was changed.
+
+The dual-edge probe can also enable a configurable band-pass on its
+secondary path. With a 500–3500 Hz secondary band and four-sample delay,
+clean A/B last-column maxima were 3/5 and first-column maxima 16/10.
+Adding a 0.15-peak 400 Hz tone yielded last-column maxima 29/32 and MAE
+7.414/7.312; a 3300 Hz tone yielded 47/48 and MAE 16.408/16.353. With
+deterministic uniform noise at peak 0.13856, last-column maxima were 24/24
+and MAE 4.444/4.455. Although these are improvements over the unfiltered
+secondary path in the tone examples, all three interference cases still
+exceed the clean-edge bound and the same 20-level limit may not be a fair
+criterion for noisy signals. These are A/B offline probes with a fixed
+delay, not an application, RF, or arbitrary-image validation.
+
+The 500–3500 Hz dual-edge probe was subsequently applied to the generated
+rapidly varying and extreme A/B images. The diagnostic was corrected to
+feed its final silence through the same preprocessors and to apply the
+secondary path during the frontend flush; earlier optional preprocessed
+loop metrics above were measured before that correction, so their final
+pixel results should not be used as a corrected-flush comparison. With the
+corrected flush, baseline versus dual-edge last-column maxima were 142/58
+and 73/64 for the rapidly varying A/B, and 92/8 and 160/22 for extreme
+A/B. The last case misses the 20-level clean bound, and the varying
+patterns remain substantially above it. The dual-edge path is therefore
+not a general fix even in these clean in-memory tests; successful QTest
+execution does not assert this quality bound.
+
+The corrected-flush, in-memory dual-edge diagnostic compared whole-sample
+delays 2, 3, 4 and 5. Last-column maxima on rapid A/B were 35/32, 30/29,
+58/64 and 112/120 respectively; on extreme A/B they were 32/56, 24/37,
+8/22 and 0/10. A 50% blend of the frequency estimates at delays 3 and 4
+gave maxima 44/45 and 16/30. The optimum changes with image content; none
+of these choices met the 20-level bound for all four images. The fractional
+blend is a diagnostic interpolation of already-demodulated observations,
+not a validated fractional-delay filter. The results are consistent with
+the risk of mixing the previous pixel when delaying too far, but do not by
+themselves prove that mechanism.
+
+An optional in-memory adaptive probe chooses between delays 3 and 4 for
+each last-pixel observation, preferring the demodulated frequency nearest
+the observation eight samples earlier. This heuristic produced maximum
+last-column errors 58/64 on rapid A/B, 13/22 on extreme A/B, and 100/70
+on A/B patterns whose final blue pixel contrasts with its neighbours.
+In particular, the rapid A/B result is worse than fixed delay three
+(30/29); these failures rule out adopting this simple continuity-based
+selector. These are diagnostic executions, not image-quality passes.
+
+Another in-memory probe aligns last-pixel secondary observations to the
+same time six samples before the component end (bounded delays 0–5).
+It produced last-column maxima 24/25 for rapid A/B, 26/36 for extreme A/B,
+and 78/27 for the A/B inputs with a contrasting final blue pixel. Although
+the rapid cases improved over fixed delay three (30/29), this still fails
+the 20-level clean-edge bound and the final blue A case exceeds its 40-level
+unfiltered regression bound. It is an experimental sample selection, not a
+production change or a general image-quality pass.
+
+Moving that diagnostic target to five or seven samples before the component
+end did not resolve the trade-off: rapid A/B last-column maxima were 32/29
+and 59/65, while the contrasting-terminal-pixel A/B maxima were 101/28 and
+82/72. The target at six samples above remains the best of these three for
+the rapid images, but none meets both image families' stated bounds. These
+limited timing sweeps do not validate a correction; further work needs a
+different reconstruction approach rather than assuming one fixed sample
+position is sufficient.
+
+As a further two-observation probe, linear extrapolation using 1.5 times
+the delay-three estimate minus 0.5 times the delay-four estimate yielded
+last-column maxima 20/23 on rapid A/B, 31/45 on extreme A/B and 82/16 on
+the contrasting-final-pixel A/B patterns. This modestly improves the rapid
+cases but fails the other cases; its negative coefficient can also amplify
+noise, which was not measured here. It is not a validated reconstruction
+method and has not been enabled in production.
+
+The optional `DECODIUM_AVT_BOUNDARY_TRACE` path exports 13 valid filtered
+frequency observations around each nonterminal AVT90 component boundary,
+with source ground truth, for offline model evaluation. The helper
+`tests/sstv/tools/analyze_avt_boundary_trace.py` fits 14 linear coefficients
+on an A trace and evaluates separately on B traces. Training on smooth A
+gave maximum error 5.15 on smooth B but 117.92 on rapidly varying B; training
+on rapid A gave maximum 53.78 on rapid B. Training on extreme A was only
+rank three and gave maximum 86.85 on rapid B. Each comparison covered 719
+component boundaries and deliberately excluded the final boundary. The
+estimator uses future observations and known source values during training;
+it is not a production decoder, an independent oracle, or RF evidence.
+These results demonstrate that this unconstrained linear fit does not
+generalise sufficiently across the tested image families.
+
+Training the same linear estimator on the combined rapid, smooth and
+extreme A traces and testing on the three untouched B traces gave maximum
+errors 42.53, 8.96 and 1.71 respectively. Reversing the split (combined B
+to A) gave 15.14, 6.75 and 0.44. Each test covers 719 nonterminal
+component boundaries. The asymmetric A/B result still fails the rapid-B
+20-level bound, despite the broader training set, and does not include
+noisy inputs or the final pixel. This is diagnostic evidence only; future
+observations are used and no model is applied in production.
+
+Two further deterministic A/B fixtures use independently seeded random
+colours in eight-pixel horizontal blocks. Their unfiltered in-memory
+last-column maxima were 34/12; the ordinary test now bounds both by 40.
+The corrected-flush default-preprocessor path gave 92/130. The linear
+models fitted on the three earlier families, without training on these
+random traces, gave maxima 6.00 on random B and 5.97 on random A over 719
+nonterminal boundaries. This does not reverse the rapid-pattern failure,
+does not cover the final boundary or disturbed signals, and is not a
+production or independent-peer test.
+
+The generated eight-pixel random-block A/B fixtures were also exported as
+mono 12 kHz float PCM by the optional in-memory test, resampled to 48 kHz
+and given one second of trailing silence for the independent Revenant
+adapter at the pinned revision above. Both decoded as complete AVT90 QRM,
+VIS 70, 256×240. Against the original 320×240 references resized
+bilinearly to 256×240, MAE was 1.168/1.177, p95 5/5 and maximum error
+38/36, in each case at the last column. A crossed reference/image comparison
+gave MAE 83.28 and failed a 10-level guard; the independent adapter's AVT
+and FAX A/B self-controls also passed. The first attempt without trailing
+silence reported only 239 complete rows, so its result was discarded.
+This is an independent file-mediated decoder comparison at a different
+horizontal resolution, not a direct 320-pixel comparison, an application
+exchange or RF evidence. The optional PCM export uses the host float byte
+order; the above run was on a little-endian Mac.
+
+For the reverse file-mediated direction, the pinned Revenant encoder
+transmitted two independently seeded random-block images at its native
+256×240 resolution. Its own decoder reconstructed A/B with MAE 1.886/1.871
+and p95 9/9 against the exact native inputs. The same encoded audio, with a
+one-second silent tail, was played through BlackHole 2ch into the running
+Decodium receiver with no injected interference. Against explicitly
+bilinearly upscaled 320×240 references, Decodium completed both images with
+MAE 2.738/2.751 and p95 15/15; its last-column maxima were 96/91. Both
+fail the optional 20-level last-column guard even though the broad replay
+guard passed. The crossed A-reference/B-reception control failed with MAE
+81.54. The playback reported zero discontinuities. Artifacts are
+`.../decodium-avt-interference-47lt32xt` and
+`.../decodium-avt-interference-omkthzq_`. This shows the same boundary
+symptom with an independently generated signal, but differing raster
+resolutions and resampling prevent attributing the entire difference to a
+single stage. It is file-mediated virtual audio, not a live independent GUI
+or RF test.
+
+The same independent A/B signals were replayed again through the application
+with its test-mode-only band-pass bypass, and the lab now checks the
+corresponding diagnostic log marker before accepting that setting. With the
+normal filter, first/last-column maxima were 17/96 and 18/91; with the
+bypass they were 23/28 and 24/18. B therefore passes a 20-level last-column
+guard but fails a 20-level first-column guard. Whole-image MAE with bypass
+was 1.589/1.607 and p95 8/8, with zero reported audio discontinuities.
+Artifacts are `.../decodium-avt-interference-usclq8rh` and
+`.../decodium-avt-interference-wzpltcg4`. This clean, file-mediated A/B
+test supports a filter contribution for independent transmitted signals,
+but does not remove differences caused by 256-to-320 resizing and does not
+make the bypass safe under interference. The production filter is unchanged.
+
+The boundary-trace helper also has a `--quadratic` option adding all pairwise
+products of the 13 observed frequencies. With combined A training, maxima
+on rapid/smooth/extreme/random B were 122.47/33.00/0.10/25.19; with combined
+B training, maxima on the corresponding A cases were 87.32/18.01/0.01/14.39.
+The fit rank was 103 out of 105 nominal coefficients. This unconstrained
+nonlinear fit generalises worse than the earlier linear fit on several
+held-out inputs and is not suitable for production. As before, the trace
+omits the final boundary, uses future observations, and contains clean
+synthetic data only.
+
+Quadratic ridge fits with strengths 0.001, 0.1, 1 and 10 were also trained
+on the combined A or B families and evaluated on the opposite side, with
+the random-block traces held out of training. The rapid-pattern maxima were
+respectively 93.58/75.11, 82.10/60.37, 78.71/47.49 and 86.97/64.12; random
+holdout maxima ranged from 8.04 to 10.77. These parameter choices do not
+meet the 20-level rapid-pattern bound and do not establish a robust model.
+The diagnostic's optional ridge fitting has separate synthetic A/B controls
+for exact recovery, an unpenalised intercept and shrinkage. This remains an
+offline experiment using future observations and excludes the terminal
+boundary and interference.
+
+The ordinary unfiltered 12 kHz in-memory AVT90 QRM test now asserts an
+explicit maximum error on the last column, in addition to whole-image MAE:
+20 levels for both rapidly varying and both smooth A/B inputs, and 40 for
+the A/B inputs with a deliberately contrasting terminal blue pixel.
+Observed maxima before adding these bounds were 14/14, 9/14 and 37/23,
+respectively. This regression gate covers the unfiltered in-memory frontend
+only; the filtered application-path defect described above remains open.
+
+The frontend test now measures A/B slowly rising and falling 1700–2100 Hz
+chirps against the observation timestamps, with and without the default
+preprocessor. On the local Mac, mean offsets were -0.648/-0.352 samples
+without preprocessing and -2.961/-2.665 samples with it. The phase
+discriminator naturally measures between adjacent samples, while its
+timestamp is integer-valued; the A/B average without preprocessing is
+approximately -0.5 sample. The extra delay with the preprocessor was about
+2.31 samples for each chirp. These smooth-signal averages support the filter
+delay analysis above but do not model abrupt colour changes or establish an
+appropriate global anchor correction. The frontend suite including all four
+chirp cases passed; production timing was not changed.
+
+As an exploratory 320-column comparison, the pinned Revenant decoder was
+built from a temporary copy with only its AVT90 output width changed from
+256 to 320 (`fixtures/revenant-avt90-320-diagnostic.patch`); the checkout
+itself remained clean. On the captured smooth A/B signals, the modified
+decoder completed at 320×240 with MAE 0.125/0.150, first-column maxima
+37/94 and last-column maxima 35/28 against the original 320-column images.
+On the generated random-block A/B audio, it produced MAE 3.472/3.491,
+first-column maxima 48/48 and last-column maxima 48/42. The crossed smooth
+reference/image failed with MAE 113.69; the adapter's separate AVT24 and
+FAX480 self-controls passed. This is a deliberately modified external
+decoder, not evidence of interoperability with the unmodified application.
+The experiment shows that merely requesting 320 columns from its 16 kHz
+frontend does not satisfy the 20-level edge guard across these inputs, and
+does not establish a ready-to-use production fix.
+
+Two additional application-to-application AVT24 Narrow-QRM transfers used
+the detailed A/B patterns and BlackHole 2ch, with capture disabled to limit
+disk use and explicit 20-level guards on both image edges. Both receivers
+reported complete 128×120 images, the requested mode and no audio
+discontinuities or dropped chunks. Their MAE was 1.220/1.434 and p95 5/7,
+but first-column maxima were 21/62 and last-column maxima 66/62. Both
+therefore failed the explicit edge guards, even though the aggregate limits
+would pass. Artifacts are `.../decodium-avt-two-app-avt-24-narrow-qrm-5xix0iqi`
+and `.../decodium-avt-two-app-avt-24-narrow-qrm-836j6scu`. This is local
+virtual audio, not RF. It shows that the edge-quality issue is not confined
+to AVT90; it does not establish that both modes have the same cause.
+
+Two further AVT24 Narrow-QRM application-pair A/B runs retained their
+BlackHole captures and reference images. Decodium completed both with MAE
+1.219/1.536 and first/last-column maxima 21/66 and 62/61. The unmodified
+pinned Revenant adapter decoded those same captures as complete 128×120,
+VIS 67, with MAE 0.892/1.942 and first/last-column maxima 28/27 and 55/31.
+No image resizing was required. Both receivers exceed the 20-level edge
+guard on these inputs; the independent decoder therefore does not isolate
+the whole discrepancy to Decodium's receiver. Its separate AVT/FAX A/B
+self-controls passed, and a crossed A-reference/B-output comparison failed
+with MAE 84.15. The captures and Decodium output are under
+`.../decodium-avt-two-app-avt-24-narrow-qrm-6xctaue3` and
+`.../decodium-avt-two-app-avt-24-narrow-qrm-6bu5n25l`; independent outputs
+are `/tmp/decodium-narrow-qrm-6xctaue3-revenant.ppm` and
+`/tmp/decodium-narrow-qrm-6bu5n25l-revenant.ppm`. This comparison does not
+by itself identify transmitter, channel or decoder causation and is not RF.
+
+The inverse experiment used the exact same 128×120 reference images as input
+to the unmodified pinned Revenant encoder. Revenant decoded its own files
+with MAE 0.906/1.045 and first/last-column maxima 20/63 and 49/31. The same
+audio, played through BlackHole into Decodium with no injected interference,
+produced complete A/B images with MAE 1.305/1.468 and first/last-column
+maxima 21/73 and 60/70, with no reported discontinuities. Both Decodium
+results fail the 20-level edge guards; the A-reference/B-reception negative
+control failed with MAE 83.93. No resizing was used. Artifacts for Decodium
+are `.../decodium-avt-interference-wih9g025` and
+`.../decodium-avt-interference-t3801wv1`; the independently decoded images
+are `/tmp/revenant-narrow-a-self.ppm` and `/tmp/revenant-narrow-b-self.ppm`.
+The independent self-decode was file-mediated, while Decodium used virtual
+audio, so this does not equalise every channel condition or establish RF
+performance. It does show that the chosen 20-level edge bound also fails
+for the independent encoder/decoder on both of these images.
+
+An in-memory AVT24 Narrow-QRM A/B loopback now recreates those two exact
+128×120 references; exported PPMs were compared pixel-for-pixel with the
+application-run references. With the production preprocessor bypassed,
+first/last-column maximum component errors were 13/9 and 11/9; with the
+preprocessor enabled, they were 33/73 and 85/67. The test asserts the
+20-level bound on both edges for the unfiltered clean control; its generic
+PASS in the filtered diagnostic does not assert that bound. This isolates a
+reproducible contribution from preprocessing in this in-memory path, but
+does not prove that it explains all discrepancies in the application and
+independent-decoder experiments. Bypassing the filter is not a production
+fix: prior interference controls show it compromises rejection.
+
+As a further filtered in-memory diagnostic, the detected AVT24 image anchor
+was shifted by -4 through +2 samples for both patterns. No shift brought both
+edge maxima within 20 levels. At -2 samples the first/last maxima were
+46/36 and 53/32; at -1 they were 23/41 and 55/37. This rules out a simple
+integer anchor offset in that range as a sufficient fix for these cases;
+it does not rule out other timing or filter-compensation approaches. The
+`DECODIUM_AVT_LOOP_ANCHOR_SHIFT` switch affects only the test diagnostic.
+
+An in-memory A/B sweep tested three preprocessing passbands on the same
+AVT24 references, both clean and with a continuous 0.1-peak out-of-band tone
+mixed into the encoder audio. With 900–2500 Hz, first/last maxima for A/B
+were 33/73 and 85/67 clean, 52/88 and 103/79 at 430 Hz, and 57/113 and
+130/111 at 2900 Hz. With 500–3500 Hz they were 11/58 and 32/35 clean,
+63/66 and 85/83 at 430 Hz, and 129/72 and 128/111 at 2900 Hz; both 2900 Hz
+tests also failed their generic image-quality assertion. With 300–4500 Hz
+they were 10/40 and 17/27 clean; 430 Hz prevented acquisition for both
+patterns, and 2900 Hz produced 104/75 and 97/85 with both generic quality
+assertions failing. Thus widening the filter improves these clean edges but
+is not a robust fix for these interference controls. These are controlled
+in-memory examples, not an exhaustive interference or RF characterisation.
+
+The two wider passbands were also tested with detected-anchor shifts of -2,
+-1, 0 and +1 samples on both A/B references, clean and with the same 0.1-peak
+430 Hz or 2900 Hz tone. None passed the 20-level bound at both edges on both
+clean images: for example, 500–3500 Hz at -1 gave A 29/27 and B 27/16.
+At 2900 Hz every 500–3500 Hz run failed the generic quality assertion; at
+300–4500 Hz every 430 Hz run failed acquisition and every 2900 Hz run failed
+the generic quality assertion. The other shifts did not address those
+failures. This matrix excludes these tested fixed filter/timing combinations
+as sufficient solutions, but does not exclude adaptive or other approaches.
+
+The in-memory loopback can also discard selected leading or trailing
+observations of the final pixel of each AVT24 component, before the normal
+decoder aggregation. With the default filter, shifts -2, -1 and 0, and
+lead/tail exclusions (0,0), (0,2), (0,3), (2,0), (3,0), (2,2), none of the
+clean A/B combinations met the 20-level first/last-column bound. For example,
+shift -2 and lead 2 gave A 46/28 and B 53/23; shift -1 and tail 2 gave
+A 23/33 and B 55/23. These numbers do not prove anything about untested
+windows or interference; the diagnostic only filters test observations and
+does not alter the production decoder.
+
+The same diagnostic was extended to exclude leading or trailing observations
+of the first pixel independently. For each previously tested shift -2, -1
+and 0, six first-pixel windows were combined with a last-pixel window that
+had improved that shift's last-column result. No combination reached the
+20-level bound on both edges for both clean references. For example, shift
+-2 with two leading first-pixel and two leading last-pixel observations
+excluded gave A 32/28 and B 44/23; shift -1 with two leading and two trailing
+first-pixel observations and two trailing last-pixel observations excluded
+gave A 20/33 and B 50/23. These remain in-memory diagnostic results, and the
+test's generic PASS is not a pass of the 20-level edge bound.
+
+The same captured two-application AVT24 runs were also inspected beyond the
+single maximum. Out of 360 RGB component values per edge, Decodium's first
+column exceeded 20 in 1/360 and 3/360 values (A/B), while its last column
+exceeded 20 in 184/360 and 159/360. Last-column mean absolute error was
+24.639/20.169 for Decodium versus 8.442/6.628 for unmodified Revenant on the
+same captures. Thus the 20-level maximum is an exploratory guard, not an
+independently established protocol acceptance limit, but the observed
+last-column degradation is also distributed across many pixels and is not
+merely an isolated maximum. The image comparator now reports per-edge mean
+and p95 as well as maximum; these metrics do not themselves impose new gates.
+
+The filtered in-memory AVT24 loopback now also reports mean absolute error
+per edge. With default timing and aggregation the clean first/last means
+were 1.836/26.764 (A) and 1.978/21.778 (B). Shifting the anchor -1 sample
+and excluding two trailing observations of the last pixel gave 6.983/8.314
+and 5.261/6.486: this markedly improves the last edge but worsens the first.
+With a 0.1-peak 2900 Hz tone, the same candidate gave 29.822/29.978 and
+30.044/29.814, versus baseline 27.569/37.056 and 29.856/34.525. These are
+diagnostic sample cases, not application or RF proof; no fixed policy has
+been selected and neither the generic test PASS nor these means prove that
+the edge maxima or interference requirements pass.
+
+To reduce that first-edge trade-off, the same -1-sample, last-pixel-tail-2
+in-memory candidate was evaluated with six independently selected first-pixel
+windows on both images and the 430/2900 Hz tone controls. Dropping the first
+two observations of the first pixel changed clean first/last edge MAE from
+6.983/8.314 and 5.261/6.486 to 2.958/8.314 and 2.142/6.486. The original
+unshifted baseline was 1.836/26.764 and 1.978/21.778. For 430 Hz, the
+candidate was 13.639/15.639 and 15.142/13.281, against baseline
+12.300/28.356 and 13.572/25.003. For 2900 Hz it was 30.139/29.978 and
+31.539/29.814, against baseline 27.569/37.056 and 29.856/34.525. This
+candidate trades first-edge error against a lower last-edge mean and does
+not establish a production improvement across interference, image content,
+all modes, maxima, or real audio paths. It is still test-only.
+
+Two additional deterministic 128×120 block-pattern A/B images, distinct from
+the images used to choose the candidate, now exercise the same AVT24
+Narrow-QRM in-memory loopback. Clean baseline first/last edge means were
+1.244/23.219 and 1.250/23.500; the candidate gave 1.767/6.869 and
+1.839/6.969. Last-edge maxima changed from 67/133 to 22/68. With a 0.1-peak
+430 Hz tone the candidate means were 14.892/13.911 and 14.650/14.506,
+versus 12.486/24.711 and 12.775/25.333 for baseline. With 2900 Hz they
+were 30.725/30.192 and 30.989/30.703, versus 29.344/32.847 and
+28.903/34.906. The candidate improves last-edge means in these examples but
+does not establish acceptable maxima, first-edge preservation, broader
+interference performance or application-level operation.
+
+The -1 anchor and first-leading-two/last-trailing-two window have also been
+exercised as a test-mode-only runtime diagnostic on the same recorded
+AVT24 Narrow-QRM A/B captures, replayed through BlackHole into separate
+Decodium receiver processes. Baseline versus candidate first/last column
+mean errors were A 3.778/24.686 versus 6.139/8.553, and B 2.839/20.142
+versus 4.600/6.808. All four received complete images with zero reported
+discontinuities and no added interference; baseline/candidate logs confirm
+that only the candidate applied the diagnostic. Baseline artifacts are
+`.../decodium-avt-interference-lj0y96q0` and `...-k_of2egp`; candidate
+artifacts are `.../decodium-avt-interference-z1bdp1fd` and `...-49_vp4hr`.
+No maximum-edge guards were enabled in these runs. This is replay over
+virtual audio, not RF, and it does not establish performance under
+interference, slant correction, other modes or arbitrary imagery. The
+diagnostic is gated by Qt test mode and leaves ordinary reception unchanged.
+
+The same four application replay comparisons were repeated with a 2900 Hz
+continuous tone at peak 0.1 mixed into the original capture (nominal active
+signal-to-interference ratio about 18 dB, gain 0.8). All four images completed
+without reported discontinuities, but all failed the lab's whole-image
+MAE ≤ 5 and p95 ≤ 15 limits. Baseline versus candidate whole-image MAE was
+21.234 versus 21.109 (A) and 20.998 versus 21.186 (B). First/last edge MAE
+was 23.067/30.956 versus 24.639/22.783 (A) and 24.822/23.767 versus
+27.819/23.794 (B). Baseline artifacts are `.../decodium-avt-interference-i_2qfs_i`
+and `...-9jl9v6q_`; candidate artifacts are `...-npynvfe9` and `...-5nhcqjya`.
+This shows substantial sensitivity to this interference for both paths and
+does not justify promotion of the edge candidate to ordinary reception.
+The full local `test_sstv_rx_runtime` and AVT session tests passed after the
+test-only runtime diagnostic was added.
+
+An additional controlled A/B replay used a 2400 Hz, 0.1-peak continuous
+tone and the test-only edge candidate, comparing the existing manually
+configured 2400 Hz interference notch against no notch. Whole-image
+MAE/p95 with the notch was 1.518/10 (A) and 1.723/14 (B), passing the
+lab's aggregate limits; without the notch it was 18.966/36 and 18.806/36,
+failing them. All images completed without reported discontinuities and
+the logs confirmed the notch and candidate. Notch artifacts are
+`.../decodium-avt-interference-ont61zw5` and `...-2r69gudx`; controls are
+`...-u7fc9noh` and `...-n67qc9yg`. No edge maximum guards were enabled.
+This tests a known, stationary tone only: it is not proof of automatic
+interference detection, arbitrary interference suppression, or RF operation.
+An attempted 2900 Hz manual setting was rejected before RX because the
+then-current runtime accepted notch settings only from 900 to 2500 Hz; it was not
+a valid 2900 Hz notch trial.
+
+As a negative A/B control for the same 2400 Hz tone and edge candidate, the
+manual notch was deliberately set to 2300 Hz. Both images completed with
+no reported discontinuities but failed the aggregate quality limits, with
+whole-image MAE/p95 18.777/36 and 18.823/36, close to the corresponding
+no-notch controls. Artifacts are `.../decodium-avt-interference-8uyw0ax1`
+and `...-fo3wbnte`. This supports that the earlier improvement depended on
+placing the notch near the known tone; it is not a measurement of its full
+frequency response or an automatic tuning test.
+
+The manual notch range is now extended from 900–2500 to 900–3500 Hz in the
+UI, runtime and DSP validation, with an additional Nyquist bound. Existing
+settings are preserved and the filter remains manually controlled. In the
+same A/B application replay with a known 2900 Hz, 0.1-peak tone, ordinary
+reception with the manually configured 2900 Hz notch produced whole-image
+MAE/p95 1.305/5 and 1.522/7, versus 21.234/35 and 20.998/35 without the
+notch. All four images completed without reported discontinuities. The
+notch runs are `.../decodium-avt-interference-8oihhiq6` and `...-l982o8hj`;
+the no-notch controls are `...-i_2qfs_i` and `...-9jl9v6q_`. Aggregate
+limits passed with the notch; no edge maximum limits were enabled and the
+unrelated AVT edge issue remains. These are virtual-audio replays with a
+known stationary tone, not automatic tuning or RF proof. Local DSP tests
+cover notch rejection and adjacent-tone preservation at 1700, 1900, 2900
+and 3500 Hz; runtime bounds and QML configuration also passed.
+
+The runtime acquisition regression now also tests AVT24 QRM and Narrow-QRM
+prefixes at manual notch frequencies 1700, 1900, 2900 and 3500 Hz. Each
+case verifies a valid VIS, the requested image mode and progressive image
+coverage; all eight passed locally. These are bounded replay-prefix tests,
+not full-image, interference or RF proofs.
+
+Clean-signal A/B controls were then replayed with the new 2900 Hz notch
+active and no injected tone. Whole-image MAE/p95 was 1.358/5 and 1.588/7,
+versus 1.262/5 and 1.433/7 without the notch; all four images completed
+with no reported discontinuities. Notch runs are
+`.../decodium-avt-interference-qnnn53_y` and `...-3djmeetl`; previous
+no-notch controls are `...-lj0y96q0` and `...-k_of2egp`. These controls
+bound the observed change on these captures, not all SSTV modes or signals.
+
+The upper endpoint of the extended manual range was exercised with the same
+A/B application replays and a known 3500 Hz, 0.1-peak tone. With the notch
+set to 3500 Hz, whole-image MAE/p95 was 1.229/5 and 1.479/7, passing the
+aggregate limits; without the notch it was 13.934/25 and 13.975/25, failing
+them. All four received complete images with no reported discontinuities.
+Notch artifacts are `.../decodium-avt-interference-7lmq34jh` and
+`...-n_z69_66`; no-notch controls are `...-9y9g5hwr` and `...-jt62lv8t`.
+No edge maxima were gated; this is a known stationary tone over virtual
+audio, not an automatic tuning or RF test.
+
+The AVT24 edge candidate was also exercised in live A/B transmissions
+between two Decodium processes over BlackHole, without injected interference.
+Both completed with full coverage and no reported discontinuities; logs
+confirm the -1 anchor and edge window were applied. First/last column means
+were 6.147/8.567 and 4.628/6.781; maxima were 20/33 and 50/36. The broad
+whole-image limits passed, with no edge maximum guards enabled. Artifacts
+are `.../decodium-avt-two-app-avt-24-narrow-qrm-ne2mu3bj` and
+`...-5_h3eyfe`. These data are local virtual-audio operation, not RF, and
+do not resolve the first-edge trade-off or establish interference robustness.
+
+The test-only AVT24 edge candidate was also applied to clean A/B waveforms
+produced by the unmodified pinned Revenant encoder, replayed through BlackHole
+into Decodium. Baseline versus candidate last-column means were 28.211 vs
+10.489 and 23.108 vs 8.381; first-column means were 2.506 vs 4.469 and
+1.936 vs 3.303. Whole-image MAE improved from 1.305/1.468 to 1.001/1.206,
+but whole-image p95 worsened from 3/6 to 9/13. All four application outputs
+were complete with no reported discontinuities and passed broad aggregate
+limits; no edge maxima were gated. Candidate artifacts are
+`.../decodium-avt-interference-hnxi379i` and `...-0c7g7dro`; baseline
+artifacts are `...-wih9g025` and `...-t3801wv1`. This is useful independent
+transmitter evidence but also confirms a quality trade-off away from the
+edge; it is not a production fix or RF validation.
+
+A subsequent experimental decoder option applies the -1-sample timing and
+two-sample tail exclusion only to the last pixel of each component, keeping
+the original mapping for every other pixel. It is disabled by default and
+is exposed to the application only in Qt test mode for AVT24 Narrow-QRM,
+12 kHz, dense observations and zero clock correction. Four automated
+clean in-memory A/B cases assert that every non-final-column RGB value is
+identical to the ordinary decoder and that total last-column error is less
+than 60% of its control; all passed. Configuration tests reject unsupported
+modes, sparse observations and nonzero clock correction.
+
+In two live Decodium virtual-audio A/B transfers the experimental option
+produced first/last edge mean errors 3.781/8.567 and 2.808/6.817, with
+whole-image MAE/p95 1.139/4 and 1.511/6. The earlier ordinary runs on the
+same patterns had edge means 3.794/24.639 and 2.817/20.169, and whole-image
+MAE/p95 1.219/5 and 1.536/7. The candidate artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-3ns61fst` and `...-u37_4qsm`.
+Both completed with no reported discontinuities and no edge maxima gates.
+The same option receiving unmodified Revenant A/B waveforms yielded last
+edge means 10.489/8.364 versus ordinary 28.211/23.108, while whole-image
+p95 stayed at 3/6. Candidate artifacts are
+`.../decodium-avt-interference-fk5g4ymh` and `...-f5m6a762`. The standard
+AVT suites and four experimental tests passed locally. This is not yet a
+production fix: missing/sparse observations, interference, clock mismatch,
+other modes and RF require additional evidence before enabling it by default.
+
+The in-memory split-edge test now runs twenty cases: four A/B patterns each
+with no loss, two periodic dropped-observation patterns and 430/2900 Hz
+0.1-peak tones. Each compares against a simultaneous ordinary decoder fed
+the same observations and asserts identical non-final columns; all passed.
+The clean and dropped-observation cases require total last-column error
+below 60% of control, while the two specified tone cases require it below
+98%. Dropping demodulated observations periodically is not equivalent to
+an audio discontinuity, arbitrary bursts or RF fading.
+
+The experimental last-pixel path previously discarded the normal final-pixel
+observations, leaving sparse one-observation-per-pixel partial frames without
+published coverage. It now retains a bounded normal-timing fallback for each
+colour component, used only when the adjusted window has no valid observation.
+Two synthetic A/B full frames with one observation per pixel match the ordinary
+decoder exactly in pixels and coverage, despite different input chunk sizes.
+Separate in-memory discontinuity cases after three and five lines stop as
+partial frames and ignore subsequent observations. These simulate session
+discontinuities; they do not establish behaviour under real audio dropouts.
+
+After this change, two Decodium applications transferred patterns A and B
+over virtual audio with full coverage and no reported discontinuities. Their
+first/last column mean absolute errors were 3.789/8.544 and 2.819/6.781;
+whole-image MAE/p95 were 1.094/4 and 1.338/6. Artifacts are
+`.../decodium-avt-two-app-avt-24-narrow-qrm-wnidgj5b` and `...-umqvf30d`.
+Both standard AVT suites and all twenty split-edge cases passed. These
+virtual-audio tests did not gate maximum edge errors or demonstrate RF, and
+the timing option remains experimental and disabled in normal application use.
+
+The split-edge candidate was also replayed with the manual 2900 Hz notch and
+the same 0.1-peak 2900 Hz tone used for the ordinary A/B controls above. Both
+images completed without reported discontinuities. Last-column mean errors
+were 8.539/6.856 versus 24.583/20.158 for the ordinary notch controls; the
+first-column means were 3.886/2.978 versus 3.886/3.000. Whole-image MAE/p95
+was 1.145/4 and 1.682/6, versus 1.305/5 and 1.522/7 for the controls: B's
+overall MAE therefore worsened despite its improved final column. The
+candidate artifacts are `.../decodium-avt-interference-qjrvxpmx` and
+`...-j_1uigvt`. Maximum edge errors were not gated. This is virtual-audio
+replay with one known stationary tone, not RF or automatic notch tuning.
+
+With the same manual notch enabled but no injected tone, the split-edge
+candidate completed both A/B images without reported discontinuities.
+Last-column mean errors were 8.569/6.872 versus 24.583/20.158 for the
+ordinary notch controls; whole-image MAE/p95 was 1.233/4 and 1.462/6 versus
+1.358/5 and 1.588/7. Candidate artifacts are
+`.../decodium-avt-interference-r6pbb0g9` and `...-4w0w_y_q`. The ordinary
+and candidate runs are separate virtual-audio replays, not identical
+demodulated observations, and no maximum edge errors were gated.
+
+Post-hoc pixel comparison of these two separate replay runs found that the
+maximum control-versus-candidate difference outside the first and last columns
+was one RGB level for both A and B. For B, 17,493 of 45,360 interior colour
+components differed, yielding interior MAE 1.631 versus 1.362 in the ordinary
+control. For A, 2,438 interior components differed. These are comparisons of
+separately played audio, not identical demodulated observations; they do not
+identify the cause of the one-level differences or prove that the candidate
+itself changes interior pixels. The simultaneous in-memory A/B cases above
+remain the evidence that its mapping leaves non-final pixels unchanged when
+both decoders receive identical observations.
+
+In full Decodium replay with a 2900 Hz, 0.1-peak tone and no notch, the
+experimental split-edge path completed both images without discontinuities
+but failed the broad image-quality limits: whole-image MAE/p95 was
+21.169/35 and 20.999/35. Ordinary controls were 21.234/35 and 20.998/35.
+Last-column means were 22.769/23.797 for split versus 30.956/23.767 for
+ordinary. Artifacts are `.../decodium-avt-interference-33bipx3y` and
+`...-o_a29qf3`; controls are `...-i_2qfs_i` and `...-9jl9v6q_`. The
+experimental path does not solve this interfering tone, and the small B
+edge difference is not evidence of an improvement. No notch was used in
+these comparisons.

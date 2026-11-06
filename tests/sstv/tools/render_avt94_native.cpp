@@ -11,8 +11,9 @@
 int main(int argc, char** argv)
 {
     using namespace decodium::sstv;
-    if (argc != 4 || (std::string(argv[3]) != "qrm" && std::string(argv[3]) != "narrow-qrm")) {
-        std::cerr << "usage: render_avt94_native RGB OUTPUT.f32 qrm|narrow-qrm\n";
+    if (argc != 4 || (std::string(argv[3]) != "qrm" && std::string(argv[3]) != "narrow-qrm"
+                      && std::string(argv[3]) != "narrow")) {
+        std::cerr << "usage: render_avt94_native RGB OUTPUT.f32 qrm|narrow-qrm|narrow\n";
         return 2;
     }
     if (std::filesystem::exists(argv[2]) || std::filesystem::is_symlink(argv[2])) return 3;
@@ -27,7 +28,9 @@ int main(int argc, char** argv)
     SstvAvtEncoderConfig config;
     config.mode = SstvAvtMode::Avt94;
     config.sampleRate = 48000U;
-    config.variant = std::string(argv[3]) == "narrow-qrm" ? SstvAvtVariant::NarrowQrm : SstvAvtVariant::Qrm;
+    const std::string variant(argv[3]);
+    config.variant = variant == "narrow-qrm" ? SstvAvtVariant::NarrowQrm
+        : variant == "narrow" ? SstvAvtVariant::Narrow : SstvAvtVariant::Qrm;
     config.terminalHoldMs = 10U;
     SstvAvtEncoder encoder(pixels, config);
     std::ofstream output(argv[2], std::ios::binary);

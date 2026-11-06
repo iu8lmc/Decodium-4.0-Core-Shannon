@@ -1,5 +1,62 @@
 # Remote sharing E2EE: implementation in progress
 
+An installable experimental HTTPS server is now available in
+`tools/sstv-share-server`. Authenticated local A/B tests transferred two
+images between full Decodium processes, both with and without pinned sender
+signatures; the test checked stored ciphertext manifests and reconstructed
+images. Separate server tests cover account isolation, invalid credentials,
+integrity failures, expiry, quotas, token rotation and upload resumption
+after server restart. The installed CLI also passed a CA-verified local HTTPS
+smoke test with two separate accounts. This is not an Internet deployment or
+an independent security audit; the service README records current limits.
+The installed Python package was additionally used by the signed and
+unsigned two-Decodium A/B labs after the server's structural manifest checks
+were added. Artifacts are `.../decodium-share-server-ab-7r3jpzjz` and
+`.../decodium-share-server-ab-3bhjrpi7`. These runs use temporary local
+credentials and Keychains; no user account or production provider was used.
+
+After rebuilding the 1.0.736 source, which includes the FT4/FT8/SDR lifecycle
+changes, the signed two-application transfer and both signed nonce-tamper
+restart regressions were run again on macOS ARM64. All three passed: the
+isolated HTTPS fixture confirmed that the altered signed manifest was rejected
+before its content was requested, each restarted receiver retained its
+recipient identity, and the original A/B images were subsequently decrypted
+and compared with their sources. These tests exercise a local fixture and
+temporary Keychain, not a production provider, a security audit or every
+possible interruption.
+
+The independent-signing-key impersonation A/B laboratory now records content
+requests by inbox identifier and requires zero requests for the forged sender's
+item. In B it also requires an actual content request for the preceding valid
+A image; that image is compared with its source. The fixture's own A/B actor
+tests check that it counts both a normal download and a tampered-ciphertext
+download, guarding against a counter that always reports zero. After this
+change both full-Decodium forgery cases and the fixture tests passed, as did
+the normal signed transfer. This is a local HTTPS/Keychain attack simulation;
+it does not prove sender identity without independently verified pins or
+cover every provider and attack.
+
+Two additional signed A/B application tests substitute the ciphertext of the
+other completed image and update the target manifest's byte size and SHA-256,
+while preserving its original sender signature and all other fields. The
+fixture verifies that the ciphertexts, nonces and ephemeral keys differ and
+that only the intended manifest fields changed. Both receivers rejected the
+invalid signature before requesting the substituted content. In the B case,
+the preceding untampered A content was requested and reconstructed. The
+normal signed transfer, unsigned payload-substitution A/B controls and HTTPS
+fixture test also passed. These are isolated local two-process tests, not
+evidence for every provider or an independent security review. Run
+`ctest --test-dir build -R '^test_sstv_share_app_signed_payload_swap_[ab]$' --output-on-failure`.
+
+The signed payload-tampering A/B application laboratory now also checks the
+exact attack construction: the fixture flips one ciphertext bit, recomputes
+its SHA-256 in the signed manifest and retains the original signature. Both
+receivers rejected the signature before requesting the altered content. In
+the B case the preceding valid A image was requested and reconstructed. The
+normal signed transfer, fixture test, and unsigned payload-tampering A/B
+controls also passed. These are isolated local HTTPS tests and do not prove
+behaviour against every provider or establish an independent security audit.
+
 Two full Decodium application A/B tests now also exercise a provider that
 changes one bit of the 12-byte AES-GCM nonce in the manifest while retaining
 valid canonical Base64 and recalculating the manifest digest. The receiving
@@ -1112,7 +1169,7 @@ one second after recovery. Previously the pending check prevented expiry at
 the deadline. The queue now attempts the atomic expiry transaction before the
 pending-verification delay, while retaining the pending state if that
 transaction cannot be committed. The fixture checks TLS-only and encrypted
-manifests; its encrypted opener is a fixture. Additional controls fail the
+manifests; its original encrypted opener was a fixture. Additional controls fail the
 inbox lookup or the database commit at expiry, confirm that the validated file
 is preserved and acceptance remains blocked, then verify that the next pump
 persists expiry and removes only the managed temporary files. The initially
@@ -1124,6 +1181,103 @@ inbox lookup failure. They exchange images between two Decodium processes over
 verified loopback HTTPS. These app cases exercise the two conditions separately;
 their exact combination and injected commit failure were covered by the queue
 fixture, not by a full application test.
+
+The queue regression now repeats every expiry scenario for two distinct
+images. When the cryptographic backend is enabled, the encrypted cases use
+real X25519 recipient encryption and AES-GCM opening instead of the fake
+opener; each case also verifies rejection of a modified ciphertext. The
+negative control also recomputes the public ciphertext SHA-256 after the
+modification, so rejection is checked beyond the unauthenticated digest.
+The queue and AEAD tests passed locally with `DECODIUM_TEST_SHARE_CRYPTO=1`.
+Builds without that optional backend retain the simulated opener. This
+strengthens the queue-level combined failure test but does not turn it into
+a full-application test of that exact combination.
+
+The queue expiry cases additionally compare the decrypted staged image
+byte-for-byte with each A/B input and keep a distinct sentinel file in the
+same directory. They verify that the staged bytes and sentinel survive a
+failed expiry transaction and that the sentinel survives successful expiry
+and cleanup. All queue cases passed locally with real cryptography enabled.
+
+The two separate full-application expiry-awaiting and inbox-unavailable
+scenarios have now also been run with signed encrypted envelopes for both A/B
+images. All four new tests passed using two Decodium processes, isolated
+Keychains and a loopback HTTPS provider; the four existing unsigned encrypted
+controls also passed. As before, the expiry and injected lookup failure are
+separate application cases rather than one combined case. The macOS CTest
+inventory gate now requires these four signed cases as well, bringing its
+required signed A/B inventory to 18; its positive and negative controls and
+the local CTest inventory check passed. No remote CI run is implied.
+
+A later attempt to add the combined pending-lookup/expiry full-process test
+did not yield a valid result. The initial A/B attempts did not observe the
+expected pending state; subsequent attempts stalled before publishing the
+laboratory identities. The previously passing signed expiry-awaiting A
+control also timed out before identity publication after the experimental
+changes were removed and the application rebuilt. The cause is not yet
+established. Diagnostic directories include
+`.../decodium-share-transfer-_frjni72`, `...-szlrek52`, `...-5ef4unnt`,
+`...-xjttzefo` and control `...-7799njfb`. The unverified combined-test
+prototype was removed; the timeout means the earlier passing application
+results have not been reproduced in the current environment.
+
+Further isolation found the test-mode receiver ready, enabled and configured
+with secure storage available, but without the discovered provider inbox
+capability. The standalone local HTTPS fixture test also timed out. A separate
+minimal Python socket test, with no Decodium or HTTPS involved, timed out
+connecting to both `127.0.0.1` and `::1`; a Unix socket pair succeeded.
+`lo0` was up with both addresses and the IPv4 route pointed to `lo0`.
+This establishes a local TCP-loopback failure at that time, but not its
+cause. The macOS Keychain, AEAD and sharing QML tests passed separately.
+A test-mode-only wait diagnostic was added to the application lab; the
+network or system firewall configuration was not modified.
+
+On recheck, IPv4 and IPv6 loopback TCP and ICMP still timed out. ExpressVPN
+reported disconnected; an enabled LuLu network extension reported its
+localhost-allow preference enabled. These observations do not establish the
+cause, and packet-filter status was not readable without elevated access.
+The sharing application harness now performs a verified, bounded HTTPS
+capability preflight before launching Decodium. A/B offline mock controls
+cover success, malformed and oversized responses, missing E2EE capability,
+HTTP errors and timeout; they passed. The real control now fails at that
+preflight in about five seconds with an explicit timeout rather than waiting
+for both applications for 105 seconds. Successful real preflight and the
+full-process tests remain to be rerun when loopback is available.
+
+On a later local recheck, TCP loopback responded again without a network
+configuration change made by this test. The standalone HTTPS fixture, the
+verified HTTPS preflight, and all four signed expiry-awaiting / inbox-
+unavailable A/B application cases then passed again (six CTests total).
+The cause and duration of the earlier loopback outage remain unknown. These
+application cases still exercise expiry and the injected lookup failure
+separately; the combined full-process scenario remains unverified.
+Both corrupt-recipient-pin and corrupt-sender-pin full-process A/B controls
+also passed after connectivity returned, with the new HTTPS preflight active.
+
+The combined pending-lookup/expiry scenario is now covered by signed A/B
+full-process tests on macOS. Each test transfers encrypted images through
+the isolated HTTPS fixture, stops the receiver while the target image awaits
+acceptance, and restarts it with a test-mode-only lookup denial. The harness
+reads the isolated queue to verify the pending diagnostic and unchanged staged
+bytes before advancing the laboratory clock; the denial is then released.
+Both targets reached `Expired`, their managed staged files were removed and a
+separate sentinel in the same directory remained unchanged. For target B the
+earlier A image is also checked. The denial is deliberately simulated and
+the clock advance is test-only; this is not a real disk failure or public
+provider test. Both combined tests and nine related queue, crypto, QML,
+inventory and separate-case regressions passed. The macOS inventory gate now
+requires 20 signed application A/B tests. An earlier attempt failed because
+the lab read a stale inbox view after expiry; the lab now waits for the
+history state instead. The temporary local TCP outage described above was
+independent and had recovered before these successful runs.
+
+The expiry-hold lab guard now also requires the receiver Keychain, identity
+and expiry marker to be in the same canonical temporary directory with the
+sharing laboratory prefix. For both A/B cases, preflight controls reject a
+launch outside test mode, the sender role, missing or outside markers, the
+sender Keychain and a same-named Keychain in another directory. The combined
+tests passed again after the guard was tightened. These restrictions apply to
+the laboratory fault injection, not to ordinary user Keychains.
 
 ### Sender-authentication design gate
 
@@ -1201,6 +1355,13 @@ below. Operator-facing key exchange and trust policy were added afterwards;
 sender authentication still depends on independent fingerprint verification.
 
 ### Experimental signed envelopes and sender policy
+
+After the test-mode `--lab-no-monitor` startup-timer correction, both the
+unsigned-encrypted and signed-encrypted full-application transfer CTests were
+rerun locally. Each uses two Decodium processes, two distinct A/B images,
+isolated Keychains and the verified loopback HTTPS fixture; both passed. This
+is a regression check for that lab startup change, not public-provider,
+cross-platform or independent-security-audit evidence.
 
 The sharing page can create and display a signing identity, sign an encrypted
 upload explicitly, and pin a sender signing key after the operator confirms its
@@ -1479,3 +1640,128 @@ full Decodium signed-replay A/B regressions passed on macOS. This is a
 targeted compiler simulation, not a Windows Hamlib build, application runtime
 or evidence that all CI failures are resolved. No runner was started or
 monitored.
+
+Two additional full-application signed A/B tests change the `sstvMode`
+field in an otherwise signed encrypted manifest at the local HTTPS fixture.
+Both receivers rejected sender authentication before requesting the altered
+content; in the B case, the preceding unmodified A image was also received.
+The normal signed transfer and accepted-image replay after restart A/B
+controls passed in the same local run. This tests that particular signed
+metadata alteration with two local processes, not an external provider or
+an independent security audit.
+
+The same signed-manifest application checks were extended to `expiresUtc`
+(changed by five minutes while retaining a valid timestamp) and the X25519
+recipient `keyId` (replaced with a validly encoded different key ID). Both
+alterations were rejected before content download for image A and image B;
+the B controls also received the preceding unchanged A image. These tests
+exercise the local HTTPS fixture and do not establish provider interoperability
+or independently verify identities.
+
+Two further signed application tests alter `recipientId` to a different
+valid identifier at the local provider, retaining the original signature.
+For both A and B, the receiver rejects the altered manifest before requesting
+its content; the B control first receives the intact A image. The local HTTPS
+fixture and ordinary signed transfer controls also pass. This tests rejection
+by the intended receiver, not delivery to an independently operated recipient.
+
+Two-process A/B controls now cover enabling the sender-authentication policy
+after a valid signed image has already been staged for acceptance. Both
+images are accepted and compared with their originals under the newly enabled
+policy. Complementary unsigned A/B controls confirm acceptance is rejected
+while the policy is enabled and succeeds only after it is disabled again.
+These tests use an isolated HTTPS provider and simulated identity pinning.
+
+After adding the policy-change scenario, a combined 12-test local regression
+also passed: the AEAD suite, signed and unsigned pending-policy A/B controls,
+the signed transfer, recipient and SSTV-mode tampering A/B, and signed replay
+after acceptance and receiver restart A/B. The application cases use the
+same local fixture and isolated identities described above.
+
+The following existing full-application tests were rerun on macOS ARM64:
+`test_sstv_share_app_signed_invalid_then_valid_{a,b}`,
+`test_sstv_share_app_signed_nonce_restart_{a,b}`,
+`test_sstv_share_app_signed_legacy_invalid_{a,b}`,
+`test_sstv_share_app_signed_replay_resigned_{a,b}`, and
+`test_sstv_share_app_signed_replay_index_upgrade_{a,b}`. All ten passed.
+The first cases verify that a manifest with an altered signature or nonce is
+rejected before content download, and that the original valid transfer can
+subsequently complete; the nonce cases restart the receiver with its saved
+identity. The legacy cases insert a paused invalid record before the valid
+transfer. The replay cases re-sign an accepted envelope, verify the new
+signature independently with OpenSSL, restart the receiver and check that
+the duplicate is rejected without changing the accepted Gallery files; the
+index-upgrade variant removes the test database replay indexes before the
+restart and checks that they are recreated. These are isolated two-process
+loopback HTTPS tests with simulated identity pinning, not public-provider or
+RF interoperability, cross-platform runtime evidence, or a security audit.
+
+The macOS native SSTV workflow now explicitly installs ffmpeg (which also
+provides ffprobe) and checks CTest's JSON inventory for the ten signed
+application A/B cases above, including their `sstv`, `sharing`, `security`
+and `application` labels. This prevents the workflow's `sstv` label run
+from silently omitting those cases when optional test dependencies are
+absent. Local A/B positive controls accepted complete inventories, while
+missing tests, missing labels, malformed entries and duplicate names were
+rejected. The check also accepted the locally configured CTest inventory.
+No GitHub runner was started or observed for this change.
+
+After the inventory change, the local macOS build's `test_sstv_share_aead`,
+`test_sstv_macos_keychain`, `test_sstv_share_qml` and
+`test_sstv_share_app_signed_transfer` were rerun and passed. The Keychain
+test exercises corrupt recipient pins in a separate temporary keychain; the
+QML/controller test checks both corrupt recipient-pin notices and a corrupt
+sender-pin notice, while the application transfer uses valid isolated pins
+to exchange two signed images. Together these checks do not constitute a
+full-application test with a corrupt OS Keychain record, a public-provider
+test, independent identity verification or an independent security audit.
+
+The missing full-process corrupt-recipient-pin scenario is now covered on
+macOS by `test_sstv_share_app_signed_corrupt_recipient_pin_{a,b}`. Each test
+starts two Decodium test-mode processes with separate temporary keychains
+and a loopback HTTPS fixture. The sender laboratory inserts one of two
+distinct low-order recipient keys into its isolated keychain immediately
+before pinning. The actual sharing controller reports the stored key as
+corrupt; the lab verifies that the bad record was not overwritten, removes
+only that test record, and retries the normal verified pin. Both processes
+then transfer and decrypt the A/B images. Preflight controls reject this
+laboratory operation outside test mode and reject a marker path outside the
+isolated root. The A/B cases, signed-transfer control, AEAD, QML sharing and
+macOS inventory controls passed after rebuilding. The initial attempt used
+an external process to insert the item, but the isolated Keychain denied the
+application access; it was replaced with in-process injection and is not
+counted as a successful corruption test. This exercises the complete app
+process and real isolated Keychain via the controller, not a human-operated
+GUI, personal Keychain, public provider or independent security audit.
+
+The fault-injection guard was subsequently tightened at both command-line
+validation and the injection site: the keychain must be the sender file in
+the same canonical temporary laboratory directory as the identity file,
+with the expected laboratory directory prefix. A/B preflights reject the
+receiver keychain and a same-named file in a different directory, in
+addition to rejecting non-test mode and an outside marker. The normal signed
+transfer and both corrupt-pin A/B application scenarios passed after the
+guard change. These checks constrain this laboratory fault injection; they
+do not change production key-storage semantics.
+
+`test_sstv_share_app_signed_corrupt_sender_pin_{a,b}` now exercises the
+complementary receiver-side signing pin. In the isolated receiver keychain,
+the laboratory inserts two distinct invalid 91-byte public-key encodings.
+The real sharing controller reports the stored sender key as corrupt, the
+laboratory verifies that the bad record is unchanged and clears only that
+test record, and the receiver retries the verified signing pin. Both
+Decodium processes then exchange and decrypt the A/B signed images. The
+same preflight checks reject non-test mode, a marker outside the lab root,
+the other actor's keychain and a same-named file in another directory.
+Both new tests and both earlier corrupt-recipient tests passed after the
+change, as did the AEAD, QML and macOS inventory controls. The inventory
+now requires all 14 named signed A/B cases. These are full-process tests
+using isolated Keychains and a local HTTPS fixture, not manual GUI operation,
+public-provider interoperability or a security audit.
+
+After subsequent SSTV receiver changes, the local AEAD and sharing QML
+tests and both signed `replay_index_upgrade_{a,b}` full-process tests were
+rerun successfully. The latter again exercise receiver restart and replay
+index recovery against the isolated loopback HTTPS provider and temporary
+identities; they do not establish independent identity verification or a
+security audit.

@@ -921,7 +921,7 @@ SstvRxRuntime::Config SstvRxRuntime::configuration() const noexcept
 bool SstvRxRuntime::setInterferenceNotch(std::optional<int> frequencyHz)
 {
     if (!isOnOwnerThread() || state() != State::Inactive || m_worker.joinable()
-        || (frequencyHz && (*frequencyHz < 900 || *frequencyHz > 2500))) return false;
+        || (frequencyHz && (*frequencyHz < 900 || *frequencyHz > 3500))) return false;
     m_interferenceNotchHz = frequencyHz;
     scheduleSnapshotNotification(true);
     return true;
@@ -2654,6 +2654,11 @@ void SstvRxRuntime::resetWorkerPipeline(WorkerPipeline& pipeline,
     pipeline.inputSampleRate = 0U;
     pipeline.resampler.reset();
     SstvPreprocessorConfig preprocessorConfig;
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariable("DECODIUM_LAB_AVT_BANDPASS") == QStringLiteral("off")) {
+        preprocessorConfig.bandPassEnabled = false;
+        qInfo() << "[LAB][AVT] band-pass disabled for diagnostic";
+    }
     if (m_interferenceNotchHz) {
         preprocessorConfig.interferenceNotchEnabled = true;
         preprocessorConfig.interferenceFrequencyHz = *m_interferenceNotchHz;
@@ -4243,6 +4248,20 @@ bool SstvRxRuntime::beginAvtSession(
     config.variant = detection.variant;
     config.sampleRate = SstvResampler::kOutputSampleRate;
     config.imageStartSample = detection.imageStartSample;
+    // Laboratory-only timing experiment; production always uses the
+    // acquired countdown anchor unchanged.
+    if (QStandardPaths::isTestModeEnabled()
+        && ((detection.mode == SstvAvtMode::Avt90 && detection.variant == SstvAvtVariant::Qrm)
+            || (detection.mode == SstvAvtMode::Avt24 && detection.variant == SstvAvtVariant::NarrowQrm))) {
+        bool valid = false;
+        const int shift = qEnvironmentVariable("DECODIUM_LAB_AVT_ANCHOR_SHIFT").toInt(&valid);
+        if (valid && shift >= -4 && shift <= 4
+            && (shift >= 0 || config.imageStartSample >= static_cast<std::uint64_t>(-shift))) {
+            config.imageStartSample = shift < 0 ? config.imageStartSample - static_cast<std::uint64_t>(-shift)
+                                               : config.imageStartSample + static_cast<std::uint64_t>(shift);
+            qInfo() << "[LAB][AVT] anchor shift" << shift;
+        }
+    }
     config.observationSpanSamples = static_cast<std::uint32_t>(
         pipeline.frequencyDemodulator->config().hopSamples);
     config.frequencyOffsetHz = pipeline.avtFrequencyOffsetHz;
@@ -4250,7 +4269,20 @@ bool SstvRxRuntime::beginAvtSession(
             == SstvRxSlantMode::Manual
         ? pipeline.controls.settings.manualClockErrorPpm : 0.0;
     config.clockErrorPpm = roundedClockErrorPpm(clockError);
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_AVT24_SPLIT_EDGE") == 1
+        && config.mode == SstvAvtMode::Avt24 && config.variant == SstvAvtVariant::NarrowQrm
+        && config.sampleRate == 12'000U && config.clockErrorPpm == 0
+        && config.observationSpanSamples == 1U && config.imageStartSample > 0U) {
+        config.experimentalAvt24LastPixelTiming = true;
+        qInfo() << "[LAB][AVT] AVT24 split-edge diagnostic enabled";
+    }
     pipeline.avtSession = std::make_unique<SstvAvtRxSession>(config);
+    if (QStandardPaths::isTestModeEnabled() && detection.mode == SstvAvtMode::Avt24
+        && detection.variant == SstvAvtVariant::NarrowQrm
+        && qEnvironmentVariable("DECODIUM_LAB_AVT24_WINDOW") == QStringLiteral("1")) {
+        qInfo() << "[LAB][AVT] AVT24 edge window diagnostic enabled";
+    }
     pipeline.avtLinesReported = 0U;
     pipeline.nominalLinePeriodSamples = samplesForPicoseconds(
         SstvAvtProtocol::spec(detection.mode).lineDuration);
@@ -5379,16 +5411,42 @@ void SstvRxRuntime::consumeAvtObservations(
     if (!pipeline.avtSession || observations.empty()) {
         return;
     }
+    std::vector<SstvFrequencyObservation> windowed;
+    const auto* input = &observations;
+    if (QStandardPaths::isTestModeEnabled()
+        && pipeline.avtSession->mode() == SstvAvtMode::Avt24
+        && pipeline.avtSession->variant() == SstvAvtVariant::NarrowQrm
+        && qEnvironmentVariable("DECODIUM_LAB_AVT24_WINDOW") == QStringLiteral("1")) {
+        const SstvAvtMapper mapper(SstvAvtMapperConfig {SstvAvtMode::Avt24,
+            SstvResampler::kOutputSampleRate, 0, SstvAvtVariant::NarrowQrm});
+        const auto start = pipeline.avtSession->imageStartSample();
+        const auto width = SstvAvtProtocol::spec(SstvAvtMode::Avt24).width;
+        windowed.reserve(observations.size());
+        for (const auto& observation : observations) {
+            if (observation.centreSample >= start) {
+                const auto sample = observation.centreSample - start;
+                if (sample < mapper.imageSampleCount()) {
+                    const auto position = mapper.positionAtSample(sample);
+                    if (position.valid()
+                        && ((position.pixel == 0U && sample - position.segmentStartSample < 2U)
+                            || (position.pixel + 1U == width && position.segmentEndSample - sample <= 2U)))
+                        continue;
+                }
+            }
+            windowed.push_back(observation);
+        }
+        input = &windowed;
+    }
     bool imageChanged = false;
     std::size_t offset = 0U;
-    while (offset < observations.size()
+    while (offset < input->size()
            && pipeline.avtSession->state()
                == SstvAvtRxSessionState::Receiving) {
         const std::size_t count = std::min(
-            observations.size() - offset,
+            input->size() - offset,
             SstvAvtRxSession::MaximumObservationsPerConsume);
         const SstvAvtRxSessionUpdate update = pipeline.avtSession->consume(
-            observations.data() + offset, count);
+            input->data() + offset, count);
         offset += count;
         imageChanged = imageChanged || update.imageChanged;
         if (update.linesPublished > pipeline.avtLinesReported) {

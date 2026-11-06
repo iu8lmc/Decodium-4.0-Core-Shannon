@@ -3,14 +3,17 @@
 #include "src/sstv/digital/HamDrmMotCodec.h"
 #include "src/sstv/digital/HamDrmObjectAssembler.h"
 #include "src/sstv/digital/HamDrmPartialStore.h"
+#include "src/sstv/digital/HamDrmProfileRegistry.h"
 #include "src/sstv/digital/HamDrmCrc.h"
 
 #include <QCryptographicHash>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace hamdrm = decodium::sstv::hamdrm;
@@ -69,6 +72,60 @@ int main()
     const hamdrm::HamDrmPartialStore store(temporary.path());
     CHECK(store.save(partial).ok());
     CHECK(QFile::exists(store.pathForTransportId(metadata.transportId)));
+    QFile existing(store.pathForTransportId(metadata.transportId));
+    CHECK(existing.open(QIODevice::ReadOnly));
+    const QByteArray baseline = existing.readAll();
+    existing.close();
+    for (int variant = 0; variant < 2; ++variant) {
+        hamdrm::HamDrmLimits limits;
+        if (variant == 0) limits.maximumObjectBytes = std::numeric_limits<std::size_t>::max();
+        else limits.maximumHeaderBytes = std::numeric_limits<std::size_t>::max();
+        const hamdrm::HamDrmPartialStore overflowing(temporary.path(), limits);
+        const auto saved = overflowing.save(partial);
+        CHECK(!saved.ok());
+        CHECK(saved.code == hamdrm::HamDrmErrorCode::LimitExceeded);
+        const auto loaded = overflowing.load(metadata.transportId);
+        CHECK(!loaded.ok());
+        CHECK(loaded.status.code == hamdrm::HamDrmErrorCode::LimitExceeded);
+        CHECK(existing.open(QIODevice::ReadOnly));
+        CHECK(existing.readAll() == baseline);
+        existing.close();
+    }
+    for (std::size_t variant = 0; variant < 2U; ++variant) {
+        hamdrm::HamDrmLimits limits;
+        limits.maximumSegmentBytes = std::numeric_limits<std::size_t>::max() - variant;
+        const hamdrm::HamDrmPartialStore largeSegmentLimit(temporary.path(), limits);
+        CHECK(largeSegmentLimit.save(partial).ok());
+        const auto loaded = largeSegmentLimit.load(metadata.transportId);
+        CHECK(loaded.ok());
+        CHECK(loaded.ok() && loaded.value->missingBodySegments() == partial.missingBodySegments());
+    }
+    hamdrm::HamDrmMotObjectMetadata secondMetadata = metadata;
+    secondMetadata.transportId = 0x9876U;
+    const auto secondEncoded = hamdrm::encodeHamDrmObject(secondMetadata, body, 82U);
+    CHECK(secondEncoded.ok());
+    if (!secondEncoded.ok()) return 1;
+    hamdrm::HamDrmObjectAssembler second(secondMetadata.transportId);
+    CHECK(second.ingest(secondEncoded.value->headerGroups.front().data(),
+                        secondEncoded.value->headerGroups.front().size()).ok());
+    CHECK(store.save(second).ok());
+    QFile unrelated(store.partialDirectory() + QStringLiteral("/extra.hamdrm-partial"));
+    CHECK(unrelated.open(QIODevice::WriteOnly));
+    unrelated.close();
+    const QString linkPath = store.pathForTransportId(0x1234U);
+    const bool linked = QFile::link(store.pathForTransportId(metadata.transportId), linkPath);
+    const bool symbolic = linked && QFileInfo(linkPath).isSymLink();
+    if (symbolic) {
+        CHECK(!store.load(0x1234U).ok());
+        std::cout << "Checking symbolic-link exclusion\n";
+    } else if (linked) {
+        CHECK(QFile::remove(linkPath));
+    }
+    const auto ids = store.savedTransportIds();
+    CHECK(ids == std::vector<std::uint16_t>({0x4567U, 0x9876U}));
+    if (symbolic) CHECK(QFile::remove(linkPath));
+    CHECK(store.remove(secondMetadata.transportId).ok());
+    CHECK(store.savedTransportIds() == std::vector<std::uint16_t>({0x4567U}));
     const auto restored = store.load(metadata.transportId);
     CHECK(restored.ok());
     CHECK(restored.ok() && restored.value->progress().headerComplete);
@@ -76,6 +133,40 @@ int main()
     CHECK(restored.ok()
           && restored.value->missingBodySegments()
               == partial.missingBodySegments());
+    QString legacyProfile = QStringLiteral("must-be-cleared");
+    CHECK(store.load(metadata.transportId, &legacyProfile).ok());
+    CHECK(legacyProfile.isEmpty());
+
+    const auto& profiles = hamdrm::HamDrmProfileRegistry::all();
+    CHECK(profiles.size() >= 2U);
+    for (std::size_t i = 0; i < 2U && i < profiles.size(); ++i) {
+        const QString expected = QString::fromStdString(profiles[i].id);
+        CHECK(store.save(partial, expected).ok());
+        QString loadedProfile;
+        const auto loaded = store.load(metadata.transportId, &loadedProfile);
+        CHECK(loaded.ok());
+        CHECK(loadedProfile == expected);
+        CHECK(loaded.ok() && loaded.value->missingBodySegments() == partial.missingBodySegments());
+    }
+    CHECK(!store.save(partial, QStringLiteral("not-a-real-profile")).ok());
+    QFile badProfile(store.pathForTransportId(metadata.transportId));
+    CHECK(badProfile.open(QIODevice::ReadWrite));
+    if (badProfile.isOpen()) {
+        QByteArray bytes = badProfile.readAll();
+        bytes[18] = static_cast<char>(0xff);
+        bytes[19] = static_cast<char>(0xff);
+        bytes[20] = static_cast<char>(0xff);
+        bytes[21] = static_cast<char>(0xff);
+        bytes.replace(bytes.size() - 32, 32,
+                      QCryptographicHash::hash(bytes.first(bytes.size() - 32), QCryptographicHash::Sha256));
+        CHECK(badProfile.seek(0));
+        CHECK(badProfile.write(bytes) == bytes.size());
+        badProfile.close();
+        QString rejectedProfile = QStringLiteral("must-be-cleared");
+        CHECK(!store.load(metadata.transportId, &rejectedProfile).ok());
+        CHECK(rejectedProfile.isEmpty());
+    }
+    CHECK(store.save(partial).ok());
 
     // Recreate a valid v1 snapshot written by the old reflected-CRC encoder.
     // load() must preserve the original file while translating only the

@@ -252,6 +252,8 @@ struct SstvAvtDecoderConfig final
     std::size_t maximumPendingDirtyEvents {
         SstvImageFrame::kDefaultMaximumDirtyEvents};
     SstvAvtVariant variant {SstvAvtVariant::Normal};
+    // Experimental dense-observation edge timing; disabled by default.
+    bool experimentalAvt24LastPixelTiming {false};
 };
 
 enum class SstvAvtDecodeState : std::uint8_t
@@ -325,6 +327,10 @@ private:
                     double frequencyHz,
                     double confidence,
                     bool edge) noexcept;
+    void accumulateLastPixelFallback(const SstvAvtPosition& position,
+                                     double frequencyHz,
+                                     double confidence,
+                                     bool edge) noexcept;
     bool reconstructComponent(std::size_t base,
                               std::vector<std::uint8_t>& values);
     void publishCurrentLine();
@@ -336,6 +342,7 @@ private:
     SstvAvtMapper mapper_;
     std::unique_ptr<SstvImageFrame> frame_;
     std::vector<PixelAccumulator> accumulators_;
+    std::array<PixelAccumulator, 3U> lastPixelFallback_ {};
     SstvAvtDecoderMetrics metrics_;
     SstvAvtDecodeState state_ {SstvAvtDecodeState::Receiving};
     std::uint64_t imageEndSample_ {0U};

@@ -6,6 +6,7 @@
 #include "src/sstv/models/SstvShareController.h"
 #include <QAbstractItemModel>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -18,6 +19,9 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
+#if defined(Q_OS_MACOS)
+#include "src/security/MacKeychainBackend.h"
+#endif
 
 class SstvShareLabSession final : public QObject
 {
@@ -30,6 +34,32 @@ public:
         connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
         connect(share_, &decodium::sstv::SstvShareController::operationFinished,
                 this, [this](const QString& op, bool ok, const QString& detail) {
+            if (!ok && op == QStringLiteral("sharing-pin") && phase_ == Pinning
+                && !path("corruptPinMarker").isEmpty()
+                && detail == QStringLiteral("Stored recipient key is corrupt")) {
+                QFile marker(path("corruptPinMarker"));
+                if (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+                    || marker.write("rejected\n") != 9) {
+                    fail(QStringLiteral("corrupt-pin marker failed")); return;
+                }
+                if (!labCorruptPin(false, false)) { fail(QStringLiteral("corrupt-pin preservation check failed")); return; }
+                qInfo() << "[LAB][SHARE SESSION] corrupt recipient pin rejected";
+                phase_ = WaitPeer;
+                return;
+            }
+            if (!ok && op == QStringLiteral("sender-signing-pin") && phase_ == PinningSender
+                && !path("corruptPinMarker").isEmpty()
+                && detail == QStringLiteral("Stored sender key is corrupt")) {
+                QFile marker(path("corruptPinMarker"));
+                if (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+                    || marker.write("rejected\n") != 9) {
+                    fail(QStringLiteral("corrupt sender-pin marker failed")); return;
+                }
+                if (!labCorruptPin(false, true)) { fail(QStringLiteral("corrupt sender-pin preservation check failed")); return; }
+                qInfo() << "[LAB][SHARE SESSION] corrupt sender signing pin rejected";
+                phase_ = WaitSigningPeer;
+                return;
+            }
             if (!ok && op == QStringLiteral("accept") && policyStage_ == 2) {
                 if (!detail.contains(QStringLiteral("validation"))) {
                     fail(QStringLiteral("unexpected policy rejection: ") + detail); return;
@@ -159,6 +189,41 @@ private:
     bool signedLab() const {
         return QStandardPaths::isTestModeEnabled() && qEnvironmentVariableIntValue("DECODIUM_LAB_SIGNED_ENVELOPE") == 1;
     }
+    bool labCorruptPin(bool inject, bool signingPin) {
+#if defined(Q_OS_MACOS)
+        if (!signedLab() || path("corruptPinMarker").isEmpty()
+            || (path("corruptPinCase") != QStringLiteral("zero") && path("corruptPinCase") != QStringLiteral("one"))) return false;
+        const QFileInfo keychain(QCoreApplication::instance()->property("decodiumLabShareKeychain").toString());
+        const QString temp = QFileInfo(QDir::tempPath()).canonicalFilePath();
+        const QString directory = keychain.dir().canonicalPath();
+        const QString expectedFile = signingPin ? QStringLiteral("receiver.keychain-db") : QStringLiteral("sender.keychain-db");
+        if (!keychain.isAbsolute() || !keychain.isFile() || keychain.isSymLink() || keychain.canonicalFilePath().isEmpty()
+            || keychain.fileName() != expectedFile || temp.isEmpty() || directory.isEmpty()
+            || !directory.startsWith(temp + QLatin1Char('/'))
+            || !QFileInfo(directory).fileName().startsWith(QStringLiteral("decodium-share-transfer-"))
+            || directory != QFileInfo(path("identity")).dir().canonicalPath()) return false;
+        secure_settings::MacKeychainBackend backend(keychain.canonicalFilePath());
+        const QByteArray profile = signingPin ? QByteArrayLiteral("LABRX") : QByteArrayLiteral("LABTX");
+        const auto service = QStringLiteral("Decodium.SSTV.E2EE.v1.")
+            + QString::fromLatin1(QCryptographicHash::hash(profile, QCryptographicHash::Sha256).toHex());
+        const QByteArray peer = QByteArrayLiteral("rest-encrypted") + QByteArray(1, '\0')
+            + (signingPin ? QByteArrayLiteral("labtx") : QByteArrayLiteral("labrx"));
+        const auto account = (signingPin ? QStringLiteral("sender-p256-") : QStringLiteral("peer-"))
+            + QString::fromLatin1(QCryptographicHash::hash(peer, QCryptographicHash::Sha256).toHex());
+        QByteArray bytes(signingPin ? 91 : 32, '\0');
+        if (path("corruptPinCase") == QStringLiteral("one")) bytes[0] = '\1';
+        const auto encoded = QString::fromLatin1(bytes.toBase64());
+        const auto current = backend.lookup(service, account);
+        if (inject) return !current.found && backend.store(service, account, encoded)
+            && backend.lookup(service, account).value == encoded;
+        return current.found && current.value == encoded && backend.remove(service, account)
+            && !backend.lookup(service, account).found;
+#else
+        Q_UNUSED(inject)
+        Q_UNUSED(signingPin)
+        return false;
+#endif
+    }
     void fail(const QString& error) {
         if (phase_ == Finished) return;
         phase_ = Finished; timer_.stop();
@@ -202,18 +267,30 @@ private:
     void tick() {
         if (elapsed_.elapsed() > 90'000) { fail(QStringLiteral("session timeout")); return; }
         if (!share_ || phase_ == Finished) return;
+        if (phase_ == WaitCapability && elapsed_.elapsed() > 8'000 && !capabilityReported_) {
+            capabilityReported_ = true;
+            qWarning() << "[LAB][SHARE SESSION] waiting for encrypted capability"
+                       << "ready" << share_->ready() << "enabled" << share_->enabled()
+                       << "configured" << share_->configured()
+                       << "secureStorage" << share_->secureStorageAvailable()
+                       << "inbox" << share_->providerSupportsInbox()
+                       << "busy" << share_->busy() << "error" << share_->errorString();
+        }
         if (phase_ == WaitReady && share_->ready()) {
             phase_ = config_.value(QStringLiteral("resumeExistingProvider")).toBool()
                 ? WaitCapability : Configure;
         }
         if (phase_ == Configure) {
+            // Synthetic credentials are used only by this isolated test helper.
+            const QString labToken = qEnvironmentVariable("DECODIUM_LAB_SHARE_BEARER");
+            const bool authenticatedLab = !labToken.isEmpty();
             const QVariantMap cfg {{"type", "rest"}, {"providerId", "rest-encrypted"},
-                {"endpoint", path("endpoint")}, {"createPath", "/api/uploads"},
-                {"chunkPath", "/api/uploads/{uploadId}/content"},
-                {"statusPath", "/api/uploads/{uploadId}/status"},
-                {"completePath", "/api/uploads/{uploadId}/complete"},
-                {"cancelPath", "/api/uploads/{uploadId}"},
-                {"authType", "bearer"}, {"credentialsRequired", false}};
+                {"endpoint", path("endpoint")}, {"createPath", authenticatedLab ? "/api/v1/transfers" : "/api/uploads"},
+                {"chunkPath", authenticatedLab ? "/api/v1/transfers/{uploadId}/chunks" : "/api/uploads/{uploadId}/content"},
+                {"statusPath", authenticatedLab ? "/api/v1/transfers/{uploadId}" : "/api/uploads/{uploadId}/status"},
+                {"completePath", authenticatedLab ? "/api/v1/transfers/{uploadId}/complete" : "/api/uploads/{uploadId}/complete"},
+                {"cancelPath", authenticatedLab ? "/api/v1/transfers/{uploadId}" : "/api/uploads/{uploadId}"},
+                {"authType", "bearer"}, {"credentialsRequired", authenticatedLab}, {"secret", labToken}};
             phase_ = Configuring;
             if (!share_->configureProvider(cfg)) fail(QStringLiteral("configure queue failed"));
         } else if (phase_ == Enable) {
@@ -224,7 +301,8 @@ private:
                 if (!share_->setRequireIncomingEncryption(true)) {
                     fail(QStringLiteral("encryption policy queue failed")); return;
                 }
-                if (signedLab() && !share_->setRequireIncomingSenderAuthentication(true)) {
+                if (signedLab() && path("policyTarget").isEmpty()
+                    && !share_->setRequireIncomingSenderAuthentication(true)) {
                     fail(QStringLiteral("sender authentication policy queue failed")); return;
                 }
                 phase_ = IdentityPending;
@@ -238,6 +316,10 @@ private:
             if (!file.exists()) return;
             if (!file.open(QIODevice::ReadOnly) || file.size() > 4096) { fail(QStringLiteral("invalid signing identity")); return; }
             const QJsonObject identity = QJsonDocument::fromJson(file.readAll()).object();
+            if (!path("corruptPinMarker").isEmpty() && !corruptPinInjected_) {
+                if (!labCorruptPin(true, true)) { fail(QStringLiteral("corrupt sender-pin injection failed")); return; }
+                corruptPinInjected_ = true;
+            }
             phase_ = PinningSender;
             const auto oldFingerprint = path("oldSigningFingerprint");
             const bool queued = oldFingerprint.isEmpty()
@@ -258,6 +340,10 @@ private:
             if (!file.exists()) return;
             if (!file.open(QIODevice::ReadOnly) || file.size() > 4096) { fail(QStringLiteral("invalid peer identity")); return; }
             const QJsonObject identity = QJsonDocument::fromJson(file.readAll()).object();
+            if (!path("corruptPinMarker").isEmpty() && !corruptPinInjected_) {
+                if (!labCorruptPin(true, false)) { fail(QStringLiteral("corrupt-pin injection failed")); return; }
+                corruptPinInjected_ = true;
+            }
             phase_ = Pinning;
             if (!share_->pinSharingRecipient(path("recipient"), identity.value("publicKey").toString(),
                                              identity.value("fingerprint").toString(), true))
@@ -293,7 +379,9 @@ private:
                     && field(history, i, "fileName").toString()
                         == QStringLiteral("image-") + path("expiryTarget") + QStringLiteral(".png")
                     && field(history, i, "transferState").toString() == QStringLiteral("Expired")) {
-                    if (path("expiryTarget") == QStringLiteral("b") && copied_.size() != 1) {
+                    if (path("expiryTarget") == QStringLiteral("b") && copied_.size() != 1
+                        && !(qEnvironmentVariableIntValue("DECODIUM_LAB_EXPIRY_HOLD") == 1
+                             && QFileInfo::exists(QDir(path("outputDir")).filePath(QStringLiteral("image-a.png"))))) {
                         fail(QStringLiteral("image A was not received before B expired")); return;
                     }
                     if (config_.value(QStringLiteral("expiryWhileAwaiting")).toBool()) {
@@ -322,6 +410,9 @@ private:
                     return;
                 }
             }
+            if (qEnvironmentVariableIntValue("DECODIUM_LAB_EXPIRY_HOLD") == 1
+                && !path("expiryMarker").isEmpty() && QFileInfo::exists(path("expiryMarker")))
+                return;
             auto* inbox = share_->inbox();
             for (int i = 0; i < inbox->rowCount(); ++i) {
                 const QString id = field(inbox, i, "incomingId").toString();
@@ -339,7 +430,8 @@ private:
                 if (field(inbox, i, "canDownload").toBool() && !queued_.contains(id)) {
                     queued_.insert(id);
                     if (!share_->requireIncomingEncryption()
-                        || (signedLab() && !share_->requireIncomingSenderAuthentication())
+                        || (signedLab() && path("policyTarget").isEmpty()
+                            && !share_->requireIncomingSenderAuthentication())
                         || !share_->download(id, filename)) {
                         fail(QStringLiteral("encrypted download policy or queue failed")); return;
                     }
@@ -347,9 +439,14 @@ private:
                 const bool policyTarget = !path("policyTarget").isEmpty()
                     && filename == QStringLiteral("image-") + path("policyTarget") + QStringLiteral(".png");
                 if (policyTarget && policyStage_ == 1 && share_->requireIncomingSenderAuthentication()) {
-                    policyStage_ = 2;
-                    if (!share_->accept(policyTransferId_)) fail(QStringLiteral("policy acceptance queue failed"));
-                    return;
+                    if (signedLab()) {
+                        qInfo() << "[LAB][SHARE SESSION] pending signed acceptance allowed by sender policy";
+                        policyStage_ = 4;
+                    } else {
+                        policyStage_ = 2;
+                        if (!share_->accept(policyTransferId_)) fail(QStringLiteral("policy acceptance queue failed"));
+                        return;
+                    }
                 }
                 if (policyTarget && policyStage_ == 3 && !share_->requireIncomingSenderAuthentication()) policyStage_ = 4;
                 if (policyTarget && policyStage_ > 0 && policyStage_ < 4) continue;
@@ -375,6 +472,23 @@ private:
                             fail(QStringLiteral("no validated image before expiry")); return;
                         }
                         if (path("expiryTarget") == QStringLiteral("b") && copied_.size() != 1) return;
+                        if (qEnvironmentVariableIntValue("DECODIUM_LAB_EXPIRY_HOLD") == 1) {
+                            const QString readyPath = path("expiryMarker") + QStringLiteral(".ready");
+                            const QFileInfo readyInfo(readyPath);
+                            if (readyInfo.isSymLink()) { fail(QStringLiteral("unsafe expiry ready marker")); return; }
+                            if (!readyInfo.exists()) {
+                                QFile ready(readyPath);
+                                const auto data = QJsonDocument(QJsonObject {
+                                    {QStringLiteral("transferId"), field(inbox, i, "transferId").toString()},
+                                    {QStringLiteral("storageFolder"), share_->storageFolder()}
+                                }).toJson(QJsonDocument::Compact);
+                                if (!ready.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+                                    || ready.write(data) != data.size()) {
+                                    fail(QStringLiteral("cannot signal awaiting expiry")); return;
+                                }
+                            }
+                            continue;
+                        }
                         QFile marker(path("expiryMarker"));
                         if (!marker.exists() && (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)
                                                  || marker.write("expired\n") != 8)) {
@@ -415,6 +529,8 @@ private:
     QTimer timer_;
     QElapsedTimer elapsed_;
     Phase phase_ {WaitReady};
+    bool corruptPinInjected_ {false};
+    bool capabilityReported_ {false};
     bool refreshing_ {false};
     bool replayRejected_ {false};
     bool acceptedQueued_ {false}, acceptedDone_ {false};

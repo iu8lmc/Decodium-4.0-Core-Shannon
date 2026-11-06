@@ -342,14 +342,81 @@ cases are controller checks, not observed interactive GUI sessions.
 When the last body segment is missing, its terminal marker and the exact
 extent are unavailable. The BSR path now infers a candidate segment count
 from the validated MOT body length and consistent received regular-segment
-lengths. It rejects inconsistent sizes, indices at or beyond the inferred
-last segment, and counts outside the configured bounds. The missing-segment
+lengths. It rejects inconsistent sizes, indices beyond the inferred last
+segment, and counts outside the configured bounds. A correctly sized last
+segment received without its terminal marker is accepted as partial data but
+is requested again, so completion still requires the explicit marker. The missing-segment
 text marks the count as inferred; this assumes the equal-size regular segment
 convention and is not proof that an arbitrary sender uses that convention.
 The assembler still requires the actual terminal segment before declaring an
 object complete. Controller A/B tests exercise extended and compact requests,
 missing last and intermediate segments, and rejection of inconsistent lengths
 and indices.
+
+This unmarked-final case was observed with an independent TRXAMADRM 3.6
+transmitter: a short final body segment was transmitted without its terminal
+bit during the initial pass, and the earlier controller could not generate a
+BSR. Controller tests now cover short and full-sized unmarked final segments,
+both request dialects, and inconsistent lengths. Two full Decodium application
+pairs completed the repair over virtual audio with extended and compact BSRs,
+respectively (`decodium-hamdrm-repair-a-h2qxfx77` and
+`decodium-hamdrm-repair-b-neiax9nh`). In separate A/B tests an independent
+TRXAMADRM transmitter produced the partial image and its receiver recovered
+the exact extended BSR sent by Decodium (`/tmp/dtrxrepair-a-jp_hauln` and
+`/tmp/dtrxrepair-b-e0pbjfe3`). These latter tests establish BSR transport,
+not a completed independent repair. A subsequent longer independent repair
+initially failed (`/tmp/dtrxrepair-a-28i5n0d0`): the historical transmitter's
+laboratory PortAudio adapter dropped newly generated audio when its ring buffer
+filled. With laboratory-only audio pacing, the unmodified historical codec
+transmitted the complete signal. Two separate 2,225-byte A/B transfers then
+completed over virtual audio: Decodium requested the deliberately discarded
+segment, the historical receiver obtained the BSR, the historical transmitter
+accepted it and sent a repair, and Decodium reconstructed the exact original
+file (`/tmp/dtrxrepair-a-7i949z70`, `/tmp/dtrxrepair-b-ritt4p93`). The BSR
+was extended in both runs, as required by this historical parser. This is not
+evidence of an EasyPal exchange.
+
+A further assembler regression was found when a previously unmarked final
+segment was retransmitted with a terminal marker but different bytes: the
+duplicate was rejected, yet its marker had already changed assembly state.
+The assembler now checks duplicate bytes before committing the marker. An
+identical retransmission can establish the marker and reports completion when
+all data are present; inconsistent complete collections roll back that marker.
+Core A/B tests with different segment sizes failed before this correction and
+now verify the rejected duplicate leaves the extent unknown, followed by
+byte-exact completion with the valid retransmission. Two full Decodium pairs
+again completed extended and compact repair over virtual audio with an
+initially unmarked final segment (`.../decodium-hamdrm-repair-a-ejxhvcqc`,
+`.../decodium-hamdrm-repair-b-37li6aai`). The conflicting duplicate cases are
+core tests, not injected live-audio transmissions.
+
+The same rollback property now applies to newly received segments: a terminal
+segment rejected for exceeding the object limit, failing length consistency,
+or producing invalid metadata cannot leave its bytes or a new terminal marker
+in the assembler. Core A/B tests first reproduced the state corruption with
+two segment sizes and both oversized and undersized final bodies; a subsequent
+valid final segment now reconstructs each original object exactly. Following
+the correction, both two-Decodium virtual-audio repair controls again passed
+(`.../decodium-hamdrm-repair-a-etx9dv7h`,
+`.../decodium-hamdrm-repair-b-qxpy5hzf`). Malformed segments were injected
+in the core tests, not into these audio controls.
+
+On 2026-11-04 the named HAMDRM test executables were rebuilt against the
+current source and the complete `ctest -R '^test_hamdrm_'` selection passed
+15/15 on macOS. This includes the core, persistence, JPEG2000, controller,
+FTP, PHY, channel, waveform, RS, fuzz-smoke and lab CLI checks; it is not an
+independent EasyPal application exchange or a cross-platform runtime test.
+
+An additional A/B check exercises this recovery inside full Decodium
+application pairs: after dropping the original final segment and requesting
+repair, the test-mode receiver submits a shortened copy of the audio-decoded
+repair segment to the assembler, confirms rejection without changes to the
+stored bytes, count or extent, and then accepts the unmodified audio-decoded
+segment. Both extended and compact BSR cases reconstructed the 2,725-byte
+images exactly (`.../decodium-hamdrm-repair-a-fmxnrnvm` and
+`.../decodium-hamdrm-repair-b-x7q1fm00`). The malformed copy is injected
+after demodulation rather than transmitted over audio. This hook is gated by
+Qt test mode and explicit laboratory environment variables.
 
 Two full Decodium application pairs on macOS ARM64 transmitted different
 2,725-byte JPEG fixtures. The test-only receiver hook discarded the final MOT

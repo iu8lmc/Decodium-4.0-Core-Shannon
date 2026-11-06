@@ -256,7 +256,7 @@ private Q_SLOTS:
     config.bandPassEnabled = false;
     config.levelControlEnabled = false;
     config.limiterEnabled = false;
-    for (double frequency : {1'700.0, 1'900.0})
+    for (double frequency : {1'700.0, 1'900.0, 2'900.0, 3'500.0})
       {
         config.interferenceFrequencyHz = frequency;
         auto const tone = makeTone (frequency, 36'000u, 0.4);
@@ -514,6 +514,57 @@ private Q_SLOTS:
       }
   }
 
+  void demodulatorChirpTimestamp_data ()
+  {
+    QTest::addColumn<double> ("startHz");
+    QTest::addColumn<double> ("slopeHzPerSample");
+    QTest::addColumn<bool> ("withPreprocessor");
+    QTest::newRow ("rising") << 1700.0 << 0.02 << false;
+    QTest::newRow ("falling") << 2100.0 << -0.02 << false;
+    QTest::newRow ("rising-filtered") << 1700.0 << 0.02 << true;
+    QTest::newRow ("falling-filtered") << 2100.0 << -0.02 << true;
+  }
+
+  void demodulatorChirpTimestamp ()
+  {
+    QFETCH (double, startHz);
+    QFETCH (double, slopeHzPerSample);
+    QFETCH (bool, withPreprocessor);
+    std::vector<float> samples (20'000u);
+    for (std::size_t i = 0; i < samples.size (); ++i)
+      {
+        const double n = static_cast<double> (i);
+        const double phase = TwoPi * (startHz * n + 0.5 * slopeHzPerSample * n * n) / SampleRateHz + 0.271;
+        samples[i] = static_cast<float> (0.5 * std::sin (phase));
+      }
+    auto config = SstvFrequencyDemodulatorConfig::sstvDefaults ();
+    config.averagingSamples = 3u;
+    config.hopSamples = 1u;
+    SstvFrequencyDemodulator demodulator (config);
+    if (withPreprocessor) {
+      SstvPreprocessor preprocessor;
+      samples = preprocessor.process (samples);
+    }
+    const auto observations = consumeInChunks (demodulator, samples, {1u, 73u, 509u, 2'048u});
+    double sum = 0.0;
+    std::size_t count = 0u;
+    for (const auto& observation : observations)
+      if (observation.valid () && observation.centreSample >= 1000u && observation.centreSample < 19000u)
+        {
+          sum += (observation.rawFrequencyHz - startHz) / slopeHzPerSample
+                 - static_cast<double> (observation.centreSample);
+          ++count;
+        }
+    QVERIFY (count > 17000u);
+    const double timingOffset = sum / static_cast<double> (count);
+    qInfo ("chirp relative timing offset: %.6f samples", timingOffset);
+    // A phase difference spans two adjacent samples, so its natural time is
+    // halfway between them. centreSample is intentionally an integer.
+    QVERIFY2 (withPreprocessor ? (timingOffset > -5.0 && timingOffset < -1.0)
+                              : (std::abs (timingOffset + 0.5) < 0.45),
+              qPrintable (QStringLiteral ("unexpected demodulator chirp timing %1 samples").arg (timingOffset)));
+  }
+
   void handlesAmplitudeNoiseAndDcThroughFrontend ()
   {
     std::vector<float> const input = makeTone (1'900.0,
@@ -659,7 +710,7 @@ private Q_SLOTS:
     QVERIFY_THROWS_EXCEPTION (std::invalid_argument,
                               SstvPreprocessor {invalidPre});
     invalidPre = SstvPreprocessorConfig::sstvDefaults ();
-    invalidPre.interferenceFrequencyHz = 2'501.0;
+    invalidPre.interferenceFrequencyHz = 3'501.0;
     QVERIFY_THROWS_EXCEPTION (std::invalid_argument,
                               SstvPreprocessor {invalidPre});
     invalidPre = SstvPreprocessorConfig::sstvDefaults ();

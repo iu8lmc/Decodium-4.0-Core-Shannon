@@ -357,6 +357,7 @@ private slots:
     void radiofaxPreparedSourceAndLongHeader();
     void fax480ProfilesUsePreparedAudioAndRelease();
     void voxCompletionUsesNoPttOffHook();
+    void avt94NarrowVoxHeaderHasNoSilentBlocksAB();
     void audioOnlyDoesNotAddVoxEnvelope();
     void cancelShutdownRetainDeviceUntilDetachAndReleaseOnce();
     void audioLeaseSurvivesConcurrentPullUntilDetachAcknowledgement();
@@ -1675,6 +1676,45 @@ void TestSstvTxCoordinator::audioOnlyDoesNotAddVoxEnvelope()
     QCOMPARE(plan.totalFrames, plan.protocolEndFrame);
     QVERIFY(coordinator->cancel(3U));
     QCOMPARE(fake.pttOffCalls, std::uint64_t {0});
+}
+
+void TestSstvTxCoordinator::avt94NarrowVoxHeaderHasNoSilentBlocksAB()
+{
+    for (const SstvRgbPixel color : {SstvRgbPixel {255U, 0U, 0U},
+                                     SstvRgbPixel {0U, 0U, 255U}}) {
+        FakeHooks fake;
+        fake.preflight.pttReleaseRequired = false;
+        fake.preflight.voxAudioActivation = true;
+        auto config = fastConfig();
+        config.voxPreKeyMs = 750U;
+        auto coordinator = enabledCoordinator(fake, config);
+        auto request = requestFor(SstvTxCoordinatorMode::Avt94Narrow);
+        std::fill(request.pixels.begin(), request.pixels.end(), color);
+        const auto started = coordinator->start(1U, request);
+        QVERIFY(started.accepted);
+        QVERIFY(coordinator->notifyPttConfirmed(2U, started.sessionId));
+        auto device = fake.audioDevice.lock();
+        QVERIFY(device != nullptr);
+        const auto channels = device->channelCount();
+        QVERIFY(channels > 0U);
+        const std::size_t frames = 96'000U;
+        std::vector<std::int16_t> samples(frames * channels);
+        std::size_t bytes = 0U;
+        while (bytes < samples.size() * sizeof(std::int16_t)) {
+            const auto n = device->read(reinterpret_cast<char*>(samples.data()) + bytes,
+                                        static_cast<qint64>(samples.size() * sizeof(std::int16_t) - bytes));
+            QVERIFY(n > 0);
+            bytes += static_cast<std::size_t>(n);
+        }
+        std::size_t run = 0U;
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            bool zero = true;
+            for (unsigned channel = 0; channel < channels; ++channel)
+                zero = zero && samples[frame * channels + channel] == 0;
+            run = zero ? run + 1U : 0U;
+            QVERIFY2(run < 480U, "Unexpected 10 ms zero block in VOX/header audio");
+        }
+    }
 }
 
 void TestSstvTxCoordinator::voxCompletionUsesNoPttOffHook()
