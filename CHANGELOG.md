@@ -1,5 +1,23 @@
 # Changelog / Registro Modifiche
 
+## [1.0.1003] - 2026-11-14
+
+### English (UK)
+
+Reduced decode-list, settings and static-map overhead; improved retirement of
+obsolete decoder work and WSPR resource cleanup; added timer diagnostics,
+isolated A/B tooling and regression gates. Low CPU policy remains unchanged.
+The intermittent FT4 UI stall remains unresolved. Full bilingual changes,
+measurements and validation boundaries: [release notes](doc/GITHUB_RELEASE_BODY_1.0.1003.md).
+
+### Italiano
+
+Ridotto il lavoro superfluo di lista decode, impostazioni e mappa statica;
+migliorati il ritiro delle decodifiche obsolete e la pulizia delle risorse WSPR;
+aggiunti diagnostica timer, strumenti A/B isolati e controlli di regressione.
+Low CPU resta invariato. Il rallentamento intermittente FT4 rimane aperto.
+Dettagli bilingui, misure e limiti: [note di rilascio](doc/GITHUB_RELEASE_BODY_1.0.1003.md).
+
 ## [1.0.701] - 2026-10-19
 
 ### English

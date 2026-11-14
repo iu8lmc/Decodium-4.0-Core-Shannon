@@ -1,7 +1,13 @@
 #include "DecodeListModel.h"
+#include "DecodiumLogging.hpp"
+
+// Standalone model tests do not link the application diagnostic writer. Windows
+// budgeted-update telemetry still needs a sink; it is outside this test scope.
+void DecodiumLogging::diag(DiagCategory, QString const&) {}
 
 #include <QSignalSpy>
 #include <QtTest>
+#include <limits>
 
 namespace {
 QVariantMap decodeRow(QString const& time, QString const& message, QString const& db = QStringLiteral("-10"))
@@ -30,6 +36,8 @@ class TestDecodeListModel final : public QObject
     Q_OBJECT
 
 private slots:
+    void allRolesPreserveValuesAndRejectInvalidRequests();
+    void benchmarkReadVisibleRows();
     void appendAndShiftStayIncremental();
     void prependAndTailPruneStayIncremental();
     void provisionalTailReplacementKeepsHistoryIncremental();
@@ -44,6 +52,60 @@ private slots:
     void contextResetCancelsPendingRows();
     void contextResetWhileEmptyStillNotifiesViews();
 };
+
+void TestDecodeListModel::allRolesPreserveValuesAndRejectInvalidRequests()
+{
+    DecodeListModel model;
+    QVariantMap row = decodeRow("120000", "CQ K1ABC FN42");
+    auto const names = model.roleNames();
+    for (auto it = names.cbegin(); it != names.cend(); ++it) {
+        if (it.key() != DecodeListModel::EntryRole)
+            row.insert(QString::fromLatin1(it.value()), QStringLiteral("field:") + QString::fromLatin1(it.value()));
+    }
+    model.setEntries(rows({row}));
+    for (auto it = names.cbegin(); it != names.cend(); ++it) {
+        QVariant const expected = it.key() == DecodeListModel::EntryRole
+            ? QVariant(row) : row.value(QString::fromLatin1(it.value()));
+        QCOMPARE(model.data(model.index(0), it.key()), expected);
+    }
+    for (int const role : {std::numeric_limits<int>::min(), 0,
+                          int(DecodeListModel::TimeRole) - 1,
+                          int(DecodeListModel::EntryRole) + 1,
+                          std::numeric_limits<int>::max()}) {
+        QVERIFY(!model.data(model.index(0), role).isValid());
+    }
+    QVERIFY(!model.data(QModelIndex(), DecodeListModel::MessageRole).isValid());
+    QVERIFY(!model.data(model.index(1), DecodeListModel::MessageRole).isValid());
+    model.setEntries(rows({decodeRow("120015", "CQ W1AW FN31")}));
+    QVERIFY(!model.data(model.index(0), DecodeListModel::DxCountryRole).isValid());
+    QCOMPARE(model.data(model.index(0), DecodeListModel::MessageRole).toString(), QStringLiteral("CQ W1AW FN31"));
+}
+
+void TestDecodeListModel::benchmarkReadVisibleRows()
+{
+    DecodeListModel model;
+    QVariantList entries;
+    auto const names = model.roleNames();
+    for (int i = 0; i < 500; ++i) {
+        QVariantMap row;
+        for (auto it = names.cbegin(); it != names.cend(); ++it) {
+            if (it.key() != DecodeListModel::EntryRole)
+                row.insert(QString::fromLatin1(it.value()), QString::number(i) + QString::fromLatin1(it.value()));
+        }
+        entries.append(row);
+    }
+    model.setEntries(entries);
+    qint64 reads = 0;
+    QBENCHMARK {
+        // Simulate role reads by visible delegates against a 500-row history.
+        for (int row = 0; row < 50; ++row) {
+            QModelIndex const index = model.index(row);
+            for (auto it = names.cbegin(); it != names.cend(); ++it)
+                reads += model.data(index, it.key()).isValid() ? 1 : 0;
+        }
+    }
+    QVERIFY(reads > 0);
+}
 
 void TestDecodeListModel::contextResetCancelsPendingRows()
 {

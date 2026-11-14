@@ -111,7 +111,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
 
     QString const serialMode = m_decodeModeBySerial.value(serial);
     quint64 const serialSession = m_decodeSessionBySerial.value(serial, m_decodeSessionId);
-    if (serialSession != m_decodeSessionId) {
+    if (serial <= m_retiredDecodeSerial || serialSession != m_decodeSessionId) {
         bridgeLog("onFt8DecodeReady: ignored stale callback serial=" + QString::number(serial) +
                   " session=" + QString::number(serialSession) +
                   " currentSession=" + QString::number(m_decodeSessionId));

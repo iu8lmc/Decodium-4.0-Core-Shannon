@@ -116,7 +116,7 @@ void DecodiumBridge::primeLegacyAllTxtCursor()
 void DecodiumBridge::clearDecodeWindowsForModeChange(const QString& previousMode, const QString& nextMode)
 {
     decodiumBridgeDecodeClearLog(QStringLiteral("mode-change decode/map reset: %1 -> %2").arg(previousMode, nextMode));
-    ++m_decodeSessionId;
+    invalidateDecodeSession();
     invalidateLegacyDecodeModelDeltaFastPath();
 
     // Cancel every queued UI handoff. The in-flight worker is invalidated by
@@ -208,7 +208,7 @@ void DecodiumBridge::clearDecodeWindowsForBandChange(double previousFrequency,
                        QString::number(nextFrequency, 'f', 0),
                        nextBand.isEmpty() ? QStringLiteral("--") : nextBand,
                        reason));
-    ++m_decodeSessionId;
+    invalidateDecodeSession();
     invalidateLegacyDecodeModelDeltaFastPath();
 
     resetWorldMapDisplayFromCurrentDecodes();

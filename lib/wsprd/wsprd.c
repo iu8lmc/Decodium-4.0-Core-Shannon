@@ -771,6 +771,9 @@ int wsprd_run(int argc, char *argv[])
     extern int optreset;
 #endif
     int i,j,k;
+    int exit_status = 1;
+    FILE *fp_fftwf_wisdom_file, *fall_wspr = NULL, *fwsprd = NULL;
+    FILE *fhash, *ftimer = NULL;
     unsigned char *symbols, *decdata, *channel_symbols, *apmask, *cw;
     signed char message[]={-9,13,-35,123,57,-39,64,0,0,0,0};
     char *callsign, *grid,  *call_loc_pow;
@@ -917,19 +920,19 @@ int wsprd_run(int argc, char *argv[])
                 break;
             case '?':
                 usage();
-                return 1;
+                goto cleanup;
         }
     }
     
     if( access(data_dir, R_OK | W_OK)) {
       wsprd_emit_formatted(1, "Error: inaccessible data directory: '%s'\n", data_dir);
       usage();
-      return EXIT_FAILURE;
+      goto cleanup;
     }
 
     if( optind+1 > argc) {
         usage();
-        return 1;
+        goto cleanup;
     } else {
         ptr_to_infile=argv[optind];
     }
@@ -944,7 +947,6 @@ int wsprd_run(int argc, char *argv[])
         mettab[1][i]=round( 10*(metric_tables[2][255-i]-bias) );
     }
     
-    FILE *fp_fftwf_wisdom_file, *fall_wspr, *fwsprd, *fhash, *ftimer;
     strcpy(wisdom_fname,".");
     strcpy(all_fname,".");
     strcpy(spots_fname,".");
@@ -989,20 +991,20 @@ int wsprd_run(int argc, char *argv[])
         treadwav += (float)(clock()-t0)/CLOCKS_PER_SEC;
         
         if( npoints == 1 ) {
-            return 1;
+            goto cleanup;
         }
         dialfreq=dialfreq_cmdline - (dialfreq_error*1.0e-06);
     } else if ( strstr(ptr_to_infile,".c2") !=0 )  {
         ptr_to_infile_suffix=strstr(ptr_to_infile,".c2");
         npoints=readc2file(ptr_to_infile, idat, qdat, &dialfreq, &wspr_type);
         if( npoints == 1 ) {
-            return 1;
+            goto cleanup;
         }
         dialfreq -= (dialfreq_error*1.0e-06);
     } else {
         wsprd_emit_formatted(1, "Error: Failed to open %s\n",ptr_to_infile);
         wsprd_emit_formatted(1, "WSPR file must have suffix .wav or .c2\n");
-        return 1;
+        goto cleanup;
     }
     
     // Parse date and time from given filename
@@ -1011,6 +1013,8 @@ int wsprd_run(int argc, char *argv[])
     date[6]='\0';
     uttime[4]='\0';
     
+    // Keep variable-length FFT arrays outside the common error-cleanup scope.
+    {
     // Do windowed ffts over 2 symbols, stepped by half symbols
     int nffts=4*floor(npoints/512)-1;
     fftin=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
@@ -1592,10 +1596,6 @@ int wsprd_run(int argc, char *argv[])
     fprintf(ftimer,"-----------------------------------\n");
     fprintf(ftimer,"Total              %7.2f %7.2f\n",ttotal,1.0);
     
-    fclose(fall_wspr);
-    fclose(fwsprd);
-    //  fclose(fdiag);
-    fclose(ftimer);
     fftwf_destroy_plan(PLAN1);
     fftwf_destroy_plan(PLAN2);
     fftwf_destroy_plan(PLAN3);
@@ -1610,6 +1610,16 @@ int wsprd_run(int argc, char *argv[])
         fclose(fhash);
     }
     
+    }
+    exit_status = 0;
+
+cleanup:
+    if (fall_wspr) fclose(fall_wspr);
+    if (fwsprd) fclose(fwsprd);
+    if (ftimer) fclose(ftimer);
+    free(apmask);
+    free(cw);
+    free(grid);
     free(hashtab);
     free(loctab);
     free(symbols);
@@ -1621,7 +1631,7 @@ int wsprd_run(int argc, char *argv[])
     free(qdat);
     free(stack);
 
-    return 0;
+    return exit_status;
 }
 
 #ifndef WSPRD_EMBEDDED_ONLY

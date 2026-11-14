@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QByteArray>
 #include <QStringList>
+#include <atomic>
+#include <cstdint>
 #include <QVector>
 
 namespace decodium
@@ -43,7 +45,11 @@ class FST4DecodeWorker final : public QObject
 public:
   explicit FST4DecodeWorker (QObject * parent = nullptr);
 
+  void retireThrough (quint64 serial);
   void decode (DecodeRequest const& request);
+
+private:
+  std::atomic<std::uint64_t> m_retiredSerial {0};
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);

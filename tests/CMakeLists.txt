@@ -1001,3 +1001,94 @@ target_include_directories(test_multisettings_switch PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(test_multisettings_switch wsjt_qt wsjt_cxx wsjt_fort Qt6::Test Qt6::Widgets)
 add_test(NAME test_multisettings_switch COMMAND $<TARGET_FILE:test_multisettings_switch>)
 set_tests_properties(test_multisettings_switch PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable (test_world_map_frame_cadence
+  test_world_map_frame_cadence.cpp
+  ../src/ui/WorldMapGpuItem.cpp ../src/ui/WorldMapGpuItem.hpp
+  ../src/services/MapBaseMapService.cpp ../src/services/MapBaseMapService.h
+  ../src/services/MapExternalOverlayService.cpp ../src/services/MapExternalOverlayService.h
+  ../src/services/MapLayerModel.cpp ../src/services/MapLayerModel.h)
+target_include_directories (test_world_map_frame_cadence PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_world_map_frame_cadence PRIVATE Qt6::Test Qt6::Quick Qt6::Gui Qt6::Network Qt6::Concurrent)
+set_target_properties (test_world_map_frame_cadence PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+add_test (NAME test_world_map_frame_cadence COMMAND $<TARGET_FILE:test_world_map_frame_cadence>)
+set_tests_properties (test_world_map_frame_cadence PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
+# This scheduling test uses the software path without QSB resources. Shader-only
+# helpers in the shared renderer are intentionally unused in this target.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options (test_world_map_frame_cadence PRIVATE -Wno-unused-function)
+endif ()
+
+add_executable (test_ft4_decode_cancellation test_ft4_decode_cancellation.cpp)
+target_include_directories (test_ft4_decode_cancellation PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_ft4_decode_cancellation PRIVATE wsjt_qt wsjt_cxx wsjt_fort Qt6::Test Qt6::Core)
+target_compile_definitions (test_ft4_decode_cancellation PRIVATE FT4_WAV_GENERATOR="$<TARGET_FILE:ft4_make_test_wav>")
+set_target_properties (test_ft4_decode_cancellation PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+add_dependencies (test_ft4_decode_cancellation ft4_make_test_wav)
+if (MINGW)
+  target_link_options (test_ft4_decode_cancellation PRIVATE -Wl,--stack,16777216)
+endif ()
+add_test (NAME test_ft4_decode_cancellation COMMAND $<TARGET_FILE:test_ft4_decode_cancellation>)
+set_tests_properties (test_ft4_decode_cancellation PROPERTIES TIMEOUT 60)
+
+# Exercise the real queue/worker with a controlled wsprd entry point. The native
+# algorithm is covered separately by frozen-signal A/B and application labs.
+add_executable(test_wspr_worker_queue test_wspr_worker_queue.cpp
+  ${CMAKE_SOURCE_DIR}/Detector/WSPRDecodeWorker.cpp)
+target_include_directories(test_wspr_worker_queue PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_wspr_worker_queue PRIVATE Qt6::Test Qt6::Core)
+set_target_properties(test_wspr_worker_queue PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+add_test(NAME test_wspr_worker_queue COMMAND $<TARGET_FILE:test_wspr_worker_queue>)
+set_tests_properties(test_wspr_worker_queue PROPERTIES TIMEOUT 30)
+
+add_executable(test_lab_storage_isolation test_lab_storage_isolation.cpp
+  ${CMAKE_SOURCE_DIR}/src/app/DecodiumStorageMigration.cpp)
+target_include_directories(test_lab_storage_isolation PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_lab_storage_isolation PRIVATE Qt6::Test Qt6::Core)
+set_target_properties(test_lab_storage_isolation PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+add_test(NAME test_lab_storage_isolation COMMAND $<TARGET_FILE:test_lab_storage_isolation>)
+
+# Count resources in the real WSPR translation unit across repeated calls.
+# The short FT8 WAV exercises successful input processing, not WSPR sensitivity;
+# native WSPR decode equivalence uses the separate frozen reference recording.
+set(wspr_resource_sources wspr_resource_probe.c)
+foreach(wspr_source IN LISTS wsprd_CSRCS)
+  if(NOT wspr_source STREQUAL "lib/wsprd/wsprd.c")
+    list(APPEND wspr_resource_sources "${CMAKE_SOURCE_DIR}/${wspr_source}")
+  endif()
+endforeach()
+add_executable(test_wspr_resource_cleanup ${wspr_resource_sources})
+set_target_properties(test_wspr_resource_cleanup PROPERTIES AUTOMOC OFF)
+target_include_directories(test_wspr_resource_cleanup PRIVATE ${FFTW3_INCLUDE_DIRS})
+target_link_libraries(test_wspr_resource_cleanup PRIVATE ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+foreach(wspr_case IN ITEMS valid missing)
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-${wspr_case}")
+endforeach()
+add_test(NAME test_wspr_resource_valid COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
+  "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-valid"
+  "${CMAKE_SOURCE_DIR}/tests/bridge_refactor_fixtures/ft8-k1abc-1500.wav" 0)
+add_test(NAME test_wspr_resource_missing COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
+  "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-missing"
+  "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-missing/nonexistent.wav" 1)
+set_tests_properties(test_wspr_resource_valid test_wspr_resource_missing PROPERTIES TIMEOUT 60)
+
+# Build the maintained simulator without enabling unrelated utility targets.
+add_executable(q65_performance_fixture ../utils/q65sim.cpp)
+target_include_directories(q65_performance_fixture PRIVATE ${PROJECT_BINARY_DIR})
+target_link_libraries(q65_performance_fixture PRIVATE wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+
+# Native FST4 profiling is opt-in and does not exercise the GUI or network.
+add_executable(fst4_performance_probe fst4_performance_probe.cpp)
+target_include_directories(fst4_performance_probe PRIVATE ${PROJECT_BINARY_DIR})
+target_link_libraries(fst4_performance_probe PRIVATE wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+
+add_executable(test_fst4_decode_cancellation test_fst4_decode_cancellation.cpp)
+target_include_directories(test_fst4_decode_cancellation PRIVATE ${PROJECT_BINARY_DIR})
+target_link_libraries(test_fst4_decode_cancellation PRIVATE wsjt_qt wsjt_cxx wsjt_fort Qt6::Test Qt6::Core)
+add_test(NAME test_fst4_decode_cancellation COMMAND test_fst4_decode_cancellation)
+set_tests_properties(test_fst4_decode_cancellation PROPERTIES TIMEOUT 30)
+
+add_executable(fst4_performance_fixture ../utils/fst4sim.cpp)
+target_include_directories(fst4_performance_fixture PRIVATE ${PROJECT_BINARY_DIR})
+target_link_libraries(fst4_performance_fixture PRIVATE wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)

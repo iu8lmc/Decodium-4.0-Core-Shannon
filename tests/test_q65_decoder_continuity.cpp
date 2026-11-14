@@ -1,6 +1,7 @@
 #include "wsjtx_config.h"
 
 #include "Detector/Q65DecodeWorker.hpp"
+#include "Detector/Q65DecodeCancellation.hpp"
 #include "commons.h"
 
 #include <QByteArray>
@@ -10,6 +11,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <thread>
 
 extern "C"
 {
@@ -101,6 +103,8 @@ class TestQ65DecoderContinuity final : public QObject
 private slots:
     void decodesThreeConsecutiveFullWindowsWithoutCoherentAveraging();
     void decodesDefaultAndNonDefaultQ65Submodes();
+    void retiredRequestsDoNotCancelFreshSlots();
+    void cancellationScopePreservesThreadAndAveragingIsolation();
 };
 
 void TestQ65DecoderContinuity::decodesThreeConsecutiveFullWindowsWithoutCoherentAveraging()
@@ -212,6 +216,60 @@ void TestQ65DecoderContinuity::decodesDefaultAndNonDefaultQ65Submodes()
                                 .arg(profile.message, rows.join(QStringLiteral(" | ")))));
         ++serial;
     }
+}
+
+void TestQ65DecoderContinuity::retiredRequestsDoNotCancelFreshSlots()
+{
+    decodium::q65::Q65DecodeWorker candidate;
+    QStringList rows;
+    quint64 completed = 0;
+    QObject::connect(&candidate, &decodium::q65::Q65DecodeWorker::decodeReady,
+                     [&](quint64 serial, QStringList output) { completed = serial; rows = output; });
+    decodium::q65::DecodeRequest request;
+    request.audio = makeQ65Window(QStringLiteral("K1ABC W9XYZ EN37"), 15, 0, 1500);
+    request.nutc = 120000;
+    request.ntrperiod = 15;
+    request.nfqso = 1500;
+    request.ntol = 20;
+    request.ndepth = 3;
+    request.nfa = 200;
+    request.nfb = 4000;
+    candidate.retireThrough(4);
+    candidate.retireThrough(2); // An older notification cannot revive retired work.
+    for (quint64 serial : {3, 4, 5, 6}) {
+        request.serial = serial;
+        rows = {QStringLiteral("not completed")};
+        candidate.decode(request);
+        QCOMPARE(completed, serial);
+        if (serial <= 4) QVERIFY(rows.isEmpty());
+        else QVERIFY(containsMessage(rows, QStringLiteral("K1ABC W9XYZ EN37")));
+    }
+}
+
+void TestQ65DecoderContinuity::cancellationScopePreservesThreadAndAveragingIsolation()
+{
+    using namespace decodium::q65;
+    std::atomic<std::uint64_t> retired {7};
+    QVERIFY(!decodeCancelled());
+    {
+        ScopedDecodeCancellation old(retired, 7, true);
+        QVERIFY(decodeCancelled());
+        bool otherThreadCancelled = true;
+        std::thread other([&] { otherThreadCancelled = decodeCancelled(); });
+        other.join();
+        QVERIFY(!otherThreadCancelled);
+        {
+            ScopedDecodeCancellation coherentAverage(retired, 7, false);
+            QVERIFY(!decodeCancelled());
+        }
+        QVERIFY(decodeCancelled());
+        {
+            ScopedDecodeCancellation fresh(retired, 8, true);
+            QVERIFY(!decodeCancelled());
+        }
+        QVERIFY(decodeCancelled());
+    }
+    QVERIFY(!decodeCancelled());
 }
 
 QTEST_MAIN(TestQ65DecoderContinuity)

@@ -243,6 +243,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     }
 
     m_legacyStateTimer = new QTimer(this);
+    m_legacyStateTimer->setObjectName(QStringLiteral("decodiumLegacyStateTimer"));
     m_legacyStateTimer->setInterval(250);
     connect(m_legacyStateTimer, &QTimer::timeout, this, &DecodiumBridge::syncLegacyBackendState);
 

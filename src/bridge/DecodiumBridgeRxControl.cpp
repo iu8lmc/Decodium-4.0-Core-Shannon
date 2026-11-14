@@ -26,7 +26,7 @@ void DecodiumBridge::startRx()
     m_monitorStartupGraceUntilMs = QDateTime::currentMSecsSinceEpoch()
         + qMax<qint64>(effectivePeriodMsForMode(m_mode) * 2, 20000);
     if (m_monitoring) { bridgeLog("startRx: already monitoring, skip"); return; }
-    ++m_decodeSessionId;
+    invalidateDecodeSession();
     resetNativeDecodeDedupIndex();
     resetFt2AsyncDecodeDedupIndex();
     m_ft8StartupPressureSlotDeferred = false;

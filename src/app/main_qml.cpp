@@ -37,6 +37,7 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
+#include <QPointer>
 #include <QThread>
 #include <QDir>
 #include <QDirIterator>
@@ -174,6 +175,7 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #include "DecodiumDxCluster.h"
 #include "DecodiumLogging.hpp"
 #include "DecodiumStorageMigration.hpp"
+#include "DecodiumLabStorage.hpp"
 #include "DecodiumUpdater.hpp"
 #include "GraphicsPipelineCache.hpp"
 #include "LinuxGraphicsSafety.hpp"
@@ -395,14 +397,24 @@ public:
         QString const receiverClass = QString::fromLatin1(receiver->metaObject()->className());
         QString const receiverName = receiver->objectName();
         QEvent::Type const eventType = event->type();
+        // Capture timer identity before dispatch: a single-shot callback can
+        // destroy its receiver or parent. Do not dereference it for diagnostics
+        // after QApplication::notify returns.
+        auto* dispatchTimer = eventType == QEvent::Timer ? qobject_cast<QTimer*>(receiver) : nullptr;
+        int const timerIntervalMs = dispatchTimer ? dispatchTimer->interval() : -1;
+        QString const timerOwner = dispatchTimer && dispatchTimer->parent()
+            ? QString::fromLatin1(dispatchTimer->parent()->metaObject()->className()) : QString();
+        // QML properties produce subclasses such as QQmlTimer_QML_242.
+        // Checking the exact class name loses their source location.
+        QPointer<QObject> const qmlReceiver(receiver->inherits("QQmlTimer") ? receiver : nullptr);
         QElapsedTimer timer;
         timer.start();
         bool const handled = QApplication::notify(receiver, event);
         qint64 const elapsedMs = timer.elapsed();
         if (elapsedMs >= kSlowMainDispatchMs) {
             QString qmlSource;
-            if (receiverClass == QStringLiteral("QQmlTimer")) {
-                if (QQmlContext* context = qmlContext(receiver)) {
+            if (qmlReceiver) {
+                if (QQmlContext* context = qmlContext(qmlReceiver.data())) {
                     qmlSource = context->baseUrl().toString();
                 }
             }
@@ -413,7 +425,9 @@ public:
                 << "event_type=" << static_cast<int>(eventType)
                 << "receiver=" << receiverClass
                 << "object=" << (receiverName.isEmpty() ? QStringLiteral("<unnamed>") : receiverName)
-                << "qml_source=" << (qmlSource.isEmpty() ? QStringLiteral("<unknown>") : qmlSource);
+                << "qml_source=" << (qmlSource.isEmpty() ? QStringLiteral("<unknown>") : qmlSource)
+                << "timer_interval_ms=" << timerIntervalMs
+                << "timer_owner=" << (timerOwner.isEmpty() ? QStringLiteral("<unknown>") : timerOwner);
         }
         return handled;
     }
@@ -1666,10 +1680,17 @@ static bool ensureLegacySqliteDatabase()
 
 int main(int argc, char* argv[])
 {
-    // IU8LMC — persistenza fuori dal registro di Windows + migrazione one-shot.
-    // DEVE restare la prima istruzione: da qui in poi ogni QSettings, il log e
-    // il database devono gia' vedere il nuovo layout su file.
-    DecodiumStorageMigration::configure();
+    QString labStorageError;
+    auto const labStorage = decodium::lab::configureStorage(argc, argv, &labStorageError);
+    if (labStorage == decodium::lab::StorageSetup::Failed) {
+        std::fprintf(stderr, "%s\n", qPrintable(labStorageError));
+        return 2;
+    }
+    if (labStorage == decodium::lab::StorageSetup::NotRequested) {
+        DecodiumStorageMigration::configure();
+    } else {
+        std::fprintf(stderr, "[LAB] Early storage isolation active; normal migration skipped\n");
+    }
 
     // Validate the test-only profile switch before startup workers exist.
     for (int i = 1; i < argc; ++i) {

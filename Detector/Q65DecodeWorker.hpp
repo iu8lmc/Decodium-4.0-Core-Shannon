@@ -2,6 +2,8 @@
 #ifndef Q65DECODEWORKER_HPP
 #define Q65DECODEWORKER_HPP
 
+#include <atomic>
+#include <cstdint>
 #include <QObject>
 #include <QByteArray>
 #include <QStringList>
@@ -52,6 +54,10 @@ public:
   explicit Q65DecodeWorker (QObject * parent = nullptr);
 
   void decode (DecodeRequest const& request);
+  void retireThrough (quint64 serial);
+
+private:
+  std::atomic<std::uint64_t> m_retiredSerial {0};
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);

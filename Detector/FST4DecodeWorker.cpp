@@ -1,3 +1,4 @@
+#include "FST4DecodeCancellation.hpp"
 // -*- Mode: C++ -*-
 #include "wsjtx_config.h"
 #include "Detector/FST4DecodeWorker.hpp"
@@ -1262,7 +1263,9 @@ namespace fst4
 
 std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 {
+  if (decodeCancelled ()) return {};
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  if (decodeCancelled ()) return {};
 
   RuntimeConfig const cfg = config_for_period (qBound (15, request.ntrperiod, 1800),
                                                qBound (1, request.ndepth, 3));
@@ -1351,6 +1354,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 
   for (int inb = 0; inb <= inb1; inb += inb2)
     {
+      if (decodeCancelled ()) return {};
       if (nb < 0)
         {
           npct = inb;
@@ -1368,6 +1372,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
       auto candidates = get_candidates_fst4_cpp (bigfft, cfg, hmod, fa, fb, nfa, nfb, minsync);
       for (auto& candidate : candidates)
         {
+      if (decodeCancelled ()) return {};
           if (request.iwspr == 0 && nb < 0 && npct != 0
               && std::abs (candidate.fc0 - (nfqso + 1.5f * cfg.baud)) > ntol)
             {
@@ -1437,6 +1442,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 
       for (auto const& candidate : ordered)
         {
+          if (decodeCancelled ()) return {};
           bool candidateDone = false;
           fst4_downsample_cpp (bigfft, cfg, candidate.fcSynced, c2);
           for (int jitterIndex = 0; jitterIndex <= cfg.jittermax && !candidateDone; ++jitterIndex)
@@ -1765,9 +1771,25 @@ FST4DecodeWorker::FST4DecodeWorker (QObject* parent)
 {
 }
 
+void FST4DecodeWorker::retireThrough (quint64 serial)
+{
+  auto previous = m_retiredSerial.load (std::memory_order_relaxed);
+  while (previous < serial && !m_retiredSerial.compare_exchange_weak (
+      previous, serial, std::memory_order_release, std::memory_order_relaxed)) {}
+}
+
 void FST4DecodeWorker::decode (DecodeRequest const& request)
 {
-  Q_EMIT decodeReady (request.serial, decodeFst4Rows (request));
+  // FST4W persists learned callsigns; preserve completion until separately verified.
+  ScopedDecodeCancellation cancellation (m_retiredSerial, request.serial, request.iwspr == 0);
+  if (decodeCancelled ()) {
+    Q_EMIT decodeReady (request.serial, {});
+    return;
+  }
+  auto rows = decodeFst4Rows (request);
+  if (request.serial && m_retiredSerial.load (std::memory_order_acquire) >= request.serial)
+    rows.clear ();
+  Q_EMIT decodeReady (request.serial, rows);
 }
 
 }

@@ -81,7 +81,19 @@ WSPRDecodeWorker::WSPRDecodeWorker (QObject * parent)
 
 void WSPRDecodeWorker::decode (DecodeRequest const& request)
 {
+  auto discardRetired = [this, &request] {
+    if (request.serial > m_retiredSerial.load (std::memory_order_acquire))
+      return false;
+    // Completion is required even when skipped: the bridge owns the WAV and
+    // removes it in onWsprDecodeReady before checking session validity.
+    Q_EMIT decodeReady (request.serial, {}, {}, 0);
+    return true;
+  };
+  if (discardRetired ()) return;
+
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  // A mode change may have occurred while another decoder held this mutex.
+  if (discardRetired ()) return;
 
   OutputCollector collector;
   QVector<QByteArray> argv_storage;

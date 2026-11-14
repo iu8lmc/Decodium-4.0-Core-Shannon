@@ -1,6 +1,7 @@
 #include "DecodiumBridge.h"
 #include "DecodeUserFilterConfig.h"
 #include "DxccLookup.h"
+#include <QScopeGuard>
 #include "Network/DecoSyncTime.hpp"
 
 void decodiumBridgeDecodeFlowLog(const QString&);
@@ -23,6 +24,17 @@ void DecodiumBridge::onMsk144DecodeReady(quint64 serial, QStringList rows)
 
 void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
 {
+    auto forgetDecodeSerialGuard = qScopeGuard([this, serial] {
+        m_decodeStartMsBySerial.remove(serial);
+        m_decodeModeBySerial.remove(serial);
+        m_decodeUtcTokenBySerial.remove(serial);
+        m_decodeSessionBySerial.remove(serial);
+    });
+    if (serial <= m_retiredDecodeSerial) {
+        decodiumBridgeDecodeFlowLog(QStringLiteral("onLegacyJtDecodeReady: ignored retired serial=%1").arg(serial));
+        return;
+    }
+
     if (shouldIgnoreDecodeCallbacks()) {
         decodiumBridgeDecodeFlowLog("onLegacyJtDecodeReady: ignored during shutdown");
         return;
@@ -46,7 +58,6 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
     if (m_dxccLookup && !m_dxccLookup->isLoaded()) {
         loadDxccLookupAsync();
     }
-    Q_UNUSED(serial)
     bool changed = false;
     DecodeUserFilterConfig const userFilterConfig = readDecodeUserFilterConfig();
     ensureNativeDecodeDedupIndex();

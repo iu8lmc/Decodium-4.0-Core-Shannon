@@ -1,3 +1,4 @@
+#include "Detector/Ft4DecodeCancellation.hpp"
 // -*- Mode: C++ -*-
 #include "Detector/FT4DecodeWorker.hpp"
 
@@ -1216,22 +1217,26 @@ FT4DecodeWorker::FT4DecodeWorker (QObject * parent)
 
 void FT4DecodeWorker::markLatestDecodeSerial (quint64 serial)
 {
+  if (serial == ~quint64(0))
+    m_cancelGeneration.fetch_add (1, std::memory_order_relaxed);
   m_latestDecodeSerial.store (serial, std::memory_order_relaxed);
 }
 
 void FT4DecodeWorker::beginShutdown ()
 {
   m_shuttingDown.store (true, std::memory_order_relaxed);
-  m_latestDecodeSerial.store (~quint64(0), std::memory_order_relaxed);
+  markLatestDecodeSerial (~quint64(0));
 }
 
 void FT4DecodeWorker::decode (DecodeRequest const& request)
 {
   QElapsedTimer totalTimer;
   totalTimer.start ();
+  auto const cancelGeneration = m_cancelGeneration.load (std::memory_order_relaxed);
   quint64 latestSerial = m_latestDecodeSerial.load (std::memory_order_relaxed);
   if (m_shuttingDown.load (std::memory_order_relaxed)
-      || latestSerial == ~quint64(0))
+      || latestSerial == ~quint64(0)
+      || m_cancelGeneration.load (std::memory_order_relaxed) != cancelGeneration)
     {
       return;
     }
@@ -1247,7 +1252,8 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
 
   latestSerial = m_latestDecodeSerial.load (std::memory_order_relaxed);
   if (m_shuttingDown.load (std::memory_order_relaxed)
-      || latestSerial == ~quint64(0))
+      || latestSerial == ~quint64(0)
+      || m_cancelGeneration.load (std::memory_order_relaxed) != cancelGeneration)
     {
       return;
     }
@@ -1316,6 +1322,7 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
           });
         }, Qt::QueuedConnection);
     }
+  ScopedDecodeCancellation cancellation (m_cancelGeneration, cancelGeneration);
   ftx_ft4_decode_c (iwave, &nqsoprogress, &nfqso, &nfa, &nfb,
                     &ndepth, &lapcqonly, &ncontest, mycall.data (), hiscall.data (),
                     &syncs[0], &snrs[0], &dts[0], &freqs[0], &naps[0], &quals[0],
@@ -1330,7 +1337,8 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
 
   latestSerial = m_latestDecodeSerial.load (std::memory_order_relaxed);
   if (m_shuttingDown.load (std::memory_order_relaxed)
-      || latestSerial == ~quint64(0))
+      || latestSerial == ~quint64(0)
+      || m_cancelGeneration.load (std::memory_order_relaxed) != cancelGeneration)
     {
       return;
     }

@@ -42,9 +42,13 @@ inline void ensureSettingsProfileInitialized(const QString& profileName)
     // profiles live below `MultiSettings/`.  Prefer the direct group so the
     // control shown in QML and the values used by the bridge are identical.
     settings.beginGroup(profileName);
-    bool const directProfileExists = !settings.allKeys().isEmpty() || !settings.childGroups().isEmpty();
     bool const alreadyInitialized =
         settings.value(QStringLiteral("_ProfileSettingsInitialized"), false).toBool();
+    // A completed profile already contains this marker. Avoid enumerating
+    // every key on each settings read; leave the unmarked/legacy discovery
+    // path intact and re-read the marker rather than caching profile state.
+    bool const directProfileExists = alreadyInitialized
+        || !settings.allKeys().isEmpty() || !settings.childGroups().isEmpty();
     settings.endGroup();
     if (directProfileExists || alreadyInitialized) {
       return;
@@ -104,7 +108,9 @@ inline bool beginActiveSettingsProfile(QSettings& settings)
 
     ensureSettingsProfileInitialized(profileName);
     settings.beginGroup(profileName);
-    bool const directProfileExists = !settings.allKeys().isEmpty() || !settings.childGroups().isEmpty();
+    bool const directProfileExists =
+        settings.value(QStringLiteral("_ProfileSettingsInitialized"), false).toBool()
+        || !settings.allKeys().isEmpty() || !settings.childGroups().isEmpty();
     settings.endGroup();
     if (!directProfileExists) {
         // Compatibility with profiles written by the historical WSJT-X

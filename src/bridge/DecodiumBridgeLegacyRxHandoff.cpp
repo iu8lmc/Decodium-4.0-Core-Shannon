@@ -15,7 +15,7 @@ void DecodiumBridge::migrateActiveMonitoringToLegacyBackend()
 
     decodiumBridgeAudioLevelLog(QStringLiteral("Migrating active monitor session to legacy backend"));
     // Results still in flight belong to the preceding native RX session.
-    ++m_decodeSessionId;
+    invalidateDecodeSession();
     resetNativeDecodeDedupIndex();
     if (m_decoding) {
         m_decoding = false;

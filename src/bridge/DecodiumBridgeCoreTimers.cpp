@@ -11,6 +11,7 @@ void DecodiumBridge::initialiseCoreTimers()
 {
     // Period timer: 250ms tick, mode determines how many ticks = 1 period
     m_periodTimer = new QTimer(this);
+    m_periodTimer->setObjectName(QStringLiteral("decodiumPeriodTimer"));
     m_periodTimer->setInterval(TIMER_MS);
     connect(m_periodTimer, &QTimer::timeout, this, &DecodiumBridge::onPeriodTimer);
 

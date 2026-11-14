@@ -66,6 +66,61 @@ class SettingsRestartTest : public QObject
 {
     Q_OBJECT
 private slots:
+    void directAndLegacyProfilesKeepPrecedence()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        settings.setValue("GlobalValue", 17);
+        settings.setValue("Marked/_ProfileSettingsInitialized", true);
+        settings.setValue("Marked/Value", 1);
+        settings.setValue("Unmarked/Value", 2);
+        settings.setValue("FalseMarker/_ProfileSettingsInitialized", false);
+        settings.setValue("FalseMarker/Value", 3);
+        settings.setValue("MultiSettings/Legacy/Value", 4);
+        settings.setValue("MultiSettings/Marked/Value", 99);
+        settings.sync();
+        auto* app = QCoreApplication::instance();
+        const QStringList profiles {"Marked", "Unmarked", "FalseMarker", "Legacy"};
+        for (int i = 0; i < profiles.size(); ++i) {
+            app->setProperty("decodiumConfigName", profiles[i]);
+            QSettings read(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+            QVERIFY(decodium::beginActiveSettingsProfile(read));
+            QCOMPARE(read.value("Value").toInt(), i + 1);
+            QVERIFY(!read.contains("GlobalValue"));
+        }
+        // No memoized routing: replacing a direct profile with a legacy one
+        // must be observed by the next caller in the same process.
+        settings.remove("Marked");
+        settings.sync();
+        app->setProperty("decodiumConfigName", "Marked");
+        QSettings read(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        QVERIFY(decodium::beginActiveSettingsProfile(read));
+        QCOMPARE(read.value("Value").toInt(), 99);
+        app->setProperty("decodiumConfigName", QString {});
+    }
+
+    void benchmarkInitializedProfileLookup()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        settings.setValue("Bench/_ProfileSettingsInitialized", true);
+        for (int i = 0; i < 2000; ++i)
+            settings.setValue(QStringLiteral("Bench/Group%1/Value%2").arg(i % 20).arg(i), i);
+        settings.setValue("Bench/Target", 42);
+        settings.sync();
+        QCoreApplication::instance()->setProperty("decodiumConfigName", "Bench");
+        int value = 0;
+        QBENCHMARK {
+            value = decodium::profiledSettingsValue({}, "Target", 0).toInt();
+        }
+        QCOMPARE(value, 42);
+        QCoreApplication::instance()->setProperty("decodiumConfigName", QString {});
+    }
+
     void newProfileDoesNotCopyOtherProfiles()
     {
         QTemporaryDir dir;

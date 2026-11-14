@@ -3676,6 +3676,10 @@ private:
     mutable QMutex m_audioBufferMutex;
     quint64 m_decodeSerial {0};
     quint64 m_decodeSessionId {0};
+    // Serial numbers never reset. Keep the invalidated-session boundary even
+    // after request metadata is cleared or expires; slow current requests above
+    // this boundary remain eligible for their existing callback policy.
+    quint64 m_retiredDecodeSerial {0};
     quint64 m_periodTimerSessionId {0};
     qint64 m_bridgeOwnedJtFallbackLastSlot {-1};
     qint64 m_bridgeOwnedJtFallbackLastDispatchMs {0};
@@ -5045,6 +5049,7 @@ private:
     bool ft4LiveDecodeBacklogActive(qint64 nowMs, int minAgeMs, quint64 ignoreSerial,
                                     QString* detail = nullptr) const;
     void drainFt4LiveDecodeBacklog(quint64 keepSerial, const QString& reason);
+    void invalidateDecodeSession();
     void resetFtxDecodeWorkersForModeChange(const QString& previousMode,
                                             const QString& nextMode);
     void queueFt8DecodeRequest(const QVector<short>& audioSnapshot, quint64 serial,

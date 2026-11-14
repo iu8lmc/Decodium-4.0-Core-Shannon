@@ -4,6 +4,7 @@ import argparse, json, os, subprocess, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 p=argparse.ArgumentParser();p.add_argument('--binary',type=Path,default=ROOT/'build/decodium');p.add_argument('--qml',type=Path,default=ROOT/'build/qml/decodium/Main.qml');a=p.parse_args()
+if subprocess.run(['pgrep','-x','decodium.*|Decodium4'],capture_output=True).returncode==0:raise SystemExit('Another Decodium instance is running')
 qml=a.qml.resolve();original=qml.read_text();marker='GlassApplicationWindow {'
 if original.count(marker)!=1:raise RuntimeError('unexpected QML root')
 probe='''\n    Timer { interval:9000; running:true; repeat:false; onTriggered: {\n      if(bridge.callsign!=="9H1SR")return;\n      var delay=15000-(Date.now()%15000)+150;matchedTx.interval=delay;matchedTx.start();\n      console.log("[MATCHED-FT8] awaiting slot "+delay);\n    } }\n    Timer { id: matchedTx; repeat:false; onTriggered: {\n      bridge.resetStandardTxMessages();bridge.sendTx(6);console.log("[MATCHED-FT8] tx requested");\n    } }\n'''

@@ -1,5 +1,6 @@
 #include "wsjtx_config.h"
 #include "commons.h"
+#include "Detector/Ft4DecodeCancellation.hpp"
 
 #include <algorithm>
 #include <array>
@@ -22,6 +23,15 @@
 
 namespace
 {
+
+thread_local std::atomic<std::uint64_t> const* cancel_generation = nullptr;
+thread_local std::uint64_t cancel_expected = 0;
+
+bool ft4_decode_cancelled ()
+{
+  return cancel_generation
+      && cancel_generation->load (std::memory_order_relaxed) != cancel_expected;
+}
 
 constexpr int kFt4Bits {77};
 constexpr int kFt4K {91};
@@ -1480,7 +1490,7 @@ void run_ft4_decode (short const* iwave,
                      std::vector<Ft4DecodeLine>& output)
 {
   output.clear ();
-  if (!iwave)
+  if (!iwave || ft4_decode_cancelled ())
     {
       return;
     }
@@ -1560,6 +1570,7 @@ void run_ft4_decode (short const* iwave,
 
   for (int isp = 1; isp <= nsp; ++isp)
     {
+      if (ft4_decode_cancelled ()) return;
       if (isp == 2)
         {
           if (ndecodes == 0)
@@ -1654,6 +1665,7 @@ void run_ft4_decode (short const* iwave,
 
       for (int icand = 0; icand < ncand; ++icand)
         {
+          if (ft4_decode_cancelled ()) return;
           float const f0 = candidate[static_cast<size_t> (2 * icand)];
           float const snr = candidate[static_cast<size_t> (2 * icand + 1)] - 1.0f;
 
@@ -1684,6 +1696,7 @@ void run_ft4_decode (short const* iwave,
           bool decoded_candidate = false;
           for (int iseg = 1; iseg <= 3 && !decoded_candidate; ++iseg)
             {
+              if (ft4_decode_cancelled ()) return;
               float smax = -99.0f;
               int ibest = -1;
               int idfbest = 0;
@@ -1958,6 +1971,7 @@ void run_ft4_decode (short const* iwave,
               int nharderror = -1;
               for (int ipass = 1; ipass <= npasses; ++ipass)
                 {
+                  if (ft4_decode_cancelled ()) return;
                   std::array<signed char, 2 * kFt4Nd> apmask {};
                   int iaptype = 0;
                   if (ipass == 1) llr = llra;
@@ -2427,6 +2441,8 @@ void decode_ft4_into_outputs (short const* iwave,
                   fixed_to_string (hiscall, hiscall_len),
                   rows);
 
+  if (ft4_decode_cancelled ()) return;
+
   int const count = std::min (static_cast<int> (rows.size ()), kFt4MaxLines);
   for (int i = 0; i < count; ++i)
     {
@@ -2480,6 +2496,20 @@ void emit_ft4_results (int nutc, int nagain, char const* temp_dir,
     }
 }
 
+}
+
+decodium::ft4::ScopedDecodeCancellation::ScopedDecodeCancellation(
+    std::atomic<std::uint64_t> const& generation, std::uint64_t expected)
+  : m_previousGeneration(cancel_generation), m_previousExpected(cancel_expected)
+{
+  cancel_generation = &generation;
+  cancel_expected = expected;
+}
+
+decodium::ft4::ScopedDecodeCancellation::~ScopedDecodeCancellation()
+{
+  cancel_generation = m_previousGeneration;
+  cancel_expected = m_previousExpected;
 }
 
 extern "C" void ftx_ft4_decode_c (short const* iwave,

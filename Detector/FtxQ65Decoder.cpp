@@ -25,6 +25,7 @@
 #include <QString>
 
 #include "Detector/FortranRuntimeGuard.hpp"
+#include "Detector/Q65DecodeCancellation.hpp"
 
 extern "C"
 {
@@ -1207,6 +1208,8 @@ namespace
     state.last_j0 = j0;
     state.last_mode = mode_q65;
 
+    if (decodium::q65::decodeCancelled ()) return result;
+
     std::vector<float> ccf1;
     int ipk = 0;
     int jpk = 0;
@@ -1270,6 +1273,8 @@ namespace
         float const smax = *std::max_element (curve.begin (), curve.end ());
         result.snr1 = rms2 > 0.0f ? smax / rms2 : 0.0f;
       }
+
+    if (decodium::q65::decodeCancelled ()) return result;
 
     if (result.idec <= 0)
       {
@@ -1442,6 +1447,7 @@ namespace
                            bool lapcqonly, std::vector<Q65Line>& out_lines,
                            std::vector<int>& nqf)
   {
+    if (decodium::q65::decodeCancelled ()) return;
     int const iseq = q65_sequence (nutc, ntrperiod);
     if (lclearave)
       {
@@ -1511,6 +1517,7 @@ namespace
     Q65Dec0Result dec0 = q65_dec0 (state, audio, 0, ntrperiod, nfqso, ntol, lclearave,
                                    lnewdat, emedelay, nsps, mode_q65, nfa, nfb,
                                    ibwa, ibwb, npasses, maxiters, max_drift, 0, iseq);
+    if (decodium::q65::decodeCancelled ()) return;
     if (dec0.idec >= 0)
       {
         emit_decode (dec0, dec0.xdt, dec0.f0, dec0.idec, nused);
@@ -1535,6 +1542,7 @@ namespace
                 bool loop_decoded = false;
                 for (int ipass = 0; ipass <= passes; ++ipass)
                   {
+                    if (decodium::q65::decodeCancelled ()) return;
                     int apmask_bits[kQ65ApBits] {};
                     int apsymbols_bits[kQ65ApBits] {};
                     int apmask[kQ65ApPacked] {};
@@ -1652,6 +1660,7 @@ namespace
 
     for (Q65Candidate const& candidate : dec0.candidates)
       {
+        if (decodium::q65::decodeCancelled ()) return;
         bool dupe = false;
         for (float decoded_freq : decoded_freqs)
           {
@@ -1683,6 +1692,7 @@ namespace
         int passes = lapcqonly ? 1 : ((nqsoprogress == 5) ? 3 : 2);
         for (int ipass = 0; ipass <= passes; ++ipass)
           {
+            if (decodium::q65::decodeCancelled ()) return;
             int apmask_bits[kQ65ApBits] {};
             int apsymbols_bits[kQ65ApBits] {};
             int apmask[kQ65ApPacked] {};
@@ -1815,6 +1825,8 @@ namespace
                         trim_fixed (mycall, 12), trim_fixed (hiscall, 12), trim_fixed (hisgrid, 6),
                         *nqsoprogress, *ncontest, *lapcqonly != 0, lines, nqf);
 
+    if (decodium::q65::decodeCancelled ()) return;
+
     if (!(*nagain))
       {
         for (int freq : nqf)
@@ -1874,7 +1886,9 @@ namespace
         return;
       }
 
+    if (decodium::q65::decodeCancelled ()) { *nout = 0; return; }
     QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+    if (decodium::q65::decodeCancelled ()) { *nout = 0; return; }
     decode_q65_core_native (iwave, iwaveSamples, nqd0, nutc, ntrperiod, nsubmode, nfqso, ntol, ndepth,
                             nfa, nfb, nclearave, single_decode, nagain, max_drift,
                             lnewdat, emedelay, mycall, hiscall, hisgrid, nqsoprogress,

@@ -63,6 +63,7 @@ void DecodiumBridge::emitRxDecodeListChangedThrottled(bool normalizeBeforeEmit)
                                30);
     if (m_rxDecodeListEmitTimer == nullptr) {
         m_rxDecodeListEmitTimer = new QTimer(this);
+        m_rxDecodeListEmitTimer->setObjectName(QStringLiteral("decodiumRxDecodeListEmitTimer"));
         m_rxDecodeListEmitTimer->setSingleShot(true);
         // Signal RX must feel live, but the expensive part is a full-list
         // normalize + model rebuild. One update every 250ms is responsive

@@ -1,6 +1,7 @@
 // -*- Mode: C++ -*-
 #include "Detector/Q65DecodeWorker.hpp"
 #include "wsjtx_config.h"
+#include "Detector/Q65DecodeCancellation.hpp"
 
 #include <algorithm>
 
@@ -129,8 +130,20 @@ Q65DecodeWorker::Q65DecodeWorker (QObject * parent)
 {
 }
 
+void Q65DecodeWorker::retireThrough (quint64 serial)
+{
+  auto previous = m_retiredSerial.load (std::memory_order_relaxed);
+  while (previous < serial && !m_retiredSerial.compare_exchange_weak (
+      previous, serial, std::memory_order_release, std::memory_order_relaxed)) {}
+}
+
 void Q65DecodeWorker::decode (DecodeRequest const& request)
 {
+  ScopedDecodeCancellation cancellation (m_retiredSerial, request.serial, !request.coherentAvgEnabled);
+  if (decodeCancelled ()) {
+    Q_EMIT decodeReady (request.serial, {});
+    return;
+  }
   QVector<short> localAudio = request.audio;
   int syncsnrs[kQ65MaxLines] {};
   int snrs[kQ65MaxLines] {};
@@ -187,6 +200,10 @@ void Q65DecodeWorker::decode (DecodeRequest const& request)
                      static_cast<fortran_charlen_t> (12), static_cast<fortran_charlen_t> (6),
                      static_cast<fortran_charlen_t> (kQ65MaxLines * kDecodedChars));
 
+  if (request.serial != 0 && request.serial <= m_retiredSerial.load (std::memory_order_acquire)) {
+    Q_EMIT decodeReady (request.serial, {});
+    return;
+  }
   QString const utcPrefix = format_decode_utc (request.nutc);
   if (request.coherentAvgEnabled)
     {

@@ -1847,7 +1847,19 @@ WorldMapGpuItem::WorldMapGpuItem(QQuickItem* parent)
                 m_greylineGeometryDirty = true;
                 m_geometryDirty = true;
             }
-            update();
+            // With no paths or pulsing overlays, only the UTC clock and
+            // greyline change, at whole-second resolution. Keep polling for
+            // viewport motion, but avoid synchronising the entire map at the
+            // animation rate while its contents are static. Setters still
+            // schedule immediate updates through markDirty().
+            qint64 const clockSecond = QDateTime::currentSecsSinceEpoch();
+            bool const clockChanged = clockSecond != m_lastFrameClockSecond;
+            bool const animated = m_transmitting || !m_contacts.isEmpty()
+                || m_hasAnimatedGeographicFeatures;
+            if (pruned || viewportChanged || animated || clockChanged) {
+                m_lastFrameClockSecond = clockSecond;
+                update();
+            }
         }
     });
     m_frameTimer.start();
@@ -2125,6 +2137,7 @@ void WorldMapGpuItem::setGeographicFeatures(const QVariantList& features)
         return;
     }
     m_geographicFeatures = features;
+    m_hasAnimatedGeographicFeatures = earthquakeFeatures > 0;
     markDirty(false);
 }
 

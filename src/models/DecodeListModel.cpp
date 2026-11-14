@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 namespace {
@@ -18,7 +19,7 @@ struct RoleSpec {
     char const* mapKey;
 };
 
-static RoleSpec const kRoleSpecs[] = {
+static constexpr RoleSpec kRoleSpecs[] = {
     { DecodeListModel::TimeRole,                 "time",               "time" },
     { DecodeListModel::UtcRole,                  "utc",                "utc" },
     { DecodeListModel::DbRole,                   "db",                 "db" },
@@ -64,14 +65,31 @@ static RoleSpec const kRoleSpecs[] = {
     { DecodeListModel::EntryRole,                "modelData",          "" },
 };
 
-QString roleFieldKey(int role)
-{
-    for (auto const& spec : kRoleSpecs) {
-        if (spec.role == role) {
-            return QString::fromLatin1(spec.mapKey);
-        }
+static_assert([] {
+    for (size_t i = 0; i < std::size(kRoleSpecs); ++i) {
+        if (kRoleSpecs[i].role != DecodeListModel::TimeRole + static_cast<int>(i))
+            return false;
     }
-    return QString();
+    return true;
+}(), "Decode roles must remain contiguous and match the role table");
+
+QString const& roleFieldKey(int role)
+{
+    // Delegate reads are frequent even when the decode history is unchanged.
+    // Build these immutable keys once instead of scanning and allocating a
+    // QString for every field read. The assertion keeps direct indexing safe
+    // if new roles are added later.
+    static const auto keys = [] {
+        std::array<QString, std::size(kRoleSpecs)> result;
+        for (size_t i = 0; i < result.size(); ++i)
+            result[i] = QString::fromLatin1(kRoleSpecs[i].mapKey);
+        return result;
+    }();
+    static const QString empty;
+    if (role < DecodeListModel::TimeRole || role > DecodeListModel::EntryRole) {
+        return empty;
+    }
+    return keys[static_cast<size_t>(role - DecodeListModel::TimeRole)];
 }
 
 } // namespace
@@ -99,7 +117,7 @@ QVariant DecodeListModel::data(QModelIndex const& index, int role) const
 
     if (role == EntryRole) return entry;
 
-    QString const key = roleFieldKey(role);
+    QString const& key = roleFieldKey(role);
     if (key.isEmpty()) return QVariant();
     return entry.value(key);
 }

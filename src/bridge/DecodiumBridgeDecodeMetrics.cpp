@@ -154,6 +154,7 @@ void DecodiumBridge::setDevOverlayActive(bool v)
         m_decodeRateCommittedCounter.store(0, std::memory_order_relaxed);
         if (m_perfMetricsTimer == nullptr) {
             m_perfMetricsTimer = new QTimer(this);
+            m_perfMetricsTimer->setObjectName(QStringLiteral("decodiumPerfMetricsTimer"));
             m_perfMetricsTimer->setInterval(250);
             connect(m_perfMetricsTimer, &QTimer::timeout, this, [this]() {
                 // Calcola mean + p99 dal ring buffer.

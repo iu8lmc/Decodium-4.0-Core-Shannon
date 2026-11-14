@@ -35,6 +35,13 @@ void DecodiumBridge::onWsprDecodeReady(quint64 serial, QStringList rows,
         forgetDecodeSerial();
     });
 
+    // Keep temporary-file and metadata cleanup above this gate. An obsolete
+    // completion must not change the busy state of a newer session.
+    if (serial <= m_retiredDecodeSerial) {
+        decodiumBridgeDecodeFlowLog(QStringLiteral("onWsprDecodeReady: ignored retired serial=%1").arg(serial));
+        return;
+    }
+
     if (shouldIgnoreDecodeCallbacks()) {
         decodiumBridgeDecodeFlowLog("onWsprDecodeReady: ignored during shutdown");
         return;

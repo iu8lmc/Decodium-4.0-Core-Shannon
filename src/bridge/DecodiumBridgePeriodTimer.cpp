@@ -1,12 +1,15 @@
 #include "DecodiumBridge.h"
 #include "controllers/ActiveStationsModel.hpp"
 #include <QDateTime>
+#include <QElapsedTimer>
 
 void decodiumBridgeDecodeFlowLog(const QString&);
 #define bridgeLog decodiumBridgeDecodeFlowLog
 
 void DecodiumBridge::onPeriodTimer()
 {
+    QElapsedTimer dispatchPhases;
+    dispatchPhases.start();
     // Progress bar e watchdog usano il counter di tick (cadenza UI invariata).
     // La decisione di alimentare il decoder è invece ancorata al boundary UTC
     // calcolato dall'UTC corretto NTP / periodMs, così il
@@ -35,6 +38,11 @@ void DecodiumBridge::onPeriodTimer()
     // boundary, non al counter che può driftare.
     m_periodProgress = (periodMs > 0) ? (msInSlot * 100 / periodMs) : 0;
     emit periodProgressChanged();
+    qint64 const progressPhaseMs = dispatchPhases.elapsed();
+    if (progressPhaseMs >= 90) {
+        bridgeLog(QStringLiteral("[PERIODPHASE] progress_ms=%1 mode=%2")
+                      .arg(progressPhaseMs).arg(modeSnapshot));
+    }
 
     if (rtlSdrGeneralReceiverActive()) {
         // WFM/NFM/AM/SSB/CW are continuous receiver modes. They must not run
@@ -178,8 +186,16 @@ void DecodiumBridge::onPeriodTimer()
         m_autoCQPeriodsMissed = 0;
     }
 
+    qint64 const earlyStartMs = dispatchPhases.elapsed();
     maybeDispatchFt8EarlyDecode(utcSlot, msInSlot, periodMs);
+    qint64 const ft8EndMs = dispatchPhases.elapsed();
     maybeDispatchFt4EarlyDecode(utcSlot, msInSlot, periodMs);
+    qint64 const ft4EndMs = dispatchPhases.elapsed();
+    if (ft4EndMs - earlyStartMs >= 90) {
+        bridgeLog(QStringLiteral("[PERIODPHASE] ft8_early_ms=%1 ft4_early_ms=%2 progress_ms=%3 mode=%4")
+                      .arg(ft8EndMs - earlyStartMs).arg(ft4EndMs - ft8EndMs)
+                      .arg(progressPhaseMs).arg(modeSnapshot));
+    }
     bool const pendingAutoDecodeBeforeBoundary =
         timeSyncMode && hasPendingTimeSyncDecodeForMode(modeSnapshot);
 

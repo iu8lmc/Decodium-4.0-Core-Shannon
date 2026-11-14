@@ -277,6 +277,8 @@ private:
     int m_txTravelMs {5200};
     int m_frameIntervalMs {80};
     qreal m_animationPhase {0.0};
+    qint64 m_lastFrameClockSecond {-1};
+    bool m_hasAnimatedGeographicFeatures {false};
     double m_viewCenterLon {0.0};
     double m_viewCenterLat {0.0};
     double m_viewSpanLon {360.0};

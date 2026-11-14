@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QVector>
 #include <atomic>
+#include <cstdint>
 
 namespace decodium
 {
@@ -51,6 +52,7 @@ Q_SIGNALS:
 
 private:
   std::atomic<quint64> m_latestDecodeSerial {0};
+  std::atomic<std::uint64_t> m_cancelGeneration {0};
   std::atomic<bool> m_shuttingDown {false};
 };
 

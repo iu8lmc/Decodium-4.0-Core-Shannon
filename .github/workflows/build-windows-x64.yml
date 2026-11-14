@@ -298,6 +298,19 @@ jobs:
           set -euo pipefail
           bash scripts/ci/run-cat-release-gate.sh build-windows "$(nproc)"
 
+      - name: Verify performance and decode lifecycle regressions
+        run: |
+          set -euo pipefail
+          export PATH="${QT_PREFIX}/bin:/mingw64/bin:${HAMLIB_PREFIX}/bin:${RTLSDR_PREFIX}/bin:${PATH}"
+          cmake --build build-windows --target test_settings_profile_restart test_decode_list_model test_world_map_frame_cadence test_ft4_decode_cancellation test_wspr_worker_queue test_lab_storage_isolation test_q65_decoder_continuity test_fst4_decode_cancellation test_wspr_resource_cleanup --parallel "$(nproc)"
+          ctest --test-dir build-windows -j1 --output-on-failure -R '^(test_settings_profile_restart|test_decode_list_model|test_world_map_frame_cadence|test_ft4_decode_cancellation|test_wspr_worker_queue|test_lab_storage_isolation|test_q65_decoder_continuity|test_fst4_decode_cancellation|test_wspr_resource_valid|test_wspr_resource_missing)$'
+
+      - name: Verify Windows PowerShell test harness
+        run: |
+          set -euo pipefail
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/tools/windows_performance/Test-Comparator.ps1
+          powershell.exe -NoProfile -Command '$t=$null; $e=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD "tests/tools/windows_performance/Run-Test.ps1"),[ref]$t,[ref]$e); $e | Format-List; if($e.Count){exit 1}'
+
       - name: Build Decodium
         run: |
           set -euo pipefail
