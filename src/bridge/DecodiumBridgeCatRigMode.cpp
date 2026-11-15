@@ -101,12 +101,13 @@ void DecodiumBridge::applyConfiguredCatRigMode(const QString& reason,
             // stale USB snapshot cannot win during TX.
             if (configuredCatRigModeRequestsDataPacket()
                 && reason.compare(QStringLiteral("startTx"), Qt::CaseInsensitive) == 0) {
-                QTimer::singleShot(350, this, [this]() {
+                QTimer::singleShot(350, this, [this, rigMode]() {
                     if (m_transmitting && m_mode != QStringLiteral("RTTY")
                         && m_catBackend == QStringLiteral("cat4om")
                         && m_cat4OmCat && m_cat4OmCat->connected()) {
-                        bridgeLog(QStringLiteral("CAT rig mode verify (post-PTT): cat4om -> DATA-U"));
-                        m_cat4OmCat->setRigMode(QStringLiteral("DATA-U"));
+                        if (configuredCatRigMode() != rigMode) return;
+                        bridgeLog(QStringLiteral("CAT rig mode verify (post-PTT): cat4om -> %1").arg(rigMode));
+                        m_cat4OmCat->setRigMode(rigMode);
                     }
                 });
             }
@@ -127,12 +128,13 @@ void DecodiumBridge::applyConfiguredCatRigMode(const QString& reason,
         m_omniRigCat->setRigMode(rigMode);
         if (configuredCatRigModeRequestsDataPacket()
             && reason.compare(QStringLiteral("startTx"), Qt::CaseInsensitive) == 0) {
-            QTimer::singleShot(350, this, [this]() {
+            QTimer::singleShot(350, this, [this, rigMode]() {
                 if (m_transmitting && m_mode != QStringLiteral("RTTY")
                     && m_catBackend == QStringLiteral("omnirig")
                     && m_omniRigCat && m_omniRigCat->connected()) {
-                    bridgeLog(QStringLiteral("CAT rig mode verify (post-PTT): omnirig -> DATA-U"));
-                    m_omniRigCat->setRigMode(QStringLiteral("DATA-U"));
+                    if (configuredCatRigMode() != rigMode) return;
+                    bridgeLog(QStringLiteral("CAT rig mode verify (post-PTT): omnirig -> %1").arg(rigMode));
+                    m_omniRigCat->setRigMode(rigMode);
                 }
             });
         }

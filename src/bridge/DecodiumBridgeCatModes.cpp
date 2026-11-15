@@ -8,6 +8,12 @@ QString DecodiumBridge::configuredCatRigMode() const
     if (rawText.compare(QStringLiteral("None"), Qt::CaseInsensitive) == 0) {
         return {};
     }
+    if (rawText.compare(QStringLiteral("Data/Pkt LSB"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("DATA-L"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("PKTLSB"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("DIGL"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("DATA-L");
+    }
     if (rawText.compare(QStringLiteral("Data/Pkt"), Qt::CaseInsensitive) == 0
         || rawText.compare(QStringLiteral("DATA-U"), Qt::CaseInsensitive) == 0
         || rawText.compare(QStringLiteral("USB-D"), Qt::CaseInsensitive) == 0
@@ -29,6 +35,9 @@ QString DecodiumBridge::configuredCatRigMode() const
     if (index == 2) {
         return {};
     }
+    if (index == 3) {
+        return QStringLiteral("DATA-L");
+    }
     return QStringLiteral("USB");
 }
 
@@ -37,7 +46,11 @@ bool DecodiumBridge::configuredCatRigModeRequestsDataPacket() const
     QVariant const raw = getSetting(QStringLiteral("CATMode"), 0);
     QString const rawText = raw.toString().trimmed();
 
-    if (rawText.compare(QStringLiteral("Data/Pkt"), Qt::CaseInsensitive) == 0
+    if (rawText.compare(QStringLiteral("Data/Pkt LSB"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("DATA-L"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("PKTLSB"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("DIGL"), Qt::CaseInsensitive) == 0
+        || rawText.compare(QStringLiteral("Data/Pkt"), Qt::CaseInsensitive) == 0
         || rawText.compare(QStringLiteral("DATA-U"), Qt::CaseInsensitive) == 0
         || rawText.compare(QStringLiteral("DATA-USB"), Qt::CaseInsensitive) == 0
         || rawText.compare(QStringLiteral("USB-D"), Qt::CaseInsensitive) == 0
@@ -49,7 +62,7 @@ bool DecodiumBridge::configuredCatRigModeRequestsDataPacket() const
 
     bool ok = false;
     int const index = raw.toInt(&ok);
-    return ok && index == 1;
+    return ok && (index == 1 || index == 3);
 }
 
 QString DecodiumBridge::rttyRigMode() const

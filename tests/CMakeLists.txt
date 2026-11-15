@@ -1120,3 +1120,8 @@ target_include_directories(test_appimage_qml_snapshot PRIVATE ${CMAKE_SOURCE_DIR
 target_link_libraries(test_appimage_qml_snapshot PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME test_appimage_qml_snapshot COMMAND $<TARGET_FILE:test_appimage_qml_snapshot>)
 set_tests_properties(test_appimage_qml_snapshot PROPERTIES TIMEOUT 30)
+
+add_executable(test_panadapter_black_autorange test_panadapter_black_autorange.cpp)
+target_include_directories(test_panadapter_black_autorange PRIVATE ${CMAKE_SOURCE_DIR})
+set_target_properties(test_panadapter_black_autorange PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+add_test(NAME test_panadapter_black_autorange COMMAND test_panadapter_black_autorange)

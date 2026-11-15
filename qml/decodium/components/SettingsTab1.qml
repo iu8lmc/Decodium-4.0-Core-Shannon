@@ -1264,7 +1264,7 @@ SettingsPageScroll {
         Text { text: qsTr("Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
         DecoComboBox {
             id: modeCombo
-            model: ["USB","Data/Pkt","None"]; Layout.fillWidth: true; implicitHeight: controlHeight
+            model: ["USB","Data/Pkt","None","Data/Pkt LSB"]; Layout.fillWidth: true; implicitHeight: controlHeight
             currentIndex: dialog.settingChoiceIndex("CATMode", model, 0)
             onActivated: bridge.setSetting("CATMode", currentText)
             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }

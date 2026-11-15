@@ -3,6 +3,7 @@
 // Waterfall palette ported from deskHPSDR waterfall.c (GPL G0ORX/DL1BZ)
 
 #include "PanadapterItem.hpp"
+#include "PanadapterAutoRange.hpp"
 #include "DecodiumBridge.h"
 #include "WaterfallIntensityPalette.hpp"
 
@@ -5329,11 +5330,12 @@ void PanadapterItem::recordGpuFftCompute()
                     ? estimatedFloorDb
                     : (0.18f * estimatedFloorDb + 0.82f * m_measuredFloor);
                 float const displayRangeDb = gpuDirectAutoRangeSpanDb(m_contrastLevel);
-                float const directBlackThresh = waterfallBlackThresholdForLevel(m_blackLevel, true);
-                displayMinDb = measuredFloorDb
-                    - directBlackThresh * displayRangeDb
-                    - gpuDirectAutoRangeFloorMarginDb()
-                    + noiseCutBiasDb;
+                // Black is applied by the waterfall shader. Shifting the
+                // auto-range minimum by the same threshold cancels its effect
+                // for signals inside the range and makes the control appear
+                // ineffective on the direct GPU path.
+                displayMinDb = panadapterDirectAutoRangeMinDb(
+                    measuredFloorDb, gpuDirectAutoRangeFloorMarginDb(), noiseCutBiasDb);
                 displayMaxDb = displayMinDb + displayRangeDb;
                 if (std::abs(m_minDb - displayMinDb) > 0.25f
                     || std::abs(m_maxDb - displayMaxDb) > 0.25f) {
