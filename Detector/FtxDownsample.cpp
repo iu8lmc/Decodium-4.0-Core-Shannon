@@ -267,8 +267,9 @@ struct Ft8VarDownsampleWorkspace
   }
 };
 
-// Gli spazi di lavoro per thread NON vengono distrutti alla morte del thread,
-// e la perdita e' voluta. Il distruttore chiamerebbe fftwf_destroy_plan e
+// Su Windows e macOS gli spazi di lavoro mantengono la durata storica.
+// Su Linux vengono distrutti alla morte del thread. Su Windows il distruttore
+// chiamerebbe fftwf_destroy_plan e
 // fftwf_free da dentro LdrShutdownThread, quando le strutture per-thread di
 // Qt sono gia' smontate: con PageHeap attivo si vede il segfault dentro
 // Qt6Core su un contatore di riferimenti gia' liberato, e senza PageHeap la
@@ -278,29 +279,49 @@ struct Ft8VarDownsampleWorkspace
 // FftCompat.hpp e' dichiarato come perdita voluta.
 //
 // I thread di decodifica vengono dal pool e sono riciclati, quindi la perdita
-// e' limitata al numero di thread che il pool arriva a creare.
+// sulle piattaforme interessate dipende dai thread che il pool arriva a creare.
 Ft8DownsampleWorkspace& downsample_workspace ()
 {
+#if defined(__linux__)
+  thread_local Ft8DownsampleWorkspace workspace;
+  return workspace;
+#else
   thread_local Ft8DownsampleWorkspace* workspace = new Ft8DownsampleWorkspace;
   return *workspace;
+#endif
 }
 
 Ft2DownsampleWorkspace& ft2_downsample_workspace ()
 {
+#if defined(__linux__)
+  thread_local Ft2DownsampleWorkspace workspace;
+  return workspace;
+#else
   thread_local Ft2DownsampleWorkspace* workspace = new Ft2DownsampleWorkspace;
   return *workspace;
+#endif
 }
 
 Ft4DownsampleWorkspace& ft4_downsample_workspace ()
 {
+#if defined(__linux__)
+  thread_local Ft4DownsampleWorkspace workspace;
+  return workspace;
+#else
   thread_local Ft4DownsampleWorkspace* workspace = new Ft4DownsampleWorkspace;
   return *workspace;
+#endif
 }
 
 Ft8VarDownsampleWorkspace& ft8var_downsample_workspace ()
 {
+#if defined(__linux__)
+  thread_local Ft8VarDownsampleWorkspace workspace;
+  return workspace;
+#else
   thread_local Ft8VarDownsampleWorkspace* workspace = new Ft8VarDownsampleWorkspace;
   return *workspace;
+#endif
 }
 
 inline Complex load_complex (fftwf_complex const& value)
@@ -909,8 +930,32 @@ void ft8var_downsample_impl (float const* dd, bool* newdat, float f0, int nqso,
     }
 }
 
+#if defined(__linux__)
+struct Ft8FilterWorkspace
+{
+  std::vector<float> x = std::vector<float> (static_cast<size_t> (kFiltNfft), 0.0f);
+  std::vector<Complex> cx = std::vector<Complex> (static_cast<size_t> (kFiltNh + 1));
+  fftwf_plan forward = decodium::fft_compat::plan_dft_r2c_1d (
+      kFiltNfft, x.data (), reinterpret_cast<fftwf_complex*> (cx.data ()), FFTW_ESTIMATE);
+  fftwf_plan inverse = decodium::fft_compat::plan_dft_c2r_1d (
+      kFiltNfft, reinterpret_cast<fftwf_complex*> (cx.data ()), x.data (), FFTW_ESTIMATE);
+  ~Ft8FilterWorkspace ()
+  {
+    decodium::fft_compat::destroy_plan (forward);
+    decodium::fft_compat::destroy_plan (inverse);
+  }
+};
+#endif
+
 void ft8_filter_impl (float f0, int nslots, float width, float* wave)
 {
+#if defined(__linux__)
+  thread_local Ft8FilterWorkspace workspace;
+  auto& x = workspace.x;
+  auto& cx = workspace.cx;
+  auto forward = workspace.forward;
+  auto inverse = workspace.inverse;
+#else
   // Perdita voluta: il piano FFTW qui sotto punta dentro questi due vettori,
   // e distruggerli alla morte del thread libera memoria da dentro
   // LdrShutdownThread, con lo heap che si corrompe in silenzio.
@@ -926,6 +971,8 @@ void ft8_filter_impl (float f0, int nslots, float width, float* wave)
                                                            reinterpret_cast<fftwf_complex*> (cx.data ()),
                                                            x.data (),
                                                            FFTW_ESTIMATE);
+
+#endif
 
   std::copy (wave, wave + kFiltNfft, x.begin ());
   fftwf_execute (forward);

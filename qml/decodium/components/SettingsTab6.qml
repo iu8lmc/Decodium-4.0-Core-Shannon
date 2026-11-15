@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -165,8 +166,8 @@ SettingsPageScroll {
                 dialog.scheduleSettingsPersist()
             }
             popup: SettingsComboPopup { combo: pskReporterTimeSpanCombo }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("PSK Reporter look-back period for callsign search and heard-by results.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("PSK Reporter look-back period for callsign search and heard-by results.")
         }
 
         // ── DX Cluster ──
@@ -189,8 +190,8 @@ SettingsPageScroll {
             text: qsTr("Resume online services")
             settingsHost: root
             onClicked: if (bridge) bridge.resumeOnlineServices()
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Turn off Decodium's local Offline mode and allow Cluster, updates and online lookups again.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Turn off Decodium's local Offline mode and allow Cluster, updates and online lookups again.")
         }
 
         Text { text: qsTr("Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
@@ -1087,9 +1088,9 @@ SettingsPageScroll {
                 settingsHost: root
                 text: qsTr("Find automatically")
                 onClicked: if (bridge) bridge.detectFt2LogBridgePath()
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: qsTr("Looks in Downloads, Documents and Desktop for the most recent ft2logbridge with a config.json containing your API key.")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.delay: 400
+                DecoTemplates.ToolTip.text: qsTr("Looks in Downloads, Documents and Desktop for the most recent ft2logbridge with a config.json containing your API key.")
             }
             OutlineButton {
                 settingsHost: root
@@ -1188,9 +1189,9 @@ SettingsPageScroll {
                 verticalAlignment: Text.AlignVCenter
             }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Enables the N1MM-compatible ADIF UDP output and sets 127.0.0.1:2333. In HRD Logbook, enable UDP Receive / WSJT-X QSO Forwarding on port 2333.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Enables the N1MM-compatible ADIF UDP output and sets 127.0.0.1:2333. In HRD Logbook, enable UDP Receive / WSJT-X QSO Forwarding on port 2333.")
         }
 
         Text { text: qsTr("Enable output:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }

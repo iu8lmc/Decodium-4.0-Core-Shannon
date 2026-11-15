@@ -1,7 +1,7 @@
 find_package (Qt6Test 5 REQUIRED)
 
 if (TARGET Qt6::qmltestrunner)
-  foreach (settings_qml_test IN ITEMS settings_search settings_sidebar radio_audio_diagnostics dxcalendar dxcluster_calendar)
+  foreach (settings_qml_test IN ITEMS settings_search settings_sidebar radio_audio_diagnostics dxcalendar dxcluster_calendar tooltip_template)
     add_test (NAME test_qml_${settings_qml_test}
       COMMAND $<TARGET_FILE:Qt6::qmltestrunner>
         -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_${settings_qml_test}.qml")
@@ -267,6 +267,13 @@ target_link_libraries (ft4_stage_compare wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 
 add_executable (ft8_stage_compare ft8_stage_compare.cpp)
 target_link_libraries (ft8_stage_compare wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_executable (osd_vector_probe EXCLUDE_FROM_ALL osd_vector_probe.cpp)
+target_link_libraries (osd_vector_probe wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_executable (ldpc_bp_vector_probe EXCLUDE_FROM_ALL ldpc_bp_vector_probe.cpp)
+target_link_libraries (ldpc_bp_vector_probe wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_executable (wspr_osd_vector_probe EXCLUDE_FROM_ALL wspr_osd_vector_probe.c
+  ${CMAKE_SOURCE_DIR}/lib/wsprd/osdwspr.c)
+target_link_libraries (wspr_osd_vector_probe ${LIBM_LIBRARIES})
 if (MINGW)
   target_link_options (ft8_stage_compare PRIVATE -Wl,--stack,67108864)
 endif ()
@@ -690,6 +697,10 @@ set_tests_properties (test_ft8_hinted_decode_very_deep PROPERTIES
   LABELS "accepted-limit")
 
 add_executable (test_ft2_qso_sim test_ft2_qso_sim.cpp)
+add_executable (ft2_thread_lifetime_probe tools/ft2_thread_lifetime_probe.cpp)
+target_link_libraries (ft2_thread_lifetime_probe wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_executable (ft2_accumulation_lifetime_probe tools/ft2_accumulation_lifetime_probe.cpp)
+target_link_libraries (ft2_accumulation_lifetime_probe wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 target_link_libraries (test_ft2_qso_sim wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_ft2_qso_sim COMMAND $<TARGET_FILE:test_ft2_qso_sim>)
 
@@ -1062,7 +1073,7 @@ add_executable(test_wspr_resource_cleanup ${wspr_resource_sources})
 set_target_properties(test_wspr_resource_cleanup PROPERTIES AUTOMOC OFF)
 target_include_directories(test_wspr_resource_cleanup PRIVATE ${FFTW3_INCLUDE_DIRS})
 target_link_libraries(test_wspr_resource_cleanup PRIVATE ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
-foreach(wspr_case IN ITEMS valid missing)
+foreach(wspr_case IN ITEMS valid missing cancel mixed early after-read)
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-${wspr_case}")
 endforeach()
 add_test(NAME test_wspr_resource_valid COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
@@ -1071,7 +1082,18 @@ add_test(NAME test_wspr_resource_valid COMMAND $<TARGET_FILE:test_wspr_resource_
 add_test(NAME test_wspr_resource_missing COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
   "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-missing"
   "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-missing/nonexistent.wav" 1)
-set_tests_properties(test_wspr_resource_valid test_wspr_resource_missing PROPERTIES TIMEOUT 60)
+add_test(NAME test_wspr_resource_cancel_restart COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
+  "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-cancel"
+  "${CMAKE_SOURCE_DIR}/tests/bridge_refactor_fixtures/ft8-k1abc-1500.wav" 0 cancel)
+add_test(NAME test_wspr_resource_cancel_mixed_input COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
+  "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-mixed"
+  "${CMAKE_SOURCE_DIR}/tests/bridge_refactor_fixtures/ft8-k1abc-1500.wav" 0 mixed)
+foreach(wspr_case IN ITEMS early after-read)
+  add_test(NAME test_wspr_resource_cancel_${wspr_case} COMMAND $<TARGET_FILE:test_wspr_resource_cleanup>
+    "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-${wspr_case}"
+    "${CMAKE_SOURCE_DIR}/tests/bridge_refactor_fixtures/ft8-k1abc-1500.wav" 0 "${wspr_case}")
+endforeach()
+set_tests_properties(test_wspr_resource_valid test_wspr_resource_missing test_wspr_resource_cancel_restart test_wspr_resource_cancel_mixed_input test_wspr_resource_cancel_early test_wspr_resource_cancel_after-read PROPERTIES TIMEOUT 60)
 
 # Build the maintained simulator without enabling unrelated utility targets.
 add_executable(q65_performance_fixture ../utils/q65sim.cpp)
@@ -1092,3 +1114,9 @@ set_tests_properties(test_fst4_decode_cancellation PROPERTIES TIMEOUT 30)
 add_executable(fst4_performance_fixture ../utils/fst4sim.cpp)
 target_include_directories(fst4_performance_fixture PRIVATE ${PROJECT_BINARY_DIR})
 target_link_libraries(fst4_performance_fixture PRIVATE wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+
+add_executable(test_appimage_qml_snapshot test_appimage_qml_snapshot.cpp)
+target_include_directories(test_appimage_qml_snapshot PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_appimage_qml_snapshot PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME test_appimage_qml_snapshot COMMAND $<TARGET_FILE:test_appimage_qml_snapshot>)
+set_tests_properties(test_appimage_qml_snapshot PROPERTIES TIMEOUT 30)

@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -295,9 +296,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Hide stations already worked on the current band.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Hide stations already worked on the current band.")
         }
 
         Text { text: qsTr("Hide") + " " + qsTr("Worked Today:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 140 }
@@ -307,9 +308,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Hide stations already logged today in UTC.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Hide stations already logged today in UTC.")
         }
 
         Text { text: qsTr("Hide") + " " + qsTr("Worked Yesterday Too:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 140 }
@@ -321,9 +322,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Widen Worked Today to cover today and yesterday in UTC.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Widen Worked Today to cover today and yesterday in UTC.")
         }
 
         Text { text: qsTr("Hide") + " " + qsTr("Worked Ever:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 140 }
@@ -333,9 +334,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Hide every station already present in the log, on any band and any date.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Hide every station already present in the log, on any band and any date.")
         }
 
         Text { text: qsTr("Wait & Pounce:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -348,9 +349,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Wait & Pounce listens for filtered CQ decodes, but it only starts a reply when TX/CQ is already armed by the operator.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Wait & Pounce listens for filtered CQ decodes, but it only starts a reply when TX/CQ is already armed by the operator.")
         }
         Text { text: qsTr("W&P Filters Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
         CheckBox {

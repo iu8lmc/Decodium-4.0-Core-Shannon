@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -158,10 +159,10 @@ Item {
                         onClicked: root.activateTab(tabButton.modelData.page)
                     }
 
-                    ToolTip.visible: tabMouse.containsMouse
+                    DecoTemplates.ToolTip.visible: tabMouse.containsMouse
                                      && root.tabTip(String(tabButton.modelData.id || "")).length > 0
-                    ToolTip.text: root.tabTip(String(tabButton.modelData.id || ""))
-                    ToolTip.delay: 450
+                    DecoTemplates.ToolTip.text: root.tabTip(String(tabButton.modelData.id || ""))
+                    DecoTemplates.ToolTip.delay: 450
             }
         }
     }

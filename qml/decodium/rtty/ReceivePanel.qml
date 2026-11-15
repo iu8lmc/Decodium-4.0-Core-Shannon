@@ -4,6 +4,7 @@
 // Uncertain characters are dimmed rather than hidden: on a weak signal a partly
 // readable line is still worth something, but it must not look as authoritative
 // as a solid copy.
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -94,9 +95,9 @@ GlassPanel {
                 implicitHeight: 22
                 font.pixelSize: 10
                 onClicked: root.highlightCalls = !root.highlightCalls
-                ToolTip.visible: hovered
-                ToolTip.delay: 700
-                ToolTip.text: qsTr("Highlights callsigns. Click one to put it
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.delay: 700
+                DecoTemplates.ToolTip.text: qsTr("Highlights callsigns. Click one to put it
 in the HIS CALL field.")
             }
 

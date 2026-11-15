@@ -2,6 +2,7 @@
  * Backend "hamlib":  DecodiumTransceiverManager (Hamlib, 300+ radio)
  * bridge.catManager → QObject* al backend attivo (duck-typing QML)
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -463,7 +464,7 @@ Dialog {
                         Button {
                             implicitWidth: 36; implicitHeight: 36
                             padding: 0
-                            ToolTip.text: "Refresh ports"; ToolTip.visible: hovered; ToolTip.delay: 500
+                            DecoTemplates.ToolTip.text: "Refresh ports"; DecoTemplates.ToolTip.visible: hovered; DecoTemplates.ToolTip.delay: 500
                             onClicked: bridge.catManager.refreshPorts()
                             background: Rectangle { color: parent.hovered ? bgMedium : "transparent"; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: "↻"; color: secondaryCyan; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }

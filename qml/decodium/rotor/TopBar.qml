@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
@@ -111,8 +112,8 @@ Rectangle {
                 onTapped: rotor.setSetting("dark_theme", !rotor.darkTheme)
             }
 
-            ToolTip.visible: light.hovered
-            ToolTip.text: RotorTheme.dark ? qsTr("Switch to the light dial")
+            DecoTemplates.ToolTip.visible: light.hovered
+            DecoTemplates.ToolTip.text: RotorTheme.dark ? qsTr("Switch to the light dial")
                                      : qsTr("Switch to the night dial")
         }
     }

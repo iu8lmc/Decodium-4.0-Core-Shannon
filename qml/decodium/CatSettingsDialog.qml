@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -224,9 +225,9 @@ Dialog {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 28; height: 28
                     text: "↻"
-                    ToolTip.text: qsTr("Refresh ports")
-                    ToolTip.delay: 500
-                    ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Refresh ports")
+                    DecoTemplates.ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: hovered
                     onClicked: bridge.catManager.refreshPorts()
                     background: Rectangle { color: "transparent" }
                     contentItem: Text { text: "↻"; color: accent; font.pixelSize: 16; horizontalAlignment: Text.AlignHCenter }

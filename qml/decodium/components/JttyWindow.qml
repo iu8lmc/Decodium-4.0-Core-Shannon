@@ -10,6 +10,7 @@
  * %Q il prossimo in coda, %G il locatore.
  * By IU8LMC
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -387,9 +388,9 @@ GlassWindow {
                                     }
                                 }
                             }
-                            ToolTip.visible: keyMA.containsMouse
-                            ToolTip.delay: 600
-                            ToolTip.text: qsTr("Click to send, right click to edit")
+                            DecoTemplates.ToolTip.visible: keyMA.containsMouse
+                            DecoTemplates.ToolTip.delay: 600
+                            DecoTemplates.ToolTip.text: qsTr("Click to send, right click to edit")
                         }
                     }
                 }

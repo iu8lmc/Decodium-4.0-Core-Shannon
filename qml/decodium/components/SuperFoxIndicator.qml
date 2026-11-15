@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -86,7 +87,7 @@ Rectangle {
     }
     HoverHandler { id: hover }
     TapHandler { enabled: indicator.canToggle; onTapped: indicator.toggleSuperFox() }
-    ToolTip.visible: hover.hovered
-    ToolTip.delay: 500
-    ToolTip.text: statusDescription
+    DecoTemplates.ToolTip.visible: hover.hovered
+    DecoTemplates.ToolTip.delay: 500
+    DecoTemplates.ToolTip.text: statusDescription
 }

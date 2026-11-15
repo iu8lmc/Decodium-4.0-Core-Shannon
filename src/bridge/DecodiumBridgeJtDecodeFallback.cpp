@@ -7,6 +7,12 @@ bool decodiumBridgeOwnsFst4Audio(QString const& mode);
 
 void DecodiumBridge::maybeDispatchBridgeOwnedJtDecodeFallback()
 {
+    // These common FT modes cannot use the JT/FST4 fallback. Avoid repeated
+    // environment lookups and string normalization on every spectrum tick.
+    if (m_mode == QStringLiteral("FT8") || m_mode == QStringLiteral("FT4")
+        || m_mode == QStringLiteral("FT2")) {
+        return;
+    }
     QString const modeSnapshot = m_mode.trimmed().toUpper();
     bool const bridgeOwnedTimeSyncRx =
         decodiumBridgeOwnsLegacyJtRxWhenCatSuppressed(modeSnapshot)

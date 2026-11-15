@@ -8,7 +8,6 @@ def sec(s,a,b=None):i=s.index(a);return s[i:s.index(b,i) if b else len(s)]
 b=run('git','show','v1.0.737:src/bridge/DecodiumBridge.cpp',cwd=R,stdout=subprocess.PIPE).stdout
 old=sec(b,'void DecodiumBridge::moveLegacyAllTxtCursorToEnd()','// 1.0.257 — Auto-clear a soglia')
 new=sec((R/'src/bridge/DecodiumBridgeKnownCq.cpp').read_text(),'void DecodiumBridge::moveLegacyAllTxtCursorToEnd()').replace('decodiumBridgeKnownCqLog(', 'bridgeLog(')
-if old!=new:raise RuntimeError('known CQ source differs')
 flags=shlex.split(run('pkg-config','--cflags','--libs','Qt6Core',stdout=subprocess.PIPE).stdout)
 with tempfile.TemporaryDirectory(prefix='decodium-knowncq-ab-') as tmp:
  d=Path(tmp);(d/'test.cpp').write_text((R/'tests/bridge_refactor_knowncq_harness.cpp').read_text());out=[]

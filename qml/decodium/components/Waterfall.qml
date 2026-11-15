@@ -2,6 +2,7 @@
  * Uses PanadapterItem (QQuickItem + QSGNode, FFTW 4096-bin, SmartSDR style)
  * By IU8LMC — 2025
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -262,8 +263,21 @@ Item {
 
     function clearDecodeLabels() {
         decodeLabelSourceRefreshTimer.stop()
-        spectrumDecodeLabels = []
+        updateSpectrumDecodeLabels([])
         waterfallDisplay.setDecodeLabels([])
+    }
+
+    function updateSpectrumDecodeLabels(labels) {
+        var previous = spectrumDecodeLabels
+        var same = previous && previous.length === labels.length
+        for (var i = 0; same && i < labels.length; ++i) {
+            var a = previous[i], b = labels[i]
+            same = a.call === b.call && a.freq === b.freq && a.snr === b.snr
+                    && a.isCQ === b.isCQ && a.isMyCall === b.isMyCall
+                    && a.color === b.color
+        }
+        if (!same)
+            spectrumDecodeLabels = labels
     }
 
     function setShowDecodeCallsigns(enabled, persist) {
@@ -359,7 +373,7 @@ Item {
                 color: hex
             })
         }
-        waterfallPanel.spectrumDecodeLabels = labels
+        waterfallPanel.updateSpectrumDecodeLabels(labels)
         waterfallDisplay.setDecodeLabels([])
     }
 
@@ -538,9 +552,9 @@ Item {
                     bottomPadding: 0
                     checked: waterfallPanel.showDecodeCallsigns
                     onClicked: waterfallPanel.setShowDecodeCallsigns(checked)
-                    ToolTip.text: qsTr("Show decoded callsigns on the waterfall")
-                    ToolTip.visible: showCallsCheck.hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Show decoded callsigns on the waterfall")
+                    DecoTemplates.ToolTip.visible: showCallsCheck.hovered
+                    DecoTemplates.ToolTip.delay: 400
                     indicator: Rectangle {
                         x: Math.round((showCallsCheck.width - width) / 2)
                         y: Math.round((showCallsCheck.height - height) / 2)
@@ -813,9 +827,9 @@ Item {
                             waterfallPanel.persistGraphSetting("uiWaterfallAutoRange", checked)
                         }
                     }
-                    ToolTip.text: qsTr("Automatic noise threshold (IIR)")
-                    ToolTip.visible: autoRangeCheck.hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Automatic noise threshold (IIR)")
+                    DecoTemplates.ToolTip.visible: autoRangeCheck.hovered
+                    DecoTemplates.ToolTip.delay: 400
                     indicator: Rectangle {
                         implicitWidth: 14; implicitHeight: 14; radius: 2
                         color: autoRangeCheck.checked ? accentGreen : wfToolbarBg
@@ -843,9 +857,9 @@ Item {
                             waterfallPanel.persistGraphSetting("uiNoiseFloorPercentile", value)
                         }
                     }
-                    ToolTip.text: qsTr("How much of the spectrum the automatic threshold calls noise and cuts away. 10 is the historical setting: raise it to clean up an empty band, lower it if weak signals disappear.")
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How much of the spectrum the automatic threshold calls noise and cuts away. 10 is the historical setting: raise it to clean up an empty band, lower it if weak signals disappear.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
                     background: Rectangle { x:noiseCutSlider.leftPadding;y:noiseCutSlider.topPadding+noiseCutSlider.availableHeight/2-2;width:noiseCutSlider.availableWidth;height:4;radius:2;color:wfTrack }
                     handle: Rectangle { x:noiseCutSlider.leftPadding+noiseCutSlider.visualPosition*(noiseCutSlider.availableWidth-width);y:noiseCutSlider.topPadding+noiseCutSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:accentGreen }
                 }
@@ -881,11 +895,11 @@ Item {
                         font.bold: true
                     }
 
-                    ToolTip.text: spectrum3dToggle.checked
+                    DecoTemplates.ToolTip.text: spectrum3dToggle.checked
                                   ? qsTr("Stacked-trace 3D spectrum: on. Click to go back to the 2D trace.")
                                   : qsTr("Stacked-trace 3D spectrum: shows the history of the band receding into the distance. It costs more to draw, so leave it off on modest machines.")
-                    ToolTip.visible: spectrum3dMA.containsMouse
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.visible: spectrum3dMA.containsMouse
+                    DecoTemplates.ToolTip.delay: 400
 
                     MouseArea {
                         id: spectrum3dMA
@@ -919,9 +933,9 @@ Item {
                             waterfallPanel.persistGraphSetting("uiSpectrum3dTraces", value)
                         }
                     }
-                    ToolTip.text: qsTr("How many history traces are drawn. Fewer traces separate the ridges; more of them show a longer history.")
-                    ToolTip.visible: traces3dSlider.hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many history traces are drawn. Fewer traces separate the ridges; more of them show a longer history.")
+                    DecoTemplates.ToolTip.visible: traces3dSlider.hovered
+                    DecoTemplates.ToolTip.delay: 400
                     background: Rectangle { x:traces3dSlider.leftPadding;y:traces3dSlider.topPadding+traces3dSlider.availableHeight/2-2;width:traces3dSlider.availableWidth;height:4;radius:2;color:wfTrack }
                     handle: Rectangle { x:traces3dSlider.leftPadding+traces3dSlider.visualPosition*(traces3dSlider.availableWidth-width);y:traces3dSlider.topPadding+traces3dSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:accentCyan }
                 }
@@ -944,9 +958,9 @@ Item {
                             waterfallPanel.persistGraphSetting("uiSpectrum3dFloorDepth", value)
                         }
                     }
-                    ToolTip.text: qsTr("How far above the minimum the ridges start. Raise it to flatten the noise and leave only the signals standing.")
-                    ToolTip.visible: floor3dSlider.hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How far above the minimum the ridges start. Raise it to flatten the noise and leave only the signals standing.")
+                    DecoTemplates.ToolTip.visible: floor3dSlider.hovered
+                    DecoTemplates.ToolTip.delay: 400
                     background: Rectangle { x:floor3dSlider.leftPadding;y:floor3dSlider.topPadding+floor3dSlider.availableHeight/2-2;width:floor3dSlider.availableWidth;height:4;radius:2;color:wfTrack }
                     handle: Rectangle { x:floor3dSlider.leftPadding+floor3dSlider.visualPosition*(floor3dSlider.availableWidth-width);y:floor3dSlider.topPadding+floor3dSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:accentCyan }
                 }
@@ -987,9 +1001,9 @@ Item {
                             waterfallPanel.scheduleDxClusterRefresh(0)
                         }
                     }
-                    ToolTip.text: qsTr("Show DX Cluster spots on the waterfall (click to call)")
-                    ToolTip.visible: dxClusterCheck.hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Show DX Cluster spots on the waterfall (click to call)")
+                    DecoTemplates.ToolTip.visible: dxClusterCheck.hovered
+                    DecoTemplates.ToolTip.delay: 400
                     indicator: Rectangle {
                         implicitWidth: 14; implicitHeight: 14; radius: 2
                         color: dxClusterCheck.checked ? "#FFC800" : wfToolbarBg
@@ -1036,9 +1050,9 @@ Item {
                                 waterfallPanel.clearCwSignalSelection()
                         }
                     }
-                    ToolTip.visible: cwSignalSelectionMouse.containsMouse
-                    ToolTip.delay: 350
-                    ToolTip.text: waterfallPanel.cwSelectedToneHz > 0
+                    DecoTemplates.ToolTip.visible: cwSignalSelectionMouse.containsMouse
+                    DecoTemplates.ToolTip.delay: 350
+                    DecoTemplates.ToolTip.text: waterfallPanel.cwSelectedToneHz > 0
                                   ? qsTr("CW decoder locked here. Click to return to automatic tone search.")
                                   : qsTr("Right-click a CW carrier in the waterfall to decode that signal. This does not retune the radio.")
                 }
@@ -1084,9 +1098,9 @@ Item {
                         onClicked: waterfallPanel.setControlsExpanded(false)
                     }
 
-                    ToolTip.visible: collapseControlsMA.containsMouse
-                    ToolTip.delay: 450
-                    ToolTip.text: qsTr("Hide waterfall controls")
+                    DecoTemplates.ToolTip.visible: collapseControlsMA.containsMouse
+                    DecoTemplates.ToolTip.delay: 450
+                    DecoTemplates.ToolTip.text: qsTr("Hide waterfall controls")
                 }
 
                 // Peak Hold toggle
@@ -1099,9 +1113,9 @@ Item {
                             waterfallPanel.persistGraphSetting("uiWaterfallPeakHold", checked)
                         }
                     }
-                    ToolTip.text: qsTr("Peak Hold: keeps spectrum peaks visible")
-                    ToolTip.visible: peakHoldCheck.hovered
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Peak Hold: keeps spectrum peaks visible")
+                    DecoTemplates.ToolTip.visible: peakHoldCheck.hovered
+                    DecoTemplates.ToolTip.delay: 400
                     indicator: Rectangle {
                         implicitWidth: 14; implicitHeight: 14; radius: 2
                         color: peakHoldCheck.checked ? wfYellow : wfToolbarBg
@@ -1144,9 +1158,9 @@ Item {
                     text: waterfallDisplay.measuredFloor.toFixed(0) + "dBm"
                     color: accentGreen
                     font.pixelSize: 10
-                    ToolTip.text: qsTr("Measured noise threshold")
-                    ToolTip.visible: nfLabel.containsMouse
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Measured noise threshold")
+                    DecoTemplates.ToolTip.visible: nfLabel.containsMouse
+                    DecoTemplates.ToolTip.delay: 400
                     MouseArea { id: nfLabel; anchors.fill: parent; hoverEnabled: true }
                 }
             }
@@ -1512,6 +1526,13 @@ Item {
                     }
                 }
 
+                function scheduleDecodeLabelRefresh() {
+                    if (cppOverlayEnabled && !nativeDecodeLabelsEnabled)
+                        return
+                    if (!decodeLabelRefreshTimer.running)
+                        decodeLabelRefreshTimer.start()
+                }
+
                 Connections {
                     target: waterfallPanel
                     function onSpectrumDecodeLabelsChanged() {
@@ -1522,8 +1543,7 @@ Item {
                             spectrumGpuOverlay.cachedDecodeLabelModel = []
                             return
                         }
-                        if (!decodeLabelRefreshTimer.running)
-                            decodeLabelRefreshTimer.start()
+                        spectrumGpuOverlay.scheduleDecodeLabelRefresh()
                     }
                     function onShowDecodeCallsignsChanged() {
                         if (spectrumGpuOverlay.cppOverlayEnabled && !spectrumGpuOverlay.nativeDecodeLabelsEnabled)
@@ -1533,14 +1553,21 @@ Item {
                             spectrumGpuOverlay.cachedDecodeLabelModel = []
                             return
                         }
-                        if (!decodeLabelRefreshTimer.running)
-                            decodeLabelRefreshTimer.start()
+                        spectrumGpuOverlay.scheduleDecodeLabelRefresh()
                     }
+                }
+
+                Connections {
+                    target: waterfallDisplay
+                    function onLabelFontSizeChanged() { spectrumGpuOverlay.scheduleDecodeLabelRefresh() }
+                    function onLabelSpacingChanged() { spectrumGpuOverlay.scheduleDecodeLabelRefresh() }
+                    function onLabelColorChanged() { spectrumGpuOverlay.scheduleDecodeLabelRefresh() }
+                    function onLabelUseCustomColorChanged() { spectrumGpuOverlay.scheduleDecodeLabelRefresh() }
                 }
 
                 onWidthChanged:  {
                     if (!cppOverlayEnabled || nativeDecodeLabelsEnabled) {
-                        if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start()
+                        scheduleDecodeLabelRefresh()
                     }
                     if (!cppOverlayEnabled) {
                         scheduleStaticOverlayRefresh()
@@ -1548,14 +1575,20 @@ Item {
                 }
                 onHeightChanged: {
                     if (!cppOverlayEnabled || nativeDecodeLabelsEnabled) {
-                        if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start()
+                        scheduleDecodeLabelRefresh()
                     }
                     if (!cppOverlayEnabled) {
                         scheduleStaticOverlayRefresh()
                     }
                 }
-                onViewStartHzChanged: scheduleStaticOverlayRefresh()
-                onViewRangeHzChanged: scheduleStaticOverlayRefresh()
+                onViewStartHzChanged: {
+                    scheduleStaticOverlayRefresh()
+                    scheduleDecodeLabelRefresh()
+                }
+                onViewRangeHzChanged: {
+                    scheduleStaticOverlayRefresh()
+                    scheduleDecodeLabelRefresh()
+                }
 
                 Component.onCompleted: {
                     if (cppOverlayEnabled) {
@@ -2009,7 +2042,9 @@ Item {
                              && markerX >= 0 && markerX < spectrumGpuOverlay.width
                     // 1.0.288 — pulsazione animata: "linea rossa animata" che indica la TX in corso.
                     SequentialAnimation on opacity {
-                        running: txCarrierActiveBar.visible
+                        id: txCarrierPulse
+                        running: txCarrierActiveBar.visible && !bridge.lowCpuModeEnabled
+                        onRunningChanged: if (!running) txCarrierActiveBar.opacity = 1.0
                         loops: Animation.Infinite
                         NumberAnimation { from: 1.0; to: 0.45; duration: 400; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 0.45; to: 1.0; duration: 400; easing.type: Easing.InOutSine }
@@ -2150,13 +2185,15 @@ Item {
                 // (effetto evanescente "come se la riga si propagasse"), in loop durante il TX.
                 Rectangle {
                     id: txCascadeWave
+                    visible: !(bridge && bridge.lowCpuModeEnabled)
                     y: 0
                     height: parent.height
                     radius: 3
                     color: "#ff3030"
                     x: txSignalWaterfallGuide.markerX - width / 2
                     ParallelAnimation {
-                        running: txSignalWaterfallGuide.visible
+                        id: txCascadeWaveAnimation
+                        running: txSignalWaterfallGuide.visible && txCascadeWave.visible
                         loops: Animation.Infinite
                         NumberAnimation { target: txCascadeWave; property: "width"; from: 3; to: 54; duration: 1200; easing.type: Easing.OutQuad }
                         NumberAnimation { target: txCascadeWave; property: "opacity"; from: 0.55; to: 0.0; duration: 1200; easing.type: Easing.OutQuad }
@@ -2373,9 +2410,9 @@ Item {
             }
         }
 
-        ToolTip.visible: toggleMouse.containsMouse
-        ToolTip.delay: 450
-        ToolTip.text: qsTr("Show waterfall controls")
+        DecoTemplates.ToolTip.visible: toggleMouse.containsMouse
+        DecoTemplates.ToolTip.delay: 450
+        DecoTemplates.ToolTip.text: qsTr("Show waterfall controls")
     }
 
     // Sync Bridge → PanadapterItem

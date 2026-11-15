@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -413,9 +414,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("While operating/in QSO in FT8, ALSO launch the deep decode depth-4 (decode-list only) in addition to the fast depth-2 that drives TX.\n\nRecovers third-party stations that the fast pass would miss during operation, WITHOUT touching timing or QSO closure (it's pure decode-list, not auto-seq).\n\nCosts extra CPU during QSOs. Default: OFF.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("While operating/in QSO in FT8, ALSO launch the deep decode depth-4 (decode-list only) in addition to the fast depth-2 that drives TX.\n\nRecovers third-party stations that the fast pass would miss during operation, WITHOUT touching timing or QSO closure (it's pure decode-list, not auto-seq).\n\nCosts extra CPU during QSOs. Default: OFF.")
         }
     }
 }

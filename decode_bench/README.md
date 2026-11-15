@@ -85,6 +85,40 @@ Tabella per ogni SNR + soglia interpolata + delta vs jt9, e un CSV
 
 ## Flusso PRIMA/DOPO una modifica al decoder
 
+Per confrontare due build sugli **stessi WAV esistenti**, senza aggregare
+messaggi uguali a frequenze diverse:
+
+```bash
+python3 decode_bench/compare_builds.py --baseline build-prima/tests/ft8_stage_compare \
+  --candidate build-dopo/tests/ft8_stage_compare --wavs '/percorso/slot/*.wav' \
+  --profile deep --output /tmp/confronto-ft8.json
+```
+
+Per FT2 e FT4 si possono passare rispettivamente `--mode ft2` o `--mode ft4`
+e i corrispondenti eseguibili `ft2_stage_compare` o `ft4_stage_compare`.
+Impostare frequenza e limiti di banda appropriati con `--nfqso`, `--nfa` e
+`--nfb`; `--max-ms` e il profilo `harvest` sono specifici di FT8.
+L'opzione `--depth` permette di confrontare la stessa profondità esplicita su
+entrambe le build. Per esempio `--profile prod --depth 2` verifica il decoder
+con profondità 2; da sola non riproduce tutto il comportamento LOW CPU della
+GUI, che regola anche banda, tempi e altre attività.
+
+Il comando registra hash dei file, tempi e decode mancanti o aggiunti per
+ogni slot; restituisce un codice diverso da zero per decode mancanti, errori
+o timeout. I tempi sono confrontabili solo su una macchina senza carichi
+concorrenti, ripetendo le prove. Il banco esercita stage 4 FT8/FT4 o stage 7
+FT2 offline: **non**
+misura l'intera applicazione, LOW CPU, l'acquisizione audio o i cambi modo.
+Il confronto dei messaggi e della frequenza arrotondata è conservativo: una
+piccola variazione della frequenza stimata può richiedere verifica manuale.
+
+Per un confronto più mirato del calcolo OSD, compila il target opzionale
+`osd_vector_probe` nelle due build ed eseguilo su entrambe sulla stessa
+macchina, salvando e confrontando integralmente stdout. Il default usa 600
+vettori deterministici (K=77, 87 e 91, ordini 0–4); `--deep` usa 12 vettori
+con maschere AP per gli ordini 5 e 6 e può richiedere molto più tempo.
+Un confronto identico dei vettori non sostituisce la prova delle ricezioni.
+
 È l'uso principale: validare che una modifica al decoder **abbassi la soglia**.
 
 ```powershell

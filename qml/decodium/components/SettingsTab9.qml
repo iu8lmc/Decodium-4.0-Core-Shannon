@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -146,8 +147,8 @@ SettingsPageScroll {
                     Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
                     checked: dialog.boolSetting("DirectVisualAudioCaptureUnsafe", false)
                     onToggled: dialog.setBoolSettingIfChanged("DirectVisualAudioCaptureUnsafe", checked, false)
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Fast visual panadapter. In legacy mode it may open a second audio capture; in normal mode it only increases the visual refresh rate. Default: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Fast visual panadapter. In legacy mode it may open a second audio capture; in normal mode it only increases the visual refresh rate. Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
@@ -168,8 +169,8 @@ SettingsPageScroll {
                     Layout.preferredHeight: visible ? controlHeight : 0
                     checked: dialog.boolSetting("OpenGlGpuPanadapterFft", false)
                     onToggled: bridge.setSetting("OpenGlGpuPanadapterFft", checked)
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("After restart, offloads the visual panadapter FFT to OpenGL compute on supported Linux drivers. It does not move FT decoding to the GPU. A failed or stalled GPU path falls back automatically to asynchronous CPU FFT. Default: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("After restart, offloads the visual panadapter FFT to OpenGL compute on supported Linux drivers. It does not move FT decoding to the GPU. A failed or stalled GPU path falls back automatically to asynchronous CPU FFT. Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
@@ -193,8 +194,8 @@ SettingsPageScroll {
                         bridge.lowEndMode = checked
                         dialog.scheduleSettingsPersist()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("One switch for old/slow PCs. Enables: conservative D3D11 graphics on Windows (needs restart), Low CPU mode, max 4 FT threads, normal process priority, CPU decode profile, and hides Live Map / Full Spectrum by default. Default: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("One switch for old/slow PCs. Enables: conservative D3D11 graphics on Windows (needs restart), Low CPU mode, max 4 FT threads, normal process priority, CPU decode profile, and hides Live Map / Full Spectrum by default. Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
@@ -213,8 +214,8 @@ SettingsPageScroll {
                     Layout.preferredHeight: controlHeight
                     checked: bridge.resetSafeGraphicsNextLaunch
                     onToggled: bridge.resetSafeGraphicsNextLaunch = checked
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("One-shot diagnostic action: clears automatic graphics fallback settings and scene-graph caches, then retries the normal graphics backend once. It clears itself after startup; do not use it as a permanent D3D11 selection.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("One-shot diagnostic action: clears automatic graphics fallback settings and scene-graph caches, then retries the normal graphics backend once. It clears itself after startup; do not use it as a permanent D3D11 selection.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
@@ -238,8 +239,8 @@ SettingsPageScroll {
                         text: qsTr("Restore audio defaults")
                         enabled: !!bridge && !bridge.transmitting && !bridge.tuning
                         implicitHeight: controlHeight
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Re-enumerate audio and bind RX/TX to the current system defaults. It does not delete profiles.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Re-enumerate audio and bind RX/TX to the current system defaults. It does not delete profiles.")
                         onClicked: bridge.restoreAudioDefaults()
                     }
                     Button {
@@ -247,8 +248,8 @@ SettingsPageScroll {
                         text: qsTr("Reconnect CAT")
                         enabled: !!bridge && !bridge.transmitting && !bridge.tuning
                         implicitHeight: controlHeight
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Release every CAT backend, then reconnect the selected radio using the normal ownership rules.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Release every CAT backend, then reconnect the selected radio using the normal ownership rules.")
                         onClicked: bridge.resetCatConnection()
                     }
                     Label {
@@ -286,8 +287,8 @@ SettingsPageScroll {
                         bridge.setSetting("SetupWizardOnNextLaunch", checked)
                         dialog.scheduleSettingsPersist()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Show the guided radio/CAT/audio setup at the next launch, even if Decodium is already configured.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Show the guided radio/CAT/audio setup at the next launch, even if Decodium is already configured.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? accentGreen : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text {
                         text: qsTr("Show guided setup on next launch")
@@ -305,8 +306,8 @@ SettingsPageScroll {
                         bridge.lowCpuModeEnabled = checked
                         dialog.scheduleSettingsPersist()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Profile for slow PCs: maximum 2 FT threads, slower waterfall, reduced early/deep decoding. Default: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Profile for slow PCs: maximum 2 FT threads, slower waterfall, reduced early/deep decoding. Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
@@ -605,8 +606,8 @@ SettingsPageScroll {
                     onToggled: dialog.setBoolSettingIfChanged("SuperFox", checked, false)
                     enabled: !bridge.transmitting && !bridge.tuning
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("To work a SuperFox DXpedition, select FT8 and enable Hound Mode as well. This option alone does not enable SuperHound reception.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("To work a SuperFox DXpedition, select FT8 and enable Hound Mode as well. This option alone does not enable SuperHound reception.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
@@ -752,8 +753,8 @@ SettingsPageScroll {
         CheckBox {
             checked: dialog.boolSetting("DecoSyncSelfCalEnabled", false)
             onClicked: bridge.setSetting("DecoSyncSelfCalEnabled", checked)
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Use received decode DT values only as a secondary time-sync hint after NTP/HTTPS is already locked. Default: OFF.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Use received decode DT values only as a secondary time-sync hint after NTP/HTTPS is already locked. Default: OFF.")
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
         }

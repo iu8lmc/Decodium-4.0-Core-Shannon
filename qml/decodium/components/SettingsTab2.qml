@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -161,9 +162,9 @@ SettingsPageScroll {
             popup.width: Math.max(audioInDevCombo.width, 560)
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
             hoverEnabled: true
-            ToolTip.visible: hovered && Qt.platform.os === "linux"
-            ToolTip.delay: 600
-            ToolTip.text: qsTr("Linux: entries marked 'Pulse/PipeWire monitor' capture the audio playing on that PipeWire/PulseAudio sink, useful for WebSDR/KiwiSDR browser audio. Selecting a Pulse/PipeWire source requires pactl and changes the current user's default capture source.")
+            DecoTemplates.ToolTip.visible: hovered && Qt.platform.os === "linux"
+            DecoTemplates.ToolTip.delay: 600
+            DecoTemplates.ToolTip.text: qsTr("Linux: entries marked 'Pulse/PipeWire monitor' capture the audio playing on that PipeWire/PulseAudio sink, useful for WebSDR/KiwiSDR browser audio. Selecting a Pulse/PipeWire source requires pactl and changes the current user's default capture source.")
         }
         Text { text: qsTr("Input Channel:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
         DecoComboBox {
@@ -253,8 +254,8 @@ SettingsPageScroll {
                 bridge.setSetting("RtlSdrEnabled", checked)
                 dialog.scheduleSettingsPersist()
             }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Receives directly from an RTL-SDR. This mode is receive-only: Tune and TX are disabled.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Receives directly from an RTL-SDR. This mode is receive-only: Tune and TX are disabled.")
         }
         Text {
             text: bridge.rtlSdrSupported
@@ -329,8 +330,8 @@ SettingsPageScroll {
                 contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-            ToolTip.visible: hovered
-            ToolTip.text: !directSamplingAvailable
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: !directSamplingAvailable
                           ? qsTr("Uses the tuner path. RTL-SDR Blog V4 handles its HF upconverter automatically.")
                           : currentIndex === 1
                           ? qsTr("Uses the RTL2832 direct-sampling Q ADC for HF reception from 500 kHz to 24 MHz.")
@@ -374,8 +375,8 @@ SettingsPageScroll {
             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-            ToolTip.visible: hovered
-            ToolTip.text: currentIndex === 0
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: currentIndex === 0
                           ? qsTr("Sends decoder PCM only to Decodium's weak-signal modes; the RF panadapter remains IQ-based.")
                           : qsTr("Demodulates receive audio separately. TX and Tune remain disabled with RTL-SDR.")
         }
@@ -390,8 +391,8 @@ SettingsPageScroll {
                 bridge.setSetting("RtlSdrAudioEnabled", checked)
                 dialog.scheduleSettingsPersist()
             }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Plays demodulated mono audio through the dedicated receiver output below. It is asynchronous and never feeds the FT8 decoder.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Plays demodulated mono audio through the dedicated receiver output below. It is asynchronous and never feeds the FT8 decoder.")
         }
         // Keep the IF controls in their own two-column form.  The
         // surrounding audio grid has four columns; mixing its spare
@@ -437,8 +438,8 @@ SettingsPageScroll {
                         bridge.setSetting("RtlSdrIfEnabled", checked)
                         dialog.scheduleSettingsPersist()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Keeps the radio dial frequency for display, logging and decoding while the RTL-SDR is tuned to the receiver's fixed IF output.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Keeps the radio dial frequency for display, logging and decoding while the RTL-SDR is tuned to the receiver's fixed IF output.")
                 }
 
                 Text { text: qsTr("IF frequency (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: compactSettingsLayout ? 132 : 172; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
@@ -475,8 +476,8 @@ SettingsPageScroll {
                     delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                         background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                     popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Automatic uses LSB only with the LSB demodulator; weak-signal modes such as FT8 use USB.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Automatic uses LSB only with the LSB demodulator; weak-signal modes such as FT8 use USB.")
                 }
 
                 Text { text: qsTr("USB shift (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: compactSettingsLayout ? 132 : 172; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
@@ -523,8 +524,8 @@ SettingsPageScroll {
                         bridge.setSetting("RtlSdrIfSpectrumInverted", checked)
                         dialog.scheduleSettingsPersist()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Enable this when signals move in the opposite direction on the panadapter because the receiver's IF mixer reverses the spectrum.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Enable this when signals move in the opposite direction on the panadapter because the receiver's IF mixer reverses the spectrum.")
                 }
 
                 Text {
@@ -575,8 +576,8 @@ SettingsPageScroll {
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
             popup.width: Math.max(rtlAudioOutputCombo.width, 560)
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("System default normally selects the computer speakers and is independent from Decodium's TX audio output.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("System default normally selects the computer speakers and is independent from Decodium's TX audio output.")
         }
 
         Text { text: qsTr("RF frequency (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
@@ -689,8 +690,8 @@ SettingsPageScroll {
                 bridge.setSetting("RtlSdrDigitalAgc", checked)
                 dialog.scheduleSettingsPersist()
             }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Usually leave this disabled. It can raise the noise floor on RTL-SDR Blog V4 receivers.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Usually leave this disabled. It can raise the noise floor on RTL-SDR Blog V4 receivers.")
         }
         Item { Layout.columnSpan: 2; Layout.fillWidth: true; implicitHeight: 1 }
 
@@ -704,8 +705,8 @@ SettingsPageScroll {
                 bridge.setSetting("RtlSdrBiasTee", checked)
                 dialog.scheduleSettingsPersist()
             }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Supplies power to an external active antenna or LNA only when required by that equipment.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Supplies power to an external active antenna or LNA only when required by that equipment.")
         }
         Text { text: qsTr("Audio gain:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: compactSettingsLayout ? 132 : 172; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
         Slider {
@@ -751,8 +752,8 @@ SettingsPageScroll {
             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Post-demodulation audio filter only. It does not change the radio dial or RTL-SDR tuning.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Post-demodulation audio filter only. It does not change the radio dial or RTL-SDR tuning.")
         }
 
         Text {
@@ -784,8 +785,8 @@ SettingsPageScroll {
             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Adjusts listening level after SSB demodulation. Off preserves the raw receiver level.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Adjusts listening level after SSB demodulation. Off preserves the raw receiver level.")
         }
 
         Text {
@@ -815,8 +816,8 @@ SettingsPageScroll {
                 bridge.setSetting("RtlSdrSsbNotchFrequencyHz", Number(text))
                 dialog.scheduleSettingsPersist()
             }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Set the audible whistle frequency to remove a persistent carrier. Use 0 to disable.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Set the audible whistle frequency to remove a persistent carrier. Use 0 to disable.")
         }
 
         Text {
@@ -848,8 +849,8 @@ SettingsPageScroll {
             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
             popup.background: Rectangle { color: dialog && dialog.dialogSurface ? dialog.dialogSurface : bgDeep; border.color: glassBorder; radius: 4 }
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Adaptive speech gate for background noise in pauses. It never affects digital-mode decoder audio.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Adaptive speech gate for background noise in pauses. It never affects digital-mode decoder audio.")
         }
 
         Text {
@@ -930,8 +931,8 @@ SettingsPageScroll {
 		                                        dialog.scheduleSettingsPersist()
 		                                    }
 	                                }
-	                                ToolTip.visible: setupRxAutoMouse.containsMouse
-	                                ToolTip.text: bridge.autoRxInputLevel ? qsTr("Auto RX level active")
+	                                DecoTemplates.ToolTip.visible: setupRxAutoMouse.containsMouse
+	                                DecoTemplates.ToolTip.text: bridge.autoRxInputLevel ? qsTr("Auto RX level active")
 	                                                                       : qsTr("Auto RX level disabled")
 	                            }
 	                        }

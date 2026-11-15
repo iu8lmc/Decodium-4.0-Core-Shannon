@@ -5,6 +5,9 @@ R=Path(__file__).resolve().parents[2]
 a=(R/'tests/bridge_refactor_fixtures/legacy_audio_before.inc').read_text();sig='void DecodiumBridge::onLegacyAudioSamples('
 s=(R/'src/bridge/DecodiumBridgeLegacyAudio.cpp').read_text();b=sig+s.split(sig,1)[1]
 for x,y in [('decodiumBridgeDecodeFlowLog(', 'bridgeLog('),('decodiumBridgeIsFt2LinkApplicationMode(', 'isFt2LinkApplicationMode(')]:b=b.replace(x,y)
+guard='    if (feedSpectrum)\n        decodium::normalizeWaterfallRingPosition(m_wfRingPos, WF_RING_SIZE);\n'
+if b.count(guard)!=1:raise SystemExit('missing ring normalization')
+b=b.replace(guard,'')
 if a!=b:raise SystemExit('legacy audio callback differs')
 a=(R/'tests/bridge_refactor_fixtures/ft2_pcm_stats_before.inc').read_text();s=(R/'src/bridge/Ft2LinkPcmStats.h').read_text();b='struct Ft2LinkPcmStats\n'+s.split('struct Ft2LinkPcmStats\n',1)[1];b=b.replace('inline Ft2LinkPcmStats ft2LinkPcmStats(', 'Ft2LinkPcmStats ft2LinkPcmStats(')
 if a!=b:raise SystemExit('PCM stats differs')

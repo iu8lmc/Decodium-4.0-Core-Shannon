@@ -121,13 +121,6 @@ QVariantList DecodiumBridge::worldClockCityOptions(const QString& query, int lim
 
     QVector<CityOption> matches;
     auto appendOption = [&](QString const& zoneId, int defaultScore) {
-        QTimeZone zone = zoneId == QStringLiteral("UTC")
-            ? decodiumUtcTimeZone()
-            : QTimeZone(zoneId.toUtf8());
-        if (!zone.isValid()) {
-            return;
-        }
-
         QString const name = cityNameForZone(zoneId);
         QStringList terms {name, zoneId};
         terms.append(aliasesForZone(zoneId));
@@ -146,6 +139,15 @@ QVariantList DecodiumBridge::worldClockCityOptions(const QString& query, int lim
             } else {
                 return;
             }
+        }
+
+        // Most zone IDs do not match a typed query. Avoid loading their
+        // timezone data until after the inexpensive text filter has passed.
+        QTimeZone zone = zoneId == QStringLiteral("UTC")
+            ? decodiumUtcTimeZone()
+            : QTimeZone(zoneId.toUtf8());
+        if (!zone.isValid()) {
+            return;
         }
 
         CityOption option;

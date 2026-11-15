@@ -2009,15 +2009,32 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
   // pressure signal is allowed to reduce work for slower or overloaded hosts.
   int const effectiveRequestedThreadLimit =
       pressureLimitedRequest ? std::min (request.threadCount, 2) : request.threadCount;
+  bool const labLowCpuFollowup = QStandardPaths::isTestModeEnabled ()
+      && qEnvironmentVariableIntValue ("DECODIUM_LAB_LOWCPU_FT8_FOLLOWUP") > 0
+      && pressureLimitedRequest && request.ndepth == 3;
   int const effectiveDepth =
-      pressureLimitedRequest ? std::min (request.ndepth, 2) : request.ndepth;
+      pressureLimitedRequest ? std::min (request.ndepth, labLowCpuFollowup ? 3 : 2) : request.ndepth;
   bool const effectiveApEnabled =
       !pressureLimitedRequest && request.lft8apon;
   decodium::decode::applyCurrentDecodeWorkerPriority ();
   int const reservedThreadLimit = decodium::decode::threadLimitWithUiReserve (effectiveRequestedThreadLimit);
   apply_decode_thread_limit (reservedThreadLimit);
-  int const activeThreads = active_decode_thread_limit ();
-  decodium::decode::applyOpenMpDecodeWorkerPriority (activeThreads);
+  // omp_get_max_threads() is the ceiling configured for future regions, not
+  // the number needed for this request.  Warming that ceiling here creates a
+  // full 24-thread team even in LOW CPU. Retain the largest team actually
+  // requested by this worker so a later smaller budget doesn't repeatedly
+  // shrink and recreate OpenMP workers when profiles alternate.
+  int const activeThreads = std::min (reservedThreadLimit, active_decode_thread_limit ());
+  static thread_local int priorityTeamSize = 1;
+  priorityTeamSize = std::max (priorityTeamSize, activeThreads);
+  static bool const profilePriority = qEnvironmentVariableIntValue ("DECODIUM_FT8_PRIORITY_PROFILE") > 0;
+  QElapsedTimer priorityTimer;
+  if (profilePriority) priorityTimer.start ();
+  decodium::decode::applyOpenMpDecodeWorkerPriority (priorityTeamSize);
+  if (profilePriority)
+    qInfo ().noquote () << "[FT8-PRIORITY-PROFILE] requested=" << activeThreads
+                       << "team=" << priorityTeamSize
+                       << "elapsed_us=" << priorityTimer.nsecsElapsed () / 1000;
   set_ft8_stage4_cancel (false);
   start_ft8_pack77_hash_seed_collection_once ();
   if (!pressureLimitedRequest)
@@ -2321,8 +2338,15 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
 
 void FT8DecodeWorker::resetDecoderState ()
 {
+  static bool const profileMode = qEnvironmentVariableIntValue ("DECODIUM_MODE_PROFILE") > 0;
+  QElapsedTimer timer;
+  if (profileMode) timer.start ();
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  qint64 const waitMs = profileMode ? timer.elapsed () : 0;
   ftx_ft8_stage4_reset_c ();
+  if (profileMode)
+    qInfo ().noquote () << "[FT8-RESET-PROFILE] wait_ms=" << waitMs
+                        << "total_ms=" << timer.elapsed ();
 }
 
 }

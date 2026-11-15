@@ -2,6 +2,7 @@
  * COM port, baud rate, PTT method for Kenwood TS-590S
  * By IU8LMC
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -77,9 +78,9 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 34
                 text: "🔍  " + qsTr("Detect my radio")
-                ToolTip.visible: hovered
-                ToolTip.delay: 500
-                ToolTip.text: qsTr("Reads what the system already knows: it opens no port and sends no command")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.delay: 500
+                DecoTemplates.ToolTip.text: qsTr("Reads what the system already knows: it opens no port and sends no command")
                 onClicked: detectResults.detectAndOpen("")
                 background: Rectangle {
                     color: detectButton.hovered ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.18)
@@ -270,7 +271,7 @@ Rectangle {
                     background: Rectangle { color: Qt.rgba(1,1,1,0.07); border.color: glassBorder; radius: 4 }
                     contentItem: Text { text: parent.text; color: secondaryCyan; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     onClicked: if (cat) { cat.refreshPorts(); var idx = portCombo.find(cat.serialPort); if (idx >= 0) portCombo.currentIndex = idx }
-                    ToolTip.visible: hovered; ToolTip.text: qsTr("Refresh ports"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: hovered; DecoTemplates.ToolTip.text: qsTr("Refresh ports"); DecoTemplates.ToolTip.delay: 500
                 }
             }
 

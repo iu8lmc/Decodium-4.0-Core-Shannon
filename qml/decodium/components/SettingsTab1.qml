@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -368,9 +369,9 @@ SettingsPageScroll {
             Layout.columnSpan: Math.max(1, pageColumns - 1)
             implicitHeight: controlHeight
             text: "🔍  " + qsTr("Detect my radio")
-            ToolTip.visible: hovered
-            ToolTip.delay: 500
-            ToolTip.text: qsTr("Reads what the system already knows: it opens no port and sends no command")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 500
+            DecoTemplates.ToolTip.text: qsTr("Reads what the system already knows: it opens no port and sends no command")
             onClicked: detectRigResults.detectAndOpen("")
             background: Rectangle {
                 color: detectRigButton.hovered
@@ -730,8 +731,8 @@ SettingsPageScroll {
                     onClicked: dialog.refreshCatPorts()
                 }
 
-                ToolTip.visible: serialPortRefreshMA.containsMouse
-                ToolTip.text: qsTr("Refresh serial ports")
+                DecoTemplates.ToolTip.visible: serialPortRefreshMA.containsMouse
+                DecoTemplates.ToolTip.text: qsTr("Refresh serial ports")
             }
         }
         Text {
@@ -790,9 +791,9 @@ SettingsPageScroll {
             color: textPrimary
             font.pixelSize: controlFontSize
             leftPadding: 8
-            ToolTip.visible: activeFocus
-            ToolTip.delay: 500
-            ToolTip.text: qsTr("Enter the radio CI-V address in hexadecimal, from 0x00 to 0xFF. The address is saved with the CAT settings.")
+            DecoTemplates.ToolTip.visible: activeFocus
+            DecoTemplates.ToolTip.delay: 500
+            DecoTemplates.ToolTip.text: qsTr("Enter the radio CI-V address in hexadecimal, from 0x00 to 0xFF. The address is saved with the CAT settings.")
             background: Rectangle {
                 color: bgMedium
                 border.color: civAddrField.invalidAddress ? "#f44336"
@@ -1969,9 +1970,9 @@ SettingsPageScroll {
             color: textSecondary
             font.pixelSize: 12
             Layout.preferredWidth: 100
-            ToolTip.visible: alcTargetHover.hovered
-            ToolTip.delay: 600
-            ToolTip.text: qsTr("ALC scale 0-100. FT8/data: typically 15-25. Values >60 risk overdriving the PA.")
+            DecoTemplates.ToolTip.visible: alcTargetHover.hovered
+            DecoTemplates.ToolTip.delay: 600
+            DecoTemplates.ToolTip.text: qsTr("ALC scale 0-100. FT8/data: typically 15-25. Values >60 risk overdriving the PA.")
             HoverHandler { id: alcTargetHover }
         }
         SpinBox {
@@ -2019,9 +2020,9 @@ SettingsPageScroll {
                        ? (alcCalMA.containsMouse ? Qt.rgba(1,0.5,0,0.3) : bgMedium)
                        : (alcCalMA.containsMouse ? Qt.rgba(1,0.6,0,0.3) : bgMedium)
                 border.color: calibrating ? "#ff9800" : "#ff9800"
-                ToolTip.visible: alcCalMA.containsMouse
-                ToolTip.delay: 600
-                ToolTip.text: qsTr("Transmits a tune carrier and auto-adjusts the TX audio level until the radio's ALC reaches the target. One-shot. Requires Hamlib CAT connected.")
+                DecoTemplates.ToolTip.visible: alcCalMA.containsMouse
+                DecoTemplates.ToolTip.delay: 600
+                DecoTemplates.ToolTip.text: qsTr("Transmits a tune carrier and auto-adjusts the TX audio level until the radio's ALC reaches the target. One-shot. Requires Hamlib CAT connected.")
                 Text {
                     anchors.centerIn: parent
                     text: alcCalBtn.calibrating

@@ -80,6 +80,7 @@ std::vector<short> makeBusyFrame (bool corrupt = false)
 struct Result {
     int count = 0;
     bool recovered = false;
+    int recoveredNap = -1;
     long long elapsedMs = 0;
 };
 
@@ -100,7 +101,10 @@ Result decode (std::vector<short> const& pcm, int depth)
         Clock::now () - started).count ();
     for (int i = 0; i < result.count && i < 100; ++i) {
         QString const text = QString::fromLatin1 (messages.data () + i * 37, 37).trimmed ();
-        result.recovered |= text == QString::fromLatin1 (target);
+        if (text == QString::fromLatin1 (target)) {
+            result.recovered = true;
+            result.recoveredNap = naps[i];
+        }
         std::cout << "  " << text.toStdString () << '\n';
     }
     std::cout << "depth=" << depth << " decode_ms=" << result.elapsedMs
@@ -130,9 +134,17 @@ int main (int argc, char** argv)
         }
     }
 
+    // The weak fixture exercises the default historical-message verification,
+    // which accepts messages aged 5.5–9.5 s. Earlier strong calls are not a
+    // reliable clock: a faster decoder can reach the weak test too soon.
+    // Seed a fresh message and wait explicitly, as two FT2 slots would do.
+    ftx_ft2_stage7_clravg_c ();
+    auto const historySeed = decode (strong, 20);
+    if (!historySeed.recovered || historySeed.elapsedMs > 3000) return 1;
+    std::this_thread::sleep_for (std::chrono::milliseconds (6000));
     ftx_ft2_stage7_clravg_c ();
     auto const weakResult = decode (weak, 20);
-    if (!weakResult.recovered || weakResult.elapsedMs > 3000) return 1;
+    if (!weakResult.recovered || weakResult.recoveredNap != 8 || weakResult.elapsedMs > 3000) return 1;
 
     ftx_ft2_stage7_clravg_c ();
     auto const noiseResult = decode (noise, 20);

@@ -1130,24 +1130,45 @@ bool ensureColumn(QSqlDatabase& db,
                   const QString& table,
                   const QString& column,
                   const QString& definition,
+                  QHash<QString, QSet<QString>>& knownColumns,
                   QString* error)
 {
-    QSqlQuery query(db);
-    if (!query.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
-        if (error) {
-            *error = query.lastError().text();
+    auto columns = knownColumns.find(table);
+    if (columns == knownColumns.end()) {
+        QSqlQuery query(db);
+        if (!query.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
+            if (error) {
+                *error = query.lastError().text();
+            }
+            return false;
+        }
+        QSet<QString> existing;
+        while (query.next()) {
+            existing.insert(query.value(1).toString().toCaseFolded());
+        }
+        columns = knownColumns.insert(table, std::move(existing));
+    }
+    QString const foldedColumn = column.toCaseFolded();
+    if (columns->contains(foldedColumn))
+        return true;
+    if (!execSql(db, QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3")
+                         .arg(table, column, definition), error)) {
+        // Another connection may have added this column after our snapshot.
+        // Recheck against the database before treating the migration as failed.
+        QSqlQuery query(db);
+        if (query.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
+            while (query.next()) {
+                if (query.value(1).toString().compare(column, Qt::CaseInsensitive) == 0) {
+                    columns->insert(foldedColumn);
+                    if (error) error->clear();
+                    return true;
+                }
+            }
         }
         return false;
     }
-    while (query.next()) {
-        if (query.value(1).toString().compare(column, Qt::CaseInsensitive) == 0) {
-            return true;
-        }
-    }
-    return execSql(db,
-                   QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3")
-                       .arg(table, column, definition),
-                   error);
+    columns->insert(foldedColumn);
+    return true;
 }
 
 QString transmittingCallFromMessage(const QString& message);
@@ -1339,11 +1360,13 @@ bool openMapDatabase(const QString& path,
         {"map_spot_event", "propagation_mode", "TEXT NOT NULL DEFAULT 'UNKNOWN'"},
         {"map_spot_event", "direction", "TEXT NOT NULL DEFAULT 'RX'"}
     };
+    QHash<QString, QSet<QString>> knownColumns;
     for (ColumnMigration const& migration : migrations) {
         if (!ensureColumn(db,
                           QString::fromLatin1(migration.table),
                           QString::fromLatin1(migration.column),
                           QString::fromLatin1(migration.definition),
+                          knownColumns,
                           error)) {
             return false;
         }
@@ -1412,7 +1435,9 @@ bool openMapDatabase(const QString& path,
                     QStringLiteral(
                         "INSERT OR IGNORE INTO map_qso_grid(qso_id, grid, grid4, grid6, is_primary)"
                         " SELECT id, upper(grid), upper(grid4), nullif(upper(grid6), ''), 1"
-                        " FROM map_qso WHERE COALESCE(grid4, '')<>''"),
+                        " FROM map_qso WHERE COALESCE(grid4, '')<>''"
+                        " AND NOT EXISTS (SELECT 1 FROM map_qso_grid existing"
+                        " WHERE existing.qso_id=map_qso.id AND existing.grid=upper(map_qso.grid))"),
                     error)
         || !execSql(db,
                     QStringLiteral(

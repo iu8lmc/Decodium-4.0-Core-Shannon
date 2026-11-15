@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -286,9 +287,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("If you Halt during an active QSO and that same station sends a direct reply to your callsign within 2 minutes, Decodium can resume that QSO.\n\nApplies only to FT8/FT4/FT2 and only to the saved QSO state.\n\nDefault: OFF (= Halt fully stops the sequence by default).")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("If you Halt during an active QSO and that same station sends a direct reply to your callsign within 2 minutes, Decodium can resume that QSO.\n\nApplies only to FT8/FT4/FT2 and only to the saved QSO state.\n\nDefault: OFF (= Halt fully stops the sequence by default).")
                 }
                 Text {
                     text: qsTr("Disable TX after 73:")
@@ -349,9 +350,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When ON, FT2 also tries to recover signals whose frequency drifts during the slot, as on satellites such as QO-100.\n\nDefault: ON. Takes effect the next time Decodium starts.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When ON, FT2 also tries to recover signals whose frequency drifts during the slot, as on satellites such as QO-100.\n\nDefault: ON. Takes effect the next time Decodium starts.")
                 }
 
                 // 1.0.311 — FT2: ripetizioni del 73/RR73 finale regolabili (era fisso 8)
@@ -375,9 +376,9 @@ SettingsPageScroll {
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: ft2SignoffCapSpin.textFromValue(ft2SignoffCapSpin.value, ft2SignoffCapSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !ft2SignoffCapSpin.editable; validator: ft2SignoffCapSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("How many times to repeat the final 73/RR73 in FT2 waiting for the partner's ack before logging and closing.\n\nDefault: 4 (~28s).\n\nLower = closes earlier (less 'stuck' on the same station).\nHigher = more patient with weak/QSB partners.\n\nDoesn't affect FT8/FT4.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many times to repeat the final 73/RR73 in FT2 waiting for the partner's ack before logging and closing.\n\nDefault: 4 (~28s).\n\nLower = closes earlier (less 'stuck' on the same station).\nHigher = more patient with weak/QSB partners.\n\nDoesn't affect FT8/FT4.")
                 }
 
                 // 1.0.315 — FT4: ripetizioni del 73/RR73 finale regolabili
@@ -401,9 +402,9 @@ SettingsPageScroll {
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: ft4SignoffCapSpin.textFromValue(ft4SignoffCapSpin.value, ft4SignoffCapSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !ft4SignoffCapSpin.editable; validator: ft4SignoffCapSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("How many times to repeat the final 73/RR73 in FT4.\n\nDefault: 4 (~30s).\n\nIncrease to 6-8 for weak/QSB partners (replaces the former automatic weak/conservative extras).\n\nDoesn't affect FT2/FT8.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many times to repeat the final 73/RR73 in FT4.\n\nDefault: 4 (~30s).\n\nIncrease to 6-8 for weak/QSB partners (replaces the former automatic weak/conservative extras).\n\nDoesn't affect FT2/FT8.")
                 }
 
                 // 1.0.315 — FT8: ripetizioni del 73/RR73 finale regolabili
@@ -427,9 +428,9 @@ SettingsPageScroll {
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: ft8SignoffCapSpin.textFromValue(ft8SignoffCapSpin.value, ft8SignoffCapSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !ft8SignoffCapSpin.editable; validator: ft8SignoffCapSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("How many times to repeat the final 73/RR73 in FT8.\n\nDefault: 3 (~45s).\n\nIncrease to 6-8 for weak/QSB partners (replaces the former automatic weak/conservative extras).\n\nDoesn't affect FT2/FT4.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many times to repeat the final 73/RR73 in FT8.\n\nDefault: 3 (~45s).\n\nIncrease to 6-8 for weak/QSB partners (replaces the former automatic weak/conservative extras).\n\nDoesn't affect FT2/FT4.")
                 }
 
                 // 1.0.437 - opt-in: extra signoff retries per partner debole (FTX)
@@ -451,9 +452,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When ON, automatically grants extra final 73/RR73 retries when the active partner is weak (SNR at or below the threshold below), giving fragile QSOs more chances to close.\n\nDefault OFF = unchanged behavior. Applies to FT2/FT4/FT8, always clamped to max 8 and still bounded by the TX watchdog.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When ON, automatically grants extra final 73/RR73 retries when the active partner is weak (SNR at or below the threshold below), giving fragile QSOs more chances to close.\n\nDefault OFF = unchanged behavior. Applies to FT2/FT4/FT8, always clamped to max 8 and still bounded by the TX watchdog.")
                 }
                 Text {
                     text: qsTr("  weak SNR threshold (dB):")
@@ -477,9 +478,9 @@ SettingsPageScroll {
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: ftxWeakSnrSpin.textFromValue(ftxWeakSnrSpin.value, ftxWeakSnrSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !ftxWeakSnrSpin.editable; validator: ftxWeakSnrSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("A partner whose SNR is at or below this value is treated as 'weak' and receives the extra signoff retries.\n\nDefault: -15 dB.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("A partner whose SNR is at or below this value is treated as 'weak' and receives the extra signoff retries.\n\nDefault: -15 dB.")
                 }
                 Text {
                     text: qsTr("  extra signoff retries:")
@@ -503,9 +504,9 @@ SettingsPageScroll {
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: ftxWeakBonusSpin.textFromValue(ftxWeakBonusSpin.value, ftxWeakBonusSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !ftxWeakBonusSpin.editable; validator: ftxWeakBonusSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("How many extra final 73/RR73 retries to add on top of the per-mode cap for weak partners.\n\nDefault: +3 (capped so the total never exceeds 8).")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many extra final 73/RR73 retries to add on top of the per-mode cap for weak partners.\n\nDefault: +3 (capped so the total never exceeds 8).")
                 }
 
                 // 1.0.446 - opt-in: guard ri-aggancio RRR post-log (caso 9H1SR "troppe richiamate")
@@ -527,9 +528,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When ON, after a QSO is logged ('partner left') stop re-sending RR73 to a partner that keeps calling you with R+report because they did not copy your signoff (the 9H1SR too-many-calls case).\n\nA few courtesy repeats are still allowed (see max), then suppressed within the 30s cooldown. Default OFF. FT2 only.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When ON, after a QSO is logged ('partner left') stop re-sending RR73 to a partner that keeps calling you with R+report because they did not copy your signoff (the 9H1SR too-many-calls case).\n\nA few courtesy repeats are still allowed (see max), then suppressed within the 30s cooldown. Default OFF. FT2 only.")
                 }
                 Text {
                     text: qsTr("  courtesy RRR max:")
@@ -553,9 +554,9 @@ SettingsPageScroll {
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: ft2ReengageMaxSpin.textFromValue(ft2ReengageMaxSpin.value, ft2ReengageMaxSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !ft2ReengageMaxSpin.editable; validator: ft2ReengageMaxSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("How many courtesy RR73 to still send to a just-logged partner before suppressing further re-engagements.\n\n0 = suppress immediately. Default: 1.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many courtesy RR73 to still send to a just-logged partner before suppressing further re-engagements.\n\n0 = suppress immediately. Default: 1.")
                 }
 
                 // 1.0.314 — opt-in: TX immediato al click (stile 1.0.283)
@@ -580,9 +581,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Restores the 'TX starts IMMEDIATELY on double-click' behaviour of 1.0.283.\n\n• FT2: relaxes the period-gate (TX1 from click bypasses waiting for the next slot)\n• FT8/FT4: raises the clickable window cap to d3CapMs (~11s on FT8, 5.6s on FT4) = real 1.0.283 behaviour\n\nDefault: OFF (= safe upstream behaviour).\n\nEnable if it bothers you to wait 1 cycle after the click.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Restores the 'TX starts IMMEDIATELY on double-click' behaviour of 1.0.283.\n\n• FT2: relaxes the period-gate (TX1 from click bypasses waiting for the next slot)\n• FT8/FT4: raises the clickable window cap to d3CapMs (~11s on FT8, 5.6s on FT4) = real 1.0.283 behaviour\n\nDefault: OFF (= safe upstream behaviour).\n\nEnable if it bothers you to wait 1 cycle after the click.")
                 }
 
                 // 1.0.371 - opt-in: logga RR73 (TX4) anche se il partner sparisce (FT2 async AutoCQ)
@@ -607,9 +608,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("FT2 + async AutoCQ: when WE close with RR73 (TX4) after the partner R+report and the partner then disappears, log the QSO anyway (at the signoff cap) instead of leaving it unlogged.\n\nMatches TX5/73 and sync mode behaviour.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("FT2 + async AutoCQ: when WE close with RR73 (TX4) after the partner R+report and the partner then disappears, log the QSO anyway (at the signoff cap) instead of leaving it unlogged.\n\nMatches TX5/73 and sync mode behaviour.\n\nDefault: OFF.")
                 }
 
                 // 1.0.317 — opt-in: FT8 fast sequence (grace ridotta + late-decode accept)
@@ -634,9 +635,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Reduces FT8 sequence waits for users who prefer WSJT-X/JTDX-style reactivity.\n\nTwo changes:\n  (1) Boundary grace 1200ms → 400ms = TX starts ~800ms earlier after the slot boundary\n  (2) onFt8DecodeReady accepts late decodes within d3CapMs (~11s) instead of dropping the slot = no more '15s extra after the partner's reply'\n\nSAFETY: under CPU pressure the pre-existing clamp forces grace ≥900ms (safety > reactivity on loaded PCs).\n\nDefault: OFF (= conservative upstream behaviour, max decode reliability).")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Reduces FT8 sequence waits for users who prefer WSJT-X/JTDX-style reactivity.\n\nTwo changes:\n  (1) Boundary grace 1200ms → 400ms = TX starts ~800ms earlier after the slot boundary\n  (2) onFt8DecodeReady accepts late decodes within d3CapMs (~11s) instead of dropping the slot = no more '15s extra after the partner's reply'\n\nSAFETY: under CPU pressure the pre-existing clamp forces grace ≥900ms (safety > reactivity on loaded PCs).\n\nDefault: OFF (= conservative upstream behaviour, max decode reliability).")
                 }
 
                 // 1.0.367 — opt-in: finestra TX FT2 async conservativa (default ON = calmo/stabile)
@@ -661,9 +662,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Controls how late in a slot the async FT2 TX may start.\n\n• ON (default): the TX starts only if the FULL payload (~2520ms) still fits — window ~18% of the slot. If it would arrive late, the TX is deferred to the next slot instead of sending a TRUNCATED frame the partner can't decode. Calm, Decodium-3.0-style stability.\n• OFF: FIX B (1.0.353) behaviour — window up to ~76% of the slot (only ~700ms of useful payload required). More reactive but can transmit truncated frames on a late reply.\n\nEnable OFF only if you want maximum reactivity and accept occasional non-decodable late TX.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Controls how late in a slot the async FT2 TX may start.\n\n• ON (default): the TX starts only if the FULL payload (~2520ms) still fits — window ~18% of the slot. If it would arrive late, the TX is deferred to the next slot instead of sending a TRUNCATED frame the partner can't decode. Calm, Decodium-3.0-style stability.\n• OFF: FIX B (1.0.353) behaviour — window up to ~76% of the slot (only ~700ms of useful payload required). More reactive but can transmit truncated frames on a late reply.\n\nEnable OFF only if you want maximum reactivity and accept occasional non-decodable late TX.")
                 }
 
                 // 1.0.321 — opt-in: FT2 manual one-shot disarm (Salvatore 1.0.300 latch fix)
@@ -688,9 +689,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When ON (upstream 1.0.300+ behaviour): after a manual TX1-TX3 in FT2 the TX is disarmed and re-armed ONLY when a partner decode arrives. Avoids TX1 looping forever on double-click, but on WEAK partners that don't decode in the first RX period the QSO is lost (= 'TX1 stops without completing').\n\nWhen OFF (default on this fork, pre-1.0.300): TX1 keeps repeating until 'Caller Retries' is reached — better for weak-signal QSOs (Pasquale's case).\n\nEnable only if you double-click stations that consistently reply on the first attempt.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When ON (upstream 1.0.300+ behaviour): after a manual TX1-TX3 in FT2 the TX is disarmed and re-armed ONLY when a partner decode arrives. Avoids TX1 looping forever on double-click, but on WEAK partners that don't decode in the first RX period the QSO is lost (= 'TX1 stops without completing').\n\nWhen OFF (default on this fork, pre-1.0.300): TX1 keeps repeating until 'Caller Retries' is reached — better for weak-signal QSOs (Pasquale's case).\n\nEnable only if you double-click stations that consistently reply on the first attempt.")
                 }
 
                 // 1.0.321 — Caller retries (era Q_PROPERTY non esposta in UI)
@@ -718,9 +719,9 @@ SettingsPageScroll {
                     // 1.0.493 — segnale visivo: col watchdog owner (hard cap OFF) questo numero è ignorato
                     opacity: (bridge && bridge.txWatchdogMode !== 0 && !bridge.callerRetriesAlwaysHard) ? 0.5 : 1.0
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Maximum times the same TX step (TX1/TX2/TX3) repeats before halting if the partner doesn't reply.\n\nDefault: 10.\n\nFT2 (slot 3.75s): 10 retries ≈ 38s of calling.\nFT8 (slot 15s): 10 retries ≈ 150s.\n\nLower (4-6) = less time wasted on stations that don't reply.\nHigher (15-20) = patience for weak DX / marginal propagation.\n\nNote: with 'FT2 manual one-shot disarm' OFF (default) this is what stops TX1 from looping forever.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Maximum times the same TX step (TX1/TX2/TX3) repeats before halting if the partner doesn't reply.\n\nDefault: 10.\n\nFT2 (slot 3.75s): 10 retries ≈ 38s of calling.\nFT8 (slot 15s): 10 retries ≈ 150s.\n\nLower (4-6) = less time wasted on stations that don't reply.\nHigher (15-20) = patience for weak DX / marginal propagation.\n\nNote: with 'FT2 manual one-shot disarm' OFF (default) this is what stops TX1 from looping forever.")
                 }
                 // 1.0.493 — avviso: watchdog owner del limite → il cap qui sopra è ignorato
                 Text {
@@ -755,9 +756,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When ON (default), the 'Caller retries' cap on TX1/TX2 halts the call even if the TX Watchdog is enabled — the number you set is a real hard limit.\n\nWhen OFF (upstream 1.0.438 behaviour): the TX Watchdog takes priority and ignores the Caller-retries cap until its own timeout, so a call can repeat for the whole watchdog duration (default 6 min).")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When ON (default), the 'Caller retries' cap on TX1/TX2 halts the call even if the TX Watchdog is enabled — the number you set is a real hard limit.\n\nWhen OFF (upstream 1.0.438 behaviour): the TX Watchdog takes priority and ignores the Caller-retries cap until its own timeout, so a call can repeat for the whole watchdog duration (default 6 min).")
                 }
 
                 // 1.0.447 - Fondamenta Fase 1: censimento transizioni di stato FT2 (diagnostico, solo-log)
@@ -782,9 +783,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Diagnostic only (off by default): logs every FT2 QSO state transition (from/to/progress) to the diagnostic log, to empirically map the real sequencer state machine. No behaviour change at all - it only writes log lines. Used to design future deterministic-transition guards safely.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Diagnostic only (off by default): logs every FT2 QSO state transition (from/to/progress) to the diagnostic log, to empirically map the real sequencer state machine. No behaviour change at all - it only writes log lines. Used to design future deterministic-transition guards safely.")
                 }
 
                 // 1.0.447 - Leva#6-A: gate smart-TX adattivi all'occupazione canale (sperimentale)
@@ -809,9 +810,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Experimental, off by default. Makes the FT2 async-TX timing gates (RMS-quiet, decode-quiet, anti-collision jitter) adapt to channel occupancy: a bit more reactive when the channel is clear, more conservative when it is crowded. With this OFF the timing is byte-identical to the standard behaviour. It never transmits before hearing the partner.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Experimental, off by default. Makes the FT2 async-TX timing gates (RMS-quiet, decode-quiet, anti-collision jitter) adapt to channel occupancy: a bit more reactive when the channel is clear, more conservative when it is crowded. With this OFF the timing is byte-identical to the standard behaviour. It never transmits before hearing the partner.")
                 }
 
                 // Conservative FT2 (weak-signal mode) — opt-in tuning
@@ -838,9 +839,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Anti-QSB tuning:\n  • Ghost filter -24 dB instead of -22\n  • Retry cap extended SNR-adaptive (+2..+4 extra)\n  • Same-step wait relaxed for weak partners\n\nDefault: OFF — enable it if you have weak DX partners or marginal propagation.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Anti-QSB tuning:\n  • Ghost filter -24 dB instead of -22\n  • Retry cap extended SNR-adaptive (+2..+4 extra)\n  • Same-step wait relaxed for weak partners\n\nDefault: OFF — enable it if you have weak DX partners or marginal propagation.")
                 }
 
                 // FT2 accumulo fra slot ripetuti (RX): somma l'energia di
@@ -868,9 +869,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Sums the signal energy of repeated FT2 transmissions from the same station across slots, to decode weaker signals than a single slot allows.
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Sums the signal energy of repeated FT2 transmissions from the same station across slots, to decode weaker signals than a single slot allows.
 
 Experimental, never confirmed on real air traffic. Resets to OFF on every restart.
 
@@ -898,9 +899,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("While calling CQ (AutoCQ), keeps the decode depth at full (OSD + 4th subtraction pass + weak-signal averaging) instead of reducing it to 2.\n\nHelps you hear weak responders. Reduces automatically under CPU pressure anyway.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("While calling CQ (AutoCQ), keeps the decode depth at full (OSD + 4th subtraction pass + weak-signal averaging) instead of reducing it to 2.\n\nHelps you hear weak responders. Reduces automatically under CPU pressure anyway.\n\nDefault: OFF.")
                 }
 
                 // Scelta del prossimo caller in coda con punteggio (opt-in)
@@ -925,9 +926,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When several stations call you (AutoCQ / multi-answer), answers the best one first instead of the first to arrive.\n\nThe score favours strong signals, new DXCC entities (more if new on any band, less if only new on this band) and stations that have waited longer. Stations already worked on this band are moved down.\n\nAn order you set by hand in the queue is never changed.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When several stations call you (AutoCQ / multi-answer), answers the best one first instead of the first to arrive.\n\nThe score favours strong signals, new DXCC entities (more if new on any band, less if only new on this band) and stations that have waited longer. Stations already worked on this band are moved down.\n\nAn order you set by hand in the queue is never changed.\n\nDefault: OFF.")
                 }
 
                 // 1.0.289 — FT2 #3: chiusura rapida partner forti
@@ -951,9 +952,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("If a STRONG partner (SNR > 0 dB) doesn't send the final 73, reduces RR73 repetitions from 8 to 4 (~15s instead of 30s) before logging and returning to CQ.\n\nWeak partners keep the extra anti-QSB repetitions.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("If a STRONG partner (SNR > 0 dB) doesn't send the final 73, reduces RR73 repetitions from 8 to 4 (~15s instead of 30s) before logging and returning to CQ.\n\nWeak partners keep the extra anti-QSB repetitions.\n\nDefault: OFF.")
                 }
 
                 // 1.0.292 — FT2: decode adattivo (dedup re-decode async in solo-ascolto)
@@ -977,9 +978,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("In LISTEN-ONLY mode (not calling CQ nor in a QSO), thins async re-decode from 100ms to ~350ms: doesn't re-decode 95%-overlapping audio → saves CPU and reduces the peaks that may lower decode depth.\n\nWhen waiting for a reply (AutoCQ/QSO) it stays at full cadence. Loses no decodes.\n\nUseful mainly on modest PCs.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("In LISTEN-ONLY mode (not calling CQ nor in a QSO), thins async re-decode from 100ms to ~350ms: doesn't re-decode 95%-overlapping audio → saves CPU and reduces the peaks that may lower decode depth.\n\nWhen waiting for a reply (AutoCQ/QSO) it stays at full cadence. Loses no decodes.\n\nUseful mainly on modest PCs.\n\nDefault: OFF.")
                 }
 
                 // Sprint2-1 — FT2: narrow async decode (fast pass attorno a nfqso)
@@ -1003,9 +1004,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("When WAITING FOR A REPLY (AutoCQ or active QSO), decodes a narrow window around your RX frequency (±150 Hz) instead of the whole band, with a full-band pass every 4th cycle.\n\nThe reply is decoded earlier in the slot (less CPU per attempt), so TX can react in the same slot instead of the next one. Band activity is still scanned 1 cycle out of 4.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("When WAITING FOR A REPLY (AutoCQ or active QSO), decodes a narrow window around your RX frequency (±150 Hz) instead of the whole band, with a full-band pass every 4th cycle.\n\nThe reply is decoded earlier in the slot (less CPU per attempt), so TX can react in the same slot instead of the next one. Band activity is still scanned 1 cycle out of 4.\n\nDefault: OFF.")
                 }
 
                 // 1.0.293/294 — FT2: AP hashed-callsign cache (Phase 1: display-only rescue)
@@ -1029,9 +1030,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Experimental FT2 AP cache: stores callsigns seen in-band as hashes (TTL 30 min) and may rescue borderline FT2 decodes when a decoded callsign is already in the cache.\n\nSafety gate: AP-cache-rescued rows are shown/audited, but they do not drive AutoSeq, AutoCQ, or automatic TX. They are also not used to seed the AP cache again.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Experimental FT2 AP cache: stores callsigns seen in-band as hashes (TTL 30 min) and may rescue borderline FT2 decodes when a decoded callsign is already in the cache.\n\nSafety gate: AP-cache-rescued rows are shown/audited, but they do not drive AutoSeq, AutoCQ, or automatic TX. They are also not used to seed the AP cache again.\n\nDefault: OFF.")
                 }
 
                 // 1.0.355 — FT2: salta decode ridondante di fine-slot
@@ -1058,9 +1059,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("FT2 async only: when the asynchronous decode (incremental every 100 ms) has ALREADY decoded a slot, skip the end-of-slot synchronous decode pass for that slot.\n\nBenefit: removes contention (~1.8 s after TX) on the same worker, so the partner reply is picked up faster.\n\nCost: for slots already covered by async you lose the full end-of-slot weak-averaging pass, which can recover weak/marginal stations. Slots where async returned EMPTY still keep the sync decode.\n\nDefault: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("FT2 async only: when the asynchronous decode (incremental every 100 ms) has ALREADY decoded a slot, skip the end-of-slot synchronous decode pass for that slot.\n\nBenefit: removes contention (~1.8 s after TX) on the same worker, so the partner reply is picked up faster.\n\nCost: for slots already covered by async you lose the full end-of-slot weak-averaging pass, which can recover weak/marginal stations. Slots where async returned EMPTY still keep the sync decode.\n\nDefault: OFF.")
                 }
 
                 // 1.0.364+ — MAM multi-stream (MSHV): risponde a più
@@ -1089,9 +1090,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("MSHV multi-stream mode: in a single period it replies to MULTIPLE callers at the same time, each on ITS own audio frequency (like a DX-pedition station).\n\nThis is an ADDITIONAL MAM option: MAM (Multi-Answer Mode) or AutoCQ must be active before it can run. With this OFF, MAM remains serial, one caller at a time, as before.\n\nEXPERIMENTAL. Default: OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("MSHV multi-stream mode: in a single period it replies to MULTIPLE callers at the same time, each on ITS own audio frequency (like a DX-pedition station).\n\nThis is an ADDITIONAL MAM option: MAM (Multi-Answer Mode) or AutoCQ must be active before it can run. With this OFF, MAM remains serial, one caller at a time, as before.\n\nEXPERIMENTAL. Default: OFF.")
                 }
 
                 // 1.0.364+ — MAM multi-stream: numero massimo di stream simultanei
@@ -1122,9 +1123,9 @@ Default: OFF.")
                     contentItem: TextInput { selectByMouse: true; onActiveFocusChanged: if (activeFocus) selectAll(); text: mamMaxStreamsSpin.textFromValue(mamMaxStreamsSpin.value, mamMaxStreamsSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; leftPadding: spinTextSidePadding; rightPadding: spinTextSidePadding; readOnly: !mamMaxStreamsSpin.editable; validator: mamMaxStreamsSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                     background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("How many parallel QSOs MAM multi-stream can run at the same time, each on its own frequency.\n\nRange 1-10. Default: 3. With 1 you answer one caller at a time, but still on THEIR frequency (MSHV style).\n\nHigher values split the TX peak power across the streams: with N equal streams each one loses about 20·log10(N) dB (6 dB for 2, 9.5 dB for 3, 12 dB for 4), and they need more CPU to generate the overlapping audio. The DigiPileup power budget limits this loss. Enabled only when MAM multi-stream is active.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("How many parallel QSOs MAM multi-stream can run at the same time, each on its own frequency.\n\nRange 1-10. Default: 3. With 1 you answer one caller at a time, but still on THEIR frequency (MSHV style).\n\nHigher values split the TX peak power across the streams: with N equal streams each one loses about 20·log10(N) dB (6 dB for 2, 9.5 dB for 3, 12 dB for 4), and they need more CPU to generate the overlapping audio. The DigiPileup power budget limits this loss. Enabled only when MAM multi-stream is active.")
                 }
 
                 // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory cache (30s)
@@ -1149,9 +1150,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Caches partner state (callsign + TX num + qsoProgress + SNR) for 30 seconds: if the partner disappears for QSB and reappears within 30s, restores the qsoProgress instead of restarting from TX1.\n\nRequires Conservative FT2 active.\n\nDefault: OFF (opt-in after the 1.0.186 revert — strict gate + [FT2WS-F] log). Automatically disabled if Conservative is OFF.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Caches partner state (callsign + TX num + qsoProgress + SNR) for 30 seconds: if the partner disappears for QSB and reappears within 30s, restores the qsoProgress instead of restarting from TX1.\n\nRequires Conservative FT2 active.\n\nDefault: OFF (opt-in after the 1.0.186 revert — strict gate + [FT2WS-F] log). Automatically disabled if Conservative is OFF.")
                 }
 
                 // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
@@ -1176,9 +1177,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("If you're in TX3 (R+report) and the partner doesn't reply for 2 periods (~7.5s), re-sends TX2 (signal report) once before leaving the QSO.\n\nHelps with weak partners that didn't ack the first time. Capped to 1 re-send per QSO (no loops).\n\nRequires Conservative FT2 active. Default: ON under Conservative.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("If you're in TX3 (R+report) and the partner doesn't reply for 2 periods (~7.5s), re-sends TX2 (signal report) once before leaving the QSO.\n\nHelps with weak partners that didn't ack the first time. Capped to 1 re-send per QSO (no loops).\n\nRequires Conservative FT2 active. Default: ON under Conservative.")
                 }
 
                 // Smooth decode flow (streaming progressivo FT8/FT4)
@@ -1205,9 +1206,9 @@ Default: OFF.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Spreads FT8/FT4 decodes from the final end-of-period batch into continuous streaming with animated fade (~100 ms per row). FT2 async is unchanged because it already streams. Default: ON; auto-fallback if UI stalls are detected on modest PCs. Disable for legacy batch behavior.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Spreads FT8/FT4 decodes from the final end-of-period batch into continuous streaming with animated fade (~100 ms per row). FT2 async is unchanged because it already streams. Default: ON; auto-fallback if UI stalls are detected on modest PCs. Disable for legacy batch behavior.")
                 }
             }
         }
@@ -1285,9 +1286,9 @@ Default: OFF.")
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("When ON, if the TX watchdog fires while a QSO has already completed the two-way report exchange (both reports exchanged, progress >= ROGER_REPORT), the QSO is logged instead of abandoned.\n\nDefault OFF = 1.0.445 behavior (only a deferred snapshot, recovered only if the partner re-sends 73; in a manual QSO it is lost).")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("When ON, if the TX watchdog fires while a QSO has already completed the two-way report exchange (both reports exchanged, progress >= ROGER_REPORT), the QSO is logged instead of abandoned.\n\nDefault OFF = 1.0.445 behavior (only a deferred snapshot, recovered only if the partner re-sends 73; in a manual QSO it is lost).")
         }
         Text { text: qsTr("Tune Watchdog (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
         RowLayout {

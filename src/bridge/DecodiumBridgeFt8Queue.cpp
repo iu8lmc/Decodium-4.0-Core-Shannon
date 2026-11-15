@@ -2,6 +2,7 @@
 #include "Detector/FT8DecodeWorker.hpp"
 #include <QDateTime>
 #include <QMutexLocker>
+#include <QStandardPaths>
 #include <limits>
 
 void decodiumBridgeAudioLevelLog(const QString&);
@@ -63,8 +64,12 @@ void DecodiumBridge::queueFt8DecodeRequest(const QVector<short>& audioSnapshot, 
     bool const adaptiveFt8Pressure =
         !txAudioActive && (m_lowCpuModeEnabled || cpuPressureActive() || ft8StartupPressure);
     req.cpuPressureLimited = adaptiveFt8Pressure;
+    bool const labLowCpuFollowup = QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_LOWCPU_FT8_FOLLOWUP") > 0
+        && m_lowCpuModeEnabled && decodeDepth == 3 && nzhsym >= 50
+        && maxDecodeMsOverride > 0 && !subpassRequested;
     if (adaptiveFt8Pressure) {
-        req.ndepth = qMin(req.ndepth, 2);
+        req.ndepth = qMin(req.ndepth, labLowCpuFollowup ? 3 : 2);
         req.lft8apon = 0;
         bool const severePressure = cpuPressureSevereActive();
         bool const startupOrSeverePressure = ft8StartupPressure || severePressure;
@@ -153,6 +158,11 @@ void DecodiumBridge::queueFt8DecodeRequest(const QVector<short>& audioSnapshot, 
     }
     if (maxDecodeMsOverride > 0) {
         req.maxDecodeMs = qMin(req.maxDecodeMs, maxDecodeMsOverride);
+    }
+    if (labLowCpuFollowup) {
+        int const labBudget = qEnvironmentVariableIntValue("DECODIUM_LAB_LOWCPU_FT8_FOLLOWUP_MS");
+        if (labBudget >= 500 && labBudget <= 2800)
+            req.maxDecodeMs = qMin(req.maxDecodeMs, labBudget);
     }
     if (!txAudioActive && boundedDepth >= 3) {
         qint64 const visualThrottleUntilMs = QDateTime::currentMSecsSinceEpoch()

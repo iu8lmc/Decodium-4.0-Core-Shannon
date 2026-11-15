@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -192,6 +193,46 @@ constexpr std::array<int, 83> kLdpc17491Nrw {{
     6,   6,   6,   7,   6,   6,   6,   7,   7,   6,   6,   7,
     6,   6,   6,   6,   6,   6,   6,   7,   6,   6,   6
 }};
+
+// The parity-check graph is fixed. Resolve the reverse edge once at compile
+// time rather than searching the three bit edges on every BP iteration.
+constexpr auto make_ldpc17491_reverse_edges ()
+{
+  std::array<int, kLdpc17491MaxRowWeight * kLdpc17491M> result {};
+  for (int check = 0; check < kLdpc17491M; ++check)
+    for (int row = 0; row < kLdpc17491Nrw[static_cast<size_t> (check)]; ++row)
+      {
+        int const idx = row + kLdpc17491MaxRowWeight * check;
+        int const bit = kLdpc17491Nm[static_cast<size_t> (idx)] - 1;
+        result[static_cast<size_t> (idx)] = -1;
+        if (bit >= 0 && bit < kLdpc17491N)
+          for (int edge = 0; edge < kLdpc17491ColWeight; ++edge)
+            if (kLdpc17491Mn[static_cast<size_t> (edge + kLdpc17491ColWeight * bit)] == check + 1)
+              {
+                result[static_cast<size_t> (idx)] = edge;
+                break;
+              }
+      }
+  return result;
+}
+
+constexpr auto kLdpc17491ReverseEdges = make_ldpc17491_reverse_edges ();
+constexpr bool ldpc17491_reverse_edges_valid ()
+{
+  for (int check = 0; check < kLdpc17491M; ++check)
+    for (int row = 0; row < kLdpc17491Nrw[static_cast<size_t> (check)]; ++row)
+      {
+        int const idx = row + kLdpc17491MaxRowWeight * check;
+        if (kLdpc17491ReverseEdges[static_cast<size_t> (idx)] < 0)
+          return false;
+        for (int other = 0; other < row; ++other)
+          if (kLdpc17491Nm[static_cast<size_t> (other + kLdpc17491MaxRowWeight * check)]
+              == kLdpc17491Nm[static_cast<size_t> (idx)])
+            return false;
+      }
+  return true;
+}
+static_assert (ldpc17491_reverse_edges_valid (), "LDPC parity graph has an unmatched edge");
 
 struct Ldpc17491Tables
 {
@@ -445,9 +486,10 @@ int sum_weight (std::array<signed char, Size> const& values, int count)
   return total;
 }
 
-void mrbencode91_cpp (std::array<signed char, kLdpc17491K> const& message,
+// Order zero needs just one encoding, so avoid packing the matrix.
+void mrbencode91_direct (std::array<signed char, kLdpc17491K> const& message,
                       std::array<signed char, kLdpc17491N>& codeword,
-                      std::array<std::array<signed char, kLdpc17491K>, kLdpc17491N> const& g2,
+                      std::array<Codeword174, kLdpc17491K> const& genmrb,
                       int k)
 {
   codeword.fill (0);
@@ -457,9 +499,30 @@ void mrbencode91_cpp (std::array<signed char, kLdpc17491K> const& message,
       for (int pos = 0; pos < kLdpc17491N; ++pos)
         {
           codeword[static_cast<size_t> (pos)] ^=
-            g2[static_cast<size_t> (pos)][static_cast<size_t> (bit)];
+            genmrb[static_cast<size_t> (bit)][static_cast<size_t> (pos)];
         }
     }
+}
+
+
+// Each row contains binary generator coefficients. Packing them lets OSD
+// combine an entire row with three XORs, without changing the search order.
+static_assert (kLdpc17491N <= 3 * 64, "Packed generator must fit the codeword");
+using PackedGenerator = std::array<std::array<std::uint64_t, 3>, kLdpc17491K>;
+
+void mrbencode91_cpp (std::array<signed char, kLdpc17491K> const& message,
+                      Codeword174& codeword, PackedGenerator const& generator, int k)
+{
+  std::array<std::uint64_t, 3> encoded {};
+  for (int bit = 0; bit < k; ++bit)
+    {
+      if (message[static_cast<size_t> (bit)] == 0) continue;
+      for (size_t word = 0; word < encoded.size (); ++word)
+        encoded[word] ^= generator[static_cast<size_t> (bit)][word];
+    }
+  for (int pos = 0; pos < kLdpc17491N; ++pos)
+    codeword[static_cast<size_t> (pos)] = static_cast<signed char> (
+        (encoded[static_cast<size_t> (pos) / 64] >> (pos % 64)) & 1u);
 }
 
 void nextpat91_cpp (std::array<signed char, kLdpc17491K>& mi, int k, int iorder, int& iflag)
@@ -509,6 +572,11 @@ void nextpat91_cpp (std::array<signed char, kLdpc17491K>& mi, int k, int iorder,
     }
 }
 
+// MinSizeRel otherwise builds this search with -Os; keep the hot loop fast
+// on GCC without enabling fast-math or architecture-specific instructions.
+#if defined(__GNUC__) && !defined(__clang__) && defined(__OPTIMIZE_SIZE__)
+__attribute__((optimize("O3")))
+#endif
 void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, int ndeep,
                     signed char* message91_out, signed char* cw_out,
                     int* nharderror_out, float* dmin_out)
@@ -580,6 +648,15 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
         }
     }
 
+  // genmrb is final after elimination; pack it once for all OSD patterns.
+  PackedGenerator packedGenerator {};
+  if (ndeep > 0)
+    for (int row = 0; row < k; ++row)
+      for (int col = 0; col < kLdpc17491N; ++col)
+        if (genmrb[static_cast<size_t> (row)][static_cast<size_t> (col)] != 0)
+          packedGenerator[static_cast<size_t> (row)][static_cast<size_t> (col) / 64] |=
+              std::uint64_t {1} << (col % 64);
+
   std::array<std::array<signed char, kLdpc17491K>, kLdpc17491N> g2 {};
   for (int row = 0; row < k; ++row)
     {
@@ -605,7 +682,10 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
   std::copy_n (hdec_sorted.begin (), k, m0.begin ());
 
   Codeword174 c0 {};
-  mrbencode91_cpp (m0, c0, g2, k);
+  if (ndeep > 0)
+    mrbencode91_cpp (m0, c0, packedGenerator, k);
+  else
+    mrbencode91_direct (m0, c0, genmrb, k);
   Codeword174 cw_sorted = c0;
   int nhardmin = 0;
   float dmin = 0.0f;
@@ -694,7 +774,7 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
                   int nd1kpt = 0;
                   if (n1 == iflag)
                     {
-                      mrbencode91_cpp (me, ce, g2, k);
+                      mrbencode91_cpp (me, ce, packedGenerator, k);
                       d1 = 0.0f;
                       for (int i = 0; i < k; ++i)
                         {
@@ -723,7 +803,9 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
 
                   if (nd1kpt <= ntheta)
                     {
-                      mrbencode91_cpp (me, ce, g2, k);
+                      // The first pattern was already encoded above.
+                      if (n1 != iflag)
+                        mrbencode91_cpp (me, ce, packedGenerator, k);
                       int nhard = 0;
                       float dd = d1;
                       if (n1 == iflag)
@@ -822,7 +904,7 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
                 {
                   me2[static_cast<size_t> (i)] = m0[static_cast<size_t> (i)] ^ misub[static_cast<size_t> (i)];
                 }
-              mrbencode91_cpp (me2, ce2, g2, k);
+              mrbencode91_cpp (me2, ce2, packedGenerator, k);
               for (int i = 0; i < kLdpc17491M; ++i)
                 {
                   e2sub2[static_cast<size_t> (i)] =
@@ -866,7 +948,7 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
                           me2[static_cast<size_t> (i)] =
                             m0[static_cast<size_t> (i)] ^ mi2[static_cast<size_t> (i)];
                         }
-                      mrbencode91_cpp (me2, ce2, g2, k);
+                      mrbencode91_cpp (me2, ce2, packedGenerator, k);
                       int nhard = 0;
                       float dd = 0.0f;
                       for (int i = 0; i < kLdpc17491N; ++i)
@@ -1208,14 +1290,9 @@ extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, i
             {
               int const bit = nm_at (tables, row, check) - 1;
               float value = zn[static_cast<size_t> (bit)];
-              for (int edge = 0; edge < tables.ncw; ++edge)
-                {
-                  if (mn_at (tables, edge, bit) == check + 1)
-                    {
-                      value -= tov[static_cast<size_t> (bit)][static_cast<size_t> (edge)];
-                      break;
-                    }
-                }
+              int const edge = kLdpc17491ReverseEdges[static_cast<size_t> (
+                  row + kLdpc17491MaxRowWeight * check)];
+              value -= tov[static_cast<size_t> (bit)][static_cast<size_t> (edge)];
               toc[static_cast<size_t> (check)][static_cast<size_t> (row)] = value;
             }
         }

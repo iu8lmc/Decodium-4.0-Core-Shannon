@@ -112,15 +112,24 @@ def gen_signals(ft8sim, message, snr, n, f0, dt, fdop, delay, outdir):
 # ----------------------------------------------------------------------------
 # Decodifica Decodium
 # ----------------------------------------------------------------------------
+def run_decodium(cmd, timeout, env=None):
+    """Esegue il decoder; un errore non è una misura di mancato decode."""
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                             env=env)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Decoder scaduto dopo %s s: %s" % (timeout, cmd[-1])) from exc
+    if res.returncode != 0:
+        raise RuntimeError("Decoder fallito (exit %d) su %s: %s"
+                           % (res.returncode, cmd[-1], res.stderr or res.stdout))
+    return res.stdout
+
+
 def decode_decodium(decodium, wav, opts, nfqso, nfa, nfb, max_ms, timeout):
     """Ritorna (decoded_set, snr_map) dal decoder Decodium su un wav."""
     cmd = [decodium] + opts + ["--nfqso", str(nfqso), "--nfa", str(nfa),
                                "--nfb", str(nfb), "--max-ms", str(max_ms), wav]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return set(), {}
-    out = res.stdout
+    out = run_decodium(cmd, timeout)
     decoded = set()
     snr_map = {}
     for line in out.splitlines():

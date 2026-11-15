@@ -1,5 +1,6 @@
 #include "DecodiumBridge.h"
 #include "PanadapterItem.hpp"
+#include "WaterfallRingPosition.hpp"
 #include "FtRuntimeAdaptivePolicy.hpp"
 #include "Network/RemoteCommandServer.hpp"
 #include <QDateTime>
@@ -192,10 +193,8 @@ void DecodiumBridge::onSpectrumTimer()
         if (newSamples > 0) {
             int const toCopy = qMin(newSamples, (int)WF_RING_SIZE);
             int const srcStart = avail - toCopy;
-            for (int i = 0; i < toCopy; ++i) {
-                m_wfRing[m_wfRingPos % WF_RING_SIZE] = m_audioBuffer[srcStart + i];
-                ++m_wfRingPos;
-            }
+            decodium::appendWaterfallRing(m_wfRing, WF_RING_SIZE, m_wfRingPos,
+                                          m_audioBuffer.constData() + srcStart, toCopy);
             m_lastWaterfallAudioBufferSize = avail;
             if (usingLegacyBackendForTx()
                 && useModernSpectrumFeedWithLegacy()
@@ -363,8 +362,6 @@ void DecodiumBridge::onSpectrumTimer()
             float const freqPerBin = static_cast<float>(SAMPLE_RATE) / PANADAPTER_FFT_SIZE;
             float const freqMinHz = static_cast<int>(nfaSnapshot / freqPerBin) * freqPerBin;
             float const freqMaxHz = static_cast<int>(nfbSnapshot / freqPerBin) * freqPerBin;
-            uint64_t const serial = ++m_panadapterComputeSerial;
-
             bool const gpuPanadapterFftAllowed =
                 !m_lowCpuModeEnabled
                 && !m_gpuPanadapterFftStallGuard.load();
@@ -404,6 +401,7 @@ void DecodiumBridge::onSpectrumTimer()
                 gpuPanadapterFftAvailable
                 && !panadapterNeedsCpuSpectrumHistory;
             if (gpuPanadapterFft) {
+                uint64_t const serial = ++m_panadapterComputeSerial;
                 static std::atomic_bool loggedGpuPath {false};
                 bool expectedGpuLog = false;
                 if (loggedGpuPath.compare_exchange_strong(expectedGpuLog, true)) {
@@ -491,8 +489,13 @@ void DecodiumBridge::onSpectrumTimer()
             if (m_panadapterGpuFftActive)
                 setGpuPanadapterFftActive(false, QStringLiteral("CPU FFTW"));
 
-            QVector<short> panadapterSamples(fftLen);
-            panadapterSamples.fill(0);
+            // A busy worker cannot accept this visual frame. Avoid allocating,
+            // copying and possibly amplifying it; the atomic claim below still
+            // handles a concurrent change after this early check.
+            if (m_panadapterComputeBusy.load(std::memory_order_acquire))
+                return;
+
+            QVector<short> panadapterSamples(fftLen, 0);
             std::memcpy(panadapterSamples.data(), m_wfRing + ringStart,
                         static_cast<size_t>(firstChunk) * sizeof(short));
             if (firstChunk < usable) {
@@ -548,6 +551,8 @@ void DecodiumBridge::onSpectrumTimer()
             if (!m_panadapterComputeBusy.compare_exchange_strong(expectedIdle, true)) {
                 return;
             }
+            uint64_t const serial = ++m_panadapterComputeSerial;
+            quint64 const monitorSessionSnapshot = m_periodTimerSessionId;
             m_lastPanadapterFrameMs = nowMs;
             metricDelivered = true;
             metricHighRes = true;
@@ -570,6 +575,7 @@ void DecodiumBridge::onSpectrumTimer()
                 samples = std::move(panadapterSamples),
                 nfaSnapshot,
                 nfbSnapshot,
+                monitorSessionSnapshot,
                 usable,
                 freqMinHz,
                 freqMaxHz,
@@ -586,6 +592,9 @@ void DecodiumBridge::onSpectrumTimer()
                     values = std::move(result.values),
                     minDb = result.minDb,
                     maxDb = result.maxDb,
+                    nfaSnapshot,
+                    nfbSnapshot,
+                    monitorSessionSnapshot,
                     usable,
                     freqMinHz,
                     freqMaxHz,
@@ -593,6 +602,13 @@ void DecodiumBridge::onSpectrumTimer()
                 ]() mutable {
                     if (!guard)
                         return;
+                    // A frame from a previous monitor session or display band
+                    // must not overwrite the current view after a restart.
+                    if (guard->m_periodTimerSessionId != monitorSessionSnapshot
+                        || guard->m_nfa != nfaSnapshot || guard->m_nfb != nfbSnapshot) {
+                        guard->m_panadapterComputeBusy.store(false);
+                        return;
+                    }
                     guard->finishPanadapterFrame(std::move(values),
                                                  minDb,
                                                  maxDb,

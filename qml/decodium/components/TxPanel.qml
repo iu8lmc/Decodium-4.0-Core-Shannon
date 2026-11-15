@@ -1,6 +1,7 @@
 /* Decodium Qt6 - TX Panel Component
  * TX panel delegates to bridge (which uses HvTxW for auto-sequencing)
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -940,8 +941,8 @@ Item {
                                     function onModeChanged() { txPanel.syncQ65SubmodeSelector() }
                                 }
                                 Accessible.name: qsTr("Q65 Submode")
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("Q65 submode: period and tone spacing")
+                                DecoTemplates.ToolTip.visible: hovered
+                                DecoTemplates.ToolTip.text: qsTr("Q65 submode: period and tone spacing")
                                 font.bold: true
                                 font.family: decodiumMonoFontFamily
                                 font.pixelSize: Math.max(10, Math.round(10 * txPanel.toolbarScale))
@@ -1120,9 +1121,9 @@ Item {
                                     }
                                 }
 
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 500
-                                ToolTip.text: qsTr("Select a %1 working frequency; starred entries are preferred")
+                                DecoTemplates.ToolTip.visible: hovered
+                                DecoTemplates.ToolTip.delay: 500
+                                DecoTemplates.ToolTip.text: qsTr("Select a %1 working frequency; starred entries are preferred")
                                                   .arg(txPanel.displayModeName(engine ? engine.mode : ""))
                             }
                         }
@@ -1381,9 +1382,9 @@ Item {
                                         }
                                     }
 
-                                    ToolTip.visible: containsMouse && txCtrlRepeater.dragIndex < 0 && btnLoader.item && btnLoader.item.tip.length > 0
-                                    ToolTip.text: btnLoader.item ? btnLoader.item.tip : ""
-                                    ToolTip.delay: 500
+                                    DecoTemplates.ToolTip.visible: containsMouse && txCtrlRepeater.dragIndex < 0 && btnLoader.item && btnLoader.item.tip.length > 0
+                                    DecoTemplates.ToolTip.text: btnLoader.item ? btnLoader.item.tip : ""
+                                    DecoTemplates.ToolTip.delay: 500
                                 }
                             }
                         }
@@ -2141,9 +2142,9 @@ Item {
                     radius: 4
 
                     HoverHandler { id: nextMessageHover }
-                    ToolTip.visible: nextMessageHover.hovered
-                    ToolTip.delay: 500
-                    ToolTip.text: engine ? engine.currentTxMessage : ""
+                    DecoTemplates.ToolTip.visible: nextMessageHover.hovered
+                    DecoTemplates.ToolTip.delay: 500
+                    DecoTemplates.ToolTip.text: engine ? engine.currentTxMessage : ""
 
                     RowLayout {
                         anchors.fill: parent
@@ -2228,9 +2229,9 @@ Item {
                             engine.logQso()
                     }
 
-                    ToolTip.visible: logQsoBtn.hovered
-                    ToolTip.delay: 500
-                    ToolTip.text: txPanel.txVisualActive
+                    DecoTemplates.ToolTip.visible: logQsoBtn.hovered
+                    DecoTemplates.ToolTip.delay: 500
+                    DecoTemplates.ToolTip.text: txPanel.txVisualActive
                                   ? qsTr("Finish TX before logging the QSO")
                                   : (engine && engine.dxCall.length > 0
                                      ? qsTr("Log current QSO")
@@ -3117,9 +3118,9 @@ Item {
             }
         }
 
-        ToolTip.visible: hovered
-        ToolTip.delay: 800
-        ToolTip.text: isDisabled
+        DecoTemplates.ToolTip.visible: hovered
+        DecoTemplates.ToolTip.delay: 800
+        DecoTemplates.ToolTip.text: isDisabled
                           ? qsTr("TX%1 disabled (right-click -> menu to re-enable)").arg(txNum)
                           : qsTr("Click: send now\nRight-click: menu (Edit / Skip TX%1)\nLong-press: edit message").arg(txNum)
 

@@ -22,6 +22,7 @@
 #include "MapIntelligenceService.h"
 #include "controllers/ActiveStationsModel.hpp"
 #include <QDateTime>
+#include <QDebug>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QMediaDevices>
@@ -40,6 +41,16 @@ bool decodiumBridgeLegacyRigControlFallback(DecodiumLegacyBackend*, const QStrin
 DecodiumBridge::DecodiumBridge(QObject* parent)
     : QObject(parent)
 {
+    // Optional startup profiling for slow machines; disabled in normal use.
+    bool const profileStartup = qEnvironmentVariableIntValue("DECODIUM_STARTUP_PROFILE") > 0;
+    QElapsedTimer startupProfileTimer;
+    if (profileStartup) startupProfileTimer.start();
+    auto const startupCheckpoint = [&](char const* phase) {
+        if (profileStartup) {
+            qInfo().noquote() << "[STARTUP-PROFILE]" << phase
+                              << "ms=" << startupProfileTimer.restart();
+        }
+    };
     // The native SSTV facade is always present in SSTV-enabled builds, while
     // its worker and DSP pipeline remain stopped until the workspace starts
     // reception. A stable lifetime is required by the direct bounded PCM tap.
@@ -55,6 +66,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     initialiseDecodeModels();
 
     initialisePanadapterGpuPolicy();
+    startupCheckpoint("sstv-models-graphics");
 
     // FT2 async smart TX scheduler: ascolta il livello audio per mantenere
     // un counter di "quiet runs" (campioni consecutivi sotto soglia RMS).
@@ -65,6 +77,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 
     m_mediaDevices = new QMediaDevices(this);
     initialiseRtlSdr();
+    startupCheckpoint("audio-devices-and-rtl");
     // Telemetria stazione+meteo: refresh periodico in background (non ad
     // ogni QSO, per non martellare l'API) — usato solo se WeatherApiEnable
     // e' attivo (il controllo e' dentro fetchWeatherForGrid()).
@@ -74,16 +87,21 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     QTimer::singleShot(5000, this, &DecodiumBridge::fetchWeatherForGrid);
 
     initialiseAudioDeviceNotifications();
+    startupCheckpoint("audio-notifications");
 
     m_themeManager    = new DecodiumThemeManager(this);
     // The effective quality follows the flat "Light" theme: tell the QML bindings when it changes.
     connect(m_themeManager, &DecodiumThemeManager::currentThemeChanged,
             this, &DecodiumBridge::uiQualityChanged);
     m_propagationManager = new DecodiumPropagationManager(this);
+    startupCheckpoint("theme-and-propagation");
     initialiseSatelliteTracking();
+    startupCheckpoint("satellite-tracking");
     initialiseMapIntelligence();
+    startupCheckpoint("map-intelligence");
     m_diagnostics     = new DecodiumDiagnostics(this);
     initialiseWavManager();
+    startupCheckpoint("diagnostics-and-wav");
     m_macroManager    = new MacroManager(this);
     m_bandManager     = new BandManager(this);
     m_bandManager->setFrequencyResolver([this](const QString& bandLambda, const QString& mode) {
@@ -119,6 +137,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_cat4OmCat->loadSettings();
     m_omniRigCat->loadSettings();
     m_hamlibCat->loadSettings();
+    startupCheckpoint("cat-objects-and-settings");
     // CAT condivisa: si apre solo se l'utente l'ha chiesto. A interruttore
     // spento non viene aperta alcuna porta e il comportamento resta quello
     // di sempre.
@@ -180,6 +199,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     if (m_mapIntelligenceService) {
         m_dxCluster->setOfflineMode(m_mapIntelligenceService->offlineMode());
     }
+    startupCheckpoint("radio-sharing-and-amp");
     QGuiApplication::setFont(fontSettingFont(QStringLiteral("Font"), QString(), 0));
     initialiseDxClusterNotifications();
     initialiseLegacyCqFilterConnections();
@@ -189,6 +209,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_activeStations  = new ActiveStationsModel(this);
     m_alertManager    = new DecodiumAlertManager(this);
     initialiseTimeSync();
+    startupCheckpoint("models-cluster-time");
 
     bridgeLog(QStringLiteral("DX Cluster auto-connect: waiting for Main.qml ready"));
 
@@ -210,6 +231,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 
     initialiseCallsignIntelligence();
     initialiseUsStateAndWsprNotifications();
+    startupCheckpoint("network-services");
 
     // Start drift reference clock
     m_driftClock.start();
@@ -227,6 +249,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     initialiseCoreTimers();
 
     initialiseUiStartupSettings();
+    startupCheckpoint("cat-timers-ui-settings");
 
     // 1.0.192 — Log Frequency Calibration al boot: l'utente vede subito se
     // la correzione e' attiva o no. Se entrambi 0, formula no-op (fast path).
@@ -248,8 +271,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     connect(m_legacyStateTimer, &QTimer::timeout, this, &DecodiumBridge::syncLegacyBackendState);
 
     initialiseTxAudioOutput();
+    startupCheckpoint("tx-audio-setup");
 
     loadSettings();
+    startupCheckpoint("load-settings");
     QTimer::singleShot(5000, this, [this]() {
         if (!m_shuttingDown) {
             m_startupTxGuard = false;
@@ -262,6 +287,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         m_mapIntelligenceService->reloadFromAdif(effectiveAdifLogPath());
     }
     refreshMapMoonOverlay();
+    startupCheckpoint("sstv-map-restore");
     applyLowCpuRuntimeProfile(QStringLiteral("startup"));
     bridgeLog(QStringLiteral("Worked-before ADIF preload deferred until DXCC startup task"));
     resetStartupTransientQsoState();
@@ -285,6 +311,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     bridgeLog("startup services: waiting for Main.qml ready signal");
 
     syncLegacyBackendState();
+    startupCheckpoint("mode-restore-legacy-sync");
     if ((usingLegacyBackendForTx() || decodiumBridgeLegacyRigControlFallback(m_legacyBackend, m_catBackend)) && m_legacyStateTimer) {
         m_legacyStateTimer->start();
     }
@@ -298,5 +325,6 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     knownCqSeedTimer.start();
     seedFt8KnownCqCacheFromAllTxt();
     qInfo() << "[STARTUP-TIMING] ft8_known_cq_seed_ms=" << knownCqSeedTimer.elapsed();
+    startupCheckpoint("persistence-and-ft8-cache");
 }
 

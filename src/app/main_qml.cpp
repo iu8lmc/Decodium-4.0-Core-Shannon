@@ -3,6 +3,7 @@
 #include <QApplication>
 #include "src/services/DxCalendarCache.h"
 #include "src/app/QmlRootCleanup.h"
+#include "src/app/AppImageQmlSnapshot.hpp"
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCryptographicHash>
@@ -5702,18 +5703,40 @@ int main(int argc, char* argv[])
         qEnvironmentVariableIsSet("APPIMAGE")
         || qEnvironmentVariableIsSet("APPDIR")
         || QCoreApplication::applicationDirPath().startsWith(QStringLiteral("/tmp/.mount_"));
+    QString stableAppImageQmlPath;
+#if defined(Q_OS_LINUX)
+    if (runningFromAppImage && !qEnvironmentVariableIsSet("DECODIUM_DISABLE_QML_CACHE")
+        && !qEnvironmentVariableIsSet("QML_DISABLE_DISK_CACHE")) {
+        QElapsedTimer snapshotTimer;
+        snapshotTimer.start();
+        QString const cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (!cacheRoot.isEmpty()) {
+            QString const source = QDir(QCoreApplication::applicationDirPath())
+                                       .absoluteFilePath(QStringLiteral("qml"));
+            QString const salt = QStringLiteral("appimage-qml-v1|%1|%2|%3")
+                                     .arg(QStringLiteral(FORK_RELEASE_VERSION),
+                                          QString::fromLatin1(qVersion()), QSysInfo::buildAbi());
+            stableAppImageQmlPath = decodium::appimage_qml::prepare(
+                source, QDir(cacheRoot).filePath(QStringLiteral("appimage-qml-snapshots")), salt);
+        }
+        if (stableAppImageQmlPath.isEmpty())
+            L("AppImage QML snapshot unavailable; falling back to uncached mounted files");
+        else
+            L(("AppImage QML snapshot: " + stableAppImageQmlPath.toLocal8Bit()).constData());
+        L(("AppImage QML snapshot preparation ms=" + QByteArray::number(snapshotTimer.elapsed())).constData());
+    }
+#endif
 
     // Keep QML disk cache enabled by default. Disabling it forces every launch
-    // to recompile QML/JS and is expensive on Windows when antivirus scans the
-    // installed Qt/QML tree. AppImages are the exception: the executable lives
-    // in a transient mount path, and stale QML bytecode has caused startup
-    // failures after replacing the AppImage.
+    // to recompile QML/JS and is expensive on older machines. AppImages use
+    // it only with a verified content-addressed snapshot: their mount paths
+    // change between runs, and stale bytecode has caused startup failures.
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_QML_CACHE")) {
         qputenv("QML_DISABLE_DISK_CACHE", "1");
         L("QML disk cache disabled by DECODIUM_DISABLE_QML_CACHE");
     } else if (qEnvironmentVariableIsSet("QML_DISABLE_DISK_CACHE")) {
         L("QML disk cache disabled by environment");
-    } else if (runningFromAppImage) {
+    } else if (runningFromAppImage && stableAppImageQmlPath.isEmpty()) {
         qputenv("QML_DISABLE_DISK_CACHE", "1");
         L("QML disk cache disabled for AppImage runtime");
     } else {
@@ -5768,10 +5791,13 @@ int main(int argc, char* argv[])
                 diag->addQmlWarning(warning);
         }
     });
-    QString const appQmlPath = QCoreApplication::applicationDirPath() + QStringLiteral("/qml");
+    QString const mountedAppQmlPath = QCoreApplication::applicationDirPath() + QStringLiteral("/qml");
+    QString const appQmlPath = stableAppImageQmlPath.isEmpty() ? mountedAppQmlPath : stableAppImageQmlPath;
     QString const bundledQtQmlPath = QDir(QCoreApplication::applicationDirPath())
         .absoluteFilePath(QStringLiteral("../Resources/qml"));
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+    if (appQmlPath != mountedAppQmlPath)
+        engine.addImportPath(mountedAppQmlPath);
     engine.addImportPath(appQmlPath);
     if (QDir(bundledQtQmlPath).exists()) {
         engine.addImportPath(QDir(bundledQtQmlPath).canonicalPath());

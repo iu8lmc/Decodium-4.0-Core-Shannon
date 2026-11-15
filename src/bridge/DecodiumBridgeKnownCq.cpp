@@ -34,6 +34,19 @@ void DecodiumBridge::seedFt8KnownCqCacheFromAllTxt()
         return;
     }
 
+    // The CQ replay is explicitly opt-in and only supported for JTDX input.
+    // Hash seeding below is independent and must still inspect every FT8 line.
+    bool const knownCqSourceAllowed =
+        info.absolutePath().contains(QStringLiteral("JTDX"), Qt::CaseInsensitive)
+        || info.fileName().startsWith(QStringLiteral("JTDX"), Qt::CaseInsensitive);
+    QString const seedKnownCqText =
+        qEnvironmentVariable("DECODIUM_FT8_SEED_KNOWN_CQ_REPLAY").trimmed().toLower();
+    bool const seedKnownCqReplay =
+        knownCqSourceAllowed
+        && (seedKnownCqText == QStringLiteral("1")
+            || seedKnownCqText == QStringLiteral("true")
+            || seedKnownCqText == QStringLiteral("yes"));
+
     constexpr qint64 kTailBytes = 8 * 1024 * 1024;
     if (info.size() > kTailBytes) {
         file.seek(info.size() - kTailBytes);
@@ -63,11 +76,7 @@ void DecodiumBridge::seedFt8KnownCqCacheFromAllTxt()
         QStringLiteral(R"(^\d{6}_(\d{6})\s+[0-9]+(?:\.[0-9]+)?\s+RX\s+FT8\s+-?\d+\s+-?\d+(?:\.\d+)?\s+\d+\s+(.+)$)"),
         QRegularExpression::CaseInsensitiveOption);
     static QRegularExpression const wordSplitPattern(QStringLiteral(R"(\s+)"));
-    static QRegularExpression const callAlphabetPattern(QStringLiteral(R"(^[A-Z0-9/]{3,13}$)"));
-    static QRegularExpression const reportPattern(QStringLiteral(R"(^(?:R)?[+-]\d\d$)"));
-    static QRegularExpression const gridPattern(QStringLiteral(R"(^[A-R]{2}\d{2}$)"));
-
-    auto looksLikeHashCallSeed = [&] (QString call) {
+    auto looksLikeHashCallSeed = [] (QString call) {
         call = call.trimmed().toUpper();
         if (call.size() < 3 || call.size() > 13 || call == QStringLiteral("...")) {
             return false;
@@ -78,15 +87,26 @@ void DecodiumBridge::seedFt8KnownCqCacheFromAllTxt()
             || call == QStringLiteral("TU")) {
             return false;
         }
-        if (reportPattern.match(call).hasMatch() || gridPattern.match(call).hasMatch()
-            || !callAlphabetPattern.match(call).hasMatch()) {
-            return false;
-        }
         bool hasLetter = false;
         bool hasDigit = false;
         for (QChar const ch : call) {
-            hasLetter = hasLetter || ch.isLetter();
-            hasDigit = hasDigit || ch.isDigit();
+            ushort const code = ch.unicode();
+            bool const letter = code >= 'A' && code <= 'Z';
+            bool const digit = code >= '0' && code <= '9';
+            if (!letter && !digit && code != '/') {
+                return false;
+            }
+            hasLetter = hasLetter || letter;
+            hasDigit = hasDigit || digit;
+        }
+        // Four-character Maidenhead locators pass the alphabet and mixed
+        // letter/digit checks but were excluded by the original grid pattern.
+        if (call.size() == 4
+            && call[0] >= QLatin1Char('A') && call[0] <= QLatin1Char('R')
+            && call[1] >= QLatin1Char('A') && call[1] <= QLatin1Char('R')
+            && call[2] >= QLatin1Char('0') && call[2] <= QLatin1Char('9')
+            && call[3] >= QLatin1Char('0') && call[3] <= QLatin1Char('9')) {
+            return false;
         }
         return hasLetter && hasDigit;
     };
@@ -128,6 +148,9 @@ void DecodiumBridge::seedFt8KnownCqCacheFromAllTxt()
             rememberHashCallsFromMessage(ft8LineMatch.captured(2), order);
         }
 
+        if (!seedKnownCqReplay) {
+            continue;
+        }
         QRegularExpressionMatch const match = cqPattern.match(line);
         if (!match.hasMatch()) {
             continue;
@@ -175,17 +198,6 @@ void DecodiumBridge::seedFt8KnownCqCacheFromAllTxt()
               [](KnownCqSeed const& lhs, KnownCqSeed const& rhs) {
                   return lhs.order < rhs.order;
               });
-
-    bool const knownCqSourceAllowed =
-        info.absolutePath().contains(QStringLiteral("JTDX"), Qt::CaseInsensitive)
-        || info.fileName().startsWith(QStringLiteral("JTDX"), Qt::CaseInsensitive);
-    QString const seedKnownCqText =
-        qEnvironmentVariable("DECODIUM_FT8_SEED_KNOWN_CQ_REPLAY").trimmed().toLower();
-    bool const seedKnownCqReplay =
-        knownCqSourceAllowed
-        && (seedKnownCqText == QStringLiteral("1")
-            || seedKnownCqText == QStringLiteral("true")
-            || seedKnownCqText == QStringLiteral("yes"));
 
     int seeded = 0;
 

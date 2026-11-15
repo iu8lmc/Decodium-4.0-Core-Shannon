@@ -49,6 +49,9 @@ void DecodiumBridge::beginDecodeCallbackShutdown()
     if (m_ft4Worker) {
         m_ft4Worker->beginShutdown();
     }
+    if (m_fst4Worker) {
+        m_fst4Worker->beginShutdown();
+    }
 
     auto disconnectWorker = [this](QObject *worker) {
         if (worker) {

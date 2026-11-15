@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -38,8 +39,13 @@ namespace
 // call visti in banda, settato dal worker (ftx_ft2_set_ap_hash_cache_c) PRIMA del
 // decode. Confronto post-decode: se una call del messaggio decodificato è in cache,
 // il decode borderline (nharderror 49..60) viene promosso invece di scartato.
-// Perdita voluta, come sopra: vive quanto il processo.
+// Su Linux lo snapshot viene rilasciato con il thread; altrove mantiene la
+// durata precedente per evitare problemi di teardown del runtime.
+#if defined(__linux__)
+thread_local std::vector<quint32> g_ft2ApHashCache;
+#else
 thread_local std::vector<quint32>& g_ft2ApHashCache = *new std::vector<quint32>;
+#endif
 
 // FT2 asincrono F3 — finestra incrementale del decode asincrono. Come in
 // JTTY, a ogni giro si cercano solo gli inizi di frame che sono diventati
@@ -807,17 +813,25 @@ struct Stage7State
 
 Stage7State& stage7_state ()
 {
+#if defined(__linux__)
+  static thread_local auto state = std::make_unique<Stage7State> ();
+#else
   // Perdita voluta: il distruttore girerebbe dentro LdrShutdownThread alla
   // morte del thread, quando heap e loader sono gia' in smontaggio.
   static thread_local auto* state = new Stage7State;
+#endif
   return *state;
 }
 
 Ft2EmitState& ft2_emit_state ()
 {
+#if defined(__linux__)
+  static thread_local auto state = std::make_unique<Ft2EmitState> ();
+#else
   // Perdita voluta: il distruttore girerebbe dentro LdrShutdownThread alla
   // morte del thread, quando heap e loader sono gia' in smontaggio.
   static thread_local auto* state = new Ft2EmitState;
+#endif
   return *state;
 }
 

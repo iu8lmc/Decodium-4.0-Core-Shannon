@@ -21,7 +21,6 @@ Uso:
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -116,13 +115,9 @@ def main():
         """Come bench.decode_decodium, ma con un ambiente scelto per processo."""
         cmd = [exe] + opts + ["--nfqso", str(int(args.f0)), "--nfa", str(nfa),
                               "--nfb", str(nfb), "--max-ms", str(args.max_ms), wav]
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True,
-                                 timeout=args.timeout, env=env)
-        except subprocess.TimeoutExpired:
-            return set()
+        output = bench.run_decodium(cmd, args.timeout, env=env)
         out = set()
-        for line in res.stdout.splitlines():
+        for line in output.splitlines():
             m = bench._DECODED_RE.search(line)
             if m:
                 msg = bench.norm_msg(m.group(1))

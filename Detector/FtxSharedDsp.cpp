@@ -50,6 +50,12 @@ namespace
   class FftPlanRegistry
   {
   public:
+    ~FftPlanRegistry () noexcept
+    {
+      try { clear (); }
+      catch (...) { /* Teardown must not terminate the process. */ }
+    }
+
     fftwf_plan find_or_create (std::complex<float>* data, int nfft, int isign, int iform)
     {
       FftPlanKey key;
@@ -141,8 +147,15 @@ namespace
   // indifferente.
   FftPlanRegistry& fft_plan_registry ()
   {
+#if defined(__linux__)
+    thread_local FftPlanRegistry registry;
+    return registry;
+#else
+    // Some FFTW builds have unsafe TLS teardown on Windows and macOS.
+    // Preserve the established lifetime until cleanup is verified there.
     thread_local auto* registry = new FftPlanRegistry;
     return *registry;
+#endif
   }
 
   float percentile_value (float const* values, int count, int pct)

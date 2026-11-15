@@ -108,6 +108,12 @@ std::vector<float> make_ft8_window ()
   return window;
 }
 
+std::vector<float> const& ft8_window ()
+{
+  static std::vector<float> const window = make_ft8_window ();
+  return window;
+}
+
 std::array<float, kFt8VarEdgeWindow> make_ft8_sync8var_edge_window ()
 {
   std::array<float, kFt8VarEdgeWindow> window {};
@@ -160,7 +166,7 @@ void fill_ft8_stage4_sbase (float const* dd, int npts, float nfa, float nfb, flo
       return;
     }
 
-  std::vector<float> const window = make_ft8_window ();
+  std::vector<float> const& window = ft8_window ();
   float const df = kSampleRate / static_cast<float> (kNFFT1);
   int ia = std::max (1, static_cast<int> (std::lround (nfa / df)));
   int ib = static_cast<int> (std::lround (nfb / df));
@@ -243,7 +249,7 @@ extern "C" void ftx_sync8_search_c (float const* dd, int npts, float nfa, float 
       return;
     }
 
-  std::vector<float> const window = make_ft8_window ();
+  std::vector<float> const& window = ft8_window ();
   std::vector<float> s (static_cast<size_t> (kNH1) * kNHSYM, 0.0f);
 
   for (int j = 0; j < kNHSYM; ++j)
@@ -906,7 +912,7 @@ extern "C" void ftx_sync8_search_stage4_c (float const* dd, int npts, float nfa,
 
   fill_ft8_stage4_sbase (dd, npts, nfa, nfb, sbase);
 
-  std::array<float, kFt8VarEdgeWindow> const edge_window = make_ft8_sync8var_edge_window ();
+  static std::array<float, kFt8VarEdgeWindow> const edge_window = make_ft8_sync8var_edge_window ();
   std::array<float, 4 * kFt8VarMaxCandidates> var_candidate {};
   int var_ncand = 0;
   int const nfa_i = static_cast<int> (std::lround (nfa));

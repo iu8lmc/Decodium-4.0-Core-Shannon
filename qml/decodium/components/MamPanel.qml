@@ -5,6 +5,7 @@
  * By IU8LMC
  */
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -172,9 +173,9 @@ Item {
             onClicked: queueMoveButton.triggered()
         }
 
-        ToolTip.visible: moveMouse.containsMouse && queueMoveButton.active
-        ToolTip.text: queueMoveButton.tip
-        ToolTip.delay: 500
+        DecoTemplates.ToolTip.visible: moveMouse.containsMouse && queueMoveButton.active
+        DecoTemplates.ToolTip.text: queueMoveButton.tip
+        DecoTemplates.ToolTip.delay: 500
     }
 
     RowLayout {

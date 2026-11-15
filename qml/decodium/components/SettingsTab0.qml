@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -75,9 +76,9 @@ SettingsPageScroll {
             Layout.preferredHeight: controlHeight
             verticalAlignment: Text.AlignVCenter
             HoverHandler { id: myCallInfoHover }
-            ToolTip.visible: myCallInfoHover.hovered
-            ToolTip.delay: 500
-            ToolTip.text: qsTr("The active callsign transmitted by Decodium and written as STATION_CALLSIGN in ADIF.")
+            DecoTemplates.ToolTip.visible: myCallInfoHover.hovered
+            DecoTemplates.ToolTip.delay: 500
+            DecoTemplates.ToolTip.text: qsTr("The active callsign transmitted by Decodium and written as STATION_CALLSIGN in ADIF.")
         }
         DecoTextField {
             text: bridge.callsign; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
@@ -137,9 +138,9 @@ SettingsPageScroll {
             Layout.preferredHeight: controlHeight
             verticalAlignment: Text.AlignVCenter
             HoverHandler { id: opCallInfoHover }
-            ToolTip.visible: opCallInfoHover.hovered
-            ToolTip.delay: 500
-            ToolTip.text: qsTr("Optional legacy operator-callsign setting. It never replaces My Call for transmission or STATION_CALLSIGN in ADIF.")
+            DecoTemplates.ToolTip.visible: opCallInfoHover.hovered
+            DecoTemplates.ToolTip.delay: 500
+            DecoTemplates.ToolTip.text: qsTr("Optional legacy operator-callsign setting. It never replaces My Call for transmission or STATION_CALLSIGN in ADIF.")
         }
         DecoTextField {
             text: bridge.getSetting("OpCall", ""); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
@@ -162,9 +163,9 @@ SettingsPageScroll {
             Layout.preferredHeight: controlHeight
             verticalAlignment: Text.AlignVCenter
             HoverHandler { id: stationLabelInfoHover }
-            ToolTip.visible: stationLabelInfoHover.hovered
-            ToolTip.delay: 500
-            ToolTip.text: qsTr("Optional descriptive label for this station or operating setup. It is not a callsign or a radio model.")
+            DecoTemplates.ToolTip.visible: stationLabelInfoHover.hovered
+            DecoTemplates.ToolTip.delay: 500
+            DecoTemplates.ToolTip.text: qsTr("Optional descriptive label for this station or operating setup. It is not a callsign or a radio model.")
         }
         DecoTextField {
             text: bridge.stationName; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
@@ -197,9 +198,9 @@ SettingsPageScroll {
             Layout.preferredHeight: controlHeight
             verticalAlignment: Text.AlignVCenter
             HoverHandler { id: rigInfoHover }
-            ToolTip.visible: rigInfoHover.hovered
-            ToolTip.delay: 500
-            ToolTip.text: qsTr("Optional transceiver or radio description, for example Icom IC-7100. If left empty, Decodium uses the CAT rig name when available for PSK Reporter metadata.")
+            DecoTemplates.ToolTip.visible: rigInfoHover.hovered
+            DecoTemplates.ToolTip.delay: 500
+            DecoTemplates.ToolTip.text: qsTr("Optional transceiver or radio description, for example Icom IC-7100. If left empty, Decodium uses the CAT rig name when available for PSK Reporter metadata.")
         }
         DecoTextField {
             text: bridge.stationRigInfo; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
@@ -278,6 +279,7 @@ SettingsPageScroll {
                 contentItem: Text { text: ""; leftPadding: 24 }
             }
             Text {
+                id: weatherPreview
                 property var preview: bridge.currentWeatherPreview()
                 text: weatherApiCheck.checked
                     ? (preview.available
@@ -285,7 +287,16 @@ SettingsPageScroll {
                         : qsTranslate("StationWeather", "Fetching…"))
                     : qsTranslate("StationWeather", "Off — temperature/wind sent as “unknown”")
                 color: textSecondary; font.pixelSize: 11
-                Timer { interval: 15000; running: weatherApiCheck.checked; repeat: true; onTriggered: parent.preview = bridge.currentWeatherPreview() }
+                Timer {
+                    id: weatherPreviewTimer
+                    interval: 15000
+                    running: weatherPreview.visible && weatherApiCheck.checked
+                             && !!dialog && dialog.visible
+                             && (!dialog.nativeHostWindow || dialog.nativeHostWindow.visible)
+                    repeat: true
+                    onRunningChanged: if (running) weatherPreview.preview = bridge.currentWeatherPreview()
+                    onTriggered: weatherPreview.preview = bridge.currentWeatherPreview()
+                }
             }
         }
 

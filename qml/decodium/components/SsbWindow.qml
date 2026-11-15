@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -265,7 +266,7 @@ GlassApplicationWindow {
                 text: (bridge.frequency / 1000000).toFixed(6)
                 enabled: ready && controls.busy !== true && !voice.transmitting
                 onAccepted: { bridge.cwTuneFrequency(Number(text.replace(",","."))*1000000); focus=false }
-                ToolTip.visible: hovered; ToolTip.text: qsTr("Frequency in MHz. Press Enter to tune.")
+                DecoTemplates.ToolTip.visible: hovered; DecoTemplates.ToolTip.text: qsTr("Frequency in MHz. Press Enter to tune.")
             }
             Label { text: "MHz" }
             Button { text: "−100 Hz"; enabled: ready && controls.busy !== true && !voice.transmitting; onClicked: bridge.cwTuneFrequency(bridge.frequency-100) }
@@ -372,8 +373,8 @@ GlassApplicationWindow {
                                         Button {
                                             text: qsTr("AI help")
                                             enabled: packs.assistantInstalled && !assistant.busy && card.modelData.text.length > 0
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Ask the assistant to rewrite this text so it reads well on the air")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Ask the assistant to rewrite this text so it reads well on the air")
                                             onClicked: {
                                                 win.pendingSlot = card.modelData.index
                                                 assistant.ask(qsTr("Rewrite this message so that a radio operator reads it aloud: short, clear, in the same language, no abbreviations that are hard to pronounce. Reply with the message only: ") + card.modelData.text)
@@ -652,8 +653,8 @@ GlassApplicationWindow {
                         Layout.columnSpan: 2
                         enabled: ready && controls.busy !== true && !voice.transmitting
                                  && !bridge.decoPortUseRemote && bridge.hamlibCat && bridge.hamlibCat.atuControlAvailable
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Ask the radio to start its internal antenna tuner.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Ask the radio to start its internal antenna tuner.")
                         onClicked: bridge.hamlibCat.requestAtuTune()
                     }
                     Button {
@@ -661,8 +662,8 @@ GlassApplicationWindow {
                         Layout.columnSpan: 2
                         enabled: ready && controls.busy !== true && !voice.transmitting
                                  && !bridge.decoPortUseRemote && bridge.hamlibCat && bridge.hamlibCat.atuControlAvailable
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Disable the radio's automatic antenna tuner.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Disable the radio's automatic antenna tuner.")
                         onClicked: bridge.hamlibCat.requestAtuOff()
                     }
                     Button {
@@ -670,8 +671,8 @@ GlassApplicationWindow {
                         Layout.columnSpan: 2
                         enabled: bridge.mode === "SSB" && controls.busy !== true && !voice.transmitting
                                  && win.directCatPowerOnAvailable
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Ask a supported radio to power on through direct Hamlib CAT. The selected CAT port must remain available while the radio is in standby.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Ask a supported radio to power on through direct Hamlib CAT. The selected CAT port must remain available while the radio is in standby.")
                         onClicked: bridge.hamlibCat.requestRadioPowerOn()
                     }
                     Button {

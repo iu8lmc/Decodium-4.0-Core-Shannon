@@ -3,6 +3,7 @@
  * By IU8LMC
  */
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -208,8 +209,8 @@ Dialog {
                 id: satelliteTrackingButton
                 z: 3
                 text: "🛰"
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Satellite tracking")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("Satellite tracking")
                 onClicked: {
                     if (typeof appEngine !== "undefined" && appEngine
                             && appEngine.requestSatelliteTrackingWindow)
@@ -243,9 +244,9 @@ Dialog {
                     onClicked: astroWindow.requestWindowMinimize()
                 }
 
-                ToolTip.visible: astroMinMA.containsMouse
-                ToolTip.text: qsTr("Minimize")
-                ToolTip.delay: 500
+                DecoTemplates.ToolTip.visible: astroMinMA.containsMouse
+                DecoTemplates.ToolTip.text: qsTr("Minimize")
+                DecoTemplates.ToolTip.delay: 500
             }
 
             Rectangle {
@@ -274,9 +275,9 @@ Dialog {
                     onClicked: astroWindow.requestWindowClose()
                 }
 
-                ToolTip.visible: astroCloseMA.containsMouse
-                ToolTip.text: qsTr("Close")
-                ToolTip.delay: 500
+                DecoTemplates.ToolTip.visible: astroCloseMA.containsMouse
+                DecoTemplates.ToolTip.text: qsTr("Close")
+                DecoTemplates.ToolTip.delay: 500
             }
         }
     }

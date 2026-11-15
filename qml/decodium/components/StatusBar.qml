@@ -2,6 +2,7 @@
  * Includes S-meter, CPU monitor, and status indicators
  * By IU8LMC
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -290,7 +291,8 @@ Rectangle {
                 // Pulsing animation when decoding
                 SequentialAnimation on opacity {
                     id: pulseAnimation
-                    running: decLed.ledOn && !statusBarComponent.ft2LinkMode && statusBarComponent.visible
+                    running: decLed.ledOn && !statusBarComponent.ft2LinkMode
+                             && statusBarComponent.visible && !(bridge && bridge.lowCpuModeEnabled)
                     loops: Animation.Infinite
                     NumberAnimation { to: 0.6; duration: 300 }
                     NumberAnimation { to: 1.0; duration: 300 }
@@ -346,6 +348,7 @@ Rectangle {
                     running: ftThreadsLed.isActive && statusBarComponent.decoding
                              && !statusBarComponent.ft2LinkMode
                              && statusBarComponent.visible
+                             && !(bridge && bridge.lowCpuModeEnabled)
                     loops: Animation.Infinite
                     NumberAnimation { to: 0.7; duration: 400 }
                     NumberAnimation { to: 1.0; duration: 400 }
@@ -573,9 +576,9 @@ Rectangle {
                     font.bold: rigAlcValid && rigAlc > 60
                     color: rigAlcValid && rigAlc > 60 ? (themeManager && themeManager.isLightTheme ? bgDeep : "#ffffff") : alcStatusColor
 
-                    ToolTip.visible: alcMouseArea.containsMouse
-                    ToolTip.delay: 500
-                    ToolTip.text: rigAlcValid
+                    DecoTemplates.ToolTip.visible: alcMouseArea.containsMouse
+                    DecoTemplates.ToolTip.delay: 500
+                    DecoTemplates.ToolTip.text: rigAlcValid
                         ? qsTr("ALC meter 0..100\n>60 = excessive ALC (TX power too high)")
                         : qsTr("ALC is not reported by Hamlib for this rig/backend")
                 }

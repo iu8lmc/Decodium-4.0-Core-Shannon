@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
@@ -269,8 +270,8 @@ SstvPage {
                             checked: root.controller ? root.controller.experimentalTiming : false
                             onClicked: if (root.controller)
                                            root.controller.experimentalTiming = !root.controller.experimentalTiming
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("For difficult incoming signals, including some QSSTV repair requests, enable this before starting transmission or reception.")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("For difficult incoming signals, including some QSSTV repair requests, enable this before starting transmission or reception.")
                         }
                         Label {
                             objectName: "hamdrmAdaptiveGuidance"
@@ -651,8 +652,8 @@ SstvPage {
                             objectName: "hamdrmBsrDialect"
                             model: [qsTr("QSSTV extended"), qsTr("EasyPal compact")]
                             enabled: root.controller && root.controller.canBuildBsr
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("For TRXAMADRM 3.6, select QSSTV extended: its BSR reader does not support compact ranges.")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("For TRXAMADRM 3.6, select QSSTV extended: its BSR reader does not support compact ranges.")
                         }
                         Button {
                             objectName: "hamdrmBuildBsr"
@@ -761,8 +762,8 @@ SstvPage {
                         enabled: root.controller && root.controller.canRepairReceivedBsr
                                  && !root.controller.busy && root.capability.waveformTx
                         onClicked: root.controller.startBsrRepair()
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("The request is unauthenticated. Check that it refers to your last image before transmitting.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("The request is unauthenticated. Check that it refers to your last image before transmitting.")
                     }
                     Label {
                         Layout.fillWidth: true

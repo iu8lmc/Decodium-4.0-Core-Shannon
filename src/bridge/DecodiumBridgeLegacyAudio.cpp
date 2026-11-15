@@ -1,4 +1,5 @@
 #include "DecodiumBridge.h"
+#include "WaterfallRingPosition.hpp"
 #include "DecodiumSubManagers.h"
 #include "Ft2LinkPcmStats.h"
 #include <QDateTime>
@@ -107,6 +108,8 @@ void DecodiumBridge::onLegacyAudioSamples(QByteArray const& pcmSamples)
             ++m_wfRingPos;
         }
     }
+    if (feedSpectrum)
+        decodium::normalizeWaterfallRingPosition(m_wfRingPos, WF_RING_SIZE);
 
     if (feedRecorder) {
         m_wavManager->feedSamples(linearSamples);

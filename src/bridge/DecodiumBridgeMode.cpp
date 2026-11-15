@@ -4,7 +4,10 @@
 #include "app/BandPlan.h"
 #endif
 #include <QCoreApplication>
+#include <QDebug>
+#include <QElapsedTimer>
 #include <QEvent>
+#include <QScopeGuard>
 #include "DecodiumLegacyBackend.h"
 #include "DecodiumSubManagers.h"
 #include "Q65DopplerTracker.h"
@@ -65,6 +68,17 @@ void DecodiumBridge::setMode(const QString& v) {
     }
 
     if (m_mode != normalizedMode) {
+        bool const profileModeChange = qEnvironmentVariableIntValue("DECODIUM_MODE_PROFILE") > 0;
+        QString const profilePreviousMode = profileModeChange ? m_mode : QString {};
+        QElapsedTimer modeProfileTimer;
+        if (profileModeChange) modeProfileTimer.start();
+        auto const modeProfileGuard = qScopeGuard([&]() {
+            if (profileModeChange) {
+                qInfo().noquote() << "[MODE-PROFILE] from=" << profilePreviousMode
+                                  << "to=" << normalizedMode
+                                  << "sync_ms=" << modeProfileTimer.elapsed();
+            }
+        });
         if (m_q65Doppler) m_q65Doppler->setEnabled(false);
         quint64 const rttyRigGeneration = ++m_rttyRigModeGeneration;
         if (normalizedMode == QStringLiteral("RTTY")) {

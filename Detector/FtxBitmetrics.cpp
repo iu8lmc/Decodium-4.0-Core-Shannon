@@ -352,13 +352,22 @@ void dft_symbol_4tones (Complex const* input, std::array<Complex, 4>& tones,
       power->fill (0.0f);
     }
 
+  static auto const phasors = [] {
+    std::array<std::array<Complex, 4>, NSS> table {};
+    for (int n = 0; n < NSS; ++n)
+      for (int bin = 0; bin < 4; ++bin)
+        {
+          float const angle = -kTwoPi * static_cast<float> (bin * n) / static_cast<float> (NSS);
+          table[static_cast<size_t> (n)][static_cast<size_t> (bin)] = Complex {std::cos (angle), std::sin (angle)};
+        }
+    return table;
+  } ();
   for (int n = 0; n < NSS; ++n)
     {
       Complex const sample = input[n];
       for (int bin = 0; bin < 4; ++bin)
         {
-          float const angle = -kTwoPi * static_cast<float> (bin * n) / static_cast<float> (NSS);
-          tones[static_cast<size_t> (bin)] += sample * Complex {std::cos (angle), std::sin (angle)};
+          tones[static_cast<size_t> (bin)] += sample * phasors[static_cast<size_t> (n)][static_cast<size_t> (bin)];
         }
     }
 

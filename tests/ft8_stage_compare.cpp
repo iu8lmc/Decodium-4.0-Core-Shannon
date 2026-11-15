@@ -45,6 +45,7 @@ extern "C"
   void ftx_ft8_cpp_dsp_rollout_stage_reset_c ();
   void ftx_ft8_stage4_reset_c ();
   void ftx_ft8_stage4_set_deadline_ms_c (long long deadline_ms);
+  void ftx_ft8_set_thread_budget_c (int n);
   void ftx_ft8_stage4_set_ldpc_osd_c (int maxosd, int norder);
   void ftx_ft8_stage4_set_ldpc_max_iter_c (int max_iter);
   void ftx_ft8_stage4_set_decode_options_c (int low_thresholds, int subpass,
@@ -1436,6 +1437,12 @@ int main (int argc, char * argv[])
           QStringLiteral ("value"),
           QStringLiteral ("100")
       };
+      QCommandLineOption const threads_option {
+          QStringLiteral ("threads"),
+          QStringLiteral ("FT8 stage-4 thread budget (default 1)."),
+          QStringLiteral ("count"),
+          QStringLiteral ("1")
+      };
       QCommandLineOption const no_early_option {
           QStringLiteral ("no-early"),
           QStringLiteral ("Skip synthetic 41/47 early passes before the requested stage.")
@@ -1570,6 +1577,7 @@ int main (int argc, char * argv[])
       parser.addOption (cycles_option);
       parser.addOption (rxfsens_option);
       parser.addOption (candthin_option);
+      parser.addOption (threads_option);
       parser.addOption (no_early_option);
       parser.addOption (dump_candidates_option);
       parser.addOption (dump_only_option);
@@ -1663,6 +1671,10 @@ int main (int argc, char * argv[])
                                                       QStringLiteral ("rxfsens"));
       int const candidateThin = parse_int_option (parser, candthin_option,
                                                   QStringLiteral ("candthin"));
+      int const threadBudget = parse_int_option (parser, threads_option, QStringLiteral ("threads"));
+      if (threadBudget < 1 || threadBudget > 24)
+        throw std::runtime_error ("threads must be between 1 and 24");
+      ftx_ft8_set_thread_budget_c (threadBudget);
       bool const skipEarlyPasses = parser.isSet (no_early_option);
       bool const dumpCandidates = parser.isSet (dump_candidates_option);
       bool const dumpOnly = parser.isSet (dump_only_option);

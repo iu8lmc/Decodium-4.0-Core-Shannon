@@ -3,6 +3,7 @@
  * By IU8LMC
  */
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -165,6 +166,13 @@ Popup {
     }
 
     Timer {
+        id: searchRefreshTimer
+        interval: 180
+        repeat: false
+        onTriggered: refreshLog()
+    }
+
+    Timer {
         id: adifImportNoticeTimer
         interval: 12000
         repeat: false
@@ -220,14 +228,29 @@ Popup {
         updatingLogbookCombo = false
     }
 
+    property string displayedLogRevision: ""
+
     function refreshLog() {
+        searchRefreshTimer.stop()
         if (appEngine && appEngine.logManager) {
+            // Capture before searching so a simultaneous external write is
+            // checked again on the next fallback tick.
+            var manager = appEngine.logManager
+            var revision = manager.qsoLogRevision ? manager.qsoLogRevision() : ""
             qsoList = appEngine.logManager.searchQsos(
                 searchField.text,
                 bandFilter.currentText === "All" ? "" : bandFilter.currentText,
                 modeFilter.currentText === "All" ? "" : modeFilter.currentText, "", "")
             stats = statsFromRows(qsoList)
+            displayedLogRevision = revision
         }
+    }
+
+    function refreshLogIfChanged() {
+        var manager = appEngine && appEngine.logManager ? appEngine.logManager : null
+        if (!manager || !manager.qsoLogRevision || !displayedLogRevision
+                || manager.qsoLogRevision() !== displayedLogRevision)
+            refreshLog()
     }
 
     function hasActiveFilters() {
@@ -364,7 +387,7 @@ Popup {
         interval: 15000
         running: logWindow.visible && logWindow.activeFocus
         repeat: true
-        onTriggered: refreshLog()
+        onTriggered: refreshLogIfChanged()
     }
 
     Overlay.modal: Rectangle { color: "transparent" }
@@ -669,8 +692,8 @@ Popup {
                                 logWindow.close()
                         }
                     }
-                    ToolTip.visible: logMinMA.containsMouse
-                    ToolTip.text: qsTr("Minimize"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: logMinMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Minimize"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 // Close
@@ -690,8 +713,8 @@ Popup {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: logWindow.requestWindowClose()
                     }
-                    ToolTip.visible: logCloseMA.containsMouse
-                    ToolTip.text: qsTr("Close"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: logCloseMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Close"); DecoTemplates.ToolTip.delay: 500
                 }
             }
         }
@@ -767,11 +790,11 @@ Popup {
                         if (profile.path)
                             appEngine.logManager.switchLogbook(profile.path)
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: appEngine && appEngine.logManager
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: appEngine && appEngine.logManager
                                   ? "Active logbook: " + appEngine.logManager.activeLogbookPath
                                   : "Logbook"
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -780,7 +803,7 @@ Popup {
                     border.color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.55)
                     Text { anchors.centerIn: parent; text: qsTr("New"); font.pixelSize: 10; font.bold: true; color: accentGreen }
                     MouseArea { id: newLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: createLogbookDialog.open() }
-                    ToolTip.visible: newLogbookMA.containsMouse; ToolTip.text: qsTr("Create a separate logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: newLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Create a separate logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -789,7 +812,7 @@ Popup {
                     border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.55)
                     Text { anchors.centerIn: parent; text: qsTr("Load"); font.pixelSize: 10; font.bold: true; color: secondaryCyan }
                     MouseArea { id: loadLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: logWindow.openAddLogbookDialog() }
-                    ToolTip.visible: loadLogbookMA.containsMouse; ToolTip.text: qsTr("Load/use an existing ADIF as a logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: loadLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Load/use an existing ADIF as a logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -798,7 +821,7 @@ Popup {
                     border.color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.5)
                     Text { anchors.centerIn: parent; text: qsTr("Bkp"); font.pixelSize: 10; font.bold: true; color: accentOrange }
                     MouseArea { id: backupLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (appEngine && appEngine.logManager) appEngine.logManager.backupActiveLogbook() }
-                    ToolTip.visible: backupLogbookMA.containsMouse; ToolTip.text: qsTr("Back up the active logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: backupLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Back up the active logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -815,7 +838,7 @@ Popup {
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: logWindow.openDeleteLogbookDialog()
                     }
-                    ToolTip.visible: deleteLogbookMA.containsMouse; ToolTip.text: qsTr("Delete selected logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: deleteLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Delete selected logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 // Search field
@@ -836,7 +859,7 @@ Popup {
                             font.pixelSize: 11; font.family: decodiumMonoFontFamily
                             color: textPrimary
                             placeholderTextColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
-                            onTextChanged: { clearSelection(); refreshLog() }
+                            onTextChanged: { clearSelection(); searchRefreshTimer.restart() }
                             background: Rectangle { color: "transparent" }
                         }
                     }
@@ -889,9 +912,9 @@ Popup {
                         onClicked: logWindow.resetFilters()
                     }
 
-                    ToolTip.visible: clearFiltersMA.containsMouse
-                    ToolTip.text: qsTr("Remove search, band, and mode filters")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: clearFiltersMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Remove search, band, and mode filters")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Item { Layout.fillWidth: true }
@@ -911,7 +934,7 @@ Popup {
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: logWindow.openImportAdifDialog()
                     }
-                    ToolTip.visible: importMA.containsMouse; ToolTip.text: qsTr("Import ADIF file"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: importMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Import ADIF file"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 // Export ADIF
@@ -926,7 +949,7 @@ Popup {
                         id: exportMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: logWindow.openExportAdifDialog()
                     }
-                    ToolTip.visible: exportMA.containsMouse; ToolTip.text: qsTr("Export ADIF"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: exportMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Export ADIF"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 // Refresh
@@ -940,7 +963,7 @@ Popup {
                         id: refreshMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: refreshLog()
                     }
-                    ToolTip.visible: refreshMA.containsMouse; ToolTip.text: qsTr("Refresh"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: refreshMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Refresh"); DecoTemplates.ToolTip.delay: 500
                 }
             }
         }
@@ -1100,8 +1123,8 @@ Popup {
                                 color: parent.checked ? accentGreen : "transparent"
                                 border.color: parent.checked ? accentGreen : textSecondary
                             }
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Select QSO for ADIF export")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Select QSO for ADIF export")
                         }
                         Text { text: modelData.dateTime || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 136 }
                         Text { text: modelData.call || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 11; font.bold: true; color: accentGreen; Layout.preferredWidth: 100 }

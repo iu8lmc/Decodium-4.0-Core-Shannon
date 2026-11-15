@@ -69,6 +69,19 @@ int printdata=0;
 
 static wsprd_output_callback_t wsprd_output_callback = NULL;
 static void * wsprd_output_context = NULL;
+static wsprd_cancel_callback_t wsprd_cancel_callback = NULL;
+static void * wsprd_cancel_context = NULL;
+
+void wsprd_set_cancel_callback (wsprd_cancel_callback_t callback, void * context)
+{
+    wsprd_cancel_callback = callback;
+    wsprd_cancel_context = context;
+}
+
+static int wsprd_cancel_requested(void)
+{
+    return wsprd_cancel_callback && wsprd_cancel_callback(wsprd_cancel_context);
+}
 
 void wsprd_set_output_callback (wsprd_output_callback_t callback, void * context)
 {
@@ -771,7 +784,7 @@ int wsprd_run(int argc, char *argv[])
     extern int optreset;
 #endif
     int i,j,k;
-    int exit_status = 1;
+    int exit_status = 1, cancelled = 0;
     FILE *fp_fftwf_wisdom_file, *fall_wspr = NULL, *fwsprd = NULL;
     FILE *fhash, *ftimer = NULL;
     unsigned char *symbols, *decdata, *channel_symbols, *apmask, *cw;
@@ -936,6 +949,10 @@ int wsprd_run(int argc, char *argv[])
     } else {
         ptr_to_infile=argv[optind];
     }
+
+    // A request may be retired while this worker is waiting for the shared
+    // DSP lock or preparing its input. Avoid creating files or starting FFTs.
+    if (wsprd_cancel_requested()) { exit_status = 2; goto cleanup; }
     
     if( stackdecoder ) {
         stack=calloc(stacksize,sizeof(struct snode));
@@ -1006,6 +1023,10 @@ int wsprd_run(int argc, char *argv[])
         wsprd_emit_formatted(1, "WSPR file must have suffix .wav or .c2\n");
         goto cleanup;
     }
+
+    // Reading a WAV creates PLAN1 and PLAN2; the common cleanup below owns
+    // them even if cancellation arrives before PLAN3 is created.
+    if (wsprd_cancel_requested()) { exit_status = 2; goto cleanup; }
     
     // Parse date and time from given filename
     strncpy(date,ptr_to_infile_suffix-11,6);
@@ -1260,6 +1281,7 @@ int wsprd_run(int argc, char *argv[])
          could each work on one candidate at a time.
          */
         for (j=0; j<npk; j++) {
+            if (wsprd_cancel_requested()) { cancelled = 1; goto finish_fft; }
             
             f1=candidates[j].freq;
             drift1=candidates[j].drift;
@@ -1351,6 +1373,7 @@ int wsprd_run(int argc, char *argv[])
         int n1,n2,n3,nadd,nu,ntype;
         int osd_decode;
         for (j=0; j<nwat; j++) {
+            if (wsprd_cancel_requested()) { cancelled = 1; goto finish_fft; }
             memset(symbols,0,sizeof(char)*nbits*2);
             memset(callsign,0,sizeof(char)*13);
             memset(grid,0,sizeof(char)*5);
@@ -1368,6 +1391,7 @@ int wsprd_run(int argc, char *argv[])
                 
                 idt=0; ii=0;
                 while ( not_decoded && idt<=(128/iifac)) {
+                    if (wsprd_cancel_requested()) { cancelled = 1; goto finish_fft; }
                     ii=(idt+1)/2;
                     if( idt%2 == 1 ) ii=-ii;
                     ii=iifac*ii;
@@ -1570,6 +1594,7 @@ int wsprd_run(int argc, char *argv[])
     }
     wsprd_emit_formatted(0, "<DecodeFinished>\n");
     
+finish_fft:
     fftwf_free(fftin);
     fftwf_free(fftout);
     
@@ -1596,11 +1621,7 @@ int wsprd_run(int argc, char *argv[])
     fprintf(ftimer,"-----------------------------------\n");
     fprintf(ftimer,"Total              %7.2f %7.2f\n",ttotal,1.0);
     
-    fftwf_destroy_plan(PLAN1);
-    fftwf_destroy_plan(PLAN2);
-    fftwf_destroy_plan(PLAN3);
-    
-    if( usehashtable ) {
+    if( usehashtable && !cancelled ) {
         fhash=fopen(hash_fname,"w");
         for (i=0; i<32768; i++) {
             if( strncmp(hashtab+i*13,"\0",1) != 0 ) {
@@ -1611,9 +1632,12 @@ int wsprd_run(int argc, char *argv[])
     }
     
     }
-    exit_status = 0;
+    exit_status = cancelled ? 2 : 0;
 
 cleanup:
+    if (PLAN1) { fftwf_destroy_plan(PLAN1); PLAN1 = NULL; }
+    if (PLAN2) { fftwf_destroy_plan(PLAN2); PLAN2 = NULL; }
+    if (PLAN3) { fftwf_destroy_plan(PLAN3); PLAN3 = NULL; }
     if (fall_wspr) fclose(fall_wspr);
     if (fwsprd) fclose(fwsprd);
     if (ftimer) fclose(ftimer);

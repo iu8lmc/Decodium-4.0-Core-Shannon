@@ -38,6 +38,17 @@ void DecodiumBridge::invalidateQsoSearchCache()
     m_qsoSearchCacheStats.clear();
 }
 
+QString DecodiumBridge::qsoLogRevision() const
+{
+    QString const path = effectiveAdifLogPath();
+    QFileInfo const info(path);
+    return QStringLiteral("%1\n%2\n%3\n%4")
+        .arg(path)
+        .arg(info.exists() ? info.lastModified().toMSecsSinceEpoch() : 0)
+        .arg(info.exists() ? info.size() : 0)
+        .arg(m_qsoSearchCacheGeneration.load(std::memory_order_relaxed));
+}
+
 void DecodiumBridge::warmLogCacheAsync()
 {
     {
@@ -148,51 +159,46 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
     QString const fromFilter = fromDate.trimmed();
     QString const toFilter = toDate.trimmed();
 
-    auto matchesDate = [] (QString const& dateTime, QString const& fromValue, QString const& toValue) {
-        QString const compact = dateTime.left(10).remove(QLatin1Char('-'));
-        QString const fromCompact = QString(fromValue).remove(QRegularExpression {R"([^0-9])"});
-        QString const toCompact = QString(toValue).remove(QRegularExpression {R"([^0-9])"});
-        if (!fromCompact.isEmpty() && compact < fromCompact) {
-            return false;
-        }
-        if (!toCompact.isEmpty() && compact > toCompact) {
-            return false;
-        }
-        return true;
-    };
-
     if (needle.isEmpty() && bandFilter.isEmpty() && modeFilter.isEmpty()
         && fromFilter.isEmpty() && toFilter.isEmpty()) {
         return sourceRows;
     }
 
+    static const QRegularExpression nonDigits {R"([^0-9])"};
+    QString const fromCompact = QString(fromFilter).remove(nonDigits);
+    QString const toCompact = QString(toFilter).remove(nonDigits);
+    bool const filterDate = !fromCompact.isEmpty() || !toCompact.isEmpty();
     QVariantList results;
     for (QVariant const& rowValue : sourceRows) {
         QVariantMap const row = rowValue.toMap();
-        QString const rowBand = row.value(QStringLiteral("band")).toString().trimmed().toUpper();
-        QString const rowMode = row.value(QStringLiteral("mode")).toString().trimmed().toUpper();
-        QString const rowCall = row.value(QStringLiteral("call")).toString().trimmed().toUpper();
-        QString const rowGrid = row.value(QStringLiteral("grid")).toString().trimmed().toUpper();
-        QString const rowComment = row.value(QStringLiteral("comment")).toString().trimmed().toUpper();
-        QString const rowDateTime = row.value(QStringLiteral("dateTime")).toString();
-
+        QString const rowBand = !bandFilter.isEmpty() || !needle.isEmpty()
+            ? row.value(QStringLiteral("band")).toString().trimmed().toUpper() : QString {};
         if (!bandFilter.isEmpty() && rowBand != bandFilter) {
             continue;
         }
+        QString const rowMode = !modeFilter.isEmpty() || !needle.isEmpty()
+            ? row.value(QStringLiteral("mode")).toString().trimmed().toUpper() : QString {};
         if (!modeFilter.isEmpty() && rowMode != modeFilter) {
             continue;
         }
-        if (!matchesDate(rowDateTime, fromFilter, toFilter)) {
-            continue;
+        QString const rowDateTime = filterDate || !needle.isEmpty()
+            ? row.value(QStringLiteral("dateTime")).toString() : QString {};
+        if (filterDate) {
+            QString const compact = QString(rowDateTime.left(10)).remove(QLatin1Char('-'));
+            if ((!fromCompact.isEmpty() && compact < fromCompact)
+                || (!toCompact.isEmpty() && compact > toCompact)) {
+                continue;
+            }
         }
-        if (!needle.isEmpty()
-            && !rowCall.contains(needle)
-            && !rowGrid.contains(needle)
-            && !rowComment.contains(needle)
-            && !rowDateTime.toUpper().contains(needle)
-            && !rowBand.contains(needle)
-            && !rowMode.contains(needle)) {
-            continue;
+        if (!needle.isEmpty()) {
+            QString const rowCall = row.value(QStringLiteral("call")).toString().trimmed().toUpper();
+            QString const rowGrid = row.value(QStringLiteral("grid")).toString().trimmed().toUpper();
+            QString const rowComment = row.value(QStringLiteral("comment")).toString().trimmed().toUpper();
+            if (!rowCall.contains(needle) && !rowGrid.contains(needle)
+                && !rowComment.contains(needle) && !rowDateTime.toUpper().contains(needle)
+                && !rowBand.contains(needle) && !rowMode.contains(needle)) {
+                continue;
+            }
         }
 
         results.append(row);

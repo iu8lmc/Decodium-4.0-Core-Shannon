@@ -9,6 +9,7 @@
 // un elenco tagliato a meta' e conclude che il programma e' rotto. Per questo la
 // barra sta sempre in vista invece di comparire al passaggio del mouse, e i
 // comandi sono stretti quanto basta perche' ne resti fuori il meno possibile.
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -184,9 +185,9 @@ GlassPanel {
                     armed: rtty.reverse
                     accentColor: Theme.warning
                     onClicked: rtty.reverse = !rtty.reverse
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Swaps the two tones. When the other station is on the
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Swaps the two tones. When the other station is on the
 opposite sideband everything arrives as gibberish, and
 this is the one button that fixes it.")
                 }
@@ -199,9 +200,9 @@ this is the one button that fixes it.")
                     armed: rtty.afcEnabled
                     accentColor: Theme.secondary
                     onClicked: rtty.afcEnabled = !rtty.afcEnabled
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Follows the drift of the signal already locked,
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Follows the drift of the signal already locked,
 within a few tens of hertz.")
                 }
 
@@ -213,9 +214,9 @@ within a few tens of hertz.")
                     armed: rtty.autoTuneEnabled
                     accentColor: Theme.success
                     onClicked: rtty.autoTuneEnabled = !rtty.autoTuneEnabled
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Searches by itself whenever nothing is being
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Searches by itself whenever nothing is being
 copied, and tries the polarity too. While the
 decoder is locked it touches nothing.")
                 }
@@ -227,9 +228,9 @@ decoder is locked it touches nothing.")
                     font.pixelSize: 10
                     accentColor: Theme.primary
                     onClicked: rtty.centreOnSignal()
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Finds the tone pair in the band and moves the
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Finds the tone pair in the band and moves the
 tuning onto it. Once, now.")
                 }
             }
@@ -246,9 +247,9 @@ tuning onto it. Once, now.")
                     armed: rtty.unshiftOnSpace
                     accentColor: Theme.secondary
                     onClicked: rtty.unshiftOnSpace = !rtty.unshiftOnSpace
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Unshift on space — recovers a lost FIGS/LTRS, but\nbreaks long figure groups such as serial numbers.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Unshift on space — recovers a lost FIGS/LTRS, but\nbreaks long figure groups such as serial numbers.")
                 }
 
                 GlassButton {
@@ -259,9 +260,9 @@ tuning onto it. Once, now.")
                     enabled: radio.connected
                     accentColor: Theme.success
                     onClicked: radio.applyRttyProfile(rtty.markHz, rtty.shiftHz)
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Puts the radio into DIGU and narrows its filter\naround the tones.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Puts the radio into DIGU and narrows its filter\naround the tones.")
                 }
             }
         }

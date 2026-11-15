@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
+#include <QScopeGuard>
 #include <QTextStream>
 
 #include "commons.h"
@@ -1264,7 +1265,12 @@ namespace fst4
 std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 {
   if (decodeCancelled ()) return {};
-  QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  auto& runtime_mutex = decodium::fortran::runtime_mutex ();
+  while (!runtime_mutex.tryLock (50))
+    {
+      if (decodeCancelled ()) return {};
+    }
+  auto const runtime_unlock = qScopeGuard ([&runtime_mutex] { runtime_mutex.unlock (); });
   if (decodeCancelled ()) return {};
 
   RuntimeConfig const cfg = config_for_period (qBound (15, request.ntrperiod, 1800),
@@ -1346,6 +1352,10 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
   std::vector<DecodedLine> rows;
   std::vector<QByteArray> seen;
   bool newCallsign = false;
+  auto const save_calls = qScopeGuard ([&] {
+    if (newCallsign && cfg.doK50Decode && request.iwspr != 0)
+      save_wcalls (state, dataDir);
+  });
   float const minsync = request.ntrperiod == 15 ? 1.15f : 1.20f;
 
   std::vector<Complex> bigfft (static_cast<size_t> (cfg.nfft1 / 2 + 1));
@@ -1748,10 +1758,6 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
         }
     }
 
-  if (newCallsign && cfg.doK50Decode && request.iwspr != 0)
-    {
-      save_wcalls (state, dataDir);
-    }
   if (request.iwspr == 0)
     {
       suppress_strong_fst4_artifacts (rows);
@@ -1778,10 +1784,15 @@ void FST4DecodeWorker::retireThrough (quint64 serial)
       previous, serial, std::memory_order_release, std::memory_order_relaxed)) {}
 }
 
+void FST4DecodeWorker::beginShutdown ()
+{
+  m_shutdown.store (true, std::memory_order_release);
+}
+
 void FST4DecodeWorker::decode (DecodeRequest const& request)
 {
-  // FST4W persists learned callsigns; preserve completion until separately verified.
-  ScopedDecodeCancellation cancellation (m_retiredSerial, request.serial, request.iwspr == 0);
+  // FST4W continues through mode changes, but can stop during application shutdown.
+  ScopedDecodeCancellation cancellation (m_retiredSerial, request.serial, request.iwspr == 0, &m_shutdown);
   if (decodeCancelled ()) {
     Q_EMIT decodeReady (request.serial, {});
     return;

@@ -97,6 +97,7 @@ GlassApplicationWindow {
 
         if (mainLoadStatus === Component.Ready) {
             componentStatusPoller.stop()
+            var createStartedMs = Date.now()
             if (!mainWindowObject) {
                 // Keep Main hidden until C++ applies the graphics configuration.
                 // The engine objectCreated hook only sees this BootLoader window.
@@ -124,7 +125,8 @@ GlassApplicationWindow {
                     mainWindowObject.requestActivate()
             }
             console.log("BootLoader: Main.qml created as top-level window in "
-                        + elapsedMs + " ms")
+                        + elapsedMs + " ms (component load); object creation and window setup "
+                        + Math.round(Date.now() - createStartedMs) + " ms")
             // Keep this hidden root object alive so the top-level main window
             // is not garbage-collected. The splash type has no taskbar button.
             bootWindow.visible = false

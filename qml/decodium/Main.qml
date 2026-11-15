@@ -3,6 +3,7 @@
  * By IU8LMC
  */
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -121,8 +122,8 @@ GlassApplicationWindow {
                 else dashboardPowerOffDialog.open()
             }
         }
-        ToolTip.visible: radioQuickMouse.containsMouse
-        ToolTip.text: action === "atu" ? qsTr("Start the radio ATU")
+        DecoTemplates.ToolTip.visible: radioQuickMouse.containsMouse
+        DecoTemplates.ToolTip.text: action === "atu" ? qsTr("Start the radio ATU")
                        : action === "atu-off" ? qsTr("Disable the radio ATU")
                        : action === "on" ? qsTr("Power on a supported radio through direct CAT. Its CAT port must be available after mains power is restored.")
                        : qsTr("Power off the radio")
@@ -4970,9 +4971,9 @@ GlassApplicationWindow {
                                 }
                             }
 
-                            ToolTip.visible: bandMouseArea.containsMouse
-                            ToolTip.text: "Click to switch to " + modelData
-                            ToolTip.delay: 300
+                            DecoTemplates.ToolTip.visible: bandMouseArea.containsMouse
+                            DecoTemplates.ToolTip.text: "Click to switch to " + modelData
+                            DecoTemplates.ToolTip.delay: 300
                         }
                     }
                 }
@@ -5217,9 +5218,9 @@ GlassApplicationWindow {
                     Behavior on color { ColorAnimation { duration: 150 } }
                     Behavior on border.width { NumberAnimation { duration: 150 } }
 
-                    ToolTip.visible: menuButtonMA.containsMouse
-                    ToolTip.text: qsTr("Menu")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: menuButtonMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Menu")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 // slot 1 — fra hamburger e logo
@@ -5288,13 +5289,23 @@ GlassApplicationWindow {
 
                             // CAT connection indicator
                             Rectangle {
+                                id: catConnectionIndicator
                                 width: 12
                                 height: 12
                                 radius: 6
                                 color: bridge.catConnected ? accentGreen : "#555"
 
                                 SequentialAnimation on opacity {
-                                    running: bridge.catConnected && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                    id: catConnectionPulse
+                                    running: bridge.catConnected && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                    onRunningChanged: {
+                                        if (!running && bridge.lowCpuModeEnabled) {
+                                            Qt.callLater(function() {
+                                                if (bridge.lowCpuModeEnabled && !catConnectionPulse.running)
+                                                    catConnectionIndicator.opacity = 1.0
+                                            })
+                                        }
+                                    }
                                     loops: Animation.Infinite
                                     NumberAnimation { to: 0.4; duration: 800 }
                                     OpacityAnimator { to: 1.0; duration: 800 }
@@ -5526,14 +5537,16 @@ GlassApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                id: coherentIndicatorPulse
+                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                onRunningChanged: if (!running) ledCoherent.opacity = 1.0
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.5; duration: 400 }
                                 OpacityAnimator { to: 1.0; duration: 400 }
                             }
 
-                            ToolTip.visible: maCoherent.containsMouse
-                            ToolTip.text: "Coherent averaging: " + (bridge.coherentAvgEnabled
+                            DecoTemplates.ToolTip.visible: maCoherent.containsMouse
+                            DecoTemplates.ToolTip.text: "Coherent averaging: " + (bridge.coherentAvgEnabled
                                 ? (bridge.ledCoherentAveraging ? bridge.coherentCount + " signals" : "ON (waiting)")
                                 : "OFF (disabled)") + "  -  click to toggle"
 
@@ -5561,14 +5574,16 @@ GlassApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                id: neuralIndicatorPulse
+                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                onRunningChanged: if (!running) ledNeural.opacity = 1.0
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.5; duration: 300 }
                                 OpacityAnimator { to: 1.0; duration: 300 }
                             }
 
-                            ToolTip.visible: maNeural.containsMouse
-                            ToolTip.text: "Neural sync: " + (bridge.neuralSyncEnabled
+                            DecoTemplates.ToolTip.visible: maNeural.containsMouse
+                            DecoTemplates.ToolTip.text: "Neural sync: " + (bridge.neuralSyncEnabled
                                 ? (bridge.ledNeuralSync ? (bridge.neuralScore * 100).toFixed(0) + "%" : "ON (waiting)")
                                 : "OFF (disabled)") + "  -  click to toggle"
 
@@ -5596,14 +5611,16 @@ GlassApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                id: turboIndicatorPulse
+                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                onRunningChanged: if (!running) ledTurbo.opacity = 1.0
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.5; duration: 350 }
                                 OpacityAnimator { to: 1.0; duration: 350 }
                             }
 
-                            ToolTip.visible: maTurbo.containsMouse
-                            ToolTip.text: "Turbo feedback: " + (bridge.turboFeedbackEnabled
+                            DecoTemplates.ToolTip.visible: maTurbo.containsMouse
+                            DecoTemplates.ToolTip.text: "Turbo feedback: " + (bridge.turboFeedbackEnabled
                                 ? (bridge.ledTurboFeedback ? bridge.turboIterations + " iter" : "ON (waiting)")
                                 : "OFF (disabled)") + "  -  click to toggle"
 
@@ -5651,9 +5668,9 @@ GlassApplicationWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: bridge.syncNtpNow()
-                                ToolTip.visible: containsMouse
-                                ToolTip.delay: 600
-                                ToolTip.text: qsTr("Click: sync NTP now to align DT (FT8/FT4)")
+                                DecoTemplates.ToolTip.visible: containsMouse
+                                DecoTemplates.ToolTip.delay: 600
+                                DecoTemplates.ToolTip.text: qsTr("Click: sync NTP now to align DT (FT8/FT4)")
                             }
                         }
                     }
@@ -5745,8 +5762,8 @@ GlassApplicationWindow {
 	                                            cursorShape: Qt.PointingHandCursor
 	                                            onClicked: if (bridge) bridge.autoRxInputLevel = !bridge.autoRxInputLevel
 	                                        }
-	                                        ToolTip.visible: rxAutoLevelMouse.containsMouse
-	                                        ToolTip.text: bridge && bridge.autoRxInputLevel
+	                                        DecoTemplates.ToolTip.visible: rxAutoLevelMouse.containsMouse
+	                                        DecoTemplates.ToolTip.text: bridge && bridge.autoRxInputLevel
 	                                                      ? qsTr("Auto RX level active")
 	                                                      : qsTr("Auto RX level disabled")
 	                                    }
@@ -5832,13 +5849,23 @@ GlassApplicationWindow {
                                     spacing: 2
 
                                     Text {
+                                        id: monitorButtonIcon
                                         text: bridge.monitoring ? "⏹" : "▶"
                                         font.pixelSize: mainWindow.headerFontSize(9, 10)
                                         color: bridge.monitoring ? accentGreen : secondaryCyan
                                         anchors.verticalCenter: parent.verticalCenter
 
                                         SequentialAnimation on opacity {
-                                            running: bridge.monitoring && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                            id: monitorButtonPulse
+                                            running: bridge.monitoring && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                            onRunningChanged: {
+                                                if (!running && bridge.lowCpuModeEnabled) {
+                                                    Qt.callLater(function() {
+                                                        if (bridge.lowCpuModeEnabled && !monitorButtonPulse.running)
+                                                            monitorButtonIcon.opacity = 1.0
+                                                    })
+                                                }
+                                            }
                                             loops: Animation.Infinite
                                             OpacityAnimator { to: 0.4; duration: 500 }
                                             OpacityAnimator { to: 1.0; duration: 500 }
@@ -5862,8 +5889,8 @@ GlassApplicationWindow {
                                     onClicked: bridge.monitoring ? bridge.stopMonitor() : bridge.startMonitor()
                                 }
 
-                                ToolTip.visible: monitorMA.containsMouse
-                                ToolTip.text: bridge.monitoring ? "Stop monitoring" : "Start monitoring"
+                                DecoTemplates.ToolTip.visible: monitorMA.containsMouse
+                                DecoTemplates.ToolTip.text: bridge.monitoring ? "Stop monitoring" : "Start monitoring"
                             }
 
                             // Gallager — toggle scavo profondo weak-signal (ft8SubpassHarvest)
@@ -5901,8 +5928,8 @@ GlassApplicationWindow {
                                     onClicked: bridge.ft8SubpassHarvest = !bridge.ft8SubpassHarvest
                                 }
 
-                                ToolTip.visible: gallagerMA.containsMouse
-                                ToolTip.text: qsTr("Gallager — deep dig for weak signals.\nEnables a second decoding pass (LDPC subpass\nparallelized across cores, named after R. Gallager, father of LDPC)\nthat recovers near-noise stations missed by the normal decode.\nRequires a multi-core CPU: on old PCs it may burden the audio\n→ in that case leave it off.")
+                                DecoTemplates.ToolTip.visible: gallagerMA.containsMouse
+                                DecoTemplates.ToolTip.text: qsTr("Gallager — deep dig for weak signals.\nEnables a second decoding pass (LDPC subpass\nparallelized across cores, named after R. Gallager, father of LDPC)\nthat recovers near-noise stations missed by the normal decode.\nRequires a multi-core CPU: on old PCs it may burden the audio\n→ in that case leave it off.")
                             }
 
                             // superldpc — decoder LDPC SIMD per FT2 (AVX2 o NEON)
@@ -5942,8 +5969,8 @@ GlassApplicationWindow {
                                     onClicked: bridge.fastLdpcEnabled = !bridge.fastLdpcEnabled
                                 }
 
-                                ToolTip.visible: fastLdpcMA.containsMouse
-                                ToolTip.text: qsTr("Fast LDPC — vectorized FT2 decoder (NEON on Apple Silicon/ARM64, AVX2 on x86).\nDecodes the same words far quicker than the original decoder,\nfreeing CPU for the rest of the cycle. Falls back to the original\ndecoder automatically when the required SIMD backend is unavailable.\nTurn it off if you see decodes that look wrong.")
+                                DecoTemplates.ToolTip.visible: fastLdpcMA.containsMouse
+                                DecoTemplates.ToolTip.text: qsTr("Fast LDPC — vectorized FT2 decoder (NEON on Apple Silicon/ARM64, AVX2 on x86).\nDecodes the same words far quicker than the original decoder,\nfreeing CPU for the rest of the cycle. Falls back to the original\ndecoder automatically when the required SIMD backend is unavailable.\nTurn it off if you see decodes that look wrong.")
                             }
 
                             Rectangle {
@@ -5972,8 +5999,8 @@ GlassApplicationWindow {
                                                : (bridge.mode === "JTTY" ? mainWindow.showJttyWindow()
                                                                           : mainWindow.showSsbWindow())
                                 }
-                                ToolTip.visible: showModeWindowMouse.containsMouse
-                                ToolTip.text: bridge.mode === "CW" ? qsTr("Show the CW window")
+                                DecoTemplates.ToolTip.visible: showModeWindowMouse.containsMouse
+                                DecoTemplates.ToolTip.text: bridge.mode === "CW" ? qsTr("Show the CW window")
                                               : (bridge.mode === "JTTY" ? qsTr("Show the JTTY window")
                                                                           : qsTr("Show the SSB window"))
                             }
@@ -6202,8 +6229,8 @@ GlassApplicationWindow {
                                             }
                                         }
 
-                                        ToolTip.visible: containsMouse && !slot.isSep && headerUtilityRow.dragIndex < 0 && btnLoader.item
-                                        ToolTip.text: btnLoader.item ? btnLoader.item.tip : ""
+                                        DecoTemplates.ToolTip.visible: containsMouse && !slot.isSep && headerUtilityRow.dragIndex < 0 && btnLoader.item
+                                        DecoTemplates.ToolTip.text: btnLoader.item ? btnLoader.item.tip : ""
                                     }
                                 }
                             }
@@ -6603,9 +6630,9 @@ GlassApplicationWindow {
                             displayText: currentIndex < 0 ? qsTr("Profiles...") : model[currentIndex]
                             Component.onCompleted: currentIndex = bridge ? ids.indexOf(bridge.activeReadyProfile) : -1
                             onActivated: if (bridge && currentIndex >= 0) bridge.applyReadyProfile(ids[currentIndex])
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: qsTr("Ready profiles - apply FT2/decode toggles as a group. Details in Setup -> TX.")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.delay: 500
+                            DecoTemplates.ToolTip.text: qsTr("Ready profiles - apply FT2/decode toggles as a group. Details in Setup -> TX.")
                             Connections {
                                 target: bridge
                                 function onActiveReadyProfileChanged() {
@@ -6649,7 +6676,8 @@ GlassApplicationWindow {
 	                    property string selectedZoneId: String(bridge.getSetting("uiWorldClockZoneId", "UTC") || "UTC")
 	                    property string selectedCityName: String(bridge.getSetting("uiWorldClockCityName", "UTC") || "UTC")
 	                    property string citySearchText: ""
-	                    property var citySearchResults: bridge.worldClockCityOptions("", 24)
+	                    // The city list is only needed when the selector opens.
+	                    property var citySearchResults: []
 	                    property int hours: 0
 	                    property int minutes: 0
 	                    property int seconds: 0
@@ -6660,15 +6688,16 @@ GlassApplicationWindow {
 	                    property bool showWorldClockCities: mainWindow.settingBool("uiWorldClockShowCities", true)
 
 	                    Timer {
+	                        id: worldClockRefreshTimer
 	                        interval: 1000
-	                        running: worldClock.showWorldClock
+	                        running: worldClock.visible
 	                        repeat: true
 	                        onTriggered: worldClock.updateTime()
 	                    }
+	                    onVisibleChanged: if (visible) updateTime()
 
 	                    Component.onCompleted: {
 	                        ensureVisiblePart()
-	                        refreshCitySearch()
 	                        updateTime()
 	                    }
 
@@ -6847,9 +6876,9 @@ GlassApplicationWindow {
                                 onCanceled: {
                                     armed = false
                                 }
-                                ToolTip.visible: containsMouse && !armed
-                                ToolTip.text: qsTr("Drag to reposition the clock")
-                                ToolTip.delay: 500
+                                DecoTemplates.ToolTip.visible: containsMouse && !armed
+                                DecoTemplates.ToolTip.text: qsTr("Drag to reposition the clock")
+                                DecoTemplates.ToolTip.delay: 500
                             }
                         }
 
@@ -7019,7 +7048,6 @@ GlassApplicationWindow {
 			                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 			                                padding: 0
 			                                onOpened: {
-                                                worldClock.refreshCitySearch()
                                                 citySearchField.forceActiveFocus()
                                             }
 
@@ -7244,12 +7272,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: waterfallRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Waterfall")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: waterfallRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore Waterfall")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: waterfallMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: waterfallMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) waterfallRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7296,12 +7325,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: logRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore QSO Log")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: logRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore QSO Log")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: logWindowMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: logWindowMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) logRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7348,12 +7378,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: astroRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore astronomical data")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: astroRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore astronomical data")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: astroWindowMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: astroWindowMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) astroRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7405,12 +7436,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: liveMapRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Live Map")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: liveMapRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore Live Map")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: liveMapMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: liveMapMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) liveMapRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7546,9 +7578,9 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: dxcBtnMA.containsMouse
-                    ToolTip.text: qsTr("DX Cluster\nLeft-click: open and connect\nRight-click: disconnect")
-                    ToolTip.delay: 400
+                    DecoTemplates.ToolTip.visible: dxcBtnMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("DX Cluster\nLeft-click: open and connect\nRight-click: disconnect")
+                    DecoTemplates.ToolTip.delay: 400
 
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
@@ -7622,11 +7654,11 @@ GlassApplicationWindow {
                         onClicked: bridge.filtersBypassed = !bridge.filtersBypassed
                     }
 
-                    ToolTip.visible: bypassFiltersMA.containsMouse
-                    ToolTip.text: bridge.filtersBypassed
+                    DecoTemplates.ToolTip.visible: bypassFiltersMA.containsMouse
+                    DecoTemplates.ToolTip.text: bridge.filtersBypassed
                                   ? qsTr("Disable filter bypass")
                                   : qsTr("Bypass CQ/My Call and setup filters")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.delay: 500
 
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
@@ -7671,12 +7703,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: macroRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Macro configuration")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: macroRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore Macro configuration")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: macroDialogMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: macroDialogMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) macroRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7723,12 +7756,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: rigRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Rig Control")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: rigRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore Rig Control")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: rigControlMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: rigControlMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) rigRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7776,12 +7810,13 @@ GlassApplicationWindow {
                         }
                     }
 
-	                    ToolTip.visible: p1RestoreMA.containsMouse
-	                    ToolTip.text: qsTr("Restore Full Spectrum")
-                    ToolTip.delay: 500
+	                    DecoTemplates.ToolTip.visible: p1RestoreMA.containsMouse
+	                    DecoTemplates.ToolTip.text: qsTr("Restore Full Spectrum")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: period1Minimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: period1Minimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) p1RestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7828,12 +7863,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: p2RestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Period 2")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: p2RestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore Period 2")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: period2Minimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: period2Minimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) p2RestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7879,12 +7915,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: rxRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore Signal RX")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: rxRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore Signal RX")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: rxFreqMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: rxFreqMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) rxRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -7931,12 +7968,13 @@ GlassApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: txRestoreMA.containsMouse
-                    ToolTip.text: qsTr("Restore TX panel")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: txRestoreMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Restore TX panel")
+                    DecoTemplates.ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: txPanelMinimized && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        running: txPanelMinimized && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                        onRunningChanged: if (!running) txRestoreMA.parent.opacity = 1.0
                         loops: Animation.Infinite
                         OpacityAnimator { to: 0.7; duration: 800 }
                         OpacityAnimator { to: 1.0; duration: 800 }
@@ -8026,9 +8064,9 @@ GlassApplicationWindow {
                                     }
                                 }
 
-                                ToolTip.visible: pskSearchBtn.containsMouse
-                                ToolTip.text: bridge.pskSearchFound ? "\u2713 Online" : "Search PSK Reporter"
-                                ToolTip.delay: 500
+                                DecoTemplates.ToolTip.visible: pskSearchBtn.containsMouse
+                                DecoTemplates.ToolTip.text: bridge.pskSearchFound ? "\u2713 Online" : "Search PSK Reporter"
+                                DecoTemplates.ToolTip.delay: 500
                             }
                         }
 
@@ -8137,9 +8175,9 @@ GlassApplicationWindow {
                                     color: textPrimary
                                 }
 
-                                ToolTip.visible: themeToggleMA.containsMouse
-                                ToolTip.delay: 600
-                                ToolTip.text: themeToggle.lightNow ? qsTr("Switch to the dark theme")
+                                DecoTemplates.ToolTip.visible: themeToggleMA.containsMouse
+                                DecoTemplates.ToolTip.delay: 600
+                                DecoTemplates.ToolTip.text: themeToggle.lightNow ? qsTr("Switch to the dark theme")
                                                                    : qsTr("Switch to the light theme")
 
                                 MouseArea {
@@ -8277,9 +8315,9 @@ GlassApplicationWindow {
                                 border.width: 1
                             }
 
-                            ToolTip.visible: hovered || pressed
-                            ToolTip.delay: 400
-                            ToolTip.text: ls.tip + ": " + (ls.sliderValue > 0 ? "+" : "") + ls.sliderValue
+                            DecoTemplates.ToolTip.visible: hovered || pressed
+                            DecoTemplates.ToolTip.delay: 400
+                            DecoTemplates.ToolTip.text: ls.tip + ": " + (ls.sliderValue > 0 ? "+" : "") + ls.sliderValue
                         }
                     }
 
@@ -8765,9 +8803,9 @@ GlassApplicationWindow {
                                     onClicked: mainWindow.detachWaterfallPanel()
                                 }
 
-                                ToolTip.visible: waterfallPopMA.containsMouse
-                                ToolTip.text: qsTr("Detach Waterfall")
-                                ToolTip.delay: 500
+                                DecoTemplates.ToolTip.visible: waterfallPopMA.containsMouse
+                                DecoTemplates.ToolTip.text: qsTr("Detach Waterfall")
+                                DecoTemplates.ToolTip.delay: 500
                             }
                         }
                     }
@@ -9104,7 +9142,7 @@ GlassApplicationWindow {
                         }
                     }
 
-                    // LED Status Timer - adapts to mode period
+                    // Reset LED status at the end of each decode period.
                     Timer {
                         id: ledStatusTimer
                         interval: 500  // Update LED status every 500ms
@@ -9112,9 +9150,6 @@ GlassApplicationWindow {
                         repeat: true
                         property int resetCounter: 0
                         onTriggered: {
-                            // Refresh LED status from backend
-                            bridge.refreshLedStatus()
-
                             // Reset LED status at end of each period
                             var pLen = decodePanel.periodLength
                             var secInPeriod = decodePanel.currentSecond % pLen
@@ -9416,7 +9451,11 @@ GlassApplicationWindow {
                         }
 
                         Timer {
-                            interval: 50
+                            id: timingBarRefreshTimer
+                            // LOW CPU reduces visual redraws only. Timing is
+                            // still derived from UTC on every update; decode
+                            // and transmit scheduling run in the backend.
+                            interval: bridge && bridge.lowCpuModeEnabled ? 100 : 50
                             running: timingBar.timerActive
                             repeat: true
                             onTriggered: {
@@ -9841,13 +9880,25 @@ GlassApplicationWindow {
 
                                         // Active period indicator (pulsing)
                                         Rectangle {
+                                            id: evenPeriodIndicator
                                             width: 10
                                             height: 10
                                             radius: 5
                                             color: bridge.themeManager.successColor
 
                                             SequentialAnimation on opacity {
-                                                running: decodePanel.isCurrentPeriodEven && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                                id: evenPeriodIndicatorPulse
+                                                running: decodePanel.isCurrentPeriodEven && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                                onRunningChanged: {
+                                                    if (!running && bridge && bridge.lowCpuModeEnabled) {
+                                                        Qt.callLater(function() {
+                                                            if (bridge && bridge.lowCpuModeEnabled && !evenPeriodIndicatorPulse.running)
+                                                                evenPeriodIndicator.opacity = Qt.binding(function() {
+                                                                    return decodePanel.isCurrentPeriodEven ? 1.0 : 0.5
+                                                                })
+                                                        })
+                                                    }
+                                                }
                                                 loops: Animation.Infinite
                                                 OpacityAnimator { to: 0.3; duration: 500 }
                                                 OpacityAnimator { to: 1.0; duration: 500 }
@@ -9866,6 +9917,7 @@ GlassApplicationWindow {
 
                                         // ACTIVE badge when current period
                                         Rectangle {
+                                            id: evenPeriodBadge
                                             visible: decodePanel.isCurrentPeriodEven
                                             width: 50
                                             height: 16
@@ -9882,7 +9934,16 @@ GlassApplicationWindow {
                                             }
 
                                             SequentialAnimation on opacity {
-                                                running: decodePanel.isCurrentPeriodEven && bridge && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                                id: evenPeriodBadgePulse
+                                                running: decodePanel.isCurrentPeriodEven && bridge && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                                onRunningChanged: {
+                                                    if (!running && bridge && bridge.lowCpuModeEnabled) {
+                                                        Qt.callLater(function() {
+                                                            if (bridge && bridge.lowCpuModeEnabled && !evenPeriodBadgePulse.running)
+                                                                evenPeriodBadge.opacity = 1.0
+                                                        })
+                                                    }
+                                                }
                                                 loops: Animation.Infinite
                                                 OpacityAnimator { to: 0.6; duration: 600 }
                                                 OpacityAnimator { to: 1.0; duration: 600 }
@@ -9926,9 +9987,9 @@ GlassApplicationWindow {
 	                                                onClicked: bridge.clearDecodes()
 	                                            }
 
-	                                            ToolTip.visible: p1ClearMA.containsMouse
-	                                            ToolTip.text: qsTr("Clear Full Spectrum")
-	                                            ToolTip.delay: 500
+	                                            DecoTemplates.ToolTip.visible: p1ClearMA.containsMouse
+	                                            DecoTemplates.ToolTip.text: qsTr("Clear Full Spectrum")
+	                                            DecoTemplates.ToolTip.delay: 500
 	                                        }
 
 	                                        // 1.0.229 — Compact mode toggle Full Spectrum.
@@ -9962,11 +10023,11 @@ GlassApplicationWindow {
 	                                                cursorShape: Qt.PointingHandCursor
 	                                                onClicked: mainWindow.toggleCompactFullSpectrum()
 	                                            }
-	                                            ToolTip.visible: p1CompactMA.containsMouse
-	                                            ToolTip.text: mainWindow.compactFullSpectrum
+	                                            DecoTemplates.ToolTip.visible: p1CompactMA.containsMouse
+	                                            DecoTemplates.ToolTip.text: mainWindow.compactFullSpectrum
 	                                                ? qsTr("Return to normal row height")
 	                                                : qsTr("Compact rows (2x visible decodes)")
-	                                            ToolTip.delay: 500
+	                                            DecoTemplates.ToolTip.delay: 500
 	                                        }
 
 	                                        // Pop button
@@ -9994,9 +10055,9 @@ GlassApplicationWindow {
 	                                                onClicked: mainWindow.detachFullSpectrumPanel()
 	                                            }
 
-	                                            ToolTip.visible: p1DetachMA.containsMouse
-	                                            ToolTip.text: qsTr("Detach Full Spectrum")
-                                            ToolTip.delay: 500
+	                                            DecoTemplates.ToolTip.visible: p1DetachMA.containsMouse
+	                                            DecoTemplates.ToolTip.text: qsTr("Detach Full Spectrum")
+                                            DecoTemplates.ToolTip.delay: 500
                                         }
                                     }
                                 }
@@ -10582,9 +10643,9 @@ NumberAnimation {
                                                     evenPeriodList.forceTailFollow()
                                                 }
                                             }
-                                            ToolTip.visible: pendingMA.containsMouse
-                                            ToolTip.text: qsTr("Go to the latest decode")
-                                            ToolTip.delay: 500
+                                            DecoTemplates.ToolTip.visible: pendingMA.containsMouse
+                                            DecoTemplates.ToolTip.text: qsTr("Go to the latest decode")
+                                            DecoTemplates.ToolTip.delay: 500
                                         }
                                     }
                                 }
@@ -10768,8 +10829,8 @@ NumberAnimation {
                                                 id: rxClearMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                                 onClicked: decodePanel.clearSignalRxDecodes()
                                             }
-                                            ToolTip.visible: rxClearMA.containsMouse
-                                            ToolTip.text: qsTr("Clear Signal RX")
+                                            DecoTemplates.ToolTip.visible: rxClearMA.containsMouse
+                                            DecoTemplates.ToolTip.text: qsTr("Clear Signal RX")
                                         }
 
 	                                        // 1.0.253 — Compact mode toggle Signal RX
@@ -10801,11 +10862,11 @@ NumberAnimation {
 	                                                cursorShape: Qt.PointingHandCursor
 	                                                onClicked: mainWindow.toggleCompactSignalRx()
 	                                            }
-	                                            ToolTip.visible: rxCompactMA.containsMouse
-	                                            ToolTip.text: mainWindow.compactSignalRx
+	                                            DecoTemplates.ToolTip.visible: rxCompactMA.containsMouse
+	                                            DecoTemplates.ToolTip.text: mainWindow.compactSignalRx
 	                                                ? qsTr("Return to normal row height")
 	                                                : qsTr("Compact rows (2x visible decodes)")
-	                                            ToolTip.delay: 500
+	                                            DecoTemplates.ToolTip.delay: 500
 	                                        }
 
 	                                        // Pop button
@@ -10833,9 +10894,9 @@ NumberAnimation {
 	                                                onClicked: mainWindow.detachSignalRxPanel()
 	                                            }
 
-	                                            ToolTip.visible: rxDetachMA.containsMouse
-	                                            ToolTip.text: qsTr("Detach Signal RX")
-                                            ToolTip.delay: 500
+	                                            DecoTemplates.ToolTip.visible: rxDetachMA.containsMouse
+	                                            DecoTemplates.ToolTip.text: qsTr("Detach Signal RX")
+                                            DecoTemplates.ToolTip.delay: 500
                                         }
                                     }
                                 }
@@ -11312,8 +11373,8 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: mainWindow.detachDxClusterPanel()
-                                        ToolTip.visible: containsMouse
-                                        ToolTip.text: qsTr("Detach the DX Cluster to a window")
+                                        DecoTemplates.ToolTip.visible: containsMouse
+                                        DecoTemplates.ToolTip.text: qsTr("Detach the DX Cluster to a window")
                                     }
                                 }
                             }
@@ -11574,9 +11635,9 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                                         armed = false
                                     }
                                 }
-                                ToolTip.visible: containsMouse && !armed
-                                ToolTip.text: qsTr("Drag to swap the column")
-                                ToolTip.delay: 500
+                                DecoTemplates.ToolTip.visible: containsMouse && !armed
+                                DecoTemplates.ToolTip.text: qsTr("Drag to swap the column")
+                                DecoTemplates.ToolTip.delay: 500
                             }
                         }
                     }
@@ -11791,9 +11852,9 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                                     }
                                 }
 
-                                ToolTip.visible: txDetachMA.containsMouse
-                                ToolTip.text: qsTr("Detach TX panel")
-                                ToolTip.delay: 500
+                                DecoTemplates.ToolTip.visible: txDetachMA.containsMouse
+                                DecoTemplates.ToolTip.text: qsTr("Detach TX panel")
+                                DecoTemplates.ToolTip.delay: 500
                             }
                         }
                     }
@@ -14887,9 +14948,9 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
 	                                onClicked: mainWindow.dockWaterfallPanel()
 	                            }
 
-	                            ToolTip.visible: waterfallDockMA.containsMouse
-	                            ToolTip.text: "Dock Waterfall"
-	                            ToolTip.delay: 500
+	                            DecoTemplates.ToolTip.visible: waterfallDockMA.containsMouse
+	                            DecoTemplates.ToolTip.text: "Dock Waterfall"
+	                            DecoTemplates.ToolTip.delay: 500
 	                        }
 
                         // Minimize button
@@ -14919,9 +14980,9 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                                 }
                             }
 
-                            ToolTip.visible: minimizeMA.containsMouse
-	                            ToolTip.text: qsTr("Minimize")
-                            ToolTip.delay: 500
+                            DecoTemplates.ToolTip.visible: minimizeMA.containsMouse
+	                            DecoTemplates.ToolTip.text: qsTr("Minimize")
+                            DecoTemplates.ToolTip.delay: 500
                         }
 
                     }
@@ -14991,13 +15052,23 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                         }
 
                         Rectangle {
+                            id: waterfallMonitorIndicator
                             width: 10
                             height: 10
                             radius: 5
                             color: bridge.monitoring ? accentGreen : "#555"
 
                             SequentialAnimation on opacity {
-                                running: bridge.monitoring && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                id: waterfallMonitorPulse
+                                running: bridge.monitoring && !bridge.lowCpuModeEnabled && !mainWindow.ft2LinkModeActive && bridge.uiQuality !== "Low"
+                                onRunningChanged: {
+                                    if (!running && bridge.lowCpuModeEnabled) {
+                                        Qt.callLater(function() {
+                                            if (bridge.lowCpuModeEnabled && !waterfallMonitorPulse.running)
+                                                waterfallMonitorIndicator.opacity = 1.0
+                                        })
+                                    }
+                                }
                                 loops: Animation.Infinite
                                 OpacityAnimator { to: 0.4; duration: 600 }
                                 OpacityAnimator { to: 1.0; duration: 600 }
@@ -15944,8 +16015,8 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
 		                                cursorShape: Qt.PointingHandCursor
 		                                onClicked: mainWindow.toggleCompactFullSpectrum()
 		                            }
-		                            ToolTip.visible: p1FloatCompactMA.containsMouse
-		                            ToolTip.text: mainWindow.compactFullSpectrum
+		                            DecoTemplates.ToolTip.visible: p1FloatCompactMA.containsMouse
+		                            DecoTemplates.ToolTip.text: mainWindow.compactFullSpectrum
 		                                ? qsTr("Return to normal row height")
 		                                : qsTr("Compact rows (2x visible decodes)")
 		                        }
@@ -15971,8 +16042,8 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
 	                                cursorShape: Qt.PointingHandCursor
 	                                onClicked: mainWindow.dockFullSpectrumPanel()
 	                            }
-	                            ToolTip.visible: p1FloatDockMA.containsMouse
-		                            ToolTip.text: qsTr("Dock")
+	                            DecoTemplates.ToolTip.visible: p1FloatDockMA.containsMouse
+		                            DecoTemplates.ToolTip.text: qsTr("Dock")
 	                        }
 
 		                        Rectangle {
@@ -16718,11 +16789,11 @@ NumberAnimation {
 	                                    cursorShape: Qt.PointingHandCursor
 	                                    onClicked: mainWindow.toggleCompactSignalRx()
 	                                }
-	                                ToolTip.visible: rxFloatCompactMA.containsMouse
-	                                ToolTip.text: mainWindow.compactSignalRx
+	                                DecoTemplates.ToolTip.visible: rxFloatCompactMA.containsMouse
+	                                DecoTemplates.ToolTip.text: mainWindow.compactSignalRx
 	                                    ? qsTr("Return to normal row height")
 	                                    : qsTr("Compact rows (2x visible decodes)")
-	                                ToolTip.delay: 500
+	                                DecoTemplates.ToolTip.delay: 500
 	                            }
 
 		                        Rectangle {
@@ -16746,8 +16817,8 @@ NumberAnimation {
 	                                cursorShape: Qt.PointingHandCursor
 	                                onClicked: mainWindow.dockSignalRxPanel()
 	                            }
-	                            ToolTip.visible: rxFloatDockMA.containsMouse
-		                            ToolTip.text: qsTr("Dock")
+	                            DecoTemplates.ToolTip.visible: rxFloatDockMA.containsMouse
+		                            DecoTemplates.ToolTip.text: qsTr("Dock")
 		                }
 
 		                Rectangle {
@@ -17329,8 +17400,8 @@ NumberAnimation {
 	                                cursorShape: Qt.PointingHandCursor
 	                                onClicked: { txPanelDockHighlighted = false; txPanelDetached = false; txPanelMinimized = false; txPanelFloatingWindow.close() }
 	                            }
-	                            ToolTip.visible: txFloatDockMA.containsMouse
-	                            ToolTip.text: qsTr("Dock TX panel")
+	                            DecoTemplates.ToolTip.visible: txFloatDockMA.containsMouse
+	                            DecoTemplates.ToolTip.text: qsTr("Dock TX panel")
 	                        }
 
 	                        Rectangle {
@@ -18012,6 +18083,8 @@ NumberAnimation {
 
         DecoSyncPanel {
             anchors.fill: parent
+            panelActive: decoSyncMonitorWindow.visible
+                         && decoSyncMonitorWindow.visibility !== Window.Minimized
         }
     }
 

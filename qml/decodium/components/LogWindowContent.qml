@@ -2,6 +2,7 @@
  * Full Glassmorphism with Edit Panel, Import/Export ADIF
  * By IU8LMC
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -89,6 +90,13 @@ Rectangle {
     }
 
     Timer {
+        id: searchRefreshTimer
+        interval: 180
+        repeat: false
+        onTriggered: refreshLog()
+    }
+
+    Timer {
         id: adifImportNoticeTimer
         interval: 12000
         repeat: false
@@ -137,6 +145,7 @@ Rectangle {
     }
 
     function refreshLog() {
+        searchRefreshTimer.stop()
         if (appEngine && appEngine.logManager) {
             qsoList = appEngine.logManager.searchQsos(
                 searchField.text,
@@ -502,11 +511,11 @@ Rectangle {
                         if (profile.path)
                             appEngine.logManager.switchLogbook(profile.path)
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: appEngine && appEngine.logManager
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: appEngine && appEngine.logManager
                                   ? "Active logbook: " + appEngine.logManager.activeLogbookPath
                                   : "Logbook"
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -515,7 +524,7 @@ Rectangle {
                     border.color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.55)
                     Text { anchors.centerIn: parent; text: qsTr("New"); font.pixelSize: 9; font.bold: true; color: accentGreen }
                     MouseArea { id: newLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: createLogbookDialog.open() }
-                    ToolTip.visible: newLogbookMA.containsMouse; ToolTip.text: qsTr("Create a separate logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: newLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Create a separate logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -524,7 +533,7 @@ Rectangle {
                     border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.55)
                     Text { anchors.centerIn: parent; text: qsTr("Load"); font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                     MouseArea { id: loadLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: logContent.openAddLogbookDialog() }
-                    ToolTip.visible: loadLogbookMA.containsMouse; ToolTip.text: qsTr("Load/use an existing ADIF"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: loadLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Load/use an existing ADIF"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -533,7 +542,7 @@ Rectangle {
                     border.color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.5)
                     Text { anchors.centerIn: parent; text: qsTr("Bkp"); font.pixelSize: 9; font.bold: true; color: accentOrange }
                     MouseArea { id: backupLogbookMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (appEngine && appEngine.logManager) appEngine.logManager.backupActiveLogbook() }
-                    ToolTip.visible: backupLogbookMA.containsMouse; ToolTip.text: qsTr("Back up the active logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: backupLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Back up the active logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -550,7 +559,7 @@ Rectangle {
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: logContent.openDeleteLogbookDialog()
                     }
-                    ToolTip.visible: deleteLogbookMA.containsMouse; ToolTip.text: qsTr("Delete selected logbook"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: deleteLogbookMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Delete selected logbook"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -568,7 +577,7 @@ Rectangle {
                             placeholderText: qsTr("Search...")
                             font.pixelSize: 10; font.family: decodiumMonoFontFamily
                             color: textPrimary; placeholderTextColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
-                            onTextChanged: { clearSelection(); refreshLog() }
+                            onTextChanged: { clearSelection(); searchRefreshTimer.restart() }
                             background: Rectangle { color: "transparent" }
                         }
                     }
@@ -618,9 +627,9 @@ Rectangle {
                         onClicked: logContent.resetFilters()
                     }
 
-                    ToolTip.visible: clearFiltersMA.containsMouse
-                    ToolTip.text: qsTr("Remove filters")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: clearFiltersMA.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Remove filters")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Item { Layout.fillWidth: true }
@@ -640,7 +649,7 @@ Rectangle {
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: logContent.openImportAdifDialog()
                     }
-                    ToolTip.visible: importFloatMA.containsMouse; ToolTip.text: qsTr("Import ADIF"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: importFloatMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Import ADIF"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 // Export ADIF
@@ -650,7 +659,7 @@ Rectangle {
                     Behavior on color { ColorAnimation { duration: 150 } }
                     Text { anchors.centerIn: parent; text: qsTr("\u2B06"); font.pixelSize: 11; color: exportFloatMA.containsMouse ? secondaryCyan : textSecondary }
                     MouseArea { id: exportFloatMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: logContent.openExportAdifDialog() }
-                    ToolTip.visible: exportFloatMA.containsMouse; ToolTip.text: qsTr("Export ADIF"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: exportFloatMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Export ADIF"); DecoTemplates.ToolTip.delay: 500
                 }
 
                 // Refresh
@@ -660,7 +669,7 @@ Rectangle {
                     Behavior on color { ColorAnimation { duration: 150 } }
                     Text { anchors.centerIn: parent; text: qsTr("\u21BB"); font.pixelSize: 12; font.bold: true; color: refreshFloatMA.containsMouse ? accentGreen : textSecondary }
                     MouseArea { id: refreshFloatMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: refreshLog() }
-                    ToolTip.visible: refreshFloatMA.containsMouse; ToolTip.text: qsTr("Refresh"); ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: refreshFloatMA.containsMouse; DecoTemplates.ToolTip.text: qsTr("Refresh"); DecoTemplates.ToolTip.delay: 500
                 }
             }
         }
@@ -794,8 +803,8 @@ Rectangle {
                                 color: parent.checked ? accentGreen : "transparent"
                                 border.color: parent.checked ? accentGreen : textSecondary
                             }
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Select QSO for ADIF export")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Select QSO for ADIF export")
                         }
                         Text { text: modelData.dateTime || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 118 }
                         Text { text: modelData.call || ""; font.family: decodiumMonoFontFamily; font.pixelSize: 10; font.bold: true; color: accentGreen; Layout.preferredWidth: 85 }

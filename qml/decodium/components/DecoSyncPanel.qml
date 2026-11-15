@@ -14,6 +14,9 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
+    // The host is a separate Window: an Item can remain visible inside a
+    // hidden window, so the host must explicitly gate visual polling.
+    property bool panelActive: true
     readonly property bool liquidGlassEnabled: typeof bridge !== "undefined"
         && bridge && bridge.themeManager && bridge.themeManager.isGlassTheme
         && bridge.themeManager.glassTransparencySupported
@@ -43,7 +46,8 @@ Rectangle {
         offsetHistory.push(off)
         if (offsetHistory.length > maxHistoryPoints)
             offsetHistory.shift()
-        offsetCanvas.requestPaint()
+        if (panelActive)
+            offsetCanvas.requestPaint()
     }
 
     Timer {
@@ -53,7 +57,15 @@ Rectangle {
         repeat: true
         onTriggered: {
             root.pushSample()
+            if (root.panelActive)
+                statusLabel.text = root.buildStatusText()
+        }
+    }
+
+    onPanelActiveChanged: {
+        if (panelActive && visible) {
             statusLabel.text = root.buildStatusText()
+            offsetCanvas.requestPaint()
         }
     }
 

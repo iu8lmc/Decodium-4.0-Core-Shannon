@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -67,8 +68,8 @@ ColumnLayout {
                 ? Math.max(0, model.indexOf(root.operations.logbookBand)) : 0
             font.pixelSize: 9
             onActivated: root.operations.logbookBand = currentText
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Band filter")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Band filter")
         }
         ComboBox {
             Layout.fillWidth: true
@@ -77,8 +78,8 @@ ColumnLayout {
                 ? Math.max(0, model.indexOf(root.operations.logbookMode)) : 0
             font.pixelSize: 9
             onActivated: root.operations.logbookMode = currentText
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Mode filter")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Mode filter")
         }
         ComboBox {
             Layout.fillWidth: true
@@ -87,8 +88,8 @@ ColumnLayout {
                 ? Math.max(0, model.indexOf(root.operations.logbookPeriod)) : 0
             font.pixelSize: 9
             onActivated: root.operations.logbookPeriod = currentText
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Period")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Period")
         }
         ComboBox {
             Layout.fillWidth: true
@@ -98,8 +99,8 @@ ColumnLayout {
                 ? Math.max(0, model.indexOf(root.operations.logbookSort)) : 0
             font.pixelSize: 9
             onActivated: root.operations.logbookSort = currentText
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Sort field")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Sort field")
         }
     }
 
@@ -126,16 +127,16 @@ ColumnLayout {
             font.pixelSize: 9
             enabled: root.operations && !root.operations.exportInProgress
             onClicked: root.exportRows("CSV")
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Export the current filtered logbook to Documents/Decodium")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Export the current filtered logbook to Documents/Decodium")
         }
         Button {
             text: qsTr("ADIF")
             font.pixelSize: 9
             enabled: root.operations && !root.operations.exportInProgress
             onClicked: root.exportRows("ADIF")
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Export the current filtered logbook to Documents/Decodium")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Export the current filtered logbook to Documents/Decodium")
         }
     }
 
@@ -250,8 +251,8 @@ ColumnLayout {
                     color: root.mutedColor
                     font.pixelSize: 8
                     elide: Text.ElideRight
-                    ToolTip.visible: gridHover.hovered
-                    ToolTip.text: modelData.vuccGrids && modelData.vuccGrids.length > 0
+                    DecoTemplates.ToolTip.visible: gridHover.hovered
+                    DecoTemplates.ToolTip.text: modelData.vuccGrids && modelData.vuccGrids.length > 0
                         ? qsTr("Primary: %1\nVUCC: %2")
                               .arg(modelData.grid || "-")
                               .arg(modelData.vuccGrids.join(", "))

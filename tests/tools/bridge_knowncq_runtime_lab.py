@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """Verify real startup reads a uniquely scoped synthetic ALL.TXT."""
-import argparse,datetime,os,secrets,shutil,subprocess,tempfile
+import argparse,datetime,os,secrets,shutil,subprocess,tempfile,sys
 from pathlib import Path
 R=Path(__file__).resolve().parents[2]
 p=argparse.ArgumentParser();p.add_argument('--binary',type=Path,default=R/'build/decodium');a=p.parse_args()
 rig='KnownCq'+secrets.token_hex(5);name='Decodium - '+rig+' - test'
-profile=Path.home()/'.qttest/Library/Application Support/IU8LMC'/name
-cache=Path.home()/'.qttest/Library/Caches/IU8LMC'/name
+if sys.platform == 'darwin':
+ profile=Path.home()/'.qttest/Library/Application Support/IU8LMC'/name
+ cache=Path.home()/'.qttest/Library/Caches/IU8LMC'/name
+elif sys.platform.startswith('linux'):
+ profile=Path.home()/'.qttest/share/IU8LMC'/name
+ cache=Path.home()/'.qttest/cache/IU8LMC'/name
+else:
+ raise RuntimeError('unsupported QStandardPaths test location')
 if profile.exists() or cache.exists():raise RuntimeError('unexpected existing test profile')
 try:
  profile.mkdir(parents=True);dt=datetime.datetime.now(datetime.timezone.utc).strftime('%y%m%d_%H%M%S')

@@ -4,6 +4,7 @@
 // non segue lo standard amatoriale. Nessuno di questi controlli serve in un
 // collegamento normale, ed è per questo che stanno qui e non nel pannello
 // principale.
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -59,9 +60,9 @@ GlassPanel {
                     armed: rtty.bandpassEnabled
                     accentColor: Theme.secondary
                     onClicked: rtty.bandpassEnabled = !rtty.bandpassEnabled
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Bandpass around the two tones: throws away\neverything outside before the detector.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Bandpass around the two tones: throws away\neverything outside before the detector.")
                 }
                 GlassButton {
                     text: "NOTCH"
@@ -71,9 +72,9 @@ GlassPanel {
                     armed: rtty.notchEnabled
                     accentColor: Theme.warning
                     onClicked: rtty.notchEnabled = !rtty.notchEnabled
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Removes one frequency. Ctrl+click the waterfall\nto drop it on the carrier that is in the way.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Removes one frequency. Ctrl+click the waterfall\nto drop it on the carrier that is in the way.")
                 }
                 GlassButton {
                     text: "LMS"
@@ -83,9 +84,9 @@ GlassPanel {
                     armed: rtty.lmsEnabled
                     accentColor: Theme.accent
                     onClicked: rtty.lmsEnabled = !rtty.lmsEnabled
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Adaptive canceller: removes steady carriers by\nitself. On weak signals it can eat the RTTY as\nwell — try it and listen.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Adaptive canceller: removes steady carriers by\nitself. On weak signals it can eat the RTTY as\nwell — try it and listen.")
                 }
             }
 
@@ -162,9 +163,9 @@ GlassPanel {
                         font.pixelSize: 10
                         armed: rtty.dataBits === modelData
                         onClicked: rtty.dataBits = modelData
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 700
-                        ToolTip.text: modelData === 5 ? "Baudot: il RTTY amatoriale"
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.delay: 700
+                        DecoTemplates.ToolTip.text: modelData === 5 ? "Baudot: il RTTY amatoriale"
                                                       : "ASCII: qualche stazione utility"
                     }
                 }
@@ -209,9 +210,9 @@ GlassPanel {
                     accentColor: Theme.primary
                     armed: rtty.figuresSet === 1
                     onClicked: rtty.figuresSet = rtty.figuresSet === 0 ? 1 : 0
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Figures set: US has BELL and apostrophe where\nITA2 swaps the two.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Figures set: US has BELL and apostrophe where\nITA2 swaps the two.")
                 }
                 GlassButton {
                     text: "NO FRAME"
@@ -221,9 +222,9 @@ GlassPanel {
                     accentColor: Theme.warning
                     armed: rtty.ignoreFramingErrors
                     onClicked: rtty.ignoreFramingErrors = !rtty.ignoreFramingErrors
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Prints characters whose stop bit read wrong too:\na few more characters on distorted signals, some\nlines of rubbish in exchange.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Prints characters whose stop bit read wrong too:\na few more characters on distorted signals, some\nlines of rubbish in exchange.")
                 }
             }
 
@@ -255,9 +256,9 @@ GlassPanel {
                         font.pixelSize: 10
                         armed: rtty.diddleMode === modelData.value
                         onClicked: rtty.diddleMode = modelData.value
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 700
-                        ToolTip.text: qsTr("What to send between characters while you\ntype live.")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.delay: 700
+                        DecoTemplates.ToolTip.text: qsTr("What to send between characters while you\ntype live.")
                     }
                 }
             }

@@ -3,6 +3,7 @@
  * Tutte le modifiche sono LIVE (bind diretto alle proprieta bridge).
  * Layout orizzontale: sidebar + StackLayout con GridLayout 4 colonne.
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -1711,9 +1712,9 @@ Dialog {
                     onClicked: settingsDialog.decreaseSetupFont()
                 }
 
-                ToolTip.visible: setupFontDecreaseMA.containsMouse
-                ToolTip.delay: 400
-                ToolTip.text: qsTr("Setup text size: %1%. Decrease. This affects Setup only.")
+                DecoTemplates.ToolTip.visible: setupFontDecreaseMA.containsMouse
+                DecoTemplates.ToolTip.delay: 400
+                DecoTemplates.ToolTip.text: qsTr("Setup text size: %1%. Decrease. This affects Setup only.")
                               .arg(settingsDialog.settingsFontZoomPercent)
             }
 
@@ -1745,9 +1746,9 @@ Dialog {
                     onClicked: settingsDialog.increaseSetupFont()
                 }
 
-                ToolTip.visible: setupFontIncreaseMA.containsMouse
-                ToolTip.delay: 400
-                ToolTip.text: qsTr("Setup text size: %1%. Increase. This affects Setup only.")
+                DecoTemplates.ToolTip.visible: setupFontIncreaseMA.containsMouse
+                DecoTemplates.ToolTip.delay: 400
+                DecoTemplates.ToolTip.text: qsTr("Setup text size: %1%. Increase. This affects Setup only.")
                               .arg(settingsDialog.settingsFontZoomPercent)
             }
 
@@ -1779,9 +1780,9 @@ Dialog {
                     onClicked: settingsDialog.resetSetupFont()
                 }
 
-                ToolTip.visible: setupFontResetMA.containsMouse
-                ToolTip.delay: 400
-                ToolTip.text: qsTr("Setup text size: %1%. Reset to 100%. This affects Setup only.")
+                DecoTemplates.ToolTip.visible: setupFontResetMA.containsMouse
+                DecoTemplates.ToolTip.delay: 400
+                DecoTemplates.ToolTip.text: qsTr("Setup text size: %1%. Reset to 100%. This affects Setup only.")
                               .arg(settingsDialog.settingsFontZoomPercent)
             }
 

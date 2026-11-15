@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -303,8 +304,8 @@ Dialog {
                 implicitHeight: 34
                 font.pixelSize: 14
                 hoverEnabled: true
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Close")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("Close")
                 background: Rectangle {
                     radius: 6
                     color: closeButton.hovered
@@ -522,8 +523,8 @@ Dialog {
                     enabled: !!rotator && rotator.enabled
                     Layout.preferredWidth: 58
                     Layout.preferredHeight: 36
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Move azimuth −10°")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Move azimuth −10°")
                     contentItem: Text {
                         text: azimuthLeftButton.text
                         color: azimuthLeftButton.enabled ? textPrimary : textSecondary
@@ -540,8 +541,8 @@ Dialog {
                     enabled: !!rotator && rotator.enabled
                     Layout.preferredWidth: 58
                     Layout.preferredHeight: 36
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Move azimuth +10°")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Move azimuth +10°")
                     contentItem: Text {
                         text: azimuthRightButton.text
                         color: azimuthRightButton.enabled ? textPrimary : textSecondary
@@ -558,8 +559,8 @@ Dialog {
                     enabled: !!rotator && rotator.enabled
                     Layout.preferredWidth: 58
                     Layout.preferredHeight: 36
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Move elevation +5°")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Move elevation +5°")
                     contentItem: Text {
                         text: elevationUpButton.text
                         color: elevationUpButton.enabled ? textPrimary : textSecondary
@@ -576,8 +577,8 @@ Dialog {
                     enabled: !!rotator && rotator.enabled
                     Layout.preferredHeight: 36
                     Layout.preferredWidth: 58
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Move elevation −5°")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Move elevation −5°")
                     contentItem: Text {
                         text: elevationDownButton.text
                         color: elevationDownButton.enabled ? textPrimary : textSecondary

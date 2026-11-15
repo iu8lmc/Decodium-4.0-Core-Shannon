@@ -4,6 +4,7 @@
 
 #include "PanadapterItem.hpp"
 #include "DecodiumBridge.h"
+#include "WaterfallIntensityPalette.hpp"
 
 #include <QCoreApplication>
 #include <QPainter>
@@ -4830,6 +4831,16 @@ void PanadapterItem::addWaterfallRow(const QVector<float>& bins,
         && intensityLine
         && (!m_useShaderWaterfall || m_wfWriteRow < h || m_shaderWaterfallBlocked);
     if (prepareCpuPixels && line) {
+        if (m_waterfallRowColorsPalette != m_paletteIndex
+            || m_waterfallRowColorsBlack != m_blackLevel
+            || m_waterfallRowColorsGain != m_colorGain) {
+            m_waterfallRowColors = waterfallRowIntensityPalette(
+                blackThresh, usableRange, gamma, wfBg,
+                [this](float pct) { return wfColor(pct); });
+            m_waterfallRowColorsPalette = m_paletteIndex;
+            m_waterfallRowColorsBlack = m_blackLevel;
+            m_waterfallRowColorsGain = m_colorGain;
+        }
         for (int x = 0; x < w; ++x) {
             float pixFreq = viewStart + (float)x * viewRange / w;
             if (pixFreq < dataFreqMin || pixFreq > dataFreqMax) {
@@ -4838,17 +4849,7 @@ void PanadapterItem::addWaterfallRow(const QVector<float>& bins,
             }
             int bin = (int)((pixFreq - dataFreqMin) / dataRange * nBins);
             bin = qBound(0, bin, nBins - 1);
-            float rawNorm = static_cast<float>(intensityLine[bin]) / 255.0f;
-
-            // CPU fallback: mantiene lo stesso colore finale. Il path shader usa
-            // la riga raw per bin e fa mapping frequenza + black/gamma in GPU.
-            float adjusted = (rawNorm - blackThresh) / usableRange;
-            if (adjusted <= 0.f) {
-                line[x] = wfBg;
-                continue;
-            }
-            float pct = std::pow(qBound(0.f, adjusted, 1.f), gamma);
-            line[x] = wfColor(pct);
+            line[x] = m_waterfallRowColors[intensityLine[bin]];
         }
     } else {
         m_waterfallRgbValid = false;
@@ -4890,6 +4891,8 @@ void PanadapterItem::rebuildRgbWaterfallFromIntensity()
     float const viewCenter = baseStart + viewportRange * 0.5f + m_panHz;
     float const viewStart = viewCenter - viewRange * 0.5f;
 
+    auto const intensityColors = waterfallIntensityPalette(blackThresh, usableRange, gamma,
+                                                            m_palette, fallback);
     for (int y = 0; y < m_waterfallImage.height(); ++y) {
         auto* dst = reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(y));
         uchar const* src = m_waterfallIntensityImage.constScanLine(y);
@@ -4904,14 +4907,7 @@ void PanadapterItem::rebuildRgbWaterfallFromIntensity()
                 srcX = static_cast<int>((pixFreq - m_dataFreqMin) / dataRange * intensityW);
                 srcX = qBound(0, srcX, intensityW - 1);
             }
-            float adjusted = ((static_cast<float>(src[srcX]) / 255.0f) - blackThresh) / usableRange;
-            if (adjusted <= 0.0f) {
-                dst[x] = fallback;
-                continue;
-            }
-            float const pct = std::pow(qBound(0.0f, adjusted, 1.0f), gamma);
-            int const idx = qBound(0, static_cast<int>(pct * 255.0f + 0.5f), 255);
-            dst[x] = m_palette.value(idx, fallback);
+            dst[x] = intensityColors[src[srcX]];
         }
     }
     m_waterfallRgbValid = true;

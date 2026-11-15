@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -308,8 +309,8 @@ ScrollView {
                     Layout.fillWidth: true
                     text: modelData.label
                     font.pixelSize: 8
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Open QSO drill-down")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Open QSO drill-down")
                     onClicked: root.operations.drillDownStatistics(
                         modelData.group, modelData.label)
                 }

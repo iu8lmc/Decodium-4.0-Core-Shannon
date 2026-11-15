@@ -21,7 +21,8 @@ QString stripLegacyDecodeAppendage(QString line)
     if (match.hasMatch()) {
         int const payloadStart = match.capturedEnd();
         QString payload = line.mid(payloadStart);
-        int const annotationPos = payload.indexOf(QRegularExpression {R"(\s{2,})"});
+        static const QRegularExpression annotationPattern {R"(\s{2,})"};
+        int const annotationPos = payload.indexOf(annotationPattern);
         if (annotationPos >= 0) {
             payload = payload.left(annotationPos);
         }

@@ -3,6 +3,7 @@
 // Typing goes on the air as it is entered, the way a teleprinter worked, but the
 // buffer is always visible so the operator can see how far behind the
 // transmitter is — at 45 baud a sentence takes several seconds to clear.
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -36,9 +37,9 @@ GlassPanel {
                     enabled: radio.canTransmit
                     onClicked: rtty.transmitText(expanded)
 
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 600
-                    ToolTip.text: expanded
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 600
+                    DecoTemplates.ToolTip.text: expanded
                 }
             }
         }
@@ -231,8 +232,8 @@ GlassPanel {
                             }
                         }
 
-                        ToolTip.visible: txLevelMouse.containsMouse
-                        ToolTip.text: radio.requiresFullScaleTransmitAudio
+                        DecoTemplates.ToolTip.visible: txLevelMouse.containsMouse
+                        DecoTemplates.ToolTip.text: radio.requiresFullScaleTransmitAudio
                                       ? qsTr("QMX FSK requires 100% application audio; RF power is set on the radio.")
                                       : qsTr("Set the level so the radio's ALC barely moves.")
                     }

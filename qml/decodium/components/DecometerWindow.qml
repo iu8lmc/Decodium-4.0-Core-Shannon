@@ -432,7 +432,15 @@ Item {
             overT = 0
         }
 
-        gauge.requestPaint()
+        // The gauge is expensive to paint, but at rest its pixels do not
+        // change on every timer tick. Include every dynamic input used by
+        // onPaint, including the interpolated scale and telemetry validity.
+        var gaugeState = [txOn, effFs(), vFwd, pkFwdV, vRef, pkRefV,
+                          vSwr, pkSwrV, swrValid, alcValid, rawAlc].join("|")
+        if (gaugeState !== gauge.lastTickState) {
+            gauge.lastTickState = gaugeState
+            gauge.requestPaint()
+        }
     }
 
     function setRangeAuto(i) {
@@ -531,6 +539,7 @@ Item {
             // ------------------------------------------------- scale ad arco
             Canvas {
                 id: gauge
+                property string lastTickState: ""
                 x: 14; y: 6
                 width: 640; height: 264
                 renderStrategy: Canvas.Immediate

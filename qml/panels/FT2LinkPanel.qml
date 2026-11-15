@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -5211,9 +5212,9 @@ Rectangle {
             onClicked: function(mouse) { smallButton.clicked(mouse) }
         }
 
-        ToolTip.visible: hovered && tip.length > 0
-        ToolTip.text: tip
-        ToolTip.delay: 450
+        DecoTemplates.ToolTip.visible: hovered && tip.length > 0
+        DecoTemplates.ToolTip.text: tip
+        DecoTemplates.ToolTip.delay: 450
     }
 
     component CompactCheck: Item {
@@ -5277,9 +5278,9 @@ Rectangle {
             onClicked: compactCheck.toggled(!compactCheck.checked)
         }
 
-        ToolTip.visible: hovered && tip.length > 0
-        ToolTip.text: tip
-        ToolTip.delay: 450
+        DecoTemplates.ToolTip.visible: hovered && tip.length > 0
+        DecoTemplates.ToolTip.text: tip
+        DecoTemplates.ToolTip.delay: 450
     }
 
     component PaneResizeHandle: Rectangle {
@@ -5359,9 +5360,9 @@ Rectangle {
             }
         }
 
-        ToolTip.visible: hovered
-        ToolTip.text: targetPane === "session" ? "Resize sessions" : "Resize stations"
-        ToolTip.delay: 450
+        DecoTemplates.ToolTip.visible: hovered
+        DecoTemplates.ToolTip.text: targetPane === "session" ? "Resize sessions" : "Resize stations"
+        DecoTemplates.ToolTip.delay: 450
     }
 
     // 1.0.457 iu8lmc fix ("finestra troppo alta, comandi in basso tagliati"):
@@ -5566,10 +5567,10 @@ Rectangle {
                         onClicked: root.openQueueStatus()
                     }
 
-                    ToolTip.visible: queueStatusMouse.containsMouse
+                    DecoTemplates.ToolTip.visible: queueStatusMouse.containsMouse
                                      && root.queueStatusClickable()
-                    ToolTip.text: root.queueStatusTip()
-                    ToolTip.delay: 450
+                    DecoTemplates.ToolTip.text: root.queueStatusTip()
+                    DecoTemplates.ToolTip.delay: 450
                 }
 
                 Text {
@@ -7240,9 +7241,9 @@ Rectangle {
                                         font.pixelSize: 11
                                         maximumLength: 16
                                         selectByMouse: true
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("BBS group. Empty means ALL.")
-                                        ToolTip.delay: 450
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("BBS group. Empty means ALL.")
+                                        DecoTemplates.ToolTip.delay: 450
                                         background: Rectangle {
                                             radius: 4
                                             color: bulletinGroupText.enabled
@@ -7284,9 +7285,9 @@ Rectangle {
                                         font.pixelSize: 11
                                         maximumLength: 64
                                         selectByMouse: true
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Short BBS subject/title.")
-                                        ToolTip.delay: 450
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Short BBS subject/title.")
+                                        DecoTemplates.ToolTip.delay: 450
                                         background: Rectangle {
                                             radius: 4
                                             color: bulletinTitleText.enabled
@@ -7327,9 +7328,9 @@ Rectangle {
                                         maximumLength: 1024
                                         selectByMouse: true
                                         onAccepted: root.armOrTransmitBulletin()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Text to store and send as the BBS bulletin body.")
-                                        ToolTip.delay: 450
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Text to store and send as the BBS bulletin body.")
+                                        DecoTemplates.ToolTip.delay: 450
                                         background: Rectangle {
                                             radius: 4
                                             color: bulletinBodyText.enabled

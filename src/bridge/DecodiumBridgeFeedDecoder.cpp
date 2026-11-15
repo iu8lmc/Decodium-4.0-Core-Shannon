@@ -356,15 +356,20 @@ void DecodiumBridge::feedAudioToDecoder(qint64 completedUtcSlot)
         bool const ft8StartupDecodeGuard =
             QDateTime::currentMSecsSinceEpoch() < m_ft8StartupEarlyDecodeGuardUntilMs;
         bool const ft8CpuPressure = cpuPressureActive();
+        // Test-mode-only experiment: retain the normal fast pass and queue a
+        // bounded depth-3 follow-up. Never enable this in normal operation.
+        bool const labLowCpuFollowup = QStandardPaths::isTestModeEnabled()
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_LOWCPU_FT8_FOLLOWUP") > 0
+            && m_lowCpuModeEnabled && m_deepSearchEnabled && !txStartPending;
         bool const runDeepFollowup =
             !txAudioActive
             && (!txStartPending || deepFollowupInTx)
             && !signoffWatchActive
-            && !m_lowCpuModeEnabled
+            && (!m_lowCpuModeEnabled || labLowCpuFollowup)
             && !ft8StartupDecodeGuard
             && !ft8CpuPressure
             && !ft8RuntimeBacklog
-            && deepThreadsOk
+            && (deepThreadsOk || labLowCpuFollowup)
             && !deepCooldownActive
             && explicitDeepFollowup
             && deepFollowupLatestCompleteMs > ft8DispatchNowMs;
@@ -456,10 +461,10 @@ void DecodiumBridge::feedAudioToDecoder(qint64 completedUtcSlot)
             pending.audio = audioSnapshot;
             pending.nutc = nutc;
             pending.slotIndex = slotIndexForUtc;
-            pending.decodeDepth = decodeDepth;
+            pending.decodeDepth = labLowCpuFollowup ? 3 : decodeDepth;
             pending.decodeQsoProgress = decodeQsoProgress;
             pending.cqHint = cqHint;
-            pending.ft8ApEnabled = m_ft8ApEnabled;
+            pending.ft8ApEnabled = labLowCpuFollowup ? false : m_ft8ApEnabled;
             pending.inTx = deepFollowupInTx;
             pending.sessionId = m_decodeSessionId;
             pending.utcToken = utcToken;

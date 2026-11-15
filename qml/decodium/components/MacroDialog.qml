@@ -3,6 +3,7 @@
  * By IU8LMC
  */
 
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -193,9 +194,9 @@ Dialog {
                     }
                 }
 
-                ToolTip.visible: macroMinMA.containsMouse
-                ToolTip.text: qsTr("Minimize")
-                ToolTip.delay: 500
+                DecoTemplates.ToolTip.visible: macroMinMA.containsMouse
+                DecoTemplates.ToolTip.text: qsTr("Minimize")
+                DecoTemplates.ToolTip.delay: 500
             }
 
             // Close button
@@ -222,9 +223,9 @@ Dialog {
                     onClicked: macroDialog.requestWindowClose()
                 }
 
-                ToolTip.visible: macroCloseMA.containsMouse
-                ToolTip.text: "Close"
-                ToolTip.delay: 500
+                DecoTemplates.ToolTip.visible: macroCloseMA.containsMouse
+                DecoTemplates.ToolTip.text: "Close"
+                DecoTemplates.ToolTip.delay: 500
             }
         }
     }

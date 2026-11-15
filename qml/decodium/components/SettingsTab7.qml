@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -172,9 +173,9 @@ SettingsPageScroll {
                 background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                 contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 hoverEnabled: true
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: qsTr("Reset calibration (slope=0, intercept=0). The frequency is written to the rig without correction (fast path).")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.delay: 400
+                DecoTemplates.ToolTip.text: qsTr("Reset calibration (slope=0, intercept=0). The frequency is written to the rig without correction (fast path).")
             }
         }
 

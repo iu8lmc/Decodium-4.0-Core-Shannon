@@ -2,7 +2,16 @@
 """Exercise decode/TX wait conditions in isolated original/refactored apps."""
 import json,os,secrets,shutil,socket,subprocess,tempfile
 from pathlib import Path
-r=Path(__file__).resolve().parents[2];main=r/'src/bridge/DecodiumBridge.cpp';sstv=r/'src/bridge/DecodiumBridgeSstv.cpp';module=r/'src/bridge/DecodiumBridgeJtDecodeFallback.cpp';qml=r/'build/qml/decodium/Main.qml';m=main.read_text();s=sstv.read_text();n=module.read_text();q=qml.read_text();fixture=(r/'tests/bridge_refactor_fixtures/jtdecodefallback_before.inc').read_text();mark='void DecodiumBridge::maybeDispatchBridgeOwnedJtDecodeFallback()';head=n.split(mark,1)[0];assert (mark+n.split(mark,1)[1]).replace('decodiumBridgePeriodTimerLog(', 'bridgeLog(').replace('decodiumBridgeOwnsLegacyJtRxWhenCatSuppressed(', 'bridgeOwnsLegacyJtRxWhenCatSuppressed(').replace('decodiumBridgeOwnsFst4Audio(', 'bridgeOwnsFst4Audio(')==fixture
+r=Path(__file__).resolve().parents[2];main=r/'src/bridge/DecodiumBridge.cpp';sstv=r/'src/bridge/DecodiumBridgeSstv.cpp';module=r/'src/bridge/DecodiumBridgeJtDecodeFallback.cpp';qml=r/'build/qml/decodium/Main.qml';m=main.read_text();s=sstv.read_text();n=module.read_text();q=qml.read_text();fixture=(r/'tests/bridge_refactor_fixtures/jtdecodefallback_before.inc').read_text();mark='void DecodiumBridge::maybeDispatchBridgeOwnedJtDecodeFallback()';head=n.split(mark,1)[0]
+guard='''    // These common FT modes cannot use the JT/FST4 fallback. Avoid repeated
+    // environment lookups and string normalization on every spectrum tick.
+    if (m_mode == QStringLiteral("FT8") || m_mode == QStringLiteral("FT4")
+        || m_mode == QStringLiteral("FT2")) {
+        return;
+    }
+'''
+body=(mark+n.split(mark,1)[1]).replace('decodiumBridgePeriodTimerLog(', 'bridgeLog(').replace('decodiumBridgeOwnsLegacyJtRxWhenCatSuppressed(', 'bridgeOwnsLegacyJtRxWhenCatSuppressed(').replace('decodiumBridgeOwnsFst4Audio(', 'bridgeOwnsFst4Audio(')
+assert body.count(guard)==1 and body.replace(guard,'')==fixture
 anchor='QVariantMap DecodiumBridge::logSstvQso(const QVariantMap& values)\n{';assert s.count(anchor)==1
 inj='''\n#if DECODIUM_HAS_SSTV\n    {Q_UNUSED(values);const QString mode=m_mode;const bool mon=m_monitoring;const auto slot=m_bridgeOwnedJtFallbackLastSlot;const auto time=m_bridgeOwnedJtFallbackLastDispatchMs;m_mode=QStringLiteral("FT8");maybeDispatchBridgeOwnedJtDecodeFallback();const bool modeGuard=m_bridgeOwnedJtFallbackLastSlot==slot && m_bridgeOwnedJtFallbackLastDispatchMs==time;m_mode=QStringLiteral("JT65");m_monitoring=false;maybeDispatchBridgeOwnedJtDecodeFallback();const bool monitorGuard=m_bridgeOwnedJtFallbackLastSlot==slot && m_bridgeOwnedJtFallbackLastDispatchMs==time;m_mode=mode;m_monitoring=mon;return {{QStringLiteral("modeGuard"),modeGuard},{QStringLiteral("monitorGuard"),monitorGuard},{QStringLiteral("cat"),m_catConnected},{QStringLiteral("tx"),m_transmitting}};}\n#endif\n'''
 probe='''\n Timer {interval:10000;running:true;repeat:false;onTriggered:{bridge.mode="FT2";bridge.callsign="9H1SR";console.log('[JT-FALLBACK] '+JSON.stringify(bridge.logSstvQso({})));Qt.quit();}}\n'''

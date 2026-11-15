@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
@@ -997,9 +998,9 @@ SstvPage {
                         font.pixelSize: 10
                         elide: Text.ElideRight
                     }
-                    ToolTip.visible: sourceMouse.containsMouse && root.sourceDevice.length > 0
-                    ToolTip.delay: 500
-                    ToolTip.text: qsTr("Audio device: %1").arg(root.sourceDevice)
+                    DecoTemplates.ToolTip.visible: sourceMouse.containsMouse && root.sourceDevice.length > 0
+                    DecoTemplates.ToolTip.delay: 500
+                    DecoTemplates.ToolTip.text: qsTr("Audio device: %1").arg(root.sourceDevice)
                     MouseArea {
                         id: sourceMouse
                         anchors.fill: parent

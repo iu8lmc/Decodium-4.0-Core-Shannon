@@ -18,6 +18,7 @@
 #include <QFileInfo>
 #include <QScopeGuard>
 #include <QSet>
+#include <QStandardPaths>
 #include <cstdlib>
 #include <utility>
 using namespace decodium::seq;
@@ -1196,8 +1197,17 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                    .arg(pendingDeep.ft8ApEnabled ? 1 : 0);
         bool const stalePending = pendingDeep.sessionId != m_decodeSessionId
             || m_mode != QStringLiteral("FT8");
-        bool const busyForTx = m_transmitting || m_tuning;
-        bool const pressure = m_lowCpuModeEnabled || cpuPressureActive();
+        // In this test-only experiment the queued depth-3 follow-up identifies
+        // the LOW CPU probe. Recheck the profile and toggle after the fast pass.
+        bool const labPendingLowCpuFollowup = QStandardPaths::isTestModeEnabled()
+            && qEnvironmentVariableIntValue("DECODIUM_LAB_LOWCPU_FT8_FOLLOWUP") > 0
+            && pendingDeep.decodeDepth == 3;
+        bool const labLowCpuFollowup = labPendingLowCpuFollowup
+            && m_lowCpuModeEnabled && m_deepSearchEnabled;
+        bool const busyForTx = m_transmitting || m_tuning
+            || (labPendingLowCpuFollowup && (m_txEnabled || m_autoCqRepeat));
+        bool const pressure = (labPendingLowCpuFollowup && !labLowCpuFollowup)
+            || (m_lowCpuModeEnabled && !labLowCpuFollowup) || cpuPressureActive();
         if (stalePending || busyForTx || pressure || budgetMs < kFt8DeepMinUsefulBudgetMs) {
             // P0 (1.0.403): se il deep e' tornato troppo tardi per essere utile
             // (budgetMs < min) e NON per stale/tx/pressure, e' un segnale di backlog
@@ -1249,7 +1259,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                                   pendingDeep.decodeQsoProgress, pendingDeep.cqHint,
                                   50, pendingDeep.ft8ApEnabled, false, pendingDeep.inTx,
                                   budgetMs, false, deepThreadCount);
-            if (m_ft8SubpassHarvest) {
+            if (m_ft8SubpassHarvest && !labLowCpuFollowup) {
                 // F1: prepara l'harvest subpass (terzo decode nel gap dopo il deep).
                 Ft8PendingDeepFollowup harvest = pendingDeep;
                 harvest.sessionId = m_decodeSessionId;

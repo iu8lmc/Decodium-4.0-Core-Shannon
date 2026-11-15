@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
@@ -1258,8 +1259,8 @@ SstvPage {
                             selectByMouse: true
                             text: root.sharing ? root.sharing.localSharingId : ""
                             placeholderText: qsTr("Your sharing sender ID")
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Give this exact sender ID to the recipient together with your signing key and verified fingerprint.")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Give this exact sender ID to the recipient together with your signing key and verified fingerprint.")
                         }
                         Button {
                             objectName: "sstvShareCreateSigningIdentity"
@@ -1584,8 +1585,8 @@ SstvPage {
                 enabled: root.sharing && root.sharing.ready
                 palette.text: root.primaryTextColor
                 onClicked: root.sharing.setRequireIncomingEncryption(checked)
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Applies to newly queued downloads. Use the separate sender policy to require authentication.")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("Applies to newly queued downloads. Use the separate sender policy to require authentication.")
             }
 
             ColumnLayout {
@@ -1598,8 +1599,8 @@ SstvPage {
                     enabled: root.sharing && root.sharing.ready
                     palette.text: root.primaryTextColor
                     onClicked: root.sharing.setRequireIncomingSenderAuthentication(checked)
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Downloads must be encrypted and signed. Items awaiting acceptance are checked again against the current policy.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Downloads must be encrypted and signed. Items awaiting acceptance are checked again against the current policy.")
                 }
                 Label {
                     Layout.fillWidth: true

@@ -11,6 +11,7 @@
 // e il perche' e' scritto nel suggerimento. E' l'unica soluzione onesta: farli
 // sparire lascerebbe l'operatore a chiedersi dove sono finiti, e lasciarli
 // accesi lo lascerebbe a premerli senza effetto.
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 
@@ -110,9 +111,9 @@ no commands. Connect it in Decodium.")
                 // exposes USB-audio FSK to Hamlib as PKTUSB/PKTLSB rather than
                 // RTTY/RTTYR.
                 onClicked: radio.setMode(modelData)
-                ToolTip.visible: hovered
-                ToolTip.delay: 700
-                ToolTip.text: {
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.delay: 700
+                DecoTemplates.ToolTip.text: {
                     if (!root.live)
                         return root.whyIdle
                     if (modelData === "RTTY-U")

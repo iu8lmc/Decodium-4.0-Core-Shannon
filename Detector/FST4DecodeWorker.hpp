@@ -46,10 +46,12 @@ public:
   explicit FST4DecodeWorker (QObject * parent = nullptr);
 
   void retireThrough (quint64 serial);
+  void beginShutdown ();
   void decode (DecodeRequest const& request);
 
 private:
   std::atomic<std::uint64_t> m_retiredSerial {0};
+  std::atomic_bool m_shutdown {false};
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);

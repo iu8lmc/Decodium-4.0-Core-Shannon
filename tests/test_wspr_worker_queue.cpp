@@ -10,6 +10,8 @@
 namespace {
 wsprd_output_callback_t outputCallback = nullptr;
 void* outputContext = nullptr;
+wsprd_cancel_callback_t cancelCallback = nullptr;
+void* cancelContext = nullptr;
 QSemaphore nativeEntered, releaseNative;
 std::atomic_bool blockNative {false};
 std::atomic_int nativeCalls {0};
@@ -21,6 +23,12 @@ extern "C" void wsprd_set_output_callback(wsprd_output_callback_t callback, void
     outputContext = context;
 }
 
+extern "C" void wsprd_set_cancel_callback(wsprd_cancel_callback_t callback, void* context)
+{
+    cancelCallback = callback;
+    cancelContext = context;
+}
+
 extern "C" int wsprd_run(int argc, char** argv)
 {
     ++nativeCalls;
@@ -28,6 +36,7 @@ extern "C" int wsprd_run(int argc, char** argv)
         nativeEntered.release();
         releaseNative.acquire();
     }
+    if (cancelCallback && cancelCallback(cancelContext)) return 2;
     if (argc != 2 || QByteArray(argv[1]) != "fixture.wav") return 7;
     outputCallback(outputContext, "1200 -10 0.1 14.097100 0 K1ABC FN42 37\n", 0);
     return 0;
@@ -108,12 +117,13 @@ private slots:
         QCOMPARE(nativeCalls.load(), 2); // retired queued request never calls wsprd
         for (int i = 0; i < 3; ++i) {
             QCOMPARE(completions.at(i).at(0).toULongLong(), quint64(i + 1));
-            QCOMPARE(completions.at(i).at(3).toInt(), 0);
+            QCOMPARE(completions.at(i).at(3).toInt(), i == 0 ? 2 : 0);
         }
-        QVERIFY(!completions.at(0).at(1).toStringList().isEmpty());
+        QVERIFY(completions.at(0).at(1).toStringList().isEmpty());
         QVERIFY(completions.at(1).at(1).toStringList().isEmpty());
         QVERIFY(completions.at(1).at(2).toStringList().isEmpty());
-        QCOMPARE(completions.at(2).at(1).toStringList(), completions.at(0).at(1).toStringList());
+        QCOMPARE(completions.at(2).at(1).toStringList(),
+                 QStringList{QStringLiteral("1200 -10 0.1 14.097100 0 K1ABC FN42 37")});
     }
 };
 QTEST_GUILESS_MAIN(TestWsprWorkerQueue)

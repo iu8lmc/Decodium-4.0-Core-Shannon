@@ -2,7 +2,7 @@
 """Exercise decode/TX wait conditions in isolated original/refactored apps."""
 import json,os,secrets,shutil,socket,subprocess,tempfile
 from pathlib import Path
-r=Path(__file__).resolve().parents[2];main=r/'src/bridge/DecodiumBridge.cpp';sstv=r/'src/bridge/DecodiumBridgeSstv.cpp';module=r/'src/bridge/DecodiumBridgeSpectrumTimer.cpp';qml=r/'build/qml/decodium/Main.qml';m=main.read_text();s=sstv.read_text();n=module.read_text();q=qml.read_text();fixture=(r/'tests/bridge_refactor_fixtures/spectrum_timer_before.inc').read_text();mark='void DecodiumBridge::onSpectrumTimer()';head=n.split(mark,1)[0];assert n==head+fixture
+r=Path(__file__).resolve().parents[2];main=r/'src/bridge/DecodiumBridge.cpp';sstv=r/'src/bridge/DecodiumBridgeSstv.cpp';module=r/'src/bridge/DecodiumBridgeSpectrumTimer.cpp';qml=r/'build/qml/decodium/Main.qml';m=main.read_text();s=sstv.read_text();n=module.read_text();q=qml.read_text();fixture=(r/'tests/bridge_refactor_fixtures/spectrum_timer_before.inc').read_text();mark='void DecodiumBridge::onSpectrumTimer()';head=n.split(mark,1)[0];guard='            decodium::normalizeWaterfallRingPosition(m_wfRingPos, WF_RING_SIZE);\n';assert n.count(guard)==1 and n.replace(guard,'')==head+fixture
 anchor='QVariantMap DecodiumBridge::logSstvQso(const QVariantMap& values)\n{';assert s.count(anchor)==1
 inj='''
 #if DECODIUM_HAS_SSTV

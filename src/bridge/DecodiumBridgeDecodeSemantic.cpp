@@ -37,6 +37,22 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message,
         return false;
     }
 
+    // FST4W carries beacon reports (call [grid] power), not a directed
+    // two-callsign exchange. Do not treat its grid/power as a peer callsign.
+    if (m_mode.trimmed().startsWith(QStringLiteral("FST4W"), Qt::CaseInsensitive)) {
+        QStringList const raw = message.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        bool powerOk = false;
+        if (tokens.size() == 2 || (tokens.size() == 3 && isGridTokenStrict(tokens.at(1)))) {
+            tokens.constLast().toInt(&powerOk);
+            bool const placeholder = isPlaceholderCallToken(tokens.constFirst());
+            bool const hash = !raw.isEmpty() && isHashedCallToken(raw.constFirst());
+            if (powerOk && (isPlausibleDecodedCallsign(tokens.constFirst()) || hash
+                            || (allowUnresolvedPlaceholder && placeholder))) {
+                return true;
+            }
+        }
+    }
+
     bool const ft2StrictSemanticGate =
         m_mode.trimmed().compare(QStringLiteral("FT2"), Qt::CaseInsensitive) == 0;
 

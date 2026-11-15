@@ -628,8 +628,12 @@ static int sync_candidates_impl (float const* dd, int nmax, int const kNsps, int
     }
 
   // Potenza per frame e cella, e l'inverso del totale dei quattro toni per ogni cella base.
-  std::vector<float> power (static_cast<size_t> (nfr) * static_cast<size_t> (nbins), 0.0f);
-  std::vector<float> inv_den (static_cast<size_t> (nfr) * static_cast<size_t> (nbins), 0.0f);
+  int const inv_first = blo - 1;
+  int const inv_count = bhi - blo + 3;
+  // Four tones occupy offsets 0, 4, 8 and 12 from each searched bin.
+  int const power_count = inv_count + 12;
+  std::vector<float> power (static_cast<size_t> (nfr) * static_cast<size_t> (power_count), 0.0f);
+  std::vector<float> inv_den (static_cast<size_t> (nfr) * static_cast<size_t> (inv_count), 0.0f);
   for (int fr = 0; fr < nfr; ++fr)
     {
       float const* src = dd + static_cast<size_t> (fr) * kHop;
@@ -639,16 +643,18 @@ static int sync_candidates_impl (float const* dd, int nmax, int const kNsps, int
         }
       std::fill (fft.in + kNsps, fft.in + kNfft, 0.0f);
       fftwf_execute (fft.plan);
-      float* row = power.data () + static_cast<size_t> (fr) * static_cast<size_t> (nbins);
-      for (int k = 0; k < nbins; ++k)
+      float* row = power.data () + static_cast<size_t> (fr) * static_cast<size_t> (power_count);
+      for (int k = 0; k < power_count; ++k)
         {
-          row[k] = fft.out[k][0] * fft.out[k][0] + fft.out[k][1] * fft.out[k][1];
+          int const bin = inv_first + k;
+          row[k] = fft.out[bin][0] * fft.out[bin][0] + fft.out[bin][1] * fft.out[bin][1];
         }
-      float* inv = inv_den.data () + static_cast<size_t> (fr) * static_cast<size_t> (nbins);
-      for (int b = 0; b + 12 < nbins; ++b)
+      float* inv = inv_den.data () + static_cast<size_t> (fr) * static_cast<size_t> (inv_count);
+      for (int b = inv_first; b <= bhi + 1; ++b)
         {
-          float const d = row[b] + row[b + 4] + row[b + 8] + row[b + 12];
-          inv[b] = d > 1e-20f ? 1.0f / d : 0.0f;
+          int const k = b - inv_first;
+          float const d = row[k] + row[k + 4] + row[k + 8] + row[k + 12];
+          inv[b - inv_first] = d > 1e-20f ? 1.0f / d : 0.0f;
         }
     }
 
@@ -662,11 +668,11 @@ static int sync_candidates_impl (float const* dd, int nmax, int const kNsps, int
           for (int s = 0; s < 4; ++s)
             {
               size_t const fr = static_cast<size_t> (t0 + 4 * (kWordStart[w] + s));
-              float const* row = power.data () + fr * static_cast<size_t> (nbins) + 4 * kWords[w][s];
-              float const* inv = inv_den.data () + fr * static_cast<size_t> (nbins);
+              float const* row = power.data () + fr * static_cast<size_t> (power_count) + 4 * kWords[w][s];
+              float const* inv = inv_den.data () + fr * static_cast<size_t> (inv_count);
               for (int b = blo - 1; b <= bhi + 1; ++b)
                 {
-                  acc[static_cast<size_t> (b)] += row[b] * inv[b];
+                  acc[static_cast<size_t> (b)] += row[b - inv_first] * inv[b - inv_first];
                 }
             }
         }

@@ -16,6 +16,7 @@
 #include <QStandardPaths>
 #include <QDebug>
 #include <QtConcurrent/QtConcurrentRun>
+#include <cstring>
 #include <utility>
 
 extern void decodiumBridgeLogbookLog(const QString&);
@@ -54,8 +55,13 @@ static LotwUsersLoadResult parseLotwUsersCsv(QByteArray const& data)
             lineEnd = data.size();
         }
 
-        qsizetype const comma = data.indexOf(',', lineStart);
-        if (comma >= lineStart && comma < lineEnd) {
+        // Search only this line: malformed lines without commas must not
+        // repeatedly scan the remainder of a potentially large cache file.
+        char const* const line = data.constData() + lineStart;
+        char const* const separator = static_cast<char const*>(
+            std::memchr(line, ',', static_cast<size_t>(lineEnd - lineStart)));
+        if (separator) {
+            qsizetype const comma = lineStart + (separator - line);
             QString const call =
                 QString::fromUtf8(data.constData() + lineStart, comma - lineStart)
                     .trimmed()

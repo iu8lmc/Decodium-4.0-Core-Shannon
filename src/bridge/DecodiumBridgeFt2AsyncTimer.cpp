@@ -1,5 +1,6 @@
 #include "DecodiumBridge.h"
 #include "DecodeUtcTime.h"
+#include "AudioRingSnapshot.hpp"
 #include "Detector/FT2DecodeWorker.hpp"
 #include <QDateTime>
 #include <QTimer>
@@ -86,9 +87,8 @@ void DecodiumBridge::onAsyncDecodeTimer()
 
     decodium::ft2::AsyncDecodeRequest req;
     req.audio.resize(45000);
-    uint64_t const start = (pos - 45000) % ASYNC_BUF_SIZE;
-    for (int i = 0; i < 45000; ++i)
-        req.audio[i] = m_asyncAudio[(start + i) % ASYNC_BUF_SIZE];
+    decodium::copyAudioRingSnapshot(m_asyncAudio, ASYNC_BUF_SIZE, pos,
+                                    req.audio.data(), 45000);
     // FT2 asincrono F4: la posizione assoluta serve al worker per
     // ritrovare nella finestra i segnali decodificati nei giri precedenti.
     req.audioEnd = static_cast<qint64>(pos);

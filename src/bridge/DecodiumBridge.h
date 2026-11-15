@@ -2090,6 +2090,7 @@ public:
     QString activeLogbookPath() const { return effectiveAdifLogPath(); }
     Q_INVOKABLE bool exportAdif(const QString& filename);
     Q_INVOKABLE bool importAdif(const QString& filename);
+    Q_INVOKABLE QString qsoLogRevision() const;
     Q_INVOKABLE QVariantList searchQsos(const QString& search,
                                         const QString& band,
                                         const QString& mode,

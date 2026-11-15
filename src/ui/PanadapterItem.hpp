@@ -12,6 +12,7 @@
 #include <QStringList>
 #include <QColor>
 #include <QMetaObject>
+#include <array>
 #include <atomic>
 
 class QSGNode;
@@ -402,6 +403,10 @@ private:
     int    m_waterfallRawBinsWidth = 0;
     int    m_wfWriteRow = 0; // riga corrente ring buffer
     QVector<QRgb> m_palette; // 256 colori waterfall
+    std::array<QRgb, 256> m_waterfallRowColors {};
+    int m_waterfallRowColorsPalette = -1;
+    int m_waterfallRowColorsBlack = -1;
+    int m_waterfallRowColorsGain = -1;
 
     // ── Configurazione ──────────────────────────────────────────────────────
     float m_minDb        = -130.f;

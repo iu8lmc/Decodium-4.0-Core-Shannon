@@ -7,6 +7,7 @@
  * radio, locale o remota.
  * By IU8LMC
  */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -743,9 +744,9 @@ GlassWindow {
                             else if (win.canSend) win.cw.sendMacro(keyItem.index, win.ctx())
                         }
                     }
-                    ToolTip.visible: keyMA.containsMouse
-                    ToolTip.delay: 600
-                    ToolTip.text: keyItem.modelData.text + "\n" + qsTr("Right click: change it")
+                    DecoTemplates.ToolTip.visible: keyMA.containsMouse
+                    DecoTemplates.ToolTip.delay: 600
+                    DecoTemplates.ToolTip.text: keyItem.modelData.text + "\n" + qsTr("Right click: change it")
                 }
             }
         }
@@ -780,8 +781,8 @@ GlassWindow {
             CheckBox {
                 text: qsTr("TX while typing")
                 checked: win.transmitWhileTyping
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Transmit each new character as soon as the keyer is ready.")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("Transmit each new character as soon as the keyer is ready.")
                 onToggled: {
                     win.transmitWhileTyping = checked
                     win.queuedTypedText = ""
@@ -855,8 +856,8 @@ GlassWindow {
                     }
                 }
                 onActiveFocusChanged: if (!activeFocus && win.eng) text = (win.eng.frequency / 1e6).toFixed(6)
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Frequency in MHz. Press Enter to tune.")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("Frequency in MHz. Press Enter to tune.")
             }
             Lbl { text: "MHz" }
             Btn { label: "−"; live: win.tuneReady; onClicked: win.cw.tuneBy(-Number(cwStep.currentText)) }
@@ -867,8 +868,8 @@ GlassWindow {
                 implicitWidth: 82
                 model: ["1", "10", "50", "100", "1000"]
                 currentIndex: 1
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("VFO step in Hz")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("VFO step in Hz")
             }
             Btn {
                 objectName: "cwAutoCenter"
@@ -894,8 +895,8 @@ GlassWindow {
                 model: tones.map(v => v + " Hz")
                 currentIndex: win.cw ? tones.indexOf(win.cw.toneHz) : 5
                 onActivated: (i) => win.cw.toneHz = tones[i]
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Target received audio frequency for Center CW. That button retunes the VFO; this setting does not control the radio's CW pitch/sidetone.")
+                DecoTemplates.ToolTip.visible: hovered
+                DecoTemplates.ToolTip.text: qsTr("Target received audio frequency for Center CW. That button retunes the VFO; this setting does not control the radio's CW pitch/sidetone.")
             }
             ColumnLayout {
                 spacing: 1
@@ -906,8 +907,8 @@ GlassWindow {
                     model: ["CW-U", "CW-L"]
                     currentIndex: win.cw && win.cw.tuningLowerSideband ? 1 : 0
                     onActivated: (i) => win.cw.tuningLowerSideband = i === 1
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Decoder/centering polarity only. It does not change the radio CAT mode; select the same sideband shown by the rig.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Decoder/centering polarity only. It does not change the radio CAT mode; select the same sideband shown by the rig.")
                 }
             }
             ColumnLayout {
@@ -1150,9 +1151,9 @@ GlassWindow {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: win.useDecodedCall(modelData)
                             }
-                            ToolTip.visible: callMouse.containsMouse
-                            ToolTip.delay: 500
-                            ToolTip.text: qsTr("Click to load %1 into Call and CW macros; no TX").arg(modelData)
+                            DecoTemplates.ToolTip.visible: callMouse.containsMouse
+                            DecoTemplates.ToolTip.delay: 500
+                            DecoTemplates.ToolTip.text: qsTr("Click to load %1 into Call and CW macros; no TX").arg(modelData)
                         }
                     }
                 }
@@ -1259,9 +1260,9 @@ GlassWindow {
                         win.trafficSplitRatio = 0.5
                         win.persistTrafficSplitRatio()
                     }
-                    ToolTip.visible: containsMouse
-                    ToolTip.delay: 700
-                    ToolTip.text: qsTr("Drag to resize RX and TX. Double-click to centre.")
+                    DecoTemplates.ToolTip.visible: containsMouse
+                    DecoTemplates.ToolTip.delay: 700
+                    DecoTemplates.ToolTip.text: qsTr("Drag to resize RX and TX. Double-click to centre.")
                 }
             }
 

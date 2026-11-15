@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
@@ -674,8 +675,8 @@ SstvPage {
                     palette.windowText: enabled
                                         ? root.primaryTextColor
                                         : root.secondaryTextColor
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Append Decodium's callsign as a native FSK identifier")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Append Decodium's callsign as a native FSK identifier")
                 }
                 Button {
                     text: root.studio && root.studio.busy
@@ -697,8 +698,8 @@ SstvPage {
                     enabled: !!(root.engine
                                  && (root.engine.sstvTxActive
                                      || root.engine.sstvTxCanStart))
-                    ToolTip.visible: hovered
-                    ToolTip.text: root.engine && root.engine.sstvTxActive
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: root.engine && root.engine.sstvTxActive
                                   ? qsTr("Stop audio and release PTT safely")
                                   : root.engine && !root.engine.sstvTxCanStart
                                     ? root.engine.sstvTxUnavailableReason
@@ -915,8 +916,8 @@ SstvPage {
                         else
                             root.openWavExporter()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Render the same native PCM source without keying PTT")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Render the same native PCM source without keying PTT")
                 }
             }
 
@@ -939,8 +940,8 @@ SstvPage {
                         else
                             root.studio.startLoopback()
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Encode native PCM and decode it with the real RX runtime; no radio or PTT")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Encode native PCM and decode it with the real RX runtime; no radio or PTT")
                 }
                 ProgressBar {
                     Layout.preferredWidth: 150
@@ -1000,8 +1001,8 @@ SstvPage {
                                  && !root.engine.pttPending)
                     onClicked: root.engine.startSstvCalibrationTone(
                                    calibrationTone.currentValue)
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Uses the normal audio, CAT/PTT, watchdog and cancellation path")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.text: qsTr("Uses the normal audio, CAT/PTT, watchdog and cancellation path")
                 }
                 Label {
                     Layout.fillWidth: true

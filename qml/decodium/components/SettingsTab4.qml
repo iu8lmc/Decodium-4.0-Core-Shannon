@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -188,9 +189,9 @@ SettingsPageScroll {
                 leftPadding: dxPeditionWorkspaceCheck.indicator.width + 8
                 verticalAlignment: Text.AlignVCenter
             }
-            ToolTip.visible: hovered
-            ToolTip.delay: 600
-            ToolTip.text: qsTr("Alternative single-panel operator view optimized for DX pile-ups: a tactical 3-column dashboard (Cluster / Waterfall / TX) instead of the classic workspace. Opt-in, default OFF: the standard layout is unchanged when disabled.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 600
+            DecoTemplates.ToolTip.text: qsTr("Alternative single-panel operator view optimized for DX pile-ups: a tactical 3-column dashboard (Cluster / Waterfall / TX) instead of the classic workspace. Opt-in, default OFF: the standard layout is unchanged when disabled.")
         }
 
         // 1.0.307 (#2) — Scala interfaccia globale (icone+font+layout). Applica al riavvio.
@@ -263,9 +264,9 @@ SettingsPageScroll {
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
                         onClicked: dialog.toggleBandCfg(modelData.l, !parent.bandOn)
-                        ToolTip.visible: containsMouse
-                        ToolTip.delay: 500
-                        ToolTip.text: modelData.n + " MHz — " + (parent.bandOn ? qsTr("visible (click to hide)") : qsTr("hidden (click to show)"))
+                        DecoTemplates.ToolTip.visible: containsMouse
+                        DecoTemplates.ToolTip.delay: 500
+                        DecoTemplates.ToolTip.text: modelData.n + " MHz — " + (parent.bandOn ? qsTr("visible (click to hide)") : qsTr("hidden (click to show)"))
                     }
                 }
             }
@@ -293,9 +294,9 @@ SettingsPageScroll {
                 if (bridge) bridge.setUiQuality(model[currentIndex])
             }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Low = no effects (modest PCs).\nMedium = light animations.\nHigh = all available animations.\n\nDefault: Medium.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Low = no effects (modest PCs).\nMedium = light animations.\nHigh = all available animations.\n\nDefault: Medium.")
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -316,9 +317,9 @@ SettingsPageScroll {
                     bridge.processPriority = currentIndex
             }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("CPU scheduling priority for the Decodium process (Windows).\n\nNormal / Above normal (default) = safe.\nHigh = smoother audio/decode with low risk (recommended if you notice stutters).\nRealtime ⚠️ = maximum scheduling priority, but it can make the PC unresponsive (mouse/keyboard) and requires administrator privileges. Without admin rights Windows downgrades it to High.\n\nIf unsure, use High.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("CPU scheduling priority for the Decodium process (Windows).\n\nNormal / Above normal (default) = safe.\nHigh = smoother audio/decode with low risk (recommended if you notice stutters).\nRealtime ⚠️ = maximum scheduling priority, but it can make the PC unresponsive (mouse/keyboard) and requires administrator privileges. Without admin rights Windows downgrades it to High.\n\nIf unsure, use High.")
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -344,9 +345,9 @@ SettingsPageScroll {
                 if (bridge) bridge.setUiStyle(model[currentIndex])
             }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr(
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr(
                 "QML Quick Controls style (requires restart):\n" +
                 "• Material (recommended) — Google Material 3, customizable, Decodium's historical default\n" +
                 "• FluentWinUI3 — native Windows 11 (Mica/acrylic). Automatic fallback for SplitView/StackView.\n" +
@@ -368,9 +369,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Pop-out windows (Waterfall, Period1, DecoSync) become frameless with drag via the border.\n\nWindows 11 aesthetic.\n\nDefault: OFF. Requires closing and reopening the window.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Pop-out windows (Waterfall, Period1, DecoSync) become frameless with drag via the border.\n\nWindows 11 aesthetic.\n\nDefault: OFF. Requires closing and reopening the window.")
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -386,9 +387,9 @@ SettingsPageScroll {
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("At startup, opens Full Spectrum (Band Activity) in a separate window, isolating the Main render thread from ListView animations.\n\nReduces stalls on modest PCs.\n\nDefault: OFF. Requires restart.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("At startup, opens Full Spectrum (Band Activity) in a separate window, isolating the Main render thread from ListView animations.\n\nReduces stalls on modest PCs.\n\nDefault: OFF. Requires restart.")
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -400,9 +401,9 @@ SettingsPageScroll {
             text: qsTr("Enable (F11)")
             hoverEnabled: true
             onClicked: { dialog.fullScreenRequested(); dialog.close() }
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Switch Decodium to full screen. To exit: F11, Esc, or the top ✕ button. This is not saved: Decodium starts in normal window mode after restart.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Switch Decodium to full screen. To exit: F11, Esc, or the top ✕ button. This is not saved: Decodium starts in normal window mode after restart.")
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -425,9 +426,9 @@ SettingsPageScroll {
                 bridge.setSpectrumFpsCap(map[currentIndex])
             }
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: qsTr("Maximum frame rate of the embedded waterfall/panadapter.\n\n  • 15 = modest PCs\n  • 20 = balanced default\n  • 30 = modern hardware\n\nWhen Full Spectrum is detached the separate render thread holds 30 fps without affecting the decoder.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 400
+            DecoTemplates.ToolTip.text: qsTr("Maximum frame rate of the embedded waterfall/panadapter.\n\n  • 15 = modest PCs\n  • 20 = balanced default\n  • 30 = modern hardware\n\nWhen Full Spectrum is detached the separate render thread holds 30 fps without affecting the decoder.")
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -458,9 +459,9 @@ SettingsPageScroll {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
-                ToolTip.visible: containsMouse
-                ToolTip.delay: 400
-                ToolTip.text: qsTr("cpuPressure event counters for the current session.\n\nSevere ones (≥1100ms or burst of 4+ short stalls) are the strongest signal: if you see ≥5 after an hour of use, lower UI Quality to Low or Spectrum FPS cap to 15.")
+                DecoTemplates.ToolTip.visible: containsMouse
+                DecoTemplates.ToolTip.delay: 400
+                DecoTemplates.ToolTip.text: qsTr("cpuPressure event counters for the current session.\n\nSevere ones (≥1100ms or burst of 4+ short stalls) are the strongest signal: if you see ≥5 after an hour of use, lower UI Quality to Low or Spectrum FPS cap to 15.")
             }
         }
         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
@@ -698,8 +699,8 @@ SettingsPageScroll {
             checked: boolSetting("LiveMapUseGpu", true)
             onToggled: setBoolSettingIfChanged("LiveMapUseGpu", checked, true)
             hoverEnabled: true
-            ToolTip.visible: hovered
-            ToolTip.text: qsTr("Use GPU rendering for the live map (default). Disable to use the CPU renderer if station markers are missing or the map has graphical problems.")
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.text: qsTr("Use GPU rendering for the live map (default). Disable to use the CPU renderer if station markers are missing or the map has graphical problems.")
             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
             contentItem: Text { text: ""; leftPadding: 24 }
         }

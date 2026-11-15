@@ -89,6 +89,8 @@ extern "C"
                              float* sbase);
   void ftx_sync4d_c (Complex const* cd0, int np, int i0, Complex const* ctwk, int itwk,
                      float* sync);
+  void ftx_sync2d_scan_c (Complex const* cd0, int np, int ibmin, int ibmax, int ibstp,
+                          Complex const* ctwk, int itwk, float* sync_best, int* ibest);
   void ftx_ft4_bitmetrics_c (Complex const* cd, float* bitmetrics, int* badsync);
   void ftx_ft4_downsample_c (float const* dd, int* newdata, float f0, Complex* c);
   void ftx_subtract_ft4_c (float* dd0, int const* itone, float f0, float dt);
@@ -1753,18 +1755,19 @@ void run_ft4_decode (short const* iwave,
                   smax = -99.0f;
                   for (int idf = idfmin; idf <= idfmax; idf += idfstp)
                     {
-                      for (int istart = ibmin; istart <= ibmax; istart += ibstp)
+                      float sync = 0.0f;
+                      int istart = -1;
+                      // FT2 and FT4 use the same four sync templates. Build
+                      // the frequency tweak once per scan and retain the
+                      // original first-strict-maximum ordering.
+                      ftx_sync2d_scan_c (cd2.data (), kFt4NdMax, ibmin, ibmax, ibstp,
+                                         state.ctwk2[static_cast<size_t> (tweak_index (idf))].data (),
+                                         1, &sync, &istart);
+                      if (sync > smax)
                         {
-                          float sync = 0.0f;
-                          ftx_sync4d_c (cd2.data (), kFt4NdMax, istart,
-                                        state.ctwk2[static_cast<size_t> (tweak_index (idf))].data (),
-                                        1, &sync);
-                          if (sync > smax)
-                            {
-                              smax = sync;
-                              ibest = istart;
-                              idfbest = idf;
-                            }
+                          smax = sync;
+                          ibest = istart;
+                          idfbest = idf;
                         }
                     }
                 }

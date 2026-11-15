@@ -1,3 +1,4 @@
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -119,9 +120,9 @@ Rectangle {
             cursorShape: Qt.PointingHandCursor
             onClicked: parent.toggled(!parent.checked)
         }
-        ToolTip.visible: layerMouse.containsMouse && helpText.length > 0
-        ToolTip.text: helpText
-        ToolTip.delay: 450
+        DecoTemplates.ToolTip.visible: layerMouse.containsMouse && helpText.length > 0
+        DecoTemplates.ToolTip.text: helpText
+        DecoTemplates.ToolTip.delay: 450
     }
 
     // Do not use the platform Material Button here.  In the operational
@@ -167,10 +168,10 @@ Rectangle {
             }
         }
 
-        ToolTip.visible: actionMouse.containsMouse && !actionEnabled
+        DecoTemplates.ToolTip.visible: actionMouse.containsMouse && !actionEnabled
                           && unavailableHint.length > 0
-        ToolTip.text: unavailableHint
-        ToolTip.delay: 450
+        DecoTemplates.ToolTip.text: unavailableHint
+        DecoTemplates.ToolTip.delay: 450
     }
 
     function coerceBool(value, fallback) {
@@ -918,9 +919,9 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: if (root.worldMap) root.worldMap.zoomOut(1.4)
                     }
-                    ToolTip.visible: zoomOutMa.containsMouse
-                    ToolTip.text: qsTr("Zoom out")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: zoomOutMa.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Zoom out")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -948,9 +949,9 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: if (root.worldMap) root.worldMap.zoomIn(1.4)
                     }
-                    ToolTip.visible: zoomInMa.containsMouse
-                    ToolTip.text: qsTr("Zoom in")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: zoomInMa.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Zoom in")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -980,10 +981,10 @@ Rectangle {
                             ? root.restoreViewportAfterQsoFocus()
                             : (root.worldMap ? root.worldMap.resetView() : undefined)
                     }
-                    ToolTip.visible: resetMa.containsMouse
-                    ToolTip.text: root.qsoViewportFocused
+                    DecoTemplates.ToolTip.visible: resetMa.containsMouse
+                    DecoTemplates.ToolTip.text: root.qsoViewportFocused
                         ? qsTr("Restore previous view") : qsTr("Reset view (auto-fit)")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -1023,9 +1024,9 @@ Rectangle {
                                 root.worldMap.setGreylineEnabled(greylineBtn.greylineOn)
                         }
                     }
-                    ToolTip.visible: greylineMa.containsMouse
-                    ToolTip.text: qsTr("Toggle day/night greyline overlay")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: greylineMa.containsMouse
+                    DecoTemplates.ToolTip.text: qsTr("Toggle day/night greyline overlay")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -1058,11 +1059,11 @@ Rectangle {
                             ? root.restoreViewportAfterQsoFocus()
                             : root.focusActiveQso()
                     }
-                    ToolTip.visible: qsoFocusMa.containsMouse
-                    ToolTip.text: root.qsoViewportFocused
+                    DecoTemplates.ToolTip.visible: qsoFocusMa.containsMouse
+                    DecoTemplates.ToolTip.text: root.qsoViewportFocused
                         ? qsTr("Restore previous map view")
                         : qsTr("Auto-fit active QSO")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Rectangle {
@@ -1090,9 +1091,9 @@ Rectangle {
                         onClicked: root.detachRequested()
                     }
 
-                    ToolTip.visible: liveMapDetachMA.containsMouse
-                    ToolTip.text: root.detached ? qsTr("Dock Live Map") : qsTr("Detach Live Map")
-                    ToolTip.delay: 500
+                    DecoTemplates.ToolTip.visible: liveMapDetachMA.containsMouse
+                    DecoTemplates.ToolTip.text: root.detached ? qsTr("Dock Live Map") : qsTr("Detach Live Map")
+                    DecoTemplates.ToolTip.delay: 500
                 }
 
                 Text {
@@ -1238,8 +1239,8 @@ Rectangle {
                             if (root.mapOperations)
                                 root.mapOperations.mapProjection = currentText
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Map projection")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Map projection")
                     }
 
                     ComboBox {
@@ -1257,8 +1258,8 @@ Rectangle {
                             if (root.mapOperations)
                                 root.mapOperations.applyMapPreset(currentText)
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Map preset")
+                        DecoTemplates.ToolTip.visible: hovered
+                        DecoTemplates.ToolTip.text: qsTr("Map preset")
                     }
 
                     LayerToggle {
@@ -1894,8 +1895,8 @@ Rectangle {
                             Layout.preferredHeight: 26
                             text: "◎"
                             onClicked: root.focusSelectedGrid()
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Center this grid")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Center this grid")
                         }
                         ToolButton {
                             Layout.preferredWidth: 42
@@ -1909,16 +1910,16 @@ Rectangle {
                                 root.mapOperations.logbookSearch = root.mapLayers.selectedGrid
                                 root.mapOperations.dataViewMode = "Logbook"
                             }
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Open the logbook filtered to this grid/VUCC entity")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Open the logbook filtered to this grid/VUCC entity")
                         }
                         ToolButton {
                             Layout.preferredWidth: 30
                             Layout.preferredHeight: 26
                             text: "×"
                             onClicked: root.closeGridDetails()
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Close grid details")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Close grid details")
                         }
                     }
 
@@ -2020,16 +2021,16 @@ Rectangle {
                                             enabled: !!modelData.call
                                             onClicked: root.mapLayers.setRosterCallWatched(
                                                 modelData.call, true)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Watch this station")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Watch this station")
                                         }
                                         ToolButton {
                                             text: "QRZ"
                                             font.pixelSize: 8
                                             enabled: !!modelData.call
                                             onClicked: root.openCallLookup(modelData.call)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Open callsign lookup")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Open callsign lookup")
                                         }
                                         Button {
                                             text: qsTr("CALL")
@@ -2037,8 +2038,8 @@ Rectangle {
                                             enabled: !!modelData.call
                                             onClicked: root.engine.processMapRosterCall(
                                                 modelData.call, modelData.grid || "")
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Start QSO with this station")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Start QSO with this station")
                                         }
                                     }
                                 }
@@ -2209,8 +2210,8 @@ Rectangle {
                             Layout.preferredHeight: 22
                             text: "×"
                             onClicked: root.intelligencePanelRequested = false
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Close details")
+                            DecoTemplates.ToolTip.visible: hovered
+                            DecoTemplates.ToolTip.text: qsTr("Close details")
                         }
                     }
 
@@ -2325,8 +2326,8 @@ Rectangle {
                                     textRole: "label"
                                     valueRole: "layerId"
                                     font.pixelSize: 9
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Select the layer whose appearance is being edited")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Select the layer whose appearance is being edited")
                                 }
                                 RowLayout {
                                     Layout.fillWidth: true
@@ -2447,16 +2448,16 @@ Rectangle {
                                         text: qsTr("Export map config")
                                         font.pixelSize: 8
                                         onClicked: root.exportMapConfiguration()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Export presets, roster preferences/rules, layer styles, temporal decay and map viewport")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Export presets, roster preferences/rules, layer styles, temporal decay and map viewport")
                                     }
                                     Button {
                                         Layout.fillWidth: true
                                         text: qsTr("Import map config")
                                         font.pixelSize: 8
                                         onClicked: mapConfigurationImportDialog.open()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Import the complete map configuration bundle")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Import the complete map configuration bundle")
                                     }
                                 }
                                 Text {
@@ -2481,8 +2482,8 @@ Rectangle {
                                             if (root.baseMapService)
                                                 root.baseMapService.provider = currentText
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Local atlas, OpenStreetMap/OpenTopoMap, GEBCO bathymetry, NASA GIBS and MapTiler. If a provider fails, the configured fallback is tried.")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Local atlas, OpenStreetMap/OpenTopoMap, GEBCO bathymetry, NASA GIBS and MapTiler. If a provider fails, the configured fallback is tried.")
                                     }
                                     Button {
                                         Layout.preferredWidth: implicitWidth + 10
@@ -2495,8 +2496,8 @@ Rectangle {
                                                 root.mapLayers.setNetworkOfflineMode(
                                                     !root.mapLayerEnabled("offline"))
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: root.mapLayerEnabled("offline")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: root.mapLayerEnabled("offline")
                                             ? qsTr("Resume DX Cluster, updates and online lookups. This is a local Decodium setting, not a Windows connectivity check.")
                                             : qsTr("Pause cloud/network services, keep local ADIF, logbook, cache and radio activity available, and use the local atlas or imported raster pack.")
                                     }
@@ -2555,8 +2556,8 @@ Rectangle {
                                         text: qsTr("Import offline raster")
                                         font.pixelSize: 8
                                         onClicked: offlineRasterImportDialog.open()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Import a legally obtained equirectangular world raster, such as a Natural Earth export. Decodium stores a private local copy and does not download tiles.")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Import a legally obtained equirectangular world raster, such as a Natural Earth export. Decodium stores a private local copy and does not download tiles.")
                                     }
                                     Button {
                                         text: qsTr("Clear")
@@ -2645,8 +2646,8 @@ Rectangle {
                                                        .indexOf(root.mapLayers.bandFilter)) : 0
                                         font.pixelSize: 10
                                         onActivated: root.mapLayers.bandFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Band")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Band")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -2657,8 +2658,8 @@ Rectangle {
                                                        .indexOf(root.mapLayers.modeFilter)) : 0
                                         font.pixelSize: 10
                                         onActivated: root.mapLayers.modeFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Mode")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Mode")
                                     }
                                 }
                                 RowLayout {
@@ -2673,8 +2674,8 @@ Rectangle {
                                                        .indexOf(root.mapLayers.periodFilter)) : 0
                                         font.pixelSize: 10
                                         onActivated: root.mapLayers.periodFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Period")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Period")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -2685,8 +2686,8 @@ Rectangle {
                                                        .indexOf(root.mapLayers.sourceFilter)) : 0
                                         font.pixelSize: 10
                                         onActivated: root.mapLayers.sourceFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Source")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Source")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -2702,8 +2703,8 @@ Rectangle {
                                                 root.mapLayers.propagationFilter =
                                                     root.mapLayers.availablePropagationTypes[index].code
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Propagation")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Propagation")
                                     }
                                 }
                                 RowLayout {
@@ -2718,8 +2719,8 @@ Rectangle {
                                                        .indexOf(root.mapLayers.continentFilter)) : 0
                                         font.pixelSize: 10
                                         onActivated: root.mapLayers.continentFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Continent")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Continent")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -2730,8 +2731,8 @@ Rectangle {
                                                        .indexOf(root.mapLayers.dxccFilter)) : 0
                                         font.pixelSize: 10
                                         onActivated: root.mapLayers.dxccFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("DXCC")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("DXCC")
                                     }
                                 }
                                 RowLayout {
@@ -2752,8 +2753,8 @@ Rectangle {
                                             && root.mapLayerEnabled("psk")
                                             && !root.mapLayerEnabled("offline")
                                         onClicked: root.engine.refreshPskMapSpots()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: root.mapLayerEnabled("offline")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: root.mapLayerEnabled("offline")
                                             ? qsTr("Unavailable while Offline mode is enabled")
                                             : !root.mapLayerEnabled("psk")
                                                 ? qsTr("Enable the PSK layer to retrieve PSK Reporter spots")
@@ -2801,8 +2802,8 @@ Rectangle {
                                             root.engine.pskMapSpotWindowMinutes = Number(currentValue)
                                             root.engine.refreshPskMapSpots()
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Look-back and expiry period for PSK Reporter spots displayed on the Live Map")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Look-back and expiry period for PSK Reporter spots displayed on the Live Map")
                                     }
                                 }
                                 RowLayout {
@@ -2827,8 +2828,8 @@ Rectangle {
                                         font.pixelSize: 9
                                         onActivated: root.mapLayers.pskDisplayMode =
                                             currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Overlay PSK receivers with local activity or replace local activity")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Overlay PSK receivers with local activity or replace local activity")
                                     }
                                     Slider {
                                         Layout.fillWidth: true
@@ -2842,8 +2843,8 @@ Rectangle {
                                                 root.mapLayers.pskOpacityPercent =
                                                     Math.round(value)
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("PSK grid opacity")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("PSK grid opacity")
                                     }
                                     Text {
                                         text: root.mapLayers
@@ -2875,8 +2876,8 @@ Rectangle {
                                             else
                                                 root.mapLayers.pskFeedService.enabled = false
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: root.mapLayerEnabled("offline")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: root.mapLayerEnabled("offline")
                                             ? qsTr("The subscription is retained but paused while Offline mode is enabled")
                                             : qsTr("Subscribe to the PSK Reporter MQTT stream for this station")
                                     }
@@ -2890,8 +2891,8 @@ Rectangle {
                                             && !root.mapLayerEnabled("offline")
                                         onClicked: root.mapLayers.configurePskFeed(
                                             root.engine.callsign, root.engine.grid)
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: root.mapLayerEnabled("offline")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: root.mapLayerEnabled("offline")
                                             ? qsTr("Unavailable while Offline mode is enabled")
                                             : qsTr("Connect the PSK Reporter MQTT feed")
                                     }
@@ -2917,8 +2918,8 @@ Rectangle {
                                             ? Math.max(0, model.indexOf(root.mapLayers.spotAgeFilter)) : 0
                                         font.pixelSize: 9
                                         onActivated: root.mapLayers.spotAgeFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("PSK/spot history age")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("PSK/spot history age")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -2928,8 +2929,8 @@ Rectangle {
                                             ? Math.max(0, model.indexOf(root.mapLayers.spotCorrelationFilter)) : 0
                                         font.pixelSize: 9
                                         onActivated: root.mapLayers.spotCorrelationFilter = currentText
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Source correlation filter")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Source correlation filter")
                                     }
                                 }
                                 Text {
@@ -2959,8 +2960,8 @@ Rectangle {
                                                 root.mapLayers.gridPrecision =
                                                     currentIndex === 1 ? 6 : 4
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Coverage grid precision")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Coverage grid precision")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -2986,8 +2987,8 @@ Rectangle {
                                                 root.mapLayers.liveDecayMinutes =
                                                     Number(currentValue)
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Time before live grid activity fades out")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Time before live grid activity fades out")
                                     }
                                 }
                                 Text {
@@ -3046,8 +3047,8 @@ Rectangle {
                                                 next[modelData.source] = Number(currentText)
                                                 root.mapLayers.sourceDecayMinutes = next
                                             }
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Decay lifetime for this source")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Decay lifetime for this source")
                                         }
                                     }
                                 }
@@ -3060,8 +3061,8 @@ Rectangle {
                                         if (root.mapLayers)
                                             root.mapLayers.splitGridEnabled = checked
                                     }
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Show QSO/QSL history and current activity in separate halves of the same grid")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Show QSO/QSL history and current activity in separate halves of the same grid")
                                 }
                                 RowLayout {
                                     Layout.fillWidth: true
@@ -3124,8 +3125,8 @@ Rectangle {
                                             if (root.mapLayers)
                                                 root.mapLayers.coveragePushPinsEnabled = checked
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Draw active and wanted grids as compact map pins")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Draw active and wanted grids as compact map pins")
                                     }
                                     CheckBox {
                                         Layout.fillWidth: true
@@ -3137,8 +3138,8 @@ Rectangle {
                                             if (root.mapLayers)
                                                 root.mapLayers.timeZoneOverlayEnabled = checked
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Show UTC-offset meridians on the map")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Show UTC-offset meridians on the map")
                                     }
                                 }
                                 GridLayout {
@@ -3261,8 +3262,8 @@ Rectangle {
                                         font.pixelSize: 8
                                         Layout.preferredHeight: 24
                                         onClicked: root.locateMoon()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Center map on the Moon subpoint")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Center map on the Moon subpoint")
                                     }
                                 }
                                 Text {
@@ -3463,8 +3464,8 @@ Rectangle {
                                                 root.mapOperations.dataViewMode =
                                                     currentText
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Live and logbook visibility")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Live and logbook visibility")
                                     }
                                     ComboBox {
                                         Layout.fillWidth: true
@@ -3480,8 +3481,8 @@ Rectangle {
                                                 root.mapOperations.mapProjection =
                                                     currentText
                                         }
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Projection")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Projection")
                                     }
                                 }
                                 RowLayout {
@@ -3684,8 +3685,8 @@ Rectangle {
                                         enabled: root.externalOverlays
                                                  && !root.externalOverlays.loading
                                         onClicked: root.externalOverlays.refreshAll()
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Refresh enabled external layers")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Refresh enabled external layers")
                                     }
                                 }
                                 Repeater {
@@ -3782,8 +3783,8 @@ Rectangle {
                                     selectByMouse: true
                                     onEditingFinished: root.mapLayers
                                         .alertCallPattern = text
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Wildcard pattern matched against callsigns and messages")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Wildcard pattern matched against callsigns and messages")
                                 }
                             }
                             RowLayout {
@@ -3800,8 +3801,8 @@ Rectangle {
                                                        root.mapLayers.rosterTextMode)) : 0
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.rosterTextMode = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Call roster text-filter mode")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Call roster text-filter mode")
                                 }
                                 TextField {
                                     Layout.fillWidth: true
@@ -3814,8 +3815,8 @@ Rectangle {
                                         if (root.mapLayers)
                                             root.mapLayers.rosterTextFilter = text
                                     }
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Filtering runs in the map database worker")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Filtering runs in the map database worker")
                                 }
                             }
                             RowLayout {
@@ -3838,8 +3839,8 @@ Rectangle {
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.callLookupProvider =
                                         currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Provider used by lookup actions in grid popups and the roster")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Provider used by lookup actions in grid popups and the roster")
                                 }
                             }
                             RowLayout {
@@ -3860,8 +3861,8 @@ Rectangle {
                                                        root.mapLayers.activeAwardProgram)) : 0
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.activeAwardProgram = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Select the award whose missing entities become wanted stations")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Select the award whose missing entities become wanted stations")
                                 }
                                 ComboBox {
                                     Layout.preferredWidth: 92
@@ -3874,8 +3875,8 @@ Rectangle {
                                         && root.mapLayers.activeAwardProgram !== "None"
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.awardGoal = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Hunt entities not yet worked or not yet confirmed")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Hunt entities not yet worked or not yet confirmed")
                                 }
                             }
                             RowLayout {
@@ -3894,8 +3895,8 @@ Rectangle {
                                         ? Math.max(0, model.indexOf(root.mapLayers.rosterScope)) : 0
                                     font.pixelSize: 8
                                     onActivated: root.mapLayers.rosterScope = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Current band/mode use the selected map band and mode; Digital modes includes FT, JT, Q and other digital modes")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Current band/mode use the selected map band and mode; Digital modes includes FT, JT, Q and other digital modes")
                                 }
                                 ComboBox {
                                     Layout.preferredWidth: 98
@@ -3905,8 +3906,8 @@ Rectangle {
                                         ? Math.max(0, model.indexOf(root.mapLayers.rosterDxccScope)) : 0
                                     font.pixelSize: 8
                                     onActivated: root.mapLayers.rosterDxccScope = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Limit the roster to your DXCC or to other DXCCs")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Limit the roster to your DXCC or to other DXCCs")
                                 }
                             }
                             RowLayout {
@@ -3917,8 +3918,8 @@ Rectangle {
                                     checked: root.mapLayers ? root.mapLayers.rosterUsesLoTW : false
                                     font.pixelSize: 8
                                     onToggled: root.mapLayers.rosterUsesLoTW = checked
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Keep stations with a LoTW confirmation within the configured age")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Keep stations with a LoTW confirmation within the configured age")
                                 }
                                 CheckBox {
                                     text: qsTr("eQSL")
@@ -3937,16 +3938,16 @@ Rectangle {
                                     checked: root.mapLayers ? root.mapLayers.rosterSpottedMeOnly : false
                                     font.pixelSize: 8
                                     onToggled: root.mapLayers.rosterSpottedMeOnly = checked
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Use only PSK Reporter spots heard by your callsign")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Use only PSK Reporter spots heard by your callsign")
                                 }
                                 CheckBox {
                                     text: qsTr("RR73=CQ")
                                     checked: root.mapLayers ? root.mapLayers.rosterTreatRr73AsCq : false
                                     font.pixelSize: 8
                                     onToggled: root.mapLayers.rosterTreatRr73AsCq = checked
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Treat messages containing RR73 as CQ when CQ-only is enabled")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Treat messages containing RR73 as CQ when CQ-only is enabled")
                                 }
                             }
                             RowLayout {
@@ -4039,23 +4040,23 @@ Rectangle {
                                                        root.mapLayers.rosterStatusFilter)) : 0
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.rosterStatusFilter = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Show all, new, unconfirmed, wanted or watched stations")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Show all, new, unconfirmed, wanted or watched stations")
                                 }
                                 CheckBox {
                                     text: qsTr("CQ")
                                     checked: root.mapLayers ? root.mapLayers.rosterCqOnly : false
                                     font.pixelSize: 9
                                     onToggled: root.mapLayers.rosterCqOnly = checked
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Show only active CQ calls in the roster")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Show only active CQ calls in the roster")
                                 }
                                 ToolButton {
                                     text: qsTr("Clear")
                                     enabled: root.mapLayers && root.mapLayers.liveSpotCount > 0
                                     onClicked: root.mapLayers.clearLiveSpots()
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Clear live station history")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Clear live station history")
                                 }
                                 ToolButton {
                                     text: root.mapLayers
@@ -4065,15 +4066,15 @@ Rectangle {
                                     enabled: !!root.mapLayers
                                     onClicked: root.showRosterPreferences =
                                         !root.showRosterPreferences
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Review watched calls and ignored calls or DXCC entities")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Review watched calls and ignored calls or DXCC entities")
                                 }
                                 ToolButton {
                                     text: qsTr("Columns")
                                     enabled: !!root.mapLayers
                                     onClicked: root.showRosterColumns = !root.showRosterColumns
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Choose the information shown on each roster row")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Choose the information shown on each roster row")
                                 }
                                 ToolButton {
                                     text: root.mapLayers
@@ -4081,15 +4082,15 @@ Rectangle {
                                         : qsTr("Rules")
                                     enabled: !!root.mapLayers
                                     onClicked: root.showRosterRules = !root.showRosterRules
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Create wanted, ignored or watched rules with optional band and mode scopes")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Create wanted, ignored or watched rules with optional band and mode scopes")
                                 }
                                 ToolButton {
                                     text: qsTr("Matrix")
                                     enabled: !!root.mapLayers
                                     onClicked: root.showRosterMatrix = !root.showRosterMatrix
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Select NEW categories and inspect wanted or exception matrices")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Select NEW categories and inspect wanted or exception matrices")
                                 }
                             }
                             RowLayout {
@@ -4103,8 +4104,8 @@ Rectangle {
                                                        root.mapLayers.rosterHuntScope)) : 0
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.rosterHuntScope = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Compare worked and confirmed status globally, by band or by band and mode")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Compare worked and confirmed status globally, by band or by band and mode")
                                 }
                                 SpinBox {
                                     id: rosterRetention
@@ -4126,8 +4127,8 @@ Rectangle {
                                         if (root.mapLayers)
                                             root.mapLayers.rosterRetentionMinutes = value
                                     }
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Keep each station active in the roster for this many minutes")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Keep each station active in the roster for this many minutes")
                                 }
                             }
                             RowLayout {
@@ -4145,8 +4146,8 @@ Rectangle {
                                         && root.mapLayers.rosterSortDescending ? "↓" : "↑"
                                     onClicked: root.mapLayers.rosterSortDescending =
                                         !root.mapLayers.rosterSortDescending
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Reverse sort")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Reverse sort")
                                 }
                             }
                             Text {
@@ -4264,8 +4265,8 @@ Rectangle {
                                                         types.splice(index, 1)
                                                     root.mapLayers.rosterWantedTypes = types
                                                 }
-                                                ToolTip.visible: hovered
-                                                ToolTip.text: qsTr("Use this entity in NEW and UNCONFIRMED calculations")
+                                                DecoTemplates.ToolTip.visible: hovered
+                                                DecoTemplates.ToolTip.text: qsTr("Use this entity in NEW and UNCONFIRMED calculations")
                                             }
                                         }
                                     }
@@ -4443,8 +4444,8 @@ Rectangle {
                                                 onClicked: root.mapLayers.removeRosterRule(
                                                     modelData.type, modelData.value,
                                                     modelData.band || "", modelData.mode || "")
-                                                ToolTip.visible: hovered
-                                                ToolTip.text: qsTr("Remove rule")
+                                                DecoTemplates.ToolTip.visible: hovered
+                                                DecoTemplates.ToolTip.text: qsTr("Remove rule")
                                             }
                                         }
                                     }
@@ -4482,8 +4483,8 @@ Rectangle {
                                                 && root.mapLayers.rosterPreferenceCount > 0
                                             onClicked: root.mapLayers
                                                 .clearRosterPreferences()
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Clear all watched calls and all call or DXCC exclusions")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Clear all watched calls and all call or DXCC exclusions")
                                         }
                                     }
                                     ListView {
@@ -4533,8 +4534,8 @@ Rectangle {
                                                     .removeRosterPreference(
                                                         modelData.type,
                                                         modelData.value)
-                                                ToolTip.visible: hovered
-                                                ToolTip.text: qsTr("Remove this entry")
+                                                DecoTemplates.ToolTip.visible: hovered
+                                                DecoTemplates.ToolTip.text: qsTr("Remove this entry")
                                             }
                                         }
                                     }
@@ -4643,8 +4644,8 @@ Rectangle {
                                             enabled: !!modelData.call
                                             onClicked: root.mapLayers.setRosterCallWatched(
                                                 modelData.call, !modelData.watched)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: modelData.watched
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: modelData.watched
                                                 ? qsTr("Stop watching this station")
                                                 : qsTr("Keep this station at the top of the roster")
                                         }
@@ -4654,8 +4655,8 @@ Rectangle {
                                             enabled: !!modelData.call
                                             onClicked: root.mapLayers.setRosterCallIgnored(
                                                 modelData.call, true)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Ignore this station until roster preferences are reset")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Ignore this station until roster preferences are reset")
                                         }
                                         ToolButton {
                                             text: qsTr("DX")
@@ -4664,8 +4665,8 @@ Rectangle {
                                             visible: !!modelData.dxcc
                                             onClicked: root.mapLayers.setRosterDxccIgnored(
                                                 modelData.dxcc, true)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Ignore every station from %1")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Ignore every station from %1")
                                                 .arg(modelData.dxcc || "")
                                         }
                                         ToolButton {
@@ -4675,16 +4676,16 @@ Rectangle {
                                             visible: !!modelData.provider
                                             onClicked: root.mapLayers.setRosterProviderIgnored(
                                                 modelData.provider, true)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Ignore this feed/provider")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Ignore this feed/provider")
                                         }
                                         ToolButton {
                                             text: "QRZ"
                                             font.pixelSize: 8
                                             enabled: !!modelData.call
                                             onClicked: root.openCallLookup(modelData.call)
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Open callsign lookup")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Open callsign lookup")
                                         }
                                         ToolButton {
                                             text: qsTr("CALL")
@@ -4692,8 +4693,8 @@ Rectangle {
                                             enabled: !!modelData.call
                                             onClicked: root.engine.processMapRosterCall(
                                                 modelData.call, modelData.grid || "")
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Start QSO with this station")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Start QSO with this station")
                                         }
                                     }
                                 }
@@ -4757,8 +4758,8 @@ Rectangle {
                                         text: qsTr("ALL TIME")
                                         font.pixelSize: 8
                                         onClicked: root.mapLayers.periodFilter = "All time"
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Remove the temporary map time filter")
+                                        DecoTemplates.ToolTip.visible: hovered
+                                        DecoTemplates.ToolTip.text: qsTr("Remove the temporary map time filter")
                                     }
                                 }
                                 Text {
@@ -4769,8 +4770,8 @@ Rectangle {
                                     color: root.textSecondary
                                     font.pixelSize: 8
                                     elide: Text.ElideMiddle
-                                    ToolTip.visible: sourcePathMouse.containsMouse
-                                    ToolTip.text: text
+                                    DecoTemplates.ToolTip.visible: sourcePathMouse.containsMouse
+                                    DecoTemplates.ToolTip.text: text
                                     MouseArea {
                                         id: sourcePathMouse
                                         anchors.fill: parent
@@ -5010,8 +5011,8 @@ Rectangle {
                                                     root.mapLayers.bandActivityWindowHours =
                                                         modelData
                                             }
-                                            ToolTip.visible: hovered
-                                            ToolTip.text: qsTr("Analyse the last %1 hours")
+                                            DecoTemplates.ToolTip.visible: hovered
+                                            DecoTemplates.ToolTip.text: qsTr("Analyse the last %1 hours")
                                                 .arg(modelData)
                                         }
                                     }
@@ -5396,8 +5397,8 @@ Rectangle {
                                                        root.mapLayers.activeAwardProgram)) : 0
                                     font.pixelSize: 9
                                     onActivated: root.mapLayers.activeAwardProgram = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Use this award to identify wanted stations in the roster")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Use this award to identify wanted stations in the roster")
                                 }
                                 ComboBox {
                                     Layout.preferredWidth: 96
@@ -5426,8 +5427,8 @@ Rectangle {
                                         && root.mapLayers.activeAwardProgram !== "None"
                                     font.pixelSize: 8
                                     onActivated: root.mapLayers.awardEndorsement = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Award endorsement band")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Award endorsement band")
                                 }
                                 ComboBox {
                                     Layout.preferredWidth: 92
@@ -5440,8 +5441,8 @@ Rectangle {
                                         && root.mapLayers.activeAwardProgram !== "None"
                                     font.pixelSize: 8
                                     onActivated: root.mapLayers.awardConfirmation = currentText
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: qsTr("Confirmation source used for the confirmed score")
+                                    DecoTemplates.ToolTip.visible: hovered
+                                    DecoTemplates.ToolTip.text: qsTr("Confirmation source used for the confirmed score")
                                 }
                             }
                             RowLayout {
@@ -5544,8 +5545,8 @@ Rectangle {
                                         onClicked: root.mapLayers.activeAwardProgram =
                                             modelData.label
                                     }
-                                    ToolTip.visible: awardMouse.containsMouse
-                                    ToolTip.text: (modelData.rule || "")
+                                    DecoTemplates.ToolTip.visible: awardMouse.containsMouse
+                                    DecoTemplates.ToolTip.text: (modelData.rule || "")
                                         + "\n"
                                         + qsTr("Select %1 as the active roster award")
                                               .arg(modelData.label)

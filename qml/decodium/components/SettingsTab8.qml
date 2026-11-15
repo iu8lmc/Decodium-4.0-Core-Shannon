@@ -1,4 +1,5 @@
 /* Decodium 4.0 - lazy Settings tab */
+import QtQuick.Templates as DecoTemplates
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -117,9 +118,9 @@ SettingsPageScroll {
                     }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Use this specific decode color. When OFF, this category uses the shared default color.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Use this specific decode color. When OFF, this category uses the shared default color.")
                 }
 
                 Rectangle {
@@ -246,9 +247,9 @@ SettingsPageScroll {
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height / 2 - height / 2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                     hoverEnabled: true
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Colors the row BACKGROUND (in addition to the text) for this category. OFF = no custom background.")
+                    DecoTemplates.ToolTip.visible: hovered
+                    DecoTemplates.ToolTip.delay: 400
+                    DecoTemplates.ToolTip.text: qsTr("Colors the row BACKGROUND (in addition to the text) for this category. OFF = no custom background.")
                 }
                 Rectangle {
                     width: 60
