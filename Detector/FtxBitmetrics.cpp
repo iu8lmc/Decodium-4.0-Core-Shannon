@@ -1034,6 +1034,139 @@ void run_ft2_bitmetrics (Complex const* cd, float* bitmetrics, int* badsync)
                            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
+// Massimi per bit di un gruppo di nsym simboli (1, 2 o 3), senza storico.
+//
+// La metrica di un bit e' max(|somma|) sulle combinazioni col bit a 1 meno lo
+// stesso massimo col bit a 0. La forma diretta calcolava il modulo (hypotf) di
+// tutte le 8^nsym combinazioni e poi le riscorreva una volta per bit: da sola
+// era oltre meta' del tempo di una decodifica FT8 a profondita' 3.
+//
+// Qui il confronto avviene sui moduli al quadrato, che ordinano le combinazioni
+// allo stesso modo, e il modulo vero viene calcolato solo per le vincitrici.
+// I massimi per bit si ricavano dai massimi marginali per cifra (una cifra
+// ottale = un simbolo), cosi' le combinazioni si scorrono una volta sola.
+// Il valore restituito e' lo stesso abs1() della combinazione vincente che
+// calcolava la forma diretta; puo' differire solo fra combinazioni i cui moduli
+// coincidono entro l'ultimo bit di precisione.
+//
+// max1[p] / max0[p]: modulo massimo fra le combinazioni col bit p dell'indice
+// rispettivamente a 1 e a 0, per p = 0 .. 3 * nsym - 1.
+inline void ft8_group_bit_maxima (std::array<std::array<Complex, 8>, 79> const& cs,
+                                  std::array<int, 8> const& graymap,
+                                  int nsym, int ks, float* max1, float* max0)
+{
+  std::array<Complex, 512> sums;
+  std::array<float, 512> power;
+  int const nt = 1 << (3 * nsym);
+
+  std::array<Complex, 8> const& first = cs[static_cast<size_t> (ks - 1)];
+  if (nsym == 1)
+    {
+      for (int i3 = 0; i3 < 8; ++i3)
+        {
+          sums[static_cast<size_t> (i3)] = first[static_cast<size_t> (graymap[static_cast<size_t> (i3)])];
+        }
+    }
+  else if (nsym == 2)
+    {
+      std::array<Complex, 8> const& second = cs[static_cast<size_t> (ks)];
+      for (int i2 = 0; i2 < 8; ++i2)
+        {
+          Complex const a = first[static_cast<size_t> (graymap[static_cast<size_t> (i2)])];
+          for (int i3 = 0; i3 < 8; ++i3)
+            {
+              sums[static_cast<size_t> (i2 * 8 + i3)] =
+                  a + second[static_cast<size_t> (graymap[static_cast<size_t> (i3)])];
+            }
+        }
+    }
+  else
+    {
+      std::array<Complex, 8> const& second = cs[static_cast<size_t> (ks)];
+      std::array<Complex, 8> const& third = cs[static_cast<size_t> (ks + 1)];
+      std::array<Complex, 8> third_gray;
+      for (int i3 = 0; i3 < 8; ++i3)
+        {
+          third_gray[static_cast<size_t> (i3)] = third[static_cast<size_t> (graymap[static_cast<size_t> (i3)])];
+        }
+      for (int i1 = 0; i1 < 8; ++i1)
+        {
+          Complex const a = first[static_cast<size_t> (graymap[static_cast<size_t> (i1)])];
+          for (int i2 = 0; i2 < 8; ++i2)
+            {
+              Complex const ab = a + second[static_cast<size_t> (graymap[static_cast<size_t> (i2)])];
+              Complex* const out = sums.data () + (i1 * 64 + i2 * 8);
+              for (int i3 = 0; i3 < 8; ++i3)
+                {
+                  out[i3] = ab + third_gray[static_cast<size_t> (i3)];
+                }
+            }
+        }
+    }
+
+  for (int i = 0; i < nt; ++i)
+    {
+      float const re = sums[static_cast<size_t> (i)].real ();
+      float const im = sums[static_cast<size_t> (i)].imag ();
+      power[static_cast<size_t> (i)] = re * re + im * im;
+    }
+
+  // Massimo marginale per ogni valore di ogni cifra ottale dell'indice.
+  std::array<std::array<float, 8>, 3> best_power;
+  std::array<std::array<int, 8>, 3> best_index;
+  for (int digit = 0; digit < nsym; ++digit)
+    {
+      int const shift = 3 * digit;
+      for (int value = 0; value < 8; ++value)
+        {
+          best_power[static_cast<size_t> (digit)][static_cast<size_t> (value)] = -1.0f;
+          best_index[static_cast<size_t> (digit)][static_cast<size_t> (value)] = value << shift;
+        }
+    }
+  for (int i = 0; i < nt; ++i)
+    {
+      float const value = power[static_cast<size_t> (i)];
+      for (int digit = 0; digit < nsym; ++digit)
+        {
+          size_t const slot = static_cast<size_t> ((i >> (3 * digit)) & 7);
+          if (value > best_power[static_cast<size_t> (digit)][slot])
+            {
+              best_power[static_cast<size_t> (digit)][slot] = value;
+              best_index[static_cast<size_t> (digit)][slot] = i;
+            }
+        }
+    }
+
+  for (int bit = 0; bit < 3 * nsym; ++bit)
+    {
+      size_t const digit = static_cast<size_t> (bit / 3);
+      int const mask = 1 << (bit % 3);
+      float power1 = -1.0f;
+      float power0 = -1.0f;
+      int index1 = -1;
+      int index0 = -1;
+      for (int value = 0; value < 8; ++value)
+        {
+          float const candidate = best_power[digit][static_cast<size_t> (value)];
+          if ((value & mask) != 0)
+            {
+              if (index1 < 0 || candidate > power1)
+                {
+                  power1 = candidate;
+                  index1 = best_index[digit][static_cast<size_t> (value)];
+                }
+            }
+          else if (index0 < 0 || candidate > power0)
+            {
+              power0 = candidate;
+              index0 = best_index[digit][static_cast<size_t> (value)];
+            }
+        }
+      max1[bit] = abs1 (sums[static_cast<size_t> (index1)]);
+      max0[bit] = abs1 (sums[static_cast<size_t> (index0)]);
+    }
+}
+
 void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
                          float scale, bool weak_deep,
                          bool equalize_tone_power,
@@ -1059,6 +1192,7 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
   std::array<float, 174> bmete {};
 
   bool const reverse_metric = (imetric == 3);
+  bool const need_reverse_tones = reverse_metric || imetric == 4;
   int const metric_shape = reverse_metric ? 1 : (imetric == 4 ? 2 : imetric);
   float const sync_average = ft8_sync_average (cd0, np2, ibest, icos7);
   bool const condition_weak_edges = sync_average < 2.5f;
@@ -1083,15 +1217,19 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
       std::array<float, 8> forward_mags {};
       fft_symbol_8tones_ft8 (csymb.data (), forward_tones, forward_mags);
 
-      std::array<Complex, 32> csymb_reverse {};
-      for (int i = 0; i < NSS; ++i)
-        {
-          csymb_reverse[static_cast<size_t> (i)] =
-              std::conj (csymb[static_cast<size_t> (NSS - 1 - i)]);
-        }
+      // I toni del simbolo rovesciato servono solo alle metriche 3 e 4.
       std::array<Complex, 8> reverse_tones {};
       std::array<float, 8> reverse_mags {};
-      fft_symbol_8tones_ft8 (csymb_reverse.data (), reverse_tones, reverse_mags);
+      if (need_reverse_tones)
+        {
+          std::array<Complex, 32> csymb_reverse {};
+          for (int i = 0; i < NSS; ++i)
+            {
+              csymb_reverse[static_cast<size_t> (i)] =
+                  std::conj (csymb[static_cast<size_t> (NSS - 1 - i)]);
+            }
+          fft_symbol_8tones_ft8 (csymb_reverse.data (), reverse_tones, reverse_mags);
+        }
 
       auto const& tones = reverse_metric ? reverse_tones : forward_tones;
       auto const& mags = reverse_metric ? reverse_mags : forward_mags;
@@ -1220,15 +1358,64 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
           for (int k = 1; k <= 29; k += nsym)
             {
               int const ks = (ihalf == 1) ? (k + 7) : (k + 43);
+              int const i32 = 1 + (k - 1) * 3 + (ihalf - 1) * 87;
+              int ibmax = 2;
+              if (nsym == 2) ibmax = 5;
+              if (nsym == 3) ibmax = 8;
 
-              for (int i = 0; i < nt; ++i)
+              // Massimi indicizzati per bit dell'indice di combinazione.
+              std::array<float, 9> group_max1 {};
+              std::array<float, 9> group_max0 {};
+              if (!history_cs)
                 {
-                  int const i1 = i / 64;
-                  int const i2 = (i & 63) / 8;
-                  int const i3 = i & 7;
-                  float value = 0.0f;
-                  if (history_cs)
+                  ft8_group_bit_maxima (cs, graymap, nsym, ks,
+                                        group_max1.data (), group_max0.data ());
+                  // Le forme di metrica sono crescenti nel modulo: applicarle
+                  // al solo massimo equivale ad applicarle a ogni combinazione.
+                  auto const shape = [&] (float value) {
+                    if (use_weak_transform)
+                      {
+                        if (metric_shape == 1)
+                          {
+                            if (srr > 2.3f)
+                              {
+                                value *= value;
+                              }
+                            else if (value < 5.77f)
+                              {
+                                float const value2 = value * value;
+                                value = 1.0f + 8.0f * value2 - 0.12f * value2 * value2;
+                              }
+                            else
+                              {
+                                value = (value + 5.82f) * (value + 5.82f);
+                              }
+                          }
+                        else
+                          {
+                            value = std::pow (0.5f * value, 3.0f);
+                          }
+                      }
+                    else if (metric_shape == 2)
+                      {
+                        value *= value;
+                      }
+                    return value;
+                  };
+                  for (int bit = 0; bit <= ibmax; ++bit)
                     {
+                      group_max1[static_cast<size_t> (bit)] = shape (group_max1[static_cast<size_t> (bit)]);
+                      group_max0[static_cast<size_t> (bit)] = shape (group_max0[static_cast<size_t> (bit)]);
+                    }
+                }
+              else
+                {
+                  for (int i = 0; i < nt; ++i)
+                    {
+                      int const i1 = i / 64;
+                      int const i2 = (i & 63) / 8;
+                      int const i3 = i & 7;
+                      float value = 0.0f;
                       Complex current {};
                       Complex history {};
                       if (nsym == 1)
@@ -1273,56 +1460,22 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
                         {
                           value = std::pow (0.5f * value, 3.0f);
                         }
+                      s2[static_cast<size_t> (i)] = value;
                     }
-                  else if (nsym == 1)
+                  for (int bit = 0; bit <= ibmax; ++bit)
                     {
-                      value = abs1 (cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]);
-                    }
-                  else if (nsym == 2)
-                    {
-                      value = abs1 (cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i2)])] +
-                                    cs[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]);
-                    }
-                  else
-                    {
-                      value = abs1 (cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i1)])] +
-                                    cs[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i2)])] +
-                                    cs[static_cast<size_t> (ks + 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]);
-                    }
-                  if (!history_cs && use_weak_transform)
-                    {
-                      if (metric_shape == 1)
+                      float max1 = -1.0e30f;
+                      float max0 = -1.0e30f;
+                      for (int i = 0; i < nt; ++i)
                         {
-                          if (srr > 2.3f)
-                            {
-                              value *= value;
-                            }
-                          else if (value < 5.77f)
-                            {
-                              float const value2 = value * value;
-                              value = 1.0f + 8.0f * value2 - 0.12f * value2 * value2;
-                            }
-                          else
-                            {
-                              value = (value + 5.82f) * (value + 5.82f);
-                            }
+                          float const value = s2[static_cast<size_t> (i)];
+                          if (one[static_cast<size_t> (i)][static_cast<size_t> (bit)]) max1 = std::max (max1, value);
+                          else max0 = std::max (max0, value);
                         }
-                      else
-                        {
-                          value = std::pow (0.5f * value, 3.0f);
-                        }
+                      group_max1[static_cast<size_t> (bit)] = max1;
+                      group_max0[static_cast<size_t> (bit)] = max0;
                     }
-                  else if (!history_cs && metric_shape == 2)
-                    {
-                      value *= value;
-                    }
-                  s2[static_cast<size_t> (i)] = value;
                 }
-
-              int const i32 = 1 + (k - 1) * 3 + (ihalf - 1) * 87;
-              int ibmax = 2;
-              if (nsym == 2) ibmax = 5;
-              if (nsym == 3) ibmax = 8;
 
               for (int ib = 0; ib <= ibmax; ++ib)
                 {
@@ -1331,14 +1484,8 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
                       continue;
                     }
 
-                  float max1 = -1.0e30f;
-                  float max0 = -1.0e30f;
-                  for (int i = 0; i < nt; ++i)
-                    {
-                      float const value = s2[static_cast<size_t> (i)];
-                      if (one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)]) max1 = std::max (max1, value);
-                      else max0 = std::max (max0, value);
-                    }
+                  float const max1 = group_max1[static_cast<size_t> (ibmax - ib)];
+                  float const max0 = group_max0[static_cast<size_t> (ibmax - ib)];
                   float const bm = max1 - max0;
                   int const out_index = i32 + ib - 1;
 
@@ -1391,58 +1538,37 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
       std::array<float, 174> rbmetc {};
       for (int nsym = 1; nsym <= 3; ++nsym)
         {
-          int const nt = 1 << (3 * nsym);
           for (int ihalf = 1; ihalf <= 2; ++ihalf)
             {
               for (int k = 1; k <= 29; k += nsym)
                 {
                   int const ks = (ihalf == 1) ? (k + 7) : (k + 43);
-                  for (int i = 0; i < nt; ++i)
-                    {
-                      int const i1 = i / 64;
-                      int const i2 = (i & 63) / 8;
-                      int const i3 = i & 7;
-                      float value = 0.0f;
-                      if (nsym == 1)
-                        {
-                          value = abs1 (cs_reverse[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]);
-                        }
-                      else if (nsym == 2)
-                        {
-                          value = abs1 (cs_reverse[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i2)])] +
-                                        cs_reverse[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]);
-                        }
-                      else
-                        {
-                          value = abs1 (cs_reverse[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i1)])] +
-                                        cs_reverse[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i2)])] +
-                                        cs_reverse[static_cast<size_t> (ks + 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]);
-                        }
-                      if (use_weak_transform)
-                        {
-                          value = std::pow (0.5f * value, 3.0f);
-                        }
-                      s2[static_cast<size_t> (i)] = value;
-                    }
-
                   int const i32 = 1 + (k - 1) * 3 + (ihalf - 1) * 87;
                   int ibmax = 2;
                   if (nsym == 2) ibmax = 5;
                   if (nsym == 3) ibmax = 8;
+                  std::array<float, 9> group_max1 {};
+                  std::array<float, 9> group_max0 {};
+                  ft8_group_bit_maxima (cs_reverse, graymap, nsym, ks,
+                                        group_max1.data (), group_max0.data ());
+                  if (use_weak_transform)
+                    {
+                      for (int bit = 0; bit <= ibmax; ++bit)
+                        {
+                          group_max1[static_cast<size_t> (bit)] =
+                              std::pow (0.5f * group_max1[static_cast<size_t> (bit)], 3.0f);
+                          group_max0[static_cast<size_t> (bit)] =
+                              std::pow (0.5f * group_max0[static_cast<size_t> (bit)], 3.0f);
+                        }
+                    }
                   for (int ib = 0; ib <= ibmax; ++ib)
                     {
                       if (i32 + ib > 174)
                         {
                           continue;
                         }
-                      float max1 = -1.0e30f;
-                      float max0 = -1.0e30f;
-                      for (int i = 0; i < nt; ++i)
-                        {
-                          float const value = s2[static_cast<size_t> (i)];
-                          if (one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)]) max1 = std::max (max1, value);
-                          else max0 = std::max (max0, value);
-                        }
+                      float const max1 = group_max1[static_cast<size_t> (ibmax - ib)];
+                      float const max0 = group_max0[static_cast<size_t> (ibmax - ib)];
                       float const bm = max1 - max0;
                       int const out_index = i32 + ib - 1;
                       if (nsym == 1) rbmeta[static_cast<size_t> (out_index)] = bm;

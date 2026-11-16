@@ -3005,3 +3005,34 @@ messaggi in tutte le prove. I risultati completi sono nei file
 `build-baseline/performance/results/`. Sono misure locali con Decometer
 aperto, rendering software offscreen e telemetria inattiva; non dimostrano
 un risparmio equivalente a finestra chiusa, su ogni computer o in RF reale.
+
+### Metriche di bit FT8: massimi per bit senza modulo di ogni combinazione
+
+Il profilo di `ft8_stage_compare` (stage 4, profondità 3, registrazioni reali
+affollate) attribuiva oltre metà del tempo di decodifica a
+`run_ft8_bitmetrics`: per ogni candidato calcolava il modulo (`hypotf`) di
+tutte le 8, 64 e 512 combinazioni di toni di ogni gruppo di simboli e poi le
+riscorreva una volta per bit. Ora le combinazioni sono confrontate sui moduli
+al quadrato, i massimi per bit sono ricavati dai massimi marginali per simbolo
+in una sola scansione e il modulo vero è calcolato soltanto per le combinazioni
+vincenti. Il ramo con storico CQ conserva il calcolo precedente. Inoltre la
+FFT del simbolo rovesciato viene eseguita solo per le metriche 3 e 4 che la
+usano, l'impulso GFSK della sottrazione è calcolato una volta sola, il
+riavvolgimento di fase evita `fmod` nel caso comune (risultato identico) e la
+concessione `DECODIUM_FT8_STORICO_ENERGIA` è letta una volta per salvataggio
+anziché per ogni tono.
+
+Misura su Xeon 2,3 GHz, Linux x86-64, GCC 13.3, build `Release`, un thread,
+scadenza 60 s perché non influisca: otto WAV (tre campioni FT8 del progetto
+WSJT, due loro somme, tre versioni con rumore aggiunto) per cinque profili
+(profondità 1, 2, 3, `deep`, `harvest`). Le 40 uscite — messaggi, SNR, DT,
+frequenza e qualità — sono identiche prima e dopo. Tempo totale per profilo:
+profondità 3 da 35,95 a 19,54 s, `deep` da 27,75 a 15,18 s, `harvest` da 57,59
+a 28,91 s, profondità 2 da 3,25 a 2,15 s. Con scadenza di 1,5 s due delle tre
+registrazioni più affollate guadagnano un decode (20→21, 22→23).
+
+Il valore del massimo può differire dal precedente soltanto fra combinazioni i
+cui moduli coincidono entro l'ultimo bit; nelle prove non è mai emerso.
+La misura riguarda il decoder offline: non copre l'app completa, altre
+piattaforme o compilatori, né FT2/FT4, le cui metriche a quattro toni hanno la
+stessa struttura e non sono state modificate.
