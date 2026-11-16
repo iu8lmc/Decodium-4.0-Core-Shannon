@@ -1,6 +1,7 @@
 #include "DecodiumBridge.h"
 #include "DecodeUiFilterPolicy.h"
 #include "MapIntelligenceService.h"
+#include "CallsignIntelligenceService.h"
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -62,6 +63,8 @@ bool DecodiumBridge::appendAdifRecord(const QString& dxCall, const QString& dxGr
         return false;
     }
     f.close();
+    if (m_callsignIntelligence)
+        m_callsignIntelligence->enqueueClubLogQso(adifRecord.toUtf8(), m_callsign);
 
     m_workedCalls.insert(dxCall.toUpper());
     QString const qsoDate = (timeOnUtc.isValid() ? timeOnUtc.toUTC() : QDateTime::currentDateTimeUtc())

@@ -8,6 +8,8 @@
 #include <QTemporaryDir>
 
 #include "SecureSettings.hpp"
+#include "../src/security/ClubLogTokenStorage.hpp"
+#include "../src/security/ClubLogRestGuard.hpp"
 #include "../src/security/CoordinatedSecretBackend.h"
 #include "../src/security/SecretToolLookupStatus.h"
 #include "../src/security/SecretToolLookup.h"
@@ -70,6 +72,7 @@ namespace
     bool backend_available {true};
     bool found {false};
     bool store_success {true};
+    bool protected_values {true};
     bool remove_success {true};
     QString lookup_value;
     QString lookup_error;
@@ -87,6 +90,8 @@ namespace
     {
       return backend_available;
     }
+
+    bool protects_private_values () const override { return protected_values; }
 
     secure_settings::LookupResult lookup (QString const& service, QString const& account) const override
     {
@@ -134,6 +139,117 @@ class TestSecureSettings
   Q_OBJECT
 
 private:
+  Q_SLOT void clublog_personal_token_never_falls_back_to_plaintext ()
+  {
+    FakeBackend backend;
+    QSettings settings {settings_path (QStringLiteral ("clublog_token")), QSettings::IniFormat};
+    settings.setValue (QStringLiteral ("ClubLogApiKey"), QStringLiteral ("old-value"));
+    backend.backend_available = false;
+    QVERIFY (!secure_settings::storeClubLogToken (settings, QStringLiteral ("service"), QStringLiteral ("cl_sensitive"), backend));
+    QVERIFY (!settings.contains (QStringLiteral ("ClubLogApiKey")));
+    QVERIFY (settings.value (QStringLiteral ("ClubLogTokenNeedsReentry")).toBool ());
+    backend.backend_available = true;
+    backend.found = true;
+    backend.lookup_value = QStringLiteral ("cl_obsolete");
+    QCOMPARE (secure_settings::loadClubLogCredential (settings, QStringLiteral ("service"), backend), QString ());
+    QCOMPARE (backend.lookup_calls, 0);
+    backend.protected_values = false;
+    QVERIFY (!secure_settings::storeClubLogToken (settings, QStringLiteral ("service"), QStringLiteral ("cl_sensitive"), backend));
+    QCOMPARE (backend.store_calls, 0);
+    backend.protected_values = true;
+    backend.store_success = false;
+    QVERIFY (!secure_settings::storeClubLogToken (settings, QStringLiteral ("service"), QStringLiteral ("cl_sensitive"), backend));
+    QVERIFY (!settings.contains (QStringLiteral ("ClubLogApiKey")));
+    backend.store_success = true;
+    QVERIFY (secure_settings::storeClubLogToken (settings, QStringLiteral ("service"), QStringLiteral ("cl_sensitive"), backend));
+    QCOMPARE (settings.value (QStringLiteral ("ClubLogApiKey")).toString (), secure_settings::placeholder ());
+    QVERIFY (!settings.value (QStringLiteral ("ClubLogTokenNeedsReentry")).toBool ());
+    settings.sync ();
+    QFile file {settings.fileName ()};
+    QVERIFY (file.open (QIODevice::ReadOnly));
+    QVERIFY (!file.readAll ().contains ("cl_sensitive"));
+  }
+
+  Q_SLOT void clublog_rate_limit_and_refusal_survive_restart_without_secret ()
+  {
+    const QString path = settings_path (QStringLiteral ("clublog_restrictions"));
+    const QString token = QStringLiteral ("cl_restriction_fixture");
+    {
+      QSettings settings {path, QSettings::IniFormat};
+      secure_settings::recordClubLogRestriction (settings, token, false, 123456);
+      secure_settings::recordClubLogRestriction (settings, token, false, 100000);
+      secure_settings::recordClubLogRestriction (settings, token, true, 0);
+    }
+    QSettings reopened {path, QSettings::IniFormat};
+    const auto restriction = secure_settings::readClubLogRestriction (reopened, token);
+    QVERIFY (restriction.refused);
+    QCOMPARE (restriction.retryNotBeforeMs, qint64 (123456));
+    QVERIFY (!secure_settings::readClubLogRestriction (reopened, QStringLiteral ("cl_another_fixture")).refused);
+    QFile file {path};
+    QVERIFY (file.open (QIODevice::ReadOnly));
+    QVERIFY (!file.readAll ().contains ("cl_restriction_fixture"));
+  }
+
+  Q_SLOT void clublog_plaintext_migration_failure_removes_disk_copy ()
+  {
+    FakeBackend backend;
+    backend.backend_available = false;
+    QSettings settings {settings_path (QStringLiteral ("clublog_legacy_plain")), QSettings::IniFormat};
+    settings.setValue (QStringLiteral ("ClubLogApiKey"), QStringLiteral ("cl_legacy_fixture"));
+    settings.sync ();
+    QCOMPARE (secure_settings::loadClubLogCredential (settings, QStringLiteral ("service"), backend),
+              QStringLiteral ("cl_legacy_fixture"));
+    QVERIFY (!settings.contains (QStringLiteral ("ClubLogApiKey")));
+    QVERIFY (settings.value (QStringLiteral ("ClubLogTokenNeedsReentry")).toBool ());
+    backend.backend_available = true;
+    backend.found = true;
+    backend.lookup_value = QStringLiteral ("cl_obsolete");
+    QCOMPARE (secure_settings::loadClubLogCredential (settings, QStringLiteral ("service"), backend), QString ());
+    QFile file {settings.fileName ()};
+    QVERIFY (file.open (QIODevice::ReadOnly));
+    QVERIFY (!file.readAll ().contains ("cl_legacy_fixture"));
+  }
+
+  Q_SLOT void clublog_migration_prefers_explicit_token_over_old_keychain_value ()
+  {
+    FakeBackend backend;
+    backend.found = true;
+    backend.lookup_value = QStringLiteral ("cl_old_fixture");
+    QSettings settings {settings_path (QStringLiteral ("clublog_prefer_new")), QSettings::IniFormat};
+    settings.setValue (QStringLiteral ("ClubLogApiKey"), QStringLiteral ("cl_new_fixture"));
+    settings.sync ();
+    QCOMPARE (secure_settings::loadClubLogCredential (settings, QStringLiteral ("service"), backend),
+              QStringLiteral ("cl_new_fixture"));
+    QCOMPARE (backend.store_calls, 1);
+    QCOMPARE (backend.last_value, QStringLiteral ("cl_new_fixture"));
+    QCOMPARE (backend.lookup_calls, 0);
+    QCOMPARE (settings.value (QStringLiteral ("ClubLogApiKey")).toString (), secure_settings::placeholder ());
+    QVERIFY (!settings.value (QStringLiteral ("ClubLogTokenNeedsReentry")).toBool ());
+  }
+
+  Q_SLOT void macos_keychain_roundtrip_opt_in ()
+  {
+#if defined(Q_OS_MACOS)
+    if (!qEnvironmentVariableIsSet ("DECODIUM_TEST_NATIVE_KEYCHAIN"))
+      QSKIP ("Native keychain integration is explicitly opt-in");
+    const auto& backend = secure_settings::default_backend ();
+    QVERIFY (backend.available ());
+    QVERIFY (backend.protects_private_values ());
+    const QString service = QStringLiteral ("decodium-test-") + QUuid::createUuid ().toString (QUuid::WithoutBraces);
+    const QString account = QStringLiteral ("ephemeral-token");
+    const QString fixture = QStringLiteral ("cl_synthetic_fixture_only");
+    QString error;
+    QVERIFY2 (backend.store (service, account, fixture, &error), qPrintable (error));
+    const auto lookup = backend.lookup (service, account);
+    const bool removed = backend.remove (service, account, &error);
+    QVERIFY2 (removed, qPrintable (error));
+    QVERIFY2 (lookup.found, qPrintable (lookup.error));
+    QCOMPARE (lookup.value, fixture);
+    QVERIFY (!backend.lookup (service, account).found);
+#else
+    QSKIP ("macOS only");
+#endif
+  }
   Q_SLOT void settings_blob_lookup_fails_closed ()
   {
     QTemporaryDir dir;

@@ -5,11 +5,14 @@
 #include "EqslInboxDownload.h"
 #include "LotwReportResponse.h"
 #include "SecureSettings.hpp"
+#include "ClubLogTokenStorage.hpp"
+#include "ClubLogRestGuard.hpp"
 
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <limits>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -176,7 +179,8 @@ QByteArray extractFccEnDatPayload(const QByteArray& data)
 
 QVariantMap importProviderPayloadInBackground(const QString& provider,
                                               const QString& databasePath,
-                                              const QByteArray& data)
+                                              const QByteArray& data,
+                                              bool replaceOqrsSnapshot)
 {
     QVariantMap result;
     QByteArray payload = data;
@@ -215,7 +219,10 @@ QVariantMap importProviderPayloadInBackground(const QString& provider,
             const auto importRecord = [&](QVariantMap record) {
                 QString call = record.value(QStringLiteral("call")).toString().trimmed().toUpper();
                 if (call.startsWith(QStringLiteral("CQ "))) call = call.mid(3).trimmed();
-                if (call.isEmpty() || call.size() > 32 || invalidCall.match(call).hasMatch()) return;
+                if (call.isEmpty() || call.size() > 32 || invalidCall.match(call).hasMatch()) {
+                    if (replaceOqrsSnapshot) error = QStringLiteral("Invalid Club Log OQRS callsign");
+                    return;
+                }
 
                 query.bindValue(0, provider);
                 query.bindValue(1, call);
@@ -235,6 +242,7 @@ QVariantMap importProviderPayloadInBackground(const QString& provider,
                 query.bindValue(15, jsonString(record));
                 query.bindValue(16, updatedAt);
                 if (query.exec()) ++imported;
+                else if (replaceOqrsSnapshot) error = query.lastError().text();
             };
 
             if (provider == QStringLiteral("fcc_uls")) {
@@ -269,7 +277,30 @@ QVariantMap importProviderPayloadInBackground(const QString& provider,
                 if (!document.isArray()) {
                     error = QStringLiteral("Formato Club Log OQRS non riconosciuto");
                 } else {
+                    if (replaceOqrsSnapshot) {
+                        QSqlQuery clear(database);
+                        clear.prepare(QStringLiteral("DELETE FROM callsign_records WHERE provider=?"));
+                        clear.addBindValue(provider);
+                        if (!clear.exec() || !clear.exec(QStringLiteral("DELETE FROM callsign_cache")))
+                            error = clear.lastError().text();
+                    }
                     for (const QJsonValue& value : document.array()) {
+                        if (!error.isEmpty()) break;
+                        if (value.isObject()) {
+                            const QJsonObject object = value.toObject();
+                            QVariantMap record;
+                            record.insert(QStringLiteral("call"), object.value(QStringLiteral("dxcall")).toString());
+                            record.insert(QStringLiteral("oqrs"), true);
+                            // OQRS is a request for a card, not confirmation of one.
+                            record.insert(QStringLiteral("confirmed"), false);
+                            record.insert(QStringLiteral("metadata"), QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)));
+                            importRecord(record);
+                            continue;
+                        }
+                        if (replaceOqrsSnapshot) {
+                            error = QStringLiteral("Invalid Club Log OQRS record");
+                            break;
+                        }
                         const QJsonArray row = value.toArray();
                         if (row.size() < 4) continue;
                         QVariantMap record;
@@ -328,7 +359,9 @@ QVariantMap importProviderPayloadInBackground(const QString& provider,
                     }
                 }
             }
-            if (!database.commit()) {
+            if (!error.isEmpty()) {
+                database.rollback();
+            } else if (!database.commit()) {
                 committed = false;
                 if (error.isEmpty()) error = database.lastError().text();
             } else {
@@ -341,7 +374,7 @@ QVariantMap importProviderPayloadInBackground(const QString& provider,
     database = QSqlDatabase();
     QSqlDatabase::removeDatabase(connectionName);
 
-    result.insert(QStringLiteral("ok"), committed && imported > 0);
+    result.insert(QStringLiteral("ok"), committed && (imported > 0 || replaceOqrsSnapshot));
     result.insert(QStringLiteral("imported"), imported);
     if (!error.isEmpty()) result.insert(QStringLiteral("error"), error);
     return result;
@@ -380,11 +413,16 @@ CallsignIntelligenceService::CallsignIntelligenceService(QObject* parent)
 
     openDatabase();
     loadSettings();
+    m_clubLogUploadTimer.setSingleShot(true);
+    connect(&m_clubLogUploadTimer, &QTimer::timeout, this, &CallsignIntelligenceService::processClubLogOutbox);
+    refreshClubLogUploadStatus();
+    if (m_clubLogUploadEnabled) m_clubLogUploadTimer.start(3000);
     setStatus(tr("Ready: local callsign database available"));
 }
 
 CallsignIntelligenceService::~CallsignIntelligenceService()
 {
+    if (m_clubLogUploadReply) { m_clubLogUploadReply->disconnect(this); m_clubLogUploadReply->abort(); }
     if (m_databaseImportWatcher) {
         m_databaseImportWatcher->disconnect(this);
         m_databaseImportWatcher->waitForFinished();
@@ -438,6 +476,10 @@ void CallsignIntelligenceService::createSchema()
     query.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS callsign_provider_state ("
                              "provider TEXT PRIMARY KEY, source_url TEXT, local_path TEXT, row_count INTEGER NOT NULL DEFAULT 0, "
                              "updated_at INTEGER NOT NULL DEFAULT 0, status TEXT, error TEXT)"));
+    query.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS clublog_outbox ("
+                             "id INTEGER PRIMARY KEY, station TEXT NOT NULL, adif BLOB NOT NULL, digest TEXT NOT NULL, "
+                             "state TEXT NOT NULL, remote_id TEXT, last_error TEXT, UNIQUE(station,digest))"));
+    query.exec(QStringLiteral("ALTER TABLE clublog_outbox ADD COLUMN last_error TEXT"));
     for (const ProviderSpec& spec : std::as_const(m_specs)) {
         QSqlQuery insert(*m_database);
         insert.prepare(QStringLiteral("INSERT OR IGNORE INTO callsign_provider_state(provider,source_url,status) VALUES(?,?,?)"));
@@ -464,13 +506,15 @@ void CallsignIntelligenceService::loadSettings()
     m_lotwUsername = settings.value(QStringLiteral("LotwUsername")).toString().trimmed();
     m_lotwLastQsl = settings.value(QStringLiteral("LotwLastQsl")).toString().trimmed();
     m_clubLogEmail = settings.value(QStringLiteral("ClubLogEmail")).toString();
+    m_clubLogUploadEnabled = settings.value(QStringLiteral("ClubLogUploadEnabled"), false).toBool();
     const QString secureService = secure_settings::service(QStringLiteral("CALLSIGN_INTELLIGENCE"));
     m_eqslPassword = secure_settings::load_or_import(&settings, secureService,
                                                       QStringLiteral("EqslPassword"),
                                                       settings.value(QStringLiteral("EqslPassword")).toString());
-    m_clubLogApiKey = secure_settings::load_or_import(&settings, secureService,
-                                                       QStringLiteral("ClubLogApiKey"),
-                                                       settings.value(QStringLiteral("ClubLogApiKey")).toString()).trimmed();
+    m_clubLogApiKey = secure_settings::loadClubLogCredential(settings, secureService);
+    loadClubLogRestRestriction();
+    m_clubLogTokenStorePending = settings.value(QStringLiteral("ClubLogTokenNeedsReentry"), false).toBool()
+                                && !m_clubLogApiKey.isEmpty();
     m_clubLogApplicationPassword = secure_settings::load_or_import(&settings, secureService,
                                                                      QStringLiteral("ClubLogApplicationPassword"),
                                                                      settings.value(QStringLiteral("ClubLogApplicationPassword")).toString()).trimmed();
@@ -483,10 +527,22 @@ void CallsignIntelligenceService::saveSetting(const QString& key, const QVariant
                        QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
     decodium::beginActiveSettingsProfile(settings);
     settings.beginGroup(QStringLiteral("CallsignIntelligence"));
-    if (key == QStringLiteral("EqslPassword")
+    if (key == QStringLiteral("ClubLogApiKey") && value.toString().startsWith(QStringLiteral("cl_"))) {
+        if (secure_settings::storeClubLogToken(settings, secure_settings::service(QStringLiteral("CALLSIGN_INTELLIGENCE")),
+                                               value.toString())) {
+            m_clubLogTokenStorePending = false;
+        } else {
+            m_clubLogTokenStorePending = true;
+            setStatus(tr("Club Log token could not be stored securely; it will be needed again after restart"));
+        }
+    } else if (key == QStringLiteral("EqslPassword")
         || key == QStringLiteral("ClubLogApiKey")
         || key == QStringLiteral("ClubLogApplicationPassword")) {
         settings.setValue(key, secure_settings::value_for_write(secure_settings::service(QStringLiteral("CALLSIGN_INTELLIGENCE")), key, value.toString()));
+        if (key == QStringLiteral("ClubLogApiKey"))
+            settings.remove(QStringLiteral("ClubLogTokenNeedsReentry"));
+        if (key == QStringLiteral("ClubLogApiKey"))
+            m_clubLogTokenStorePending = false;
     } else {
         settings.setValue(key, value);
     }
@@ -532,6 +588,7 @@ void CallsignIntelligenceService::setOperatorCallsign(const QString& value)
     const QString clean = value.trimmed().toUpper();
     if (m_operatorCallsign == clean) return;
     m_operatorCallsign = clean;
+    if (m_clubLogUploadEnabled) m_clubLogUploadTimer.start(1000);
     emit settingsChanged();
 }
 
@@ -576,9 +633,12 @@ void CallsignIntelligenceService::setQrzApiKey(const QString& value)
 void CallsignIntelligenceService::setClubLogApiKey(const QString& value)
 {
     const QString clean = value.trimmed();
-    if (m_clubLogApiKey == clean) return;
+    if (m_clubLogApiKey == clean && !m_clubLogTokenStorePending) return;
     m_clubLogApiKey = clean;
+    m_clubLogRestAuthRejected = false;
+    loadClubLogRestRestriction();
     saveSetting(QStringLiteral("ClubLogApiKey"), clean);
+    if (m_clubLogUploadEnabled) m_clubLogUploadTimer.start(1000);
     emit settingsChanged();
 }
 
@@ -758,6 +818,7 @@ void CallsignIntelligenceService::setOfflineMode(bool offline)
     }
     m_offlineMode = offline;
     if (offline) {
+        if (m_clubLogUploadReply) m_clubLogUploadReply->abort();
         if (m_activeReply) {
             m_activeReply->abort();
         }
@@ -766,6 +827,7 @@ void CallsignIntelligenceService::setOfflineMode(bool offline)
         setStatus(tr("Offline: solo cache e database callsign locali"));
     } else {
         setStatus(tr("Online: provider remoto callsign abilitati"));
+        if (m_clubLogUploadEnabled) m_clubLogUploadTimer.start(1000);
     }
     emit offlineModeChanged();
 }
@@ -798,9 +860,11 @@ void CallsignIntelligenceService::lookup(const QString& callsign, bool forceRefr
         return;
     }
     if (!m_offlineMode) {
+        loadClubLogRestRestriction();
         setPending(true);
         setStatus(tr("No local record: trying the remote providers..."));
-        if (!m_clubLogApiKey.isEmpty()) {
+        if (!m_clubLogApiKey.isEmpty() && !m_clubLogRestAuthRejected
+            && QDateTime::currentMSecsSinceEpoch() >= m_clubLogRetryNotBeforeMs) {
             lookupRemoteClubLog(call);
             return;
         }
@@ -830,12 +894,18 @@ void CallsignIntelligenceService::lookupRemoteClubLog(const QString& callsign)
     if (m_offlineMode) {
         return;
     }
-    QUrl url(QStringLiteral("https://clublog.org/watch.php"));
+    bool const personalToken = m_clubLogApiKey.startsWith(QStringLiteral("cl_"));
+    QUrl url(personalToken ? QStringLiteral("https://clublog.org/api/v1/dxcc/lookup")
+                           : QStringLiteral("https://clublog.org/watch.php"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("call"), callsign);
-    query.addQueryItem(QStringLiteral("api"), m_clubLogApiKey);
+    if (!personalToken) query.addQueryItem(QStringLiteral("api"), m_clubLogApiKey);
     url.setQuery(query);
     QNetworkRequest request(url);
+    if (personalToken) {
+        request.setRawHeader("Authorization", QByteArray("Bearer ") + m_clubLogApiKey.toUtf8());
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    }
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Decodium/4.0 Callsign Intelligence"));
     request.setTransferTimeout(15000);
     m_activeReply = m_network->get(request);
@@ -847,10 +917,27 @@ void CallsignIntelligenceService::lookupRemoteClubLog(const QString& callsign)
 void CallsignIntelligenceService::handleRemoteLookupFinished(QNetworkReply* reply, const QString& callsign)
 {
     if (!reply) return;
-    const QByteArray payload = reply->error() == QNetworkReply::NoError && reply->isReadable()
+    QByteArray payload = reply->error() == QNetworkReply::NoError && reply->isReadable()
             ? reply->readAll() : QByteArray();
+    const QByteArray authorization = reply->request().rawHeader("Authorization");
+    if (authorization.startsWith("Bearer ")) {
+        const QByteArray token = authorization.mid(7);
+        if (!token.isEmpty() && payload.toLower().contains(token.toLower())) payload.clear();
+    }
     const QNetworkReply::NetworkError error = reply->error();
-    const QString errorText = reply->errorString();
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray currentAuthorization = QByteArray("Bearer ") + m_clubLogApiKey.toUtf8();
+    if (m_clubLogApiKey.startsWith(QStringLiteral("cl_"))
+        && reply->request().rawHeader("Authorization") == currentAuthorization
+        && (httpStatus == 401 || httpStatus == 403)) {
+        m_clubLogRestAuthRejected = true;
+        QSettings guard(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        secure_settings::recordClubLogRestriction(guard, m_clubLogApiKey, true, 0);
+    }
+    if (httpStatus == 429) noteClubLogRateLimit(reply);
+    QString errorText = reply->errorString();
+    if (authorization.startsWith("Bearer "))
+        errorText.replace(QString::fromUtf8(authorization.mid(7)), QStringLiteral("[redacted]"), Qt::CaseInsensitive);
     reply->deleteLater();
     m_activeReply = nullptr;
     if (m_offlineMode) {
@@ -864,6 +951,12 @@ void CallsignIntelligenceService::handleRemoteLookupFinished(QNetworkReply* repl
             QVariantMap remote;
             remote.insert(QStringLiteral("call"), callsign);
             remote.insert(QStringLiteral("provider"), QStringLiteral("clublog"));
+            if (object.contains(QStringLiteral("entity"))) {
+                remote.insert(QStringLiteral("country"), object.value(QStringLiteral("entity")).toString());
+                remote.insert(QStringLiteral("dxcc"), object.value(QStringLiteral("entity")).toString());
+                remote.insert(QStringLiteral("continent"), object.value(QStringLiteral("continent")).toString());
+                remote.insert(QStringLiteral("cqZone"), object.value(QStringLiteral("cq_zone")).toVariant());
+            }
             remote.insert(QStringLiteral("grid"), object.value(QStringLiteral("qra")).toString());
             remote.insert(QStringLiteral("oqrs"), object.value(QStringLiteral("has_oqrs")).toBool());
             remote.insert(QStringLiteral("clubLogUser"), object.value(QStringLiteral("clublog_user")).toBool());
@@ -1069,6 +1162,16 @@ bool CallsignIntelligenceService::importClubLogOqrs(const QByteArray& data)
     db.transaction();
     int imported = 0;
     for (const QJsonValue& value : document.array()) {
+        if (value.isObject()) {
+            const QJsonObject object = value.toObject();
+            QVariantMap record;
+            record.insert(QStringLiteral("call"), object.value(QStringLiteral("dxcall")).toString());
+            record.insert(QStringLiteral("oqrs"), true);
+            record.insert(QStringLiteral("confirmed"), false);
+            record.insert(QStringLiteral("metadata"), QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)));
+            if (upsertRecord(QStringLiteral("clublog_oqrs"), record)) ++imported;
+            continue;
+        }
         const QJsonArray row = value.toArray();
         if (row.size() < 4) continue;
         QVariantMap record;
@@ -1222,6 +1325,25 @@ void CallsignIntelligenceService::refreshDatabase(const QString& provider)
         return;
     }
     if (cleanProvider == QStringLiteral("clublog_oqrs")) {
+        loadClubLogRestRestriction();
+        if (QDateTime::currentMSecsSinceEpoch() < m_clubLogRetryNotBeforeMs) {
+            setStatus(tr("Club Log: rate limited; wait before retrying"));
+            return;
+        }
+        if (m_clubLogApiKey.startsWith(QStringLiteral("cl_"))) {
+            if (m_operatorCallsign.isEmpty() || m_clubLogRestAuthRejected) {
+                setStatus(tr("Club Log: check callsign and personal token"));
+                return;
+            }
+            m_clubLogOqrsRows = QJsonArray();
+            m_clubLogOqrsCursors.clear();
+            m_clubLogOqrsCall = m_operatorCallsign;
+            m_clubLogOqrsToken = m_clubLogApiKey;
+            m_updateProvider = cleanProvider;
+            setDatabaseUpdatePending(true);
+            requestClubLogOqrsRestPage(QString());
+            return;
+        }
         if (m_clubLogApiKey.isEmpty() || m_clubLogEmail.isEmpty() || m_clubLogApplicationPassword.isEmpty() || m_operatorCallsign.isEmpty()) {
             setStatus(tr("Club Log OQRS: API key, e-mail, application password and operator callsign are required"));
             return;
@@ -1256,6 +1378,106 @@ void CallsignIntelligenceService::refreshDatabase(const QString& provider)
         handleDatabaseReply(reply, cleanProvider);
     });
     setStatus(tr("%1 update under way...").arg(providerLabel(cleanProvider)));
+}
+
+void CallsignIntelligenceService::noteClubLogRateLimit(const QNetworkReply* reply)
+{
+    if (!reply) return;
+    const QByteArray header = reply->rawHeader("Retry-After").trimmed();
+    bool ok = false;
+    const qint64 seconds = header.toLongLong(&ok);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    qint64 until = now + 60000; // no header: avoid an immediate retry
+    if (ok && seconds >= 0 && seconds <= (std::numeric_limits<qint64>::max() - now) / 1000)
+        until = now + qMax<qint64>(1, seconds) * 1000;
+    else if (!header.isEmpty()) {
+        const QDateTime date = QDateTime::fromString(QString::fromLatin1(header), Qt::RFC2822Date);
+        if (date.isValid()) until = qMax(until, date.toMSecsSinceEpoch());
+    }
+    m_clubLogRetryNotBeforeMs = qMax(m_clubLogRetryNotBeforeMs, until);
+    if (reply->request().rawHeader("Authorization") == QByteArray("Bearer ") + m_clubLogApiKey.toUtf8()) {
+        QSettings guard(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        secure_settings::recordClubLogRestriction(guard, m_clubLogApiKey, false, m_clubLogRetryNotBeforeMs);
+    }
+}
+
+void CallsignIntelligenceService::loadClubLogRestRestriction()
+{
+    if (!m_clubLogApiKey.startsWith(QStringLiteral("cl_"))) return;
+    QSettings guard(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    const auto restriction = secure_settings::readClubLogRestriction(guard, m_clubLogApiKey);
+    m_clubLogRestAuthRejected |= restriction.refused;
+    m_clubLogRetryNotBeforeMs = qMax(m_clubLogRetryNotBeforeMs, restriction.retryNotBeforeMs);
+}
+
+void CallsignIntelligenceService::requestClubLogOqrsRestPage(const QString& cursor)
+{
+    if (m_updateProvider != QStringLiteral("clublog_oqrs") || m_offlineMode) return;
+    const QByteArray encodedCall = QUrl::toPercentEncoding(m_clubLogOqrsCall, "/");
+    QUrl url(QStringLiteral("https://clublog.org/api/v1/logs/") + QString::fromLatin1(encodedCall) + QStringLiteral("/oqrs-matches"));
+    QUrlQuery query;
+    if (!cursor.isEmpty()) query.addQueryItem(QStringLiteral("cursor"), cursor);
+    url.setQuery(query);
+    QNetworkRequest request(url);
+    request.setRawHeader("Authorization", QByteArray("Bearer ") + m_clubLogOqrsToken.toUtf8());
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setTransferTimeout(30000);
+    m_activeReply = m_network->get(request);
+    connect(m_activeReply, &QNetworkReply::finished, this, [this, reply = m_activeReply]() {
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status == 429) noteClubLogRateLimit(reply);
+        const bool networkOk = reply->error() == QNetworkReply::NoError;
+        const QByteArray body = reply->readAll();
+        const QByteArray requestAuthorization = reply->request().rawHeader("Authorization");
+        const QByteArray requestToken = requestAuthorization.startsWith("Bearer ") ? requestAuthorization.mid(7) : QByteArray();
+        reply->deleteLater();
+        m_activeReply = nullptr;
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+        const QJsonObject obj = doc.object();
+        if ((!requestToken.isEmpty() && body.toLower().contains(requestToken.toLower()))
+            || !networkOk || parseError.error != QJsonParseError::NoError || !doc.isObject()
+            || !obj.value(QStringLiteral("matches")).isArray()
+            || m_clubLogOqrsToken != m_clubLogApiKey || m_clubLogOqrsCall != m_operatorCallsign) {
+            if ((status == 401 || status == 403) && m_clubLogOqrsToken == m_clubLogApiKey) {
+                m_clubLogRestAuthRejected = true;
+                QSettings guard(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                secure_settings::recordClubLogRestriction(guard, m_clubLogApiKey, true, 0);
+            }
+            m_clubLogOqrsToken.clear(); m_updateProvider.clear(); setDatabaseUpdatePending(false);
+            setStatus(tr("Club Log OQRS failed (HTTP %1); existing data preserved").arg(status));
+            return;
+        }
+        const QJsonArray matches = obj.value(QStringLiteral("matches")).toArray();
+        for (const QJsonValue& value : matches) {
+            if (!value.isObject() || value.toObject().value(QStringLiteral("dxcall")).toString().isEmpty()) {
+                m_clubLogOqrsToken.clear(); m_updateProvider.clear(); setDatabaseUpdatePending(false);
+                setStatus(tr("Club Log OQRS returned an invalid record; existing data preserved"));
+                return;
+            }
+            m_clubLogOqrsRows.append(value);
+        }
+        const QJsonValue cursorValue = obj.value(QStringLiteral("next_cursor"));
+        if (!cursorValue.isUndefined() && !cursorValue.isNull() && !cursorValue.isString()) {
+            m_clubLogOqrsToken.clear(); m_updateProvider.clear(); setDatabaseUpdatePending(false);
+            setStatus(tr("Club Log OQRS returned an invalid cursor; existing data preserved"));
+            return;
+        }
+        const QString next = cursorValue.toString();
+        if (!next.isEmpty()) {
+            if (m_clubLogOqrsCursors.contains(next) || m_clubLogOqrsCursors.size() >= 10000) {
+                m_clubLogOqrsToken.clear(); m_updateProvider.clear(); setDatabaseUpdatePending(false);
+                setStatus(tr("Club Log OQRS pagination failed; existing data preserved"));
+                return;
+            }
+            m_clubLogOqrsCursors.insert(next);
+            requestClubLogOqrsRestPage(next);
+            return;
+        }
+        m_clubLogOqrsToken.clear();
+        startDatabaseImport(QStringLiteral("clublog_oqrs"),
+                            QJsonDocument(m_clubLogOqrsRows).toJson(QJsonDocument::Compact), true);
+    });
 }
 
 void CallsignIntelligenceService::handleDatabaseReply(QNetworkReply* reply,
@@ -1580,7 +1802,7 @@ void CallsignIntelligenceService::startConfirmedAdifFileImport(const QString& pr
     }));
 }
 
-void CallsignIntelligenceService::startDatabaseImport(const QString& provider, const QByteArray& data)
+void CallsignIntelligenceService::startDatabaseImport(const QString& provider, const QByteArray& data, bool replaceOqrsSnapshot)
 {
     if (m_databaseImportWatcher) {
         setStatus(tr("An update is already under way"));
@@ -1611,8 +1833,8 @@ void CallsignIntelligenceService::startDatabaseImport(const QString& provider, c
         }
         emit databasesChanged();
     });
-    watcher->setFuture(QtConcurrent::run([provider, databasePath, data]() {
-        return importProviderPayloadInBackground(provider, databasePath, data);
+    watcher->setFuture(QtConcurrent::run([provider, databasePath, data, replaceOqrsSnapshot]() {
+        return importProviderPayloadInBackground(provider, databasePath, data, replaceOqrsSnapshot);
     }));
 }
 

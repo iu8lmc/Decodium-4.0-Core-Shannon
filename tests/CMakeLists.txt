@@ -774,11 +774,15 @@ add_test (NAME test_secure_settings COMMAND $<TARGET_FILE:test_secure_settings>)
 add_executable (test_callsign_intelligence
   test_callsign_intelligence.cpp
   ../src/services/CallsignIntelligenceService.cpp
+  ../src/services/CallsignClubLogUpload.cpp
   ../src/services/CallsignIntelligenceService.h
   ../src/services/DxccLookup.cpp
   ../src/services/DxccLookup.h
   ../src/security/SecureSettings.cpp)
 target_link_libraries (test_callsign_intelligence Qt6::Test Qt6::Core Qt6::Network Qt6::Sql Qt6::Gui)
+if (APPLE)
+  target_link_libraries (test_callsign_intelligence "-framework Security")
+endif ()
 add_test (NAME test_callsign_intelligence COMMAND $<TARGET_FILE:test_callsign_intelligence>)
 
 add_executable (test_dxcc_lookup

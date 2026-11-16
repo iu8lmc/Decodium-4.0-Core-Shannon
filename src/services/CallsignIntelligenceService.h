@@ -3,7 +3,10 @@
 #include <QByteArray>
 #include <QFutureWatcher>
 #include <QHash>
+#include <QJsonArray>
+#include <QSet>
 #include <QNetworkReply>
+#include <QTimer>
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
@@ -39,6 +42,8 @@ class CallsignIntelligenceService final : public QObject
     Q_PROPERTY(QString clubLogApiKey READ clubLogApiKey WRITE setClubLogApiKey NOTIFY settingsChanged)
     Q_PROPERTY(QString clubLogEmail READ clubLogEmail WRITE setClubLogEmail NOTIFY settingsChanged)
     Q_PROPERTY(QString clubLogApplicationPassword READ clubLogApplicationPassword WRITE setClubLogApplicationPassword NOTIFY settingsChanged)
+    Q_PROPERTY(bool clubLogUploadEnabled READ clubLogUploadEnabled WRITE setClubLogUploadEnabled NOTIFY settingsChanged)
+    Q_PROPERTY(QString clubLogUploadStatus READ clubLogUploadStatus NOTIFY clubLogUploadStatusChanged)
     Q_PROPERTY(bool offlineMode READ offlineMode WRITE setOfflineMode NOTIFY offlineModeChanged)
     Q_PROPERTY(bool databaseUpdatePending READ databaseUpdatePending NOTIFY databaseUpdatePendingChanged)
 
@@ -80,6 +85,11 @@ public:
     void setClubLogEmail(const QString& value);
     QString clubLogApplicationPassword() const { return m_clubLogApplicationPassword; }
     void setClubLogApplicationPassword(const QString& value);
+    bool clubLogUploadEnabled() const { return m_clubLogUploadEnabled; }
+    void setClubLogUploadEnabled(bool enabled);
+    QString clubLogUploadStatus() const { return m_clubLogUploadStatus; }
+    void enqueueClubLogQso(const QByteArray& record, const QString& station);
+    Q_INVOKABLE void retryClubLogRejected();
     bool offlineMode() const { return m_offlineMode; }
     void setOfflineMode(bool offline);
     bool databaseUpdatePending() const { return m_databaseUpdatePending; }
@@ -123,8 +133,10 @@ signals:
     void databaseUpdatePendingChanged();
     void confirmedAdifDownloaded(const QString& provider, const QString& path);
     void externalLookupRequested(const QString& url);
+    void clubLogUploadStatusChanged();
 
 private:
+    friend class CallsignIntelligenceTest;
     struct ProviderSpec {
         QString id;
         QString label;
@@ -149,10 +161,16 @@ private:
     void handleRemoteLookupFinished(QNetworkReply* reply, const QString& callsign);
     void handleDatabaseReply(QNetworkReply* reply, const QString& provider,
                              bool eqslInboxAdif = false);
-    void startDatabaseImport(const QString& provider, const QByteArray& data);
+    void startDatabaseImport(const QString& provider, const QByteArray& data, bool replaceOqrsSnapshot = false);
     void startConfirmedAdifSave(const QString& provider, const QByteArray& data);
     void startConfirmedAdifFileImport(const QString& provider, const QString& path);
     void requestQrzConfirmedPage();
+    void requestClubLogOqrsRestPage(const QString& cursor);
+    void processClubLogOutbox();
+    void verifyClubLogOutbox(const QString& station);
+    void refreshClubLogUploadStatus(const QString& message = {});
+    void noteClubLogRateLimit(const QNetworkReply* reply);
+    void loadClubLogRestRestriction();
     bool importBytes(const QString& provider, const QByteArray& data, const QString& sourcePath);
     bool importDelimited(const QString& provider, const QByteArray& data);
     bool importAdif(const QString& provider, const QByteArray& data);
@@ -189,9 +207,20 @@ private:
     QString m_pendingLotwLastQsl;
     QString m_qrzApiKey;
     QString m_clubLogApiKey;
+    bool m_clubLogTokenStorePending = false;
+    bool m_clubLogRestAuthRejected = false;
+    qint64 m_clubLogRetryNotBeforeMs {0};
     QString m_clubLogEmail;
     QString m_clubLogApplicationPassword;
+    bool m_clubLogUploadEnabled {false};
+    QString m_clubLogUploadStatus;
+    QTimer m_clubLogUploadTimer;
+    QNetworkReply* m_clubLogUploadReply {nullptr};
     QString m_databasePath;
+    QJsonArray m_clubLogOqrsRows;
+    QSet<QString> m_clubLogOqrsCursors;
+    QString m_clubLogOqrsCall;
+    QString m_clubLogOqrsToken;
     QString m_updateProvider;
     QByteArray m_updatePayload;
     QHash<QString, ProviderSpec> m_specs;

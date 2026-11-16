@@ -1143,6 +1143,7 @@ set (wsjtx_CXXSRCS
   src/services/DxccLookup.cpp
   src/services/DxccLookup.h
   src/services/CallsignIntelligenceService.cpp
+  src/services/CallsignClubLogUpload.cpp
   src/services/CallsignIntelligenceService.h
   src/bridge/DecodiumLegacyLinkCompat.cpp
   Network/wsprnet.cpp
@@ -2262,6 +2263,9 @@ target_compile_options (wsjt_qt PRIVATE -Wno-deprecated-declarations)
 # set wsjtx_udp exports to static variants
 target_compile_definitions (wsjt_qt PUBLIC UDP_STATIC_DEFINE)
 target_link_libraries (wsjt_qt Hamlib::Hamlib Boost::log qcp Qt6::Widgets Qt6::Network Qt6::Sql Qt6::WebSockets Qt6::Core5Compat)
+if (APPLE)
+  target_link_libraries (wsjt_qt "-framework Security")
+endif ()
 if (TARGET OpenMP::OpenMP_CXX)
   target_link_libraries (wsjt_qt OpenMP::OpenMP_CXX)
 endif ()
@@ -3110,6 +3114,7 @@ add_executable (decodium_qml
   src/services/DxccLookup.cpp
   src/services/DxccLookup.h
   src/services/CallsignIntelligenceService.cpp
+  src/services/CallsignClubLogUpload.cpp
   src/services/CallsignIntelligenceService.h
   ${DECODIUM_QML_LEGACY_SRCS}
   ${wsjtx_GENUISRCS}

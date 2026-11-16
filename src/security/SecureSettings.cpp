@@ -12,14 +12,43 @@
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
+#include <cstring>
 
 #if defined (Q_OS_WIN)
 #include <windows.h>
 #include <wincrypt.h>
 #endif
+#if defined (Q_OS_MACOS)
+#include <Security/Security.h>
+#endif
 
 namespace
 {
+#if defined (Q_OS_MACOS)
+  CFMutableDictionaryRef macKeychainQuery (QString const& service, QString const& account)
+  {
+    const QByteArray s = service.toUtf8 (), a = account.toUtf8 ();
+    CFStringRef serviceString = CFStringCreateWithBytes (nullptr, reinterpret_cast<const UInt8 *> (s.constData ()),
+                                                          s.size (), kCFStringEncodingUTF8, false);
+    CFStringRef accountString = CFStringCreateWithBytes (nullptr, reinterpret_cast<const UInt8 *> (a.constData ()),
+                                                          a.size (), kCFStringEncodingUTF8, false);
+    CFMutableDictionaryRef query = CFDictionaryCreateMutable (nullptr, 0, &kCFTypeDictionaryKeyCallBacks,
+                                                               &kCFTypeDictionaryValueCallBacks);
+    if (!serviceString || !accountString || !query)
+      {
+        if (serviceString) CFRelease (serviceString);
+        if (accountString) CFRelease (accountString);
+        if (query) CFRelease (query);
+        return nullptr;
+      }
+    CFDictionarySetValue (query, kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue (query, kSecAttrService, serviceString);
+    CFDictionarySetValue (query, kSecAttrAccount, accountString);
+    CFRelease (serviceString);
+    CFRelease (accountString);
+    return query;
+  }
+#endif
 #if defined (Q_OS_LINUX)
   void prepare_secret_tool_process (QProcess& process)
   {
@@ -89,7 +118,7 @@ namespace
   public:
     bool protects_private_values () const override
     {
-#if defined (Q_OS_WIN) || defined (Q_OS_LINUX)
+#if defined (Q_OS_WIN) || defined (Q_OS_LINUX) || defined (Q_OS_MACOS)
       return true;
 #else
       return false;
@@ -99,7 +128,7 @@ namespace
     bool available () const override
     {
 #if defined (Q_OS_MACOS)
-      return QFileInfo::exists (QStringLiteral ("/usr/bin/security"));
+      return true;
 #elif defined (Q_OS_LINUX)
       return !QStandardPaths::findExecutable (QStringLiteral ("secret-tool")).isEmpty ();
 #elif defined (Q_OS_WIN)
@@ -119,32 +148,23 @@ namespace
         }
 
 #if defined (Q_OS_MACOS)
-      QProcess p;
-      p.start (QStringLiteral ("/usr/bin/security"),
-               QStringList {
-                 QStringLiteral ("find-generic-password"),
-                 QStringLiteral ("-a"), account,
-                 QStringLiteral ("-s"), service,
-                 QStringLiteral ("-w")
-               });
-      if (!p.waitForFinished (5000))
+      CFMutableDictionaryRef query = macKeychainQuery (service, account);
+      if (!query) { result.error = QObject::tr ("macOS Keychain query allocation failed"); return result; }
+      CFDictionarySetValue (query, kSecReturnData, kCFBooleanTrue);
+      CFDictionarySetValue (query, kSecMatchLimit, kSecMatchLimitOne);
+      CFTypeRef value = nullptr;
+      const OSStatus status = SecItemCopyMatching (query, &value);
+      CFRelease (query);
+      if (status == errSecSuccess && value && CFGetTypeID (value) == CFDataGetTypeID ())
         {
-          result.error = QObject::tr ("macOS Keychain read timeout");
-          return result;
-        }
-      if (0 == p.exitCode ())
-        {
+          auto const data = static_cast<CFDataRef> (value);
+          result.value = QString::fromUtf8 (reinterpret_cast<const char *> (CFDataGetBytePtr (data)),
+                                             static_cast<qsizetype> (CFDataGetLength (data)));
           result.found = true;
-          result.value = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardOutput ()));
-          return result;
         }
-      auto const stderr_text = QString::fromUtf8 (p.readAllStandardError ());
-      if (stderr_text.contains (QStringLiteral ("could not be found"), Qt::CaseInsensitive))
-        {
-          result.found = false;
-          return result;
-        }
-      result.error = trim_single_trailing_newline (stderr_text);
+      else if (status != errSecItemNotFound)
+        result.error = QObject::tr ("macOS Keychain read failed (%1)").arg (status);
+      if (value) CFRelease (value);
       return result;
 #elif defined (Q_OS_LINUX)
       auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));
@@ -196,26 +216,42 @@ namespace
         }
 
 #if defined (Q_OS_MACOS)
-      QProcess p;
-      p.start (QStringLiteral ("/usr/bin/security"),
-               QStringList {
-                 QStringLiteral ("add-generic-password"),
-                 QStringLiteral ("-U"),
-                 QStringLiteral ("-a"), account,
-                 QStringLiteral ("-s"), service,
-                 QStringLiteral ("-w"), value
-               });
-      if (!p.waitForFinished (5000))
+      const QByteArray serviceBytes = service.toUtf8 ();
+      const QByteArray accountBytes = account.toUtf8 ();
+      QByteArray secretBytes = value.toUtf8 ();
+      CFStringRef serviceString = CFStringCreateWithBytes (nullptr,
+        reinterpret_cast<const UInt8 *> (serviceBytes.constData ()), serviceBytes.size (), kCFStringEncodingUTF8, false);
+      CFStringRef accountString = CFStringCreateWithBytes (nullptr,
+        reinterpret_cast<const UInt8 *> (accountBytes.constData ()), accountBytes.size (), kCFStringEncodingUTF8, false);
+      CFMutableDataRef secretData = CFDataCreateMutable (nullptr, secretBytes.size ());
+      CFMutableDictionaryRef query = CFDictionaryCreateMutable (nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+      CFMutableDictionaryRef changes = CFDictionaryCreateMutable (nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+      OSStatus status = errSecAllocate;
+      if (serviceString && accountString && secretData && query && changes)
         {
-          if (error) *error = QObject::tr ("macOS Keychain write timeout");
-          return false;
+          CFDataAppendBytes (secretData, reinterpret_cast<const UInt8 *> (secretBytes.constData ()), secretBytes.size ());
+          CFDictionarySetValue (query, kSecClass, kSecClassGenericPassword);
+          CFDictionarySetValue (query, kSecAttrService, serviceString);
+          CFDictionarySetValue (query, kSecAttrAccount, accountString);
+          CFDictionarySetValue (changes, kSecValueData, secretData);
+          status = SecItemUpdate (query, changes);
+          if (status == errSecItemNotFound)
+            {
+              CFDictionarySetValue (query, kSecValueData, secretData);
+              status = SecItemAdd (query, nullptr);
+            }
         }
-      if (0 != p.exitCode ())
-        {
-          if (error) *error = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardError ()));
-          return false;
-        }
-      return true;
+      if (secretData && CFDataGetLength (secretData) > 0)
+        std::memset (CFDataGetMutableBytePtr (secretData), 0, static_cast<size_t> (CFDataGetLength (secretData)));
+      if (changes) CFRelease (changes);
+      if (query) CFRelease (query);
+      if (secretData) CFRelease (secretData);
+      if (accountString) CFRelease (accountString);
+      if (serviceString) CFRelease (serviceString);
+      secretBytes.fill ('\0');
+      if (status != errSecSuccess && error)
+        *error = QObject::tr ("macOS Keychain write failed (%1)").arg (status);
+      return status == errSecSuccess;
 #elif defined (Q_OS_LINUX)
       auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));
       if (secret_tool.isEmpty ())
@@ -307,28 +343,12 @@ namespace
         }
 
 #if defined (Q_OS_MACOS)
-      QProcess p;
-      p.start (QStringLiteral ("/usr/bin/security"),
-               QStringList {
-                 QStringLiteral ("delete-generic-password"),
-                 QStringLiteral ("-a"), account,
-                 QStringLiteral ("-s"), service
-               });
-      if (!p.waitForFinished (5000))
-        {
-          if (error) *error = QObject::tr ("macOS Keychain delete timeout");
-          return false;
-        }
-      if (0 == p.exitCode ())
-        {
-          return true;
-        }
-      auto const stderr_text = QString::fromUtf8 (p.readAllStandardError ());
-      if (stderr_text.contains (QStringLiteral ("could not be found"), Qt::CaseInsensitive))
-        {
-          return true;
-        }
-      if (error) *error = trim_single_trailing_newline (stderr_text);
+      CFMutableDictionaryRef query = macKeychainQuery (service, account);
+      if (!query) { if (error) *error = QObject::tr ("macOS Keychain query allocation failed"); return false; }
+      const OSStatus status = SecItemDelete (query);
+      CFRelease (query);
+      if (status == errSecSuccess || status == errSecItemNotFound) return true;
+      if (error) *error = QObject::tr ("macOS Keychain delete failed (%1)").arg (status);
       return false;
 #elif defined (Q_OS_LINUX)
       auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));

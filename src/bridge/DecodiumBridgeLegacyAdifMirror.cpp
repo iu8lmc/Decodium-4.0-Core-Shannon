@@ -1,6 +1,7 @@
 #include "DecodiumBridge.h"
 #include "AdifDocumentInternal.h"
 #include "MapIntelligenceService.h"
+#include "CallsignIntelligenceService.h"
 #include "Radio.hpp"
 #include <algorithm>
 
@@ -31,6 +32,7 @@ void DecodiumBridge::mirrorLegacyLoggedAdif(QByteArray const& adif)
     }
 
     int imported = 0;
+    QList<QPair<QByteArray, QString>> clubLogRecords;
     QStringList importedCalls;
     QStringList const activeQsoCalls {
         m_dxCall,
@@ -48,6 +50,14 @@ void DecodiumBridge::mirrorLegacyLoggedAdif(QByteArray const& adif)
         }
 
         dest.records.append(normalizedRecord);
+        QByteArray clubLogAdif;
+        for (auto field = normalizedRecord.fields.cbegin(); field != normalizedRecord.fields.cend(); ++field) {
+            const QByteArray value = field.value().toUtf8();
+            clubLogAdif += '<' + field.key().toUtf8() + ':' + QByteArray::number(value.size()) + '>' + value + ' ';
+        }
+        clubLogAdif += "<EOR>";
+        const QString station = normalizedRecord.fields.value(QStringLiteral("STATION_CALLSIGN"), m_callsign).trimmed();
+        clubLogRecords.append({clubLogAdif, station.isEmpty() ? m_callsign : station});
         existingKeys.insert(key);
         ++imported;
 
@@ -81,6 +91,9 @@ void DecodiumBridge::mirrorLegacyLoggedAdif(QByteArray const& adif)
                               .arg(activePath));
         return;
     }
+    if (m_callsignIntelligence)
+        for (const auto& record : std::as_const(clubLogRecords))
+            m_callsignIntelligence->enqueueClubLogQso(record.first, record.second);
 
     rebuildWorkedCallsFromDocument(m_workedCalls, dest.records);
     rebuildWorkedSetsFromAdifRecords(dest.records);

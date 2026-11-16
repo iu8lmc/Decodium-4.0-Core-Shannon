@@ -159,26 +159,58 @@ SettingsPageScroll {
             columns: 2
             columnSpacing: 14
             rowSpacing: 6
-            Text { text: qsTr("API key"); color: textSecondary }
+            Text { text: qsTr("API key / personal token"); color: textSecondary }
             TextField {
                 Layout.fillWidth: true
                 text: dialog.callsignService ? dialog.callsignService.clubLogApiKey : ""
                 echoMode: TextInput.Password
                 onEditingFinished: if (dialog.callsignService) dialog.callsignService.clubLogApiKey = text.trim()
             }
-            Text { text: qsTr("Email"); color: textSecondary }
+            Text { text: qsTr("Email (solo API precedente)"); color: textSecondary; visible: !dialog.callsignService || !dialog.callsignService.clubLogApiKey.startsWith("cl_") }
             TextField {
                 Layout.fillWidth: true
+                visible: !dialog.callsignService || !dialog.callsignService.clubLogApiKey.startsWith("cl_")
                 text: dialog.callsignService ? dialog.callsignService.clubLogEmail : ""
                 onEditingFinished: if (dialog.callsignService) dialog.callsignService.clubLogEmail = text.trim()
             }
-            Text { text: qsTr("Application password"); color: textSecondary }
+            Text { text: qsTr("Application password (solo API precedente)"); color: textSecondary; visible: !dialog.callsignService || !dialog.callsignService.clubLogApiKey.startsWith("cl_") }
             TextField {
                 Layout.fillWidth: true
+                visible: !dialog.callsignService || !dialog.callsignService.clubLogApiKey.startsWith("cl_")
                 text: dialog.callsignService ? dialog.callsignService.clubLogApplicationPassword : ""
                 echoMode: TextInput.Password
                 onEditingFinished: if (dialog.callsignService) dialog.callsignService.clubLogApplicationPassword = text.trim()
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: textSecondary
+            text: qsTr("Per la nuova API servono il token personale e il nominativo della stazione associato al tuo account Club Log. Email e password non sono richieste.")
+        }
+
+        CheckBox {
+            text: qsTr("Invia automaticamente i nuovi QSO a Club Log")
+            checked: dialog.callsignService ? dialog.callsignService.clubLogUploadEnabled : false
+            onToggled: if (dialog.callsignService) dialog.callsignService.clubLogUploadEnabled = checked
+        }
+        Text {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: textSecondary
+            text: dialog.callsignService ? dialog.callsignService.clubLogUploadStatus : ""
+        }
+        Button {
+            text: qsTr("Riprova i QSO rifiutati da Club Log")
+            enabled: dialog.callsignService && dialog.callsignService.clubLogUploadEnabled
+            onClicked: if (dialog.callsignService) dialog.callsignService.retryClubLogRejected()
+        }
+        Text {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: textSecondary
+            text: qsTr("Se anche DecoDXLog invia automaticamente a Club Log, attiva l'invio in una sola applicazione.")
         }
 
         RowLayout {
