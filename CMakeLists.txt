@@ -535,6 +535,22 @@ set_property (SOURCE
   Detector/FtxSync.cpp Detector/FtxBitmetrics.cpp Detector/FtxFt2Stage7.cpp Detector/FtxSubtract.cpp
   Detector/FtxDownsample.cpp Detector/FtxSharedDsp.cpp Detector/FtxTweak.cpp Detector/FtxCandidates.cpp
   APPEND PROPERTY COMPILE_OPTIONS "-fcx-limited-range")
+# ftx_expf (FtxFastMath.hpp) is written without branches so that the loops using it can be vectorised,
+# but GCC's default -ftrapping-math refuses to if-convert its selections ("control flow in loop") and
+# the log-sum-exp loops of the FT2 bit metrics stay scalar. With -fno-trapping-math GCC may evaluate
+# both sides of a selection, so operations the source guards can run and raise floating-point
+# exception flags; that is harmless here because nothing in this program unmasks traps or reads them.
+#
+# x86-64 only. There every finite and infinite result is bit-identical with and without the option
+# (measured on all entry points of the file); only the sign and payload of NaN results can differ.
+# On targets with fused multiply-add the different if-conversion makes GCC fuse different products:
+# measured on AArch64, FT2 metrics change by up to about 1e-3 relative, so the option is not applied
+# there. The same happens on x86-64 if FMA is enabled for this file (measured with -march=x86-64-v3),
+# which the project does not do.
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set_property (SOURCE Detector/FtxBitmetrics.cpp
+    APPEND PROPERTY COMPILE_OPTIONS "-fno-trapping-math")
+endif ()
 endif ()
 
 set (wsjt_qtmm_CXXSRCS

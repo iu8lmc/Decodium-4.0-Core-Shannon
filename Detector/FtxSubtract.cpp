@@ -45,6 +45,17 @@ float gfsk_pulse (float bt, float t)
 
 float wrap_phase (float phase)
 {
+  // Caso di gran lunga piu' frequente: la fase e' avanzata di meno di un giro.
+  // In [2pi, 4pi) la sottrazione e' esatta e coincide con fmod, che qui costava
+  // una chiamata di libreria per ogni campione della forma d'onda di riferimento.
+  if (phase >= 0.0f && phase < kTwoPi)
+    {
+      return phase;
+    }
+  if (phase >= kTwoPi && phase < 2.0f * kTwoPi)
+    {
+      return phase - kTwoPi;
+    }
   phase = std::fmod (phase, kTwoPi);
   if (phase < 0.0f)
     {
@@ -509,14 +520,19 @@ void generate_ft8_reference (int const* itone, float f0, Complex* out)
       return;
     }
 
-  std::array<float, 3 * kNsps> pulse {};
+  // L'impulso GFSK non dipende dal segnale: si calcola una volta sola invece di
+  // 11520 erff a ogni sottrazione.
+  static std::array<float, 3 * kNsps> const pulse = [] {
+    std::array<float, 3 * kNsps> values {};
+    for (int i = 0; i < 3 * kNsps; ++i)
+      {
+        float const tt = (static_cast<float> (i + 1) - 1.5f * static_cast<float> (kNsps))
+          / static_cast<float> (kNsps);
+        values[static_cast<size_t> (i)] = gfsk_pulse (kBt, tt);
+      }
+    return values;
+  }();
   std::vector<float> dphi (static_cast<size_t> ((kNtone + 2) * kNsps), 0.0f);
-  for (int i = 0; i < 3 * kNsps; ++i)
-    {
-      float const tt = (static_cast<float> (i + 1) - 1.5f * static_cast<float> (kNsps))
-        / static_cast<float> (kNsps);
-      pulse[static_cast<size_t> (i)] = gfsk_pulse (kBt, tt);
-    }
 
   float const dphi_peak = kTwoPi / static_cast<float> (kNsps);
   for (int j = 0; j < kNtone; ++j)

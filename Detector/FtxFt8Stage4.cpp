@@ -6952,12 +6952,15 @@ void save_cq_signal_history (Ft8CqSignalHistoryState& state, Ft8Request const& r
   entry.dt = same_signal ? (entry.dt * previous_weight + callback_dt) / total_weight : callback_dt;
   entry.score = same_signal ? std::max (entry.score, cq_score) : cq_score;
   entry.hits = same_signal ? std::min (entry.hits + 1, 5) : 1;
+  // Letta una volta sola: la concessione interroga l'ambiente a ogni chiamata e
+  // questo ciclo gira su ogni tono di ogni simbolo.
+  bool const energy_mode = ft8_storico_energia ();
   for (size_t index = 0; index < entry.cs.size (); ++index)
     {
       float const previous_mag = same_signal ? std::abs (entry.cs[index]) : 0.0f;
       float const current_mag = std::abs (cs[index]);
       float merged_mag = 0.0f;
-      if (ft8_storico_energia ())
+      if (energy_mode)
         {
           // Somma di energie: il modulo salvato e' la radice della somma dei
           // |S|^2 degli slot passati, cosi' abs2(storico) restituisce la somma.
