@@ -3031,8 +3031,63 @@ profondità 3 da 35,95 a 19,54 s, `deep` da 27,75 a 15,18 s, `harvest` da 57,59
 a 28,91 s, profondità 2 da 3,25 a 2,15 s. Con scadenza di 1,5 s due delle tre
 registrazioni più affollate guadagnano un decode (20→21, 22→23).
 
-Il valore del massimo può differire dal precedente soltanto fra combinazioni i
-cui moduli coincidono entro l'ultimo bit; nelle prove non è mai emerso.
-La misura riguarda il decoder offline: non copre l'app completa, altre
-piattaforme o compilatori, né FT2/FT4, le cui metriche a quattro toni hanno la
-stessa struttura e non sono state modificate.
+La misura riguarda il decoder offline: non copre l'app completa né altre
+piattaforme.
+
+### Metriche di bit FT4 e FT2, e confronto bit per bit
+
+La stessa tecnica è stata estesa a FT4 (`run_ft4_bitmetrics`), che aveva la
+stessa forma di FT8 con quattro toni e gruppi fino a quattro simboli: una
+funzione comune a FT8 e FT4 costruisce le somme delle combinazioni e ne ricava
+i massimi per bit. I moduli al quadrato sono confrontati in doppia precisione:
+in singola, due combinazioni con moduli vicini entro l'ultimo bit potevano
+scambiarsi l'ordine rispetto a `hypotf` e il massimo usciva diverso di un bit
+(misurato sulla prima versione: un valore su circa 50 milioni in FT8, uno su
+circa 3 milioni in FT4, differenza assoluta inferiore a 1e-6). In doppia
+precisione la differenza non compare più.
+
+FT2 è diverso: le sue metriche (`run_ft2_bitmetrics_impl` e
+`ftx_ft2_bitmetrics_accum_c`) usano già i moduli al quadrato e, per ogni bit,
+una somma di esponenziali su tutte le combinazioni; non c'era un `hypotf` da
+togliere. Sono state riformulate senza cambiare alcun valore: i termini
+riferiti al massimo globale sono calcolati una volta sola invece che per ogni
+bit, quelli dell'altra metà su vettori contigui, e le sedici somme avanzano
+insieme, ciascuna nello stesso ordine di indice di prima. Gli esponenziali per
+gruppo di quattro simboli passano da 2048 a 1280.
+
+Verifica: `tests/tools/ftx_bitmetrics_compare.cpp` carica due build di
+`FtxBitmetrics.cpp` come librerie separate, le alimenta con gli stessi segnali
+casuali (livelli su cinque decadi, SNR da -12 a +28 dB, fading, solo rumore) e
+confronta le uscite con `memcmp`. Fra `main` e questa versione, GCC 13.3
+`-O3` su x86-64, tre semi: 480.000 vettori FT8 (tutte le metriche 1-4, con e
+senza deep, equalizzazione e storico), 103.841 FT4 e 355.010 FT2, in tutto
+oltre 1,4 miliardi di valori, nessuna differenza. Lo stesso confronto è
+identico anche con `-Os` e `-O2`, con clang 18 su x86-64 e con GCC 13 per
+ARM64 eseguito in emulazione (dove le moltiplicazioni-somme fuse sono attive),
+su campioni più piccoli.
+
+Tempo della sola funzione di metrica, stesso computer, GCC `-O3`: FT8 senza
+storico da circa 300 a 85 µs (metrica 4 da 566 a 166 µs), FT4 da 167 a 60 µs,
+FT2 da 191 a 137 µs, FT2 con accumulo da 156 a 104 µs.
+
+Sul decoder completo l'effetto in FT4 e FT2 è minore che in FT8, perché lì le
+metriche pesano meno (nel profilo di partenza circa l'8% in FT4, dove domina
+l'OSD con il 36%, e circa il 20% in FT2). Otto slot sintetici per modo
+(`ft4_make_test_wav` e `ft2_make_test_wav`, da 5 a 26 segnali sommati a SNR
+noto più rumore, uno di solo rumore), profondità 1, 2 e 3, miglior tempo di
+sette esecuzioni compreso l'avvio del processo (circa 15 ms): FT4 da 0,252 a
+0,230 s, da 1,018 a 0,919 s e da 3,084 a 2,930 s; FT2 da 0,291 a 0,274 s, da
+1,072 a 0,993 s e da 1,195 a 1,101 s. Le 24 uscite per modo sono identiche.
+Il confronto FT2/FT4 parte da `main`, quindi copre anche la modifica al
+riavvolgimento di fase della sottrazione. FT8 sugli stessi 40 casi di prima
+resta identico: profondità 3 a 18,90 s, `deep` a 14,62 s, `harvest` a 28,21 s.
+
+Con GCC il ciclo degli esponenziali FT2 resta scalare: `-ftrapping-math`,
+attivo di default, impedisce la conversione delle selezioni di `ftx_expf` e
+quindi la vettorizzazione. Con `-fno-trapping-math` sul solo
+`FtxBitmetrics.cpp` le uscite restano identiche e la metrica FT2 scende
+ancora di circa il 20%; clang vettorizza già senza opzioni. L'opzione non è
+stata aggiunta: è una scelta di build da valutare a parte.
+
+Gli slot FT2/FT4 sono sintetici e i tempi sono di un solo computer: non
+sostituiscono prove in aria né misure su Windows e macOS.

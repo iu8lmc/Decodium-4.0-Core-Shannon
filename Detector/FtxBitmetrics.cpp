@@ -646,10 +646,312 @@ void ft2_channel_est_cpp (Complex const* cd, Complex* cd_eq, float* ch_snr)
     }
 }
 
+// Somme complesse di tutte le combinazioni di toni di un gruppo di nsym simboli
+// consecutivi. tone (k, v) restituisce il tono v, gia' in ordine Gray, del
+// simbolo k-esimo del gruppo. Nell'indice di una combinazione il primo simbolo
+// occupa le cifre piu' significative e la somma procede dal primo simbolo
+// all'ultimo, come nelle espressioni scritte per esteso che questa funzione
+// sostituisce: i valori ottenuti sono gli stessi, bit per bit.
+template <typename ToneAt>
+inline int ftx_build_group_sums (int tones, int nsym, ToneAt const& tone, Complex* sums)
+{
+  int count = tones;
+  for (int value = 0; value < tones; ++value)
+    {
+      sums[value] = tone (0, value);
+    }
+  for (int symbol = 1; symbol < nsym; ++symbol)
+    {
+      std::array<Complex, 8> next {};
+      for (int value = 0; value < tones; ++value)
+        {
+          next[static_cast<size_t> (value)] = tone (symbol, value);
+        }
+      // Espansione sul posto, dall'ultima combinazione alla prima.
+      for (int i = count - 1; i >= 0; --i)
+        {
+          Complex const base = sums[i];
+          for (int value = tones - 1; value >= 0; --value)
+            {
+              sums[i * tones + value] = base + next[static_cast<size_t> (value)];
+            }
+        }
+      count *= tones;
+    }
+  return count;
+}
+
+// Massimi per bit di un gruppo di nsym simboli: FT8 (8 toni, fino a 3 simboli)
+// e FT4 (4 toni, fino a 4 simboli).
+//
+// La metrica di un bit e' max(|somma|) sulle combinazioni col bit a 1 meno lo
+// stesso massimo col bit a 0. La forma diretta calcolava il modulo (hypotf) di
+// tutte le combinazioni e poi le riscorreva una volta per bit: in FT8 da sola
+// era oltre meta' del tempo di una decodifica a profondita' 3.
+//
+// Qui il confronto avviene sui moduli al quadrato, che ordinano le combinazioni
+// allo stesso modo, e il modulo vero viene calcolato solo per le vincitrici.
+// I massimi per bit si ricavano dai massimi marginali per cifra (una cifra =
+// un simbolo), cosi' le combinazioni si scorrono una volta sola.
+// Il valore restituito e' lo stesso abs1() della combinazione vincente che
+// calcolava la forma diretta.
+//
+// I quadrati sono in doppia precisione di proposito. In singola, due
+// combinazioni con moduli vicini entro l'ultimo bit potevano scambiarsi
+// l'ordine rispetto ad abs1() e il massimo usciva diverso di un bit (misurato:
+// un valore su decine di milioni). In doppia i prodotti sono esatti e
+// l'ordine coincide con quello dei moduli.
+//
+// max1[p] / max0[p]: modulo massimo fra le combinazioni col bit p dell'indice
+// rispettivamente a 1 e a 0, per p = 0 .. (bit per simbolo) * nsym - 1.
+//
+// L'area di lavoro appartiene al chiamante, che la crea una volta per tutti i
+// gruppi: 8^3 combinazioni in FT8, 4^4 in FT4.
+struct FtxMaximaWorkspace
+{
+  std::array<Complex, 512> sums {};
+  std::array<double, 512> power {};
+};
+
+template <size_t Tones, size_t Symbols>
+inline void ftx_group_bit_maxima (std::array<std::array<Complex, Tones>, Symbols> const& cs,
+                                  std::array<int, Tones> const& graymap,
+                                  int nsym, int ks, float* max1, float* max0,
+                                  FtxMaximaWorkspace& work)
+{
+  static_assert (Tones == 4 || Tones == 8, "four or eight tones per symbol");
+  constexpr int tones = static_cast<int> (Tones);
+  constexpr int digit_bits = Tones == 8 ? 3 : 2;
+
+  std::array<Complex, 512>& sums = work.sums;
+  std::array<double, 512>& power = work.power;
+  int const nt = ftx_build_group_sums (
+      tones, nsym,
+      [&cs, &graymap, ks] (int symbol, int value) {
+        return cs[static_cast<size_t> (ks - 1 + symbol)]
+                 [static_cast<size_t> (graymap[static_cast<size_t> (value)])];
+      },
+      sums.data ());
+
+  for (int i = 0; i < nt; ++i)
+    {
+      double const re = sums[static_cast<size_t> (i)].real ();
+      double const im = sums[static_cast<size_t> (i)].imag ();
+      power[static_cast<size_t> (i)] = re * re + im * im;
+    }
+
+  // Massimo marginale per ogni valore di ogni cifra dell'indice.
+  std::array<std::array<double, 8>, 4> best_power {};
+  std::array<std::array<int, 8>, 4> best_index {};
+  for (int digit = 0; digit < nsym; ++digit)
+    {
+      int const shift = digit_bits * digit;
+      for (int value = 0; value < tones; ++value)
+        {
+          best_power[static_cast<size_t> (digit)][static_cast<size_t> (value)] = -1.0;
+          best_index[static_cast<size_t> (digit)][static_cast<size_t> (value)] = value << shift;
+        }
+    }
+  for (int i = 0; i < nt; ++i)
+    {
+      double const value = power[static_cast<size_t> (i)];
+      for (int digit = 0; digit < nsym; ++digit)
+        {
+          size_t const slot = static_cast<size_t> ((i >> (digit_bits * digit)) & (tones - 1));
+          if (value > best_power[static_cast<size_t> (digit)][slot])
+            {
+              best_power[static_cast<size_t> (digit)][slot] = value;
+              best_index[static_cast<size_t> (digit)][slot] = i;
+            }
+        }
+    }
+
+  for (int bit = 0; bit < digit_bits * nsym; ++bit)
+    {
+      size_t const digit = static_cast<size_t> (bit / digit_bits);
+      int const mask = 1 << (bit % digit_bits);
+      double power1 = -1.0;
+      double power0 = -1.0;
+      int index1 = -1;
+      int index0 = -1;
+      for (int value = 0; value < tones; ++value)
+        {
+          double const candidate = best_power[digit][static_cast<size_t> (value)];
+          if ((value & mask) != 0)
+            {
+              if (index1 < 0 || candidate > power1)
+                {
+                  power1 = candidate;
+                  index1 = best_index[digit][static_cast<size_t> (value)];
+                }
+            }
+          else if (index0 < 0 || candidate > power0)
+            {
+              power0 = candidate;
+              index0 = best_index[digit][static_cast<size_t> (value)];
+            }
+        }
+      max1[bit] = abs1 (sums[static_cast<size_t> (index1)]);
+      max0[bit] = abs1 (sums[static_cast<size_t> (index0)]);
+    }
+}
+
+// Massimo di n valori. Quattro accumulatori indipendenti invece di una sola
+// catena: il massimo e' una selezione esatta, quindi l'ordine non cambia il
+// risultato.
+inline float ftx_max_of (float const* values, int n)
+{
+  float a = -1.0e30f;
+  float b = -1.0e30f;
+  float c = -1.0e30f;
+  float d = -1.0e30f;
+  int i = 0;
+  for (; i + 4 <= n; i += 4)
+    {
+      a = std::max (a, values[i]);
+      b = std::max (b, values[i + 1]);
+      c = std::max (c, values[i + 2]);
+      d = std::max (d, values[i + 3]);
+    }
+  for (; i < n; ++i)
+    {
+      a = std::max (a, values[i]);
+    }
+  return std::max (std::max (a, b), std::max (c, d));
+}
+
+// Copia in dst, in ordine crescente di indice, gli elementi di src il cui
+// indice ha il bit indicato a 1 (set) o a 0. nt e' una potenza di due.
+inline void ftx_gather_half (float const* src, int nt, int bit, bool set, float* dst)
+{
+  int const run = 1 << bit;
+  for (int base = set ? run : 0; base < nt; base += 2 * run)
+    {
+      // Ciclo esplicito: per i tratti corti una chiamata a memmove costa piu'
+      // della copia.
+      for (int j = 0; j < run; ++j)
+        {
+          dst[j] = src[base + j];
+        }
+      dst += run;
+    }
+}
+
+// Area di lavoro di ftx_group_bit_lse. Appartiene al chiamante, che la crea
+// una volta per tutti i gruppi: azzerarla a ogni gruppo costerebbe piu' degli
+// esponenziali risparmiati.
+struct FtxLseWorkspace
+{
+  std::array<float, 256> value {};
+  std::array<float, 256> folded {};
+  std::array<float, 256> global_terms {};
+  std::array<float, 128> half_values {};
+  // Una corsia per ogni meta' di ogni bit: gli addendi in ordine di indice.
+  std::array<std::array<float, 128>, 16> lanes {};
+};
+
+// Metriche di bit FT2 di un gruppo: per ogni bit dell'indice di combinazione
+//
+//   (max1 + log sum exp (v - max1)) - (max0 + log sum exp (v - max0))
+//
+// dove le somme corrono sulle combinazioni col bit a 1 e a 0 e max1/max0 sono i
+// rispettivi massimi. values[i] e' il valore gia' scalato della combinazione i;
+// nt = 2^nbits, al piu' 256. metric[p] e' la metrica del bit p dell'indice.
+//
+// La forma diretta ricalcolava un esponenziale per ogni combinazione e per
+// ogni bit, e sommava una combinazione alla volta. Qui:
+//  - per ogni bit una delle due meta' contiene il massimo globale, quindi i
+//    suoi termini exp (v - max) sono gli stessi per tutti i bit e si calcolano
+//    una volta sola;
+//  - gli esponenziali dell'altra meta' si calcolano su un vettore contiguo,
+//    vettorizzabile dove il compilatore lo consente;
+//  - le sedici somme (due meta' per otto bit) avanzano insieme invece che una
+//    dopo l'altra.
+// Ogni addendo e' lo stesso valore di prima e ogni somma procede nello stesso
+// ordine di indice: i risultati coincidono bit per bit con la forma diretta.
+inline void ftx_group_bit_lse (float const* values, int nt, int nbits, float* metric,
+                               FtxLseWorkspace& work)
+{
+  std::array<float, 256>& value = work.value;
+  std::array<float, 256>& folded = work.folded;
+  std::copy_n (values, nt, value.begin ());
+  std::copy_n (values, nt, folded.begin ());
+
+  // Massimi delle due meta' per ogni bit: si toglie ogni volta il bit piu' alto
+  // sostituendo ogni coppia col suo massimo.
+  std::array<float, 8> max1 {};
+  std::array<float, 8> max0 {};
+  int width = nt;
+  for (int bit = nbits - 1; bit >= 0; --bit)
+    {
+      int const half = width / 2;
+      max0[static_cast<size_t> (bit)] = ftx_max_of (folded.data (), half);
+      max1[static_cast<size_t> (bit)] = ftx_max_of (folded.data () + half, half);
+      for (int j = 0; j < half; ++j)
+        {
+          folded[static_cast<size_t> (j)] =
+              std::max (folded[static_cast<size_t> (j)], folded[static_cast<size_t> (half + j)]);
+        }
+      width = half;
+    }
+
+  // Termini riferiti al massimo globale, comuni a tutti i bit.
+  float const global = std::max (max1[0], max0[0]);
+  float* const global_terms = work.global_terms.data ();
+  for (int i = 0; i < nt; ++i)
+    {
+      global_terms[i] = decodium::ftx_expf (value[static_cast<size_t> (i)] - global);
+    }
+
+  int const half = nt / 2;
+  float* const half_values = work.half_values.data ();
+  for (int bit = 0; bit < nbits; ++bit)
+    {
+      for (int set = 0; set <= 1; ++set)
+        {
+          float const maximum = set != 0 ? max1[static_cast<size_t> (bit)]
+                                         : max0[static_cast<size_t> (bit)];
+          float* const lane = work.lanes[static_cast<size_t> (2 * bit + set)].data ();
+          if (maximum == global)
+            {
+              ftx_gather_half (global_terms, nt, bit, set != 0, lane);
+            }
+          else
+            {
+              ftx_gather_half (value.data (), nt, bit, set != 0, half_values);
+              for (int j = 0; j < half; ++j)
+                {
+                  lane[j] = decodium::ftx_expf (half_values[j] - maximum);
+                }
+            }
+        }
+    }
+
+  // Tutte le somme insieme, ciascuna nel proprio ordine di indice. Le corsie
+  // oltre 2 * nbits non sono usate: sommarle costa meno che distinguerle.
+  std::array<float, 16> lse {};
+  for (int j = 0; j < half; ++j)
+    {
+      for (size_t lane = 0; lane < 16; ++lane)
+        {
+          lse[lane] += work.lanes[lane][static_cast<size_t> (j)];
+        }
+    }
+
+  for (int bit = 0; bit < nbits; ++bit)
+    {
+      float const maxp1 = max1[static_cast<size_t> (bit)];
+      float const maxp0 = max0[static_cast<size_t> (bit)];
+      float const lse1 = lse[static_cast<size_t> (2 * bit + 1)];
+      float const lse0 = lse[static_cast<size_t> (2 * bit)];
+      metric[bit] = (maxp1 + std::log (std::max (lse1, kTiny))) -
+                    (maxp0 + std::log (std::max (lse0, kTiny)));
+    }
+}
+
 void run_ft4_bitmetrics (Complex const* cd, float* bitmetrics, int* badsync)
 {
   static std::array<int, 4> const graymap {{0, 1, 3, 2}};
-  auto const& one = one8_table ();
   constexpr int NN = 103;
   constexpr int NSS = 32;
   constexpr int rows = 2 * NN;
@@ -675,57 +977,30 @@ void run_ft4_bitmetrics (Complex const* cd, float* bitmetrics, int* badsync)
       return;
     }
 
+  FtxMaximaWorkspace maxima_work;
   for (int nseq = 1; nseq <= 3; ++nseq)
     {
       int const nsym = (nseq == 1 ? 1 : (nseq == 2 ? 2 : 4));
-      int const nt = 1 << (2 * nsym);
-      std::array<float, 256> s2 {};
+      int const ibmax = (nsym == 1 ? 1 : (nsym == 2 ? 3 : 7));
 
       for (int ks = 1; ks <= NN - nsym + 1; ks += nsym)
         {
-          for (int i = 0; i < nt; ++i)
-            {
-              int const i1 = i / 64;
-              int const i2 = (i & 63) / 16;
-              int const i3 = (i & 15) / 4;
-              int const i4 = (i & 3);
-              if (nsym == 1)
-                {
-                  s2[static_cast<size_t> (i)] = abs1 (cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i4)])]);
-                }
-              else if (nsym == 2)
-                {
-                  s2[static_cast<size_t> (i)] =
-                    abs1 (cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]
-                        + cs[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i4)])]);
-                }
-              else
-                {
-                  s2[static_cast<size_t> (i)] =
-                    abs1 (cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i1)])]
-                        + cs[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i2)])]
-                        + cs[static_cast<size_t> (ks + 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]
-                        + cs[static_cast<size_t> (ks + 2)][static_cast<size_t> (graymap[static_cast<size_t> (i4)])]);
-                }
-            }
+          // Massimi indicizzati per bit dell'indice di combinazione.
+          std::array<float, 8> group_max1 {};
+          std::array<float, 8> group_max0 {};
+          ftx_group_bit_maxima (cs, graymap, nsym, ks,
+                                group_max1.data (), group_max0.data (), maxima_work);
 
           int const ipt = 1 + (ks - 1) * 2;
-          int const ibmax = (nsym == 1 ? 1 : (nsym == 2 ? 3 : 7));
           for (int ib = 0; ib <= ibmax; ++ib)
             {
               if (ipt + ib > rows)
                 {
                   continue;
                 }
-              float max1 = -1.0e30f;
-              float max0 = -1.0e30f;
-              for (int i = 0; i < nt; ++i)
-                {
-                  bool const set = one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)];
-                  if (set) max1 = std::max (max1, s2[static_cast<size_t> (i)]);
-                  else max0 = std::max (max0, s2[static_cast<size_t> (i)]);
-                }
-              bm_at (bitmetrics, rows, ipt + ib - 1, nseq - 1) = max1 - max0;
+              bm_at (bitmetrics, rows, ipt + ib - 1, nseq - 1) =
+                  group_max1[static_cast<size_t> (ibmax - ib)]
+                  - group_max0[static_cast<size_t> (ibmax - ib)];
             }
         }
     }
@@ -824,73 +1099,43 @@ void run_ft2_bitmetrics_impl (Complex const* cd, float* bitmetrics, int* badsync
     }
 
   std::array<float, rows> bmet_eq {};
+  FtxLseWorkspace lse_work;
   for (int nseq = 1; nseq <= 3; ++nseq)
     {
       int const nsym = (nseq == 1 ? 1 : (nseq == 2 ? 2 : 4));
       int const nt = 1 << (2 * nsym);
+      int const ibmax = (nsym == 1 ? 1 : (nsym == 2 ? 3 : 7));
+      float const beta_eff = beta / static_cast<float> (nsym);
+      std::array<Complex, 256> sums {};
       std::array<float, 256> sp {};
 
       for (int ks = 1; ks <= NN - nsym + 1; ks += nsym)
         {
+          ftx_build_group_sums (
+              4, nsym,
+              [&cs, ks] (int symbol, int value) {
+                return cs[static_cast<size_t> (ks - 1 + symbol)]
+                         [static_cast<size_t> (graymap[static_cast<size_t> (value)])];
+              },
+              sums.data ());
           for (int i = 0; i < nt; ++i)
             {
-              int const i1 = i / 64;
-              int const i2 = (i & 63) / 16;
-              int const i3 = (i & 15) / 4;
-              int const i4 = (i & 3);
-              Complex ctmp {};
-              if (nsym == 1)
-                {
-                  ctmp = cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i4)])];
-                }
-              else if (nsym == 2)
-                {
-                  ctmp = cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]
-                    + cs[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i4)])];
-                }
-              else
-                {
-                  ctmp = cs[static_cast<size_t> (ks - 1)][static_cast<size_t> (graymap[static_cast<size_t> (i1)])]
-                    + cs[static_cast<size_t> (ks)][static_cast<size_t> (graymap[static_cast<size_t> (i2)])]
-                    + cs[static_cast<size_t> (ks + 1)][static_cast<size_t> (graymap[static_cast<size_t> (i3)])]
-                    + cs[static_cast<size_t> (ks + 2)][static_cast<size_t> (graymap[static_cast<size_t> (i4)])];
-                }
-              sp[static_cast<size_t> (i)] = abs2 (ctmp);
+              float const power = abs2 (sums[static_cast<size_t> (i)]);
+              sp[static_cast<size_t> (i)] = beta_eff * power;
             }
 
+          std::array<float, 8> group_metric {};
+          ftx_group_bit_lse (sp.data (), nt, ibmax + 1, group_metric.data (), lse_work);
+
           int const ipt = 1 + (ks - 1) * 2;
-          int const ibmax = (nsym == 1 ? 1 : (nsym == 2 ? 3 : 7));
-          float const beta_eff = beta / static_cast<float> (nsym);
           for (int ib = 0; ib <= ibmax; ++ib)
             {
               if (ipt + ib > rows)
                 {
                   continue;
                 }
-
-              float maxp1 = -1.0e30f;
-              float maxp0 = -1.0e30f;
-              for (int i = 0; i < nt; ++i)
-                {
-                  float const pval = beta_eff * sp[static_cast<size_t> (i)];
-                  bool const set = one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)];
-                  if (set) maxp1 = std::max (maxp1, pval);
-                  else maxp0 = std::max (maxp0, pval);
-                }
-
-              float lse1 = 0.0f;
-              float lse0 = 0.0f;
-              for (int i = 0; i < nt; ++i)
-                {
-                  bool const set = one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)];
-                  float const pval = beta_eff * sp[static_cast<size_t> (i)];
-                  if (set) lse1 += decodium::ftx_expf (pval - maxp1);
-                  else lse0 += decodium::ftx_expf (pval - maxp0);
-                }
-
               bm_at (bitmetrics, rows, ipt + ib - 1, nseq - 1) =
-                (maxp1 + std::log (std::max (lse1, kTiny))) -
-                (maxp0 + std::log (std::max (lse0, kTiny)));
+                  group_metric[static_cast<size_t> (ibmax - ib)];
             }
         }
     }
@@ -1032,139 +1277,6 @@ void run_ft2_bitmetrics (Complex const* cd, float* bitmetrics, int* badsync)
                            true,
                            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
-}
-
-// Massimi per bit di un gruppo di nsym simboli (1, 2 o 3), senza storico.
-//
-// La metrica di un bit e' max(|somma|) sulle combinazioni col bit a 1 meno lo
-// stesso massimo col bit a 0. La forma diretta calcolava il modulo (hypotf) di
-// tutte le 8^nsym combinazioni e poi le riscorreva una volta per bit: da sola
-// era oltre meta' del tempo di una decodifica FT8 a profondita' 3.
-//
-// Qui il confronto avviene sui moduli al quadrato, che ordinano le combinazioni
-// allo stesso modo, e il modulo vero viene calcolato solo per le vincitrici.
-// I massimi per bit si ricavano dai massimi marginali per cifra (una cifra
-// ottale = un simbolo), cosi' le combinazioni si scorrono una volta sola.
-// Il valore restituito e' lo stesso abs1() della combinazione vincente che
-// calcolava la forma diretta; puo' differire solo fra combinazioni i cui moduli
-// coincidono entro l'ultimo bit di precisione.
-//
-// max1[p] / max0[p]: modulo massimo fra le combinazioni col bit p dell'indice
-// rispettivamente a 1 e a 0, per p = 0 .. 3 * nsym - 1.
-inline void ft8_group_bit_maxima (std::array<std::array<Complex, 8>, 79> const& cs,
-                                  std::array<int, 8> const& graymap,
-                                  int nsym, int ks, float* max1, float* max0)
-{
-  std::array<Complex, 512> sums;
-  std::array<float, 512> power;
-  int const nt = 1 << (3 * nsym);
-
-  std::array<Complex, 8> const& first = cs[static_cast<size_t> (ks - 1)];
-  if (nsym == 1)
-    {
-      for (int i3 = 0; i3 < 8; ++i3)
-        {
-          sums[static_cast<size_t> (i3)] = first[static_cast<size_t> (graymap[static_cast<size_t> (i3)])];
-        }
-    }
-  else if (nsym == 2)
-    {
-      std::array<Complex, 8> const& second = cs[static_cast<size_t> (ks)];
-      for (int i2 = 0; i2 < 8; ++i2)
-        {
-          Complex const a = first[static_cast<size_t> (graymap[static_cast<size_t> (i2)])];
-          for (int i3 = 0; i3 < 8; ++i3)
-            {
-              sums[static_cast<size_t> (i2 * 8 + i3)] =
-                  a + second[static_cast<size_t> (graymap[static_cast<size_t> (i3)])];
-            }
-        }
-    }
-  else
-    {
-      std::array<Complex, 8> const& second = cs[static_cast<size_t> (ks)];
-      std::array<Complex, 8> const& third = cs[static_cast<size_t> (ks + 1)];
-      std::array<Complex, 8> third_gray;
-      for (int i3 = 0; i3 < 8; ++i3)
-        {
-          third_gray[static_cast<size_t> (i3)] = third[static_cast<size_t> (graymap[static_cast<size_t> (i3)])];
-        }
-      for (int i1 = 0; i1 < 8; ++i1)
-        {
-          Complex const a = first[static_cast<size_t> (graymap[static_cast<size_t> (i1)])];
-          for (int i2 = 0; i2 < 8; ++i2)
-            {
-              Complex const ab = a + second[static_cast<size_t> (graymap[static_cast<size_t> (i2)])];
-              Complex* const out = sums.data () + (i1 * 64 + i2 * 8);
-              for (int i3 = 0; i3 < 8; ++i3)
-                {
-                  out[i3] = ab + third_gray[static_cast<size_t> (i3)];
-                }
-            }
-        }
-    }
-
-  for (int i = 0; i < nt; ++i)
-    {
-      float const re = sums[static_cast<size_t> (i)].real ();
-      float const im = sums[static_cast<size_t> (i)].imag ();
-      power[static_cast<size_t> (i)] = re * re + im * im;
-    }
-
-  // Massimo marginale per ogni valore di ogni cifra ottale dell'indice.
-  std::array<std::array<float, 8>, 3> best_power;
-  std::array<std::array<int, 8>, 3> best_index;
-  for (int digit = 0; digit < nsym; ++digit)
-    {
-      int const shift = 3 * digit;
-      for (int value = 0; value < 8; ++value)
-        {
-          best_power[static_cast<size_t> (digit)][static_cast<size_t> (value)] = -1.0f;
-          best_index[static_cast<size_t> (digit)][static_cast<size_t> (value)] = value << shift;
-        }
-    }
-  for (int i = 0; i < nt; ++i)
-    {
-      float const value = power[static_cast<size_t> (i)];
-      for (int digit = 0; digit < nsym; ++digit)
-        {
-          size_t const slot = static_cast<size_t> ((i >> (3 * digit)) & 7);
-          if (value > best_power[static_cast<size_t> (digit)][slot])
-            {
-              best_power[static_cast<size_t> (digit)][slot] = value;
-              best_index[static_cast<size_t> (digit)][slot] = i;
-            }
-        }
-    }
-
-  for (int bit = 0; bit < 3 * nsym; ++bit)
-    {
-      size_t const digit = static_cast<size_t> (bit / 3);
-      int const mask = 1 << (bit % 3);
-      float power1 = -1.0f;
-      float power0 = -1.0f;
-      int index1 = -1;
-      int index0 = -1;
-      for (int value = 0; value < 8; ++value)
-        {
-          float const candidate = best_power[digit][static_cast<size_t> (value)];
-          if ((value & mask) != 0)
-            {
-              if (index1 < 0 || candidate > power1)
-                {
-                  power1 = candidate;
-                  index1 = best_index[digit][static_cast<size_t> (value)];
-                }
-            }
-          else if (index0 < 0 || candidate > power0)
-            {
-              power0 = candidate;
-              index0 = best_index[digit][static_cast<size_t> (value)];
-            }
-        }
-      max1[bit] = abs1 (sums[static_cast<size_t> (index1)]);
-      max0[bit] = abs1 (sums[static_cast<size_t> (index0)]);
-    }
 }
 
 void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
@@ -1349,6 +1461,7 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
       srr = synclev / snoiselev;
     }
   bool const use_weak_transform = weak_deep && srr < 2.5f;
+  FtxMaximaWorkspace maxima_work;
 
   for (int nsym = 1; nsym <= 3; ++nsym)
     {
@@ -1368,8 +1481,9 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
               std::array<float, 9> group_max0 {};
               if (!history_cs)
                 {
-                  ft8_group_bit_maxima (cs, graymap, nsym, ks,
-                                        group_max1.data (), group_max0.data ());
+                  ftx_group_bit_maxima (cs, graymap, nsym, ks,
+                                        group_max1.data (), group_max0.data (),
+                                        maxima_work);
                   // Le forme di metrica sono crescenti nel modulo: applicarle
                   // al solo massimo equivale ad applicarle a ogni combinazione.
                   auto const shape = [&] (float value) {
@@ -1549,8 +1663,9 @@ void run_ft8_bitmetrics (Complex const* cd0, int np2, int ibest, int imetric,
                   if (nsym == 3) ibmax = 8;
                   std::array<float, 9> group_max1 {};
                   std::array<float, 9> group_max0 {};
-                  ft8_group_bit_maxima (cs_reverse, graymap, nsym, ks,
-                                        group_max1.data (), group_max0.data ());
+                  ftx_group_bit_maxima (cs_reverse, graymap, nsym, ks,
+                                        group_max1.data (), group_max0.data (),
+                                        maxima_work);
                   if (use_weak_transform)
                     {
                       for (int bit = 0; bit <= ibmax; ++bit)
@@ -2140,7 +2255,6 @@ extern "C" void ftx_ft2_bitmetrics_accum_c (Complex const* cs, float const* beta
                                             float* bitmetrics)
 {
   static std::array<int, 4> const graymap {{0, 1, 3, 2}};
-  auto const& one = one8_table ();
   constexpr int NN = 103;
   constexpr int rows = 2 * NN;
   std::fill (bitmetrics, bitmetrics + rows * 3, 0.0f);
@@ -2149,71 +2263,45 @@ extern "C" void ftx_ft2_bitmetrics_accum_c (Complex const* cs, float const* beta
       return;
     }
 
+  FtxLseWorkspace lse_work;
   for (int nseq = 1; nseq <= 3; ++nseq)
     {
       int const nsym = (nseq == 1 ? 1 : (nseq == 2 ? 2 : 4));
       int const nt = 1 << (2 * nsym);
+      int const ibmax = (nsym == 1 ? 1 : (nsym == 2 ? 3 : 7));
+      std::array<Complex, 256> sums {};
       std::array<float, 256> sp {};
       for (int ks = 1; ks <= NN - nsym + 1; ks += nsym)
         {
-          for (int i = 0; i < nt; ++i)
+          std::fill_n (sp.begin (), nt, 0.0f);
+          for (int s = 0; s < nslot; ++s)
             {
-              int const i1 = i / 64;
-              int const i2 = (i & 63) / 16;
-              int const i3 = (i & 15) / 4;
-              int const i4 = (i & 3);
-              float acc = 0.0f;
-              for (int s = 0; s < nslot; ++s)
+              Complex const* c = cs + static_cast<size_t> (s) * NN * 4;
+              ftx_build_group_sums (
+                  4, nsym,
+                  [c, ks] (int symbol, int value) {
+                    return c[(ks - 1 + symbol) * 4 + graymap[static_cast<size_t> (value)]];
+                  },
+                  sums.data ());
+              for (int i = 0; i < nt; ++i)
                 {
-                  Complex const* c = cs + static_cast<size_t> (s) * NN * 4;
-                  auto tone = [&] (int k, int idx) {
-                    return c[(ks - 1 + k) * 4 + graymap[static_cast<size_t> (idx)]];
-                  };
-                  Complex ctmp {};
-                  if (nsym == 1)
-                    {
-                      ctmp = tone (0, i4);
-                    }
-                  else if (nsym == 2)
-                    {
-                      ctmp = tone (0, i3) + tone (1, i4);
-                    }
-                  else
-                    {
-                      ctmp = tone (0, i1) + tone (1, i2) + tone (2, i3) + tone (3, i4);
-                    }
-                  acc += (beta[s] / static_cast<float> (nsym)) * abs2 (ctmp);
+                  sp[static_cast<size_t> (i)] +=
+                      (beta[s] / static_cast<float> (nsym)) * abs2 (sums[static_cast<size_t> (i)]);
                 }
-              sp[static_cast<size_t> (i)] = acc;
             }
 
+          std::array<float, 8> group_metric {};
+          ftx_group_bit_lse (sp.data (), nt, ibmax + 1, group_metric.data (), lse_work);
+
           int const ipt = 1 + (ks - 1) * 2;
-          int const ibmax = (nsym == 1 ? 1 : (nsym == 2 ? 3 : 7));
           for (int ib = 0; ib <= ibmax; ++ib)
             {
               if (ipt + ib > rows)
                 {
                   continue;
                 }
-              float maxp1 = -1.0e30f;
-              float maxp0 = -1.0e30f;
-              for (int i = 0; i < nt; ++i)
-                {
-                  bool const set = one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)];
-                  if (set) maxp1 = std::max (maxp1, sp[static_cast<size_t> (i)]);
-                  else maxp0 = std::max (maxp0, sp[static_cast<size_t> (i)]);
-                }
-              float lse1 = 0.0f;
-              float lse0 = 0.0f;
-              for (int i = 0; i < nt; ++i)
-                {
-                  bool const set = one[static_cast<size_t> (i)][static_cast<size_t> (ibmax - ib)];
-                  if (set) lse1 += decodium::ftx_expf (sp[static_cast<size_t> (i)] - maxp1);
-                  else lse0 += decodium::ftx_expf (sp[static_cast<size_t> (i)] - maxp0);
-                }
               bm_at (bitmetrics, rows, ipt + ib - 1, nseq - 1) =
-                (maxp1 + std::log (std::max (lse1, kTiny))) -
-                (maxp0 + std::log (std::max (lse0, kTiny)));
+                  group_metric[static_cast<size_t> (ibmax - ib)];
             }
         }
     }
