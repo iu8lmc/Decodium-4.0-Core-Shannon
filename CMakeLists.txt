@@ -535,6 +535,13 @@ set_property (SOURCE
   Detector/FtxSync.cpp Detector/FtxBitmetrics.cpp Detector/FtxFt2Stage7.cpp Detector/FtxSubtract.cpp
   Detector/FtxDownsample.cpp Detector/FtxSharedDsp.cpp Detector/FtxTweak.cpp Detector/FtxCandidates.cpp
   APPEND PROPERTY COMPILE_OPTIONS "-fcx-limited-range")
+# ftx_expf (FtxFastMath.hpp) is written without branches so that the loops using it can be vectorised,
+# but GCC's default -ftrapping-math refuses to if-convert its selections ("control flow in loop") and
+# the log-sum-exp loops of the FT2 bit metrics stay scalar. -fno-trapping-math only states that
+# floating-point exception flags and traps are not observed -- nothing in this program enables or
+# reads them -- and does not change any computed value. Clang already assumes it.
+set_property (SOURCE Detector/FtxBitmetrics.cpp
+  APPEND PROPERTY COMPILE_OPTIONS "-fno-trapping-math")
 endif ()
 
 set (wsjt_qtmm_CXXSRCS
