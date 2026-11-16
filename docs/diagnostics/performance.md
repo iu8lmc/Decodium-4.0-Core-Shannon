@@ -3082,12 +3082,30 @@ Il confronto FT2/FT4 parte da `main`, quindi copre anche la modifica al
 riavvolgimento di fase della sottrazione. FT8 sugli stessi 40 casi di prima
 resta identico: profondità 3 a 18,90 s, `deep` a 14,62 s, `harvest` a 28,21 s.
 
-Con GCC il ciclo degli esponenziali FT2 resta scalare: `-ftrapping-math`,
+Con GCC il ciclo degli esponenziali FT2 restava scalare: `-ftrapping-math`,
 attivo di default, impedisce la conversione delle selezioni di `ftx_expf` e
-quindi la vettorizzazione. Con `-fno-trapping-math` sul solo
-`FtxBitmetrics.cpp` le uscite restano identiche e la metrica FT2 scende
-ancora di circa il 20%; clang vettorizza già senza opzioni. L'opzione non è
-stata aggiunta: è una scelta di build da valutare a parte.
+quindi la vettorizzazione. `FtxBitmetrics.cpp` è ora compilato con
+`-fno-trapping-math`, solo con GCC e solo su x86-64; clang vettorizza già
+senza opzioni. Su x86-64 il confronto fra `main` senza l'opzione e questa
+versione con l'opzione è identico bit per bit su tutti i 18 punti d'ingresso
+del file, compresi ingressi degeneri (silenzio, un solo campione, portante
+pura, livelli estremi): 58 sezioni, due semi da 4000 vettori, e lo stesso con
+la riga di compilazione esatta del progetto. Differiscono soltanto segno e
+contenuto dei risultati NaN, che compaiono con ingressi non finiti o che
+traboccano. Le 88 decodifiche dei tre corpus restano identiche. La sola
+metrica FT2 scende ancora di circa il 20% (da 151 a 120 µs su un insieme di
+64 segnali); il tempo del decoder FT2 completo con l'opzione non è stato
+misurato.
+
+L'opzione non è applicata su ARM64: lì GCC, con le moltiplicazioni-somme
+fuse, vettorizza in modo diverso anche la stima di canale e la metrica
+coerente FT2 e i valori cambiano (misurato in emulazione: fino a circa 1e-3
+relativo sulla metrica FT2). Lo stesso accade su x86-64 se per questo file
+si abilita FMA (misurato con `-march=x86-64-v3`), cosa che il progetto non
+fa. Con l'opzione il codice esegue operazioni che il sorgente protegge con
+una condizione e può alzare flag di eccezione floating-point: è innocuo
+finché nulla abilita le trap o legge quei flag, e nel repository nulla lo fa.
+Non è stato provato con il GCC di MinGW usato per Windows.
 
 Gli slot FT2/FT4 sono sintetici e i tempi sono di un solo computer: non
 sostituiscono prove in aria né misure su Windows e macOS.

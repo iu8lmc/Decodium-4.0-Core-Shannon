@@ -541,10 +541,12 @@ set_property (SOURCE
 # both sides of a selection, so operations the source guards can run and raise floating-point
 # exception flags; that is harmless here because nothing in this program unmasks traps or reads them.
 #
-# x86-64 only. There the option changes no computed value. On targets with fused multiply-add the
-# different if-conversion makes GCC fuse different products: measured on AArch64, FT2 metrics move in
-# the last digits (up to about 1e-4), so the option is not applied there. The same would happen on
-# x86-64 if FMA were enabled for this file (e.g. -march=x86-64-v3), which the project does not do.
+# x86-64 only. There every finite and infinite result is bit-identical with and without the option
+# (measured on all entry points of the file); only the sign and payload of NaN results can differ.
+# On targets with fused multiply-add the different if-conversion makes GCC fuse different products:
+# measured on AArch64, FT2 metrics change by up to about 1e-3 relative, so the option is not applied
+# there. The same happens on x86-64 if FMA is enabled for this file (measured with -march=x86-64-v3),
+# which the project does not do.
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
   set_property (SOURCE Detector/FtxBitmetrics.cpp
     APPEND PROPERTY COMPILE_OPTIONS "-fno-trapping-math")

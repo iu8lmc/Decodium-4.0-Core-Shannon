@@ -18,6 +18,8 @@
 //   FL="-O3 -DNDEBUG -std=gnu++17 -fcx-limited-range -fPIC -shared -I<sorgenti>"
 //   g++ $FL -o libprima.so <FtxBitmetrics.cpp di riferimento> -lfftw3f
 //   g++ $FL -o libdopo.so  Detector/FtxBitmetrics.cpp         -lfftw3f
+//   (su x86-64 con GCC il progetto compila il file anche con -fno-trapping-math:
+//    aggiungerla alla riga di libdopo.so per provare la build di produzione)
 //   g++ -O2 -std=gnu++17 -o ftx_bitmetrics_compare tests/tools/ftx_bitmetrics_compare.cpp -ldl
 //   ./ftx_bitmetrics_compare ./libprima.so ./libdopo.so 40000 [seme]
 //
