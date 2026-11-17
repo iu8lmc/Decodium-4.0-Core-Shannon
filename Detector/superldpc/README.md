@@ -494,8 +494,9 @@ tempo: il costo sta nel blocco OSD in piu' per OGNI candidato fallito, e il
 92% di quei candidati ha meno di 10 simboli Costas giusti. La seconda vale
 +6,5% rispetto al BICM spento e costa dal 30 al 48% in meno della prima.
 
-Con il giro a traliccio di fase forzato (`DECODIUM_FT8_TRELLIS=1`, spento di
-default) la stessa retroazione entra nel traliccio come a priori sui toni
+Con il giro a traliccio di fase attivo (lo concede il governatore delle leve
+adattive dove il tempo di decodifica ha margine; `DECODIUM_FT8_TRELLIS=1` lo
+forza, `=0` lo spegne) la stessa retroazione entra nel traliccio come a priori sui toni
 (`ftx_ft8_bitmetrics_trellis_prior_c`): 2331 decodifiche contro 2170 senza
 retroazione sul traliccio, una falsa decodifica in entrambi, nessuna su 100
 slot di rumore, tempo +5% sugli slot di segnali deboli.

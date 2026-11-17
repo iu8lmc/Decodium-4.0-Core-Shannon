@@ -32,6 +32,7 @@
 extern "C"
 {
   int ftx_ft8_ap_storico_tentativi_c ();
+  int ftx_ft8_leve_adattive_aggiorna_c (int decode_ms, int max_ms, int pressure_limited);
   int ftx_ft8_ap_msg_tentativi_c ();
   void ftx_ft8_async_decode_stage4_c (short const* iwave, int* nqsoprogress, int* nfqso, int* nftx,
                                       int* nutc, int* nfa, int* nfb, int* nzhsym, int* ndepth,
@@ -1663,6 +1664,17 @@ int main (int argc, char * argv[])
       int const norder = parse_int_option (parser, norder_option, QStringLiteral ("norder"));
       int const maxIter = parse_int_option (parser, max_iter_option, QStringLiteral ("max-iter"));
       int const maxDecodeMs = parse_int_option (parser, max_ms_option, QStringLiteral ("max-ms"));
+      // The adaptive lever governor starts with every lever off and this tool
+      // never feeds it. FT8_STAGE_COMPARE_GRANT_LEVERS=1 reports four slots well
+      // inside the budget, so the decode runs as the application does once the
+      // levers are granted (BICM-ID, coherent pass, phase-trellis round, ...).
+      if (char const* grant = std::getenv ("FT8_STAGE_COMPARE_GRANT_LEVERS"))
+        {
+          if (grant[0] != 0 && grant[0] != '0')
+            {
+              for (int i = 0; i < 4; ++i) ftx_ft8_leve_adattive_aggiorna_c (1, 100, 0);
+            }
+        }
       int const lowThresholds = parse_int_option (parser, low_thresholds_option,
                                                   QStringLiteral ("low-thresholds"));
       int const subpass = parse_int_option (parser, subpass_option, QStringLiteral ("subpass"));

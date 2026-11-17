@@ -704,10 +704,17 @@ bool ft8_bicm_v2_enabled (Ft8BicmV2Config const& config)
 //
 // DECODIUM_FT8_TRELLIS=1 forces it on for every request (including the
 // multi-cycle / sub-pass ones that the default policy leaves out), =0
-// switches it off; without the variable kFt8TrellisDefault and
-// ft8_trellis_enabled() decide. It is OFF by default: it adds decodes at an
-// unchanged false-decode count, but on slots full of weak signals the decode
-// time grows by more than 10% at every depth (measured +13..+38%).
+// switches it off; without the variable ft8_trellis_enabled() decides: the
+// round is granted by the adaptive lever governor, i.e. only after several
+// slots well inside the time budget, and withdrawn at the first slot that
+// gets close to it. It is not on unconditionally (kFt8TrellisDefault): it
+// adds decodes at an unchanged false-decode count, but on slots full of weak
+// signals the decode time grows by more than 10% at every depth (measured
+// +13..+38%).
+// With the levers granted (FT8_STAGE_COMPARE_GRANT_LEVERS=1 in
+// ft8_stage_compare), 230 held-out slots at depth 3: 1864 decodes without
+// this round, 2331 with it; one false decode on signal slots in both, none
+// on 100 noise-only slots in both.
 // Experiment knobs, read once: DECODIUM_FT8_TRELLIS_SIGMA (phase diffusion,
 // degrees per symbol), _FWALK (frequency-walk probability), _EM
 // (re-estimation rounds), _HARD (hard-error cap), _ESN0 / _NSYNC / _RMS (the
@@ -7271,8 +7278,10 @@ void plan_ft8_ldpc_decode (Ft8Request const& request, float f1, float sync, int 
   Keff = 91;
 }
 
-// Default policy of the phase-tracking round (only used if kFt8TrellisDefault
-// is ever set). The multi-cycle / sub-pass ("harvest") requests are left out:
+// Default policy of the phase-tracking round: it follows the adaptive lever
+// governor (FtxDecodeBookkeeping.cpp), like BICM-ID and the coherent pass, so
+// it runs only where the decode time leaves margin. The multi-cycle / sub-pass
+// ("harvest") requests are left out:
 // there every extra decode re-triggers the candidate search and the time cost
 // is the highest. DECODIUM_FT8_TRELLIS=1 overrides this policy too.
 bool ft8_trellis_enabled (Ft8TrellisConfig const& config, Ft8Request const& request)
@@ -7281,7 +7290,8 @@ bool ft8_trellis_enabled (Ft8TrellisConfig const& config, Ft8Request const& requ
     {
       return config.mode > 0;
     }
-  return kFt8TrellisDefault && !request.lft8subpass && request.nft8cycles < 3;
+  return (kFt8TrellisDefault || ftx_ft8_leve_adattive_attive_c () != 0)
+      && !request.lft8subpass && request.nft8cycles < 3;
 }
 
 bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& request,
