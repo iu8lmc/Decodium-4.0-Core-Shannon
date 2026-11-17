@@ -2,7 +2,9 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <complex>
 #include <limits>
 #include <memory>
@@ -977,23 +979,29 @@ inline void ftx_group_bit_lse (float const* values, int nt, int nbits, float* me
 //               ipotesi, con A e N0 stimati sui simboli di sincronismo;
 //   2 o "amp"   max-log sulle ampiezze |c|, senza alcuna stima.
 // Vale solo per le tre colonne non equalizzate di run_ft2_bitmetrics_impl.
-// SPENTA di default: vedi docs/diagnostics/performance.md.
+// Il valore si confronta per intero: qualunque altra stringa lascia la metrica
+// storica. La scelta diversa da quella storica (o un valore non riconosciuto)
+// e' scritta una volta su stderr.
+// SPENTA di default, sperimentale: vedi doc/FT2_BIT_METRIC_VARIANTS.md.
 inline int ft2_metric_mode ()
 {
   static int const v = [] {
     char const* raw = std::getenv ("DECODIUM_FT2_METRIC");
-    if (!raw)
+    if (!raw || !raw[0] || std::strcmp (raw, "0") == 0)
       {
         return 0;
       }
-    if (raw[0] == '1' || raw[0] == 'i')
+    if (std::strcmp (raw, "1") == 0 || std::strcmp (raw, "i0") == 0)
       {
+        std::fprintf (stderr, "[FT2] DECODIUM_FT2_METRIC=%s: metrica log I0 (sperimentale)\n", raw);
         return 1;
       }
-    if (raw[0] == '2' || raw[0] == 'a')
+    if (std::strcmp (raw, "2") == 0 || std::strcmp (raw, "amp") == 0)
       {
+        std::fprintf (stderr, "[FT2] DECODIUM_FT2_METRIC=%s: metrica max-log sulle ampiezze (sperimentale)\n", raw);
         return 2;
       }
+    std::fprintf (stderr, "[FT2] DECODIUM_FT2_METRIC=%s non riconosciuto: resta la metrica storica\n", raw);
     return 0;
   }();
   return v;
