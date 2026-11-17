@@ -254,6 +254,9 @@ extern "C"
   // esplicitamente anche qui: un thread che avesse gia' decodificato FT8
   // lascerebbe altrimenti a FT2 le soglie larghe di FT8.
   void superldpc_set_ft8_mode_c (int on);
+  // FT2 only: flipped-bit cap for the next decode calls of this thread
+  // (0 = the mode default, 22). See ft2_max_hard_sync().
+  void superldpc_set_ft2_max_hard_c (int n);
   int superldpc_is_available_c ();
   // superldpc (Detector/superldpc/): stessa firma, backend AVX2/FMA su x86 o
   // NEON su ARM64. Ricade da solo su ftx_decode174_91_c se il backend SIMD
@@ -1699,6 +1702,60 @@ int ft2_sync_quality (float const* bitmetrics)
        + count_matches (hbits + 198, costas4, 8);
 }
 
+// Flipped-bit cap as a function of the candidate's sync quality. OFF by
+// default and experimental: set DECODIUM_FT2_MAX_HARD_SYNC=26 (24..30) to
+// turn it on.
+//
+// The LDPC stage rejects FT2 words that flip more than 22 hard decisions:
+// that cap is what keeps noise-only candidates from turning into ghost
+// callsigns (full decoder on 3000 synthetic noise-only slots: 0 false
+// decodes at 22, 6 at 26, 76 at 30, 303 at 34, 1029 at 40). It also throws
+// away the true decodes near threshold that need 23..30 flips. Dmin, the OSD
+// distance and the LLR magnitudes do not tell the two apart, the sync does:
+// a false word from noise comes from a candidate with ft2_sync_quality()
+// around 18 of 32 and smax below ~1.8, a true one sits around 27 and above
+// 1.8. With the option on, the cap is raised only for candidates with
+// nsync >= 22 AND smax >= 1.9; every other candidate keeps 22.
+//
+// The main pass tests the candidate's own nsync and smax. The local-rescue
+// and drift-rescue retries test the nsync of the retried demodulation but
+// the smax of the candidate they retry: smax comes from the sync search,
+// which a retry does not repeat. The accumulation, averaged and external
+// entry paths never raise the cap.
+//
+// Why it is not the default: on synthetic noise-only and interference-only
+// slots it adds no false decode (0 at 24..30, like the plain 22), and at 30
+// it recovers 13% more decodes on weak-signal slots (6% over all slots with
+// signals), but a wrong word found ON a real, undecoded signal has good
+// sync too and gets through. False decodes in 4650 slots with signals (four
+// seed sets): 1 at 22, and 2, 3, 4 and 13 at 24, 26, 28 and 30.
+// Numbers and method in doc/FT2_FLIPPED_BIT_CAP.md.
+//
+//   DECODIUM_FT2_MAX_HARD_SYNC        raised cap (unset, or <= 22: off)
+//   DECODIUM_FT2_MAX_HARD_SYNC_NSYNC  minimum nsync (default 22)
+//   DECODIUM_FT2_MAX_HARD_SYNC_SMAX   minimum smax (default 1.9)
+//
+// Returns the cap to request, or 0 to keep the decoder default.
+int ft2_max_hard_sync (int nsync, float smax)
+{
+  static int const cap = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_MAX_HARD_SYNC");
+    int const n = (e && e[0]) ? std::atoi (e) : 0;
+    return (n > 22 && n <= kFt2Codeword) ? n : 0;
+  }();
+  static int const nsync_min = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_MAX_HARD_SYNC_NSYNC");
+    int const n = (e && e[0]) ? std::atoi (e) : 22;
+    return (n >= 0 && n <= 32) ? n : 22;
+  }();
+  static float const smax_min = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_MAX_HARD_SYNC_SMAX");
+    float const v = (e && e[0]) ? static_cast<float> (std::atof (e)) : 1.9f;
+    return v >= 0.0f ? v : 1.9f;
+  }();
+  return (cap > 0 && nsync >= nsync_min && smax >= smax_min) ? cap : 0;
+}
+
 bool any_message_bits (std::array<signed char, kFt2Message91> const& message91)
 {
   for (int i = 0; i < kFt2Bits; ++i)
@@ -2746,6 +2803,9 @@ bool prepare_ap_pass (Stage7State const& state, ApSetup const& setup,
 // il frame di run_decode_passes separato in ogni condizione di
 // ottimizzazione, invece di sperare che l'euristica di GCC per l'inlining
 // non superi mai una soglia critica.
+//
+// max_hard: flipped-bit cap for this candidate, 0 = the decoder default (22);
+// callers obtain it from ft2_max_hard_sync().
 __attribute__((noinline))
 DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& setup,
                                     decodium::txmsg::Decode77Context* context,
@@ -2758,7 +2818,8 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
                                     bool doosd, bool lapcqonly, int nfqso, float f_for_ap,
                                     bool averaged, float apmag,
                                     float const* symbol_mags = nullptr,
-                                    std::array<float, kFt2Codeword> const* llr_coerente = nullptr)
+                                    std::array<float, kFt2Codeword> const* llr_coerente = nullptr,
+                                    int max_hard = 0)
 {
   DecodePassResult result;
 
@@ -3037,11 +3098,13 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
   superldpc_set_ft8_mode_c (0);
   if (!compatibility)
     {
+      superldpc_set_ft2_max_hard_c (max_hard);
       superldpc_decode174_91_batch_c (nprep, batch_llr.data (), batch_apmask.data (),
                                      91, maxosd, 3,
                                      batch_msg.data (), batch_cw.data (),
                                      batch_ntype.data (), batch_nhard.data (),
                                      batch_dmin.data ());
+      superldpc_set_ft2_max_hard_c (0);
     }
 
   for (int k = 0; k < nprep; ++k)
@@ -3938,7 +4001,8 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                   state, ap_setup, &context, llra, llrb, llrc, llrd, llre, ndepth0, ncontest,
                   qso_progress, doosd, false, nfqso, f1, false, apmag,
                   ft2_ap_msg_attivo () ? symbol_mags.data () : nullptr,
-                  usa_coerente ? &llr_coerente : nullptr);
+                  usa_coerente ? &llr_coerente : nullptr,
+                  ft2_max_hard_sync (nsync_qual, smax));
 
               // Gli LLR di questo candidato, con l'esito che il decodificatore
               // di oggi ne ha tratto: il confronto con altri decodificatori si
@@ -4093,7 +4157,8 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                               state, ap_setup, &context, llra_try, llrb_try, llrc_try, llrd_try, llre_try,
                               ndepth0, ncontest, qso_progress, doosd, false, nfqso, f1_try,
                               false, apmag_try,
-                              ft2_ap_msg_attivo () ? symbol_mags_try.data () : nullptr);
+                              ft2_ap_msg_attivo () ? symbol_mags_try.data () : nullptr,
+                              nullptr, ft2_max_hard_sync (nsync_try, smax));
                           if (!decoded_try.ok)
                             {
                               if (decoded_try.stop_candidate)
@@ -4211,7 +4276,8 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                                   state, ap_setup, &context, llra_d, llrb_d, llrc_d, llrd_d, llre_d,
                                   ndepth0, ncontest, qso_progress, doosd, false, nfqso, f1,
                                   false, apmag_d,
-                                  ft2_ap_msg_attivo () ? symbol_mags_d.data () : nullptr);
+                                  ft2_ap_msg_attivo () ? symbol_mags_d.data () : nullptr,
+                                  nullptr, ft2_max_hard_sync (nsync_drift, smax));
                               if (!decoded_drift.ok)
                                 {
                                   stage7_debug_logf (

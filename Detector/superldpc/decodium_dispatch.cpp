@@ -42,6 +42,7 @@ extern "C" void ftx_decode174_91_c (float const*, int, int, int, signed char con
 
 #if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
 extern "C" void superldpc_simd_set_ft8_mode_c (int);
+extern "C" void superldpc_simd_set_ft2_max_hard_c (int);
 extern "C" void superldpc_simd_decode174_91_c (float const*, int, int, int,
                                               signed char const*, signed char*,
                                               signed char*, int*, int*, float*);
@@ -302,6 +303,8 @@ CpuCapabilities const& cpuCapabilities ()
 std::atomic<int> g_enabledFromUi {-1};
 std::atomic<bool> g_initialLogWritten {false};
 thread_local bool g_ft8Mode = false;
+// FT2 flipped-bit cap requested for the next decode calls, 0 = mode default.
+thread_local int g_ft2MaxHard = 0;
 
 bool disabledByEnvironment ()
 {
@@ -443,6 +446,13 @@ extern "C" void superldpc_set_ft8_mode_c (int on)
     g_ft8Mode = on != 0;
 }
 
+// FT2 only: per-candidate flipped-bit cap (0 = mode default). Thread-local
+// like the mode; it has no effect in FT8 mode or on the generic decoder.
+extern "C" void superldpc_set_ft2_max_hard_c (int n)
+{
+    g_ft2MaxHard = n > 0 ? n : 0;
+}
+
 extern "C" void superldpc_decode174_91_c (float const* llrIn, int Keff, int maxosd,
                                          int norder, signed char const* apmaskIn,
                                          signed char* message91Out, signed char* cwOut,
@@ -455,6 +465,7 @@ extern "C" void superldpc_decode174_91_c (float const* llrIn, int Keff, int maxo
 #if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
     if (Keff == 91 && useSuperLdpc ()) {
         superldpc_simd_set_ft8_mode_c (g_ft8Mode ? 1 : 0);
+        if (!g_ft8Mode) superldpc_simd_set_ft2_max_hard_c (g_ft2MaxHard);
         superldpc_simd_decode174_91_c (llrIn, Keff, maxosd, norder, apmaskIn,
                                     message91Out, cwOut, ntypeOut,
                                     nharderrorOut, dminOut);
@@ -478,6 +489,7 @@ extern "C" void superldpc_decode174_91_batch_c (int n, float const* llrIn,
 #if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
     if (Keff == 91 && useSuperLdpc ()) {
         superldpc_simd_set_ft8_mode_c (g_ft8Mode ? 1 : 0);
+        if (!g_ft8Mode) superldpc_simd_set_ft2_max_hard_c (g_ft2MaxHard);
         superldpc_simd_decode174_91_batch_c (n, llrIn, apmaskIn, Keff, maxosd,
                                           norder, message91Out, cwOut, ntypeOut,
                                           nharderrorOut, dminOut);
