@@ -7,9 +7,10 @@
 // (FtxFt2Stage7.cpp): preset di esercizio (OSD ordine 2, span 64, ricerca a
 // coppie, alpha 0,578, nd_max 0,065), gate appreso acceso in FT8, controllo di
 // plausibilita', soglia sui bit ribaltati (58 in FT8, 22 in FT2) e coerenza
-// AP. Non i preset del README. La variante "base" gira senza variabili
-// d'ambiente, la variante "new" con DECODIUM_LDPC_K77=1 DECODIUM_LDPC_MARGIN=1;
-// le due vedono le stesse parole, generate dallo stesso seme.
+// AP. Non i preset del README. La variante "base" gira con DECODIUM_LDPC_K77=0
+// (la ricerca su (174,91) di prima), la variante "new" con DECODIUM_LDPC_K77=1
+// DECODIUM_LDPC_MARGIN=1, "k77" con la sola ricerca nuova e i gate di prima;
+// tutte vedono le stesse parole, generate dallo stesso seme.
 //
 // Per ogni Eb/N0 (riferito ai 91 bit, come nel README) stampa FER e false
 // decodifiche sulle parole con segnale, e le false accettazioni sulle parole

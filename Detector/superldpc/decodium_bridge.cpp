@@ -282,21 +282,34 @@ float gate_delta_scelto () {
 
 // OSD sul codice concatenato (174,77) e gate a margine (OsdFast::crc_in_base,
 // gate.hpp margin_accept). Valgono solo per il preset di esercizio (norder <=
-// 3), in entrambi i modi, e si leggono a ogni costruzione del decoder (una per
-// thread), come NTAU e PAIR_SPAN.
+// 3) e si leggono a ogni costruzione del decoder (una per thread e per modo),
+// come NTAU e PAIR_SPAN.
 //
-//   DECODIUM_LDPC_K77=1      le 14 righe della CRC entrano nell'eliminazione
-//                            di Gauss: 77 posizioni d'informazione, ogni
+//   DECODIUM_LDPC_K77        1: le 14 righe della CRC entrano nell'eliminazione
+//                            di Gauss, 77 posizioni d'informazione, ogni
 //                            candidato passa la CRC per costruzione.
-//   DECODIUM_LDPC_MARGIN=1   (solo con K77) decide margin_accept() al posto di
-//                            nd_max e del gate appreso.
+//                            0: ricerca su (174,91) e filtro CRC, com'era.
+//   DECODIUM_LDPC_MARGIN     (solo con K77) 1: decide margin_accept() al posto
+//                            di nd_max e del gate appreso. 0: decidono quelli.
 //   DECODIUM_LDPC_MARGIN_THR sposta la soglia del gate a margine: manopola di
 //                            misura, come DECODIUM_LDPC_GATE_DELTA.
 //
-// K77 da solo NON e' un guadagno: senza gate la ricerca decodifica di piu'
-// (FER non filtrata a 1 dB da ~0,10 a ~0,06) ma alla stessa quantita' di false
-// decodifiche la sola soglia su nd restituisce la sensibilita' di prima. Paga
-// insieme al gate a margine; i default e le misure sono nel README.
+// Senza una scelta esplicita sono SPENTE tutte e due, in entrambi i modi, e il
+// decoder e' quello di prima bit per bit. Le misure (README, "Ricerca su
+// (174,77) e gate a margine") non bastano per accenderle:
+//   FT8: al banco la coppia decodifica dal 2 al 5% di parole in piu' alla
+//        soglia con meno false decodifiche (13 contro 21 su 1,2 milioni di
+//        parole di rumore), e con bit AP molte meno; ma nel decoder vero il
+//        profilo di esercizio costa dal 9 al 14% di tempo in piu' e sul corpus di
+//        WAV non si vede guadagno (84 decodifiche contro 86).
+//   FT2: decide gia' la soglia a 22 bit ribaltati; nessun guadagno a pari
+//        false decodifiche, e il 20-30% di tempo in piu'.
+//
+// K77 da solo NON e' un guadagno: senza gate la ricerca decodifica di piu' ma
+// lascia passare piu' falsi, e alla stessa quantita' di false decodifiche la
+// sola soglia su nd restituisce la sensibilita' di prima. Paga insieme al gate
+// a margine, e in FT8 il gate a margine paga insieme al gate appreso, di cui
+// usa il logit.
 bool env_bool (char const* nome, bool predefinito) {
     char const* e = std::getenv (nome);
     if (!e || e[0] == 0) return predefinito;

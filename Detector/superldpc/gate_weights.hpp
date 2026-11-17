@@ -58,8 +58,12 @@ static const float GATE_THRESHOLD_FT8 = -4.168874f;
 
 // --- Gate a margine (gate.hpp, margin_accept): parametri per modo, nell'ordine
 // {c_gap, gap_cap, c_cnt, w_logit, thr, ap_pow}. Valgono solo con la ricerca
-// sul codice concatenato (174,77), DECODIUM_LDPC_K77=1.
+// sul codice concatenato (174,77), DECODIUM_LDPC_K77=1 DECODIUM_LDPC_MARGIN=1.
 // Tarati con tests/tools/superldpc_k77_bench.cpp (dump=) sui semi 1, 2, 3 e
-// riportati sui semi 11, 12, 13: vedi README, "Ricerca su (174,77)".
+// riportati sui semi 21, 22, 23: vedi README, "Ricerca su (174,77) e gate a
+// margine". FT8: soglia scelta per stare a meta' dei falsi sul rumore della
+// regola di prima (10 contro 22 su 1,2 milioni di parole), ap_pow perche' con
+// 32 e 61 bit noti le parole giuste siano piu' di prima e i falsi meno. FT2:
+// soglia a 2 falsi su 6 milioni di parole di rumore (la regola di prima: 4).
 static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.04f, 0.2000f, 0.65f};
 static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.040f, 1.0f};

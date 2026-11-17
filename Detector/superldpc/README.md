@@ -300,6 +300,93 @@ pivot lo decide il rumore. Le 83 colonne migliori possibili coprono in media
 ~1,3x sul totale OSD, in cambio di gestire lo stato di conferma dei pivot e del
 rischio di divergere dal riferimento. Non vale il cambio.
 
+### Ricerca su (174,77) e gate a margine (17 novembre 2026: nel codice, spenti)
+
+Due cose nuove, tutte e due solo in ricezione e tutte e due **spente di
+default**: `DECODIUM_LDPC_K77=1` e `DECODIUM_LDPC_MARGIN=1` le accendono, per
+il solo preset di esercizio (`norder <= 3`). Senza variabili il decoder e'
+quello di prima, bit per bit (verificato: liste di decodifica identiche ai
+binari di riferimento su tutti i WAV di FT8 e FT2).
+
+**(a) OSD sul codice concatenato.** La CRC-14 e' lineare, quindi i suoi 14
+vincoli sono 14 righe di parita' in piu': `OsdFast::crc_in_base` le ricava da
+`crc14_syn` (la stessa funzione che fa il controllo), le aggiunge alle 83 di H
+e fa l'eliminazione di Gauss su 97 righe. La base piu' affidabile ha 77
+posizioni d'informazione e ogni candidato passa la CRC per costruzione. Con
+`ap_vincolo` i bit noti per ipotesi a priori sono un vincolo della ricerca: un
+candidato che ne contraddice uno non viene generato, invece di essere scelto e
+poi scartato dal controllo di coerenza a valle.
+
+**(b) Gate a margine.** Sul codice (174,77) l'OSD trova sempre una parola, e
+"ha passato la CRC" non dice piu' niente. La statistica e' quanto il candidato
+restituito e' piu' vicino del suo concorrente (il migliore fra gli altri):
+`z = nd - c_gap*clip(nd2 - nd) - w_logit*logit <= thr*(N/liberi)^ap_pow`
+(`gate.hpp`, `margin_accept`; parametri in `gate_weights.hpp`). Se il
+concorrente non esiste (77 bit noti: la parola possibile e' una sola) decide la
+regola di prima.
+
+**Misure.** Banco `tests/tools/superldpc_k77_bench.cpp`, che passa dal bridge
+(`superldpc_simd_decode174_91_batch_c`) e quindi misura la configurazione che
+il programma usa, non i preset di questo README. Eb/N0 riferito a 91 bit;
+canale M-FSK non coerente (8 toni FT8, 4 FT2) oppure BPSK; soglie tarate sui
+semi 1, 2, 3 e riportate qui sui semi 21, 22, 23 mai visti; 60 000 parole per
+punto, parole decodificate giuste / false decodifiche su solo rumore.
+
+FT8, senza AP (1,2 milioni di parole di rumore):
+
+| canale | punto | prima | K77 + margine |
+|---|---|---|---|
+| 8-FSK | 3,0 dB | 8254 | 8637 |
+| 8-FSK | 3,5 dB | 21677 | 22447 |
+| 8-FSK | 4,0 dB | 39939 | 40762 |
+| 8-FSK | 4,5 dB | 53558 | 54043 |
+| 8-FSK | rumore, falsi | 21 | 13 |
+| BPSK | 0,5 dB | 37736 | 38552 |
+| BPSK | 1,0 dB | 49791 | 50567 |
+| BPSK | 1,5 dB | 56709 | 57264 |
+| BPSK | rumore, falsi | 17 | 13 |
+
+Sono circa 0,03-0,05 dB. Con bit AP il guadagno e' soprattutto sui falsi,
+perche' la regola di prima ne lascia passare molti (FT8, 8-FSK):
+
+| bit AP | prima: giuste a meta' curva / falsi su rumore / falsi con ipotesi sbagliata su segnale (600 000 parole) | K77 + margine |
+|---|---|---|
+| 32 | 40970 (3 dB) / 10602 / 8609 | 45054 / 1824 / 1183 |
+| 61 | 38183 (2 dB) / 52 / 52 | 39809 / 6 / 8 |
+| 77 | 11029 (0 dB) / 0 / 1 | 11072 / 0 / 1 |
+
+FT2, senza AP (6 milioni di parole di rumore): 12375 -> 12926 a 4,5 dB,
+27501 -> 28073 a 5,0, 44746 -> 45010 a 5,5, 55284 -> 55351 a 6,0; falsi sul
+rumore 3 -> 5. Non e' un guadagno a pari false decodifiche: in FT2 decide gia'
+la soglia a 22 bit ribaltati.
+
+Altre due cose misurate, che conviene sapere:
+
+- La sola ricerca (174,77) con i gate di prima NON paga: decodifica di piu'
+  (FT8 4,0 dB: 41117 contro 40086, semi 11-13) ma i falsi sul rumore salgono da
+  24 a 31.
+- In FT8 il margine da solo (`w_logit = 0`) non batte il gate appreso: a 22
+  falsi su 1,2 milioni (semi di taratura), 40035 parole contro 40045 a 4,0 dB. Il guadagno viene dalla
+  somma di margine e logit del gate appreso.
+
+**Perche' restano spenti.** Nel decoder vero (`ft8_stage_compare`,
+`ft2_stage_compare` sugli stessi WAV dei binari di riferimento):
+
+| | decodifiche prima / dopo | tempo prima / dopo |
+|---|---|---|
+| FT8, 8 WAV, profondita' 1 | 67 / 68 | 1,19 s / 1,26 s |
+| FT8, profondita' 2 | 69 / 69 | 2,40 s / 2,39 s |
+| FT8, profondita' 3 (esercizio) | 86 / 84 | 20,4 / 20,3 / 20,9 s contro 23,1 / 23,1 / 22,7 s (da +9% a +14%, tre coppie) |
+| FT2, 8 WAV, profondita' 1 / 2 / 3 | 49, 62, 63 / uguali | 0,31, 1,00, 1,12 s / 0,34, 1,25, 1,34 s |
+
+Nessuna falsa decodifica in piu' (FT2: 174 decodifiche giuste e 0 fuori dalla
+verita' in entrambi i casi; FT8: 0 decodifiche su 40 WAV di solo rumore in
+entrambi i casi), ma nemmeno un guadagno visibile, e il tempo cresce attorno
+al 10% e oltre: ogni candidato del codice (174,77) va pesato, mentre prima la CRC ne
+scartava 16383 su 16384 con uno XOR. Il corpus e' piccolo (una novantina di
+decodifiche) e non puo' vedere uno 0,05 dB; quello che dice e' che il costo c'e'
+e il guadagno non si vede.
+
 ## Uso
 
     #include "ft2_decoder.hpp"
@@ -363,6 +450,7 @@ SIMD non impedisce l'avvio. `bits.hpp` copre anche MSVC.
     cpp/gate_stats.cpp    distribuzione di nd per corrette e false (taratura del gate)
     cpp/triage_stats.cpp  P(successo OSD | check insoddisfatti) — l'esperimento negativo
     cpp/osd_profile.cpp   ripartizione del tempo dell'OSD per fase
+    tests/tools/superldpc_k77_bench.cpp   (radice di Decodium) banco e selftest della ricerca (174,77) e del gate a margine
     tools/gen_test.py     vettori AWGN/BPSK + riferimento BP float
     tools/crc14.py        CRC-14, confrontata con la versione a byte di ft8_lib
 

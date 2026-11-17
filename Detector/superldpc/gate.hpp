@@ -72,8 +72,9 @@ inline float& gate_threshold_delta() {
 //
 // Con bit noti per ipotesi a priori la soglia diventa thr * (N/liberi)^ap_pow,
 // come Ft2Decoder fa per nd_max; ap_pow = 0 la lascia ferma. Se tutti i bit
-// d'informazione sono noti la parola possibile e' una sola, la concorrente non
-// esiste e il termine di margine vale zero.
+// d'informazione sono noti la parola possibile e' una sola e la concorrente non
+// esiste: qui il termine di margine vale zero, ma Ft2Decoder in quel caso non
+// chiama margin_accept() e lascia decidere la regola di prima.
 struct MarginFeatures {
     float nd = 0;          // distanza soft normalizzata del candidato
     float nd2 = 1;         // idem per il concorrente (OsdFast::last_nd2)
@@ -121,6 +122,13 @@ inline bool gate_accept(const GateFeatures& g, bool ft8 = false) {
                                  + gate_threshold_delta();
 }
 #else
+// Senza i pesi non c'e' logit: il gate a margine resta compilabile con il solo
+// termine di margine. Soglia FT8 tarata come quelle di gate_weights.hpp (15
+// falsi su 1,2 milioni di parole di rumore, semi 1-3) ma non riportata su semi
+// diversi ne' misurata con bit AP: la build del programma definisce sempre
+// SUPERLDPC_HAVE_GATE_WEIGHTS e non passa di qui.
+static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.0f, 0.0325f, 1.0f};
+static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.040f, 1.0f};
 inline float gate_logit(const GateFeatures&, bool = false) { return 1.0f; }
 inline bool gate_accept(const GateFeatures&, bool = false) { return true; }
 #endif
