@@ -22,6 +22,8 @@ env:
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
   RTLSDR_VERSION: "2.0.2"
+  OPENSSL3_PACKAGE: "mingw-w64-x86_64-openssl-3.6.5-1-any.pkg.tar.zst"
+  OPENSSL3_ROOT: ".ci/openssl3-mingw64"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -76,6 +78,30 @@ jobs:
             -o "${package}"
           pacman -U --noconfirm "${package}"
 
+      - name: Unpack OpenSSL 3 from the official MSYS2 package archive
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # The rolling MSYS2 repository now ships OpenSSL 4, which Qt 6.11.0
+          # does not build against. The OpenSSL 3 package is unpacked into its
+          # own prefix and used only for Qt and Decodium, so the MSYS2 tools
+          # that need OpenSSL 4 (curl, cmake) keep working.
+          package="/tmp/${OPENSSL3_PACKAGE}"
+          curl -fsSL --retry 3 \
+            "https://mirror.msys2.org/mingw/mingw64/${OPENSSL3_PACKAGE}" \
+            -o "${package}"
+          prefix="$(cygpath -u "${GITHUB_WORKSPACE}")/${OPENSSL3_ROOT}"
+          rm -rf "${prefix}"
+          mkdir -p "${prefix}"
+          tar -xf "${package}" -C "${prefix}" --strip-components=1 mingw64
+          test -f "${prefix}/include/openssl/opensslv.h"
+          test -f "${prefix}/lib/libcrypto.dll.a"
+          test -f "${prefix}/lib/libssl.dll.a"
+          test -f "${prefix}/bin/libcrypto-3-x64.dll"
+          test -f "${prefix}/bin/libssl-3-x64.dll"
+          grep -Eq '^# *define OPENSSL_VERSION_MAJOR +3$' "${prefix}/include/openssl/opensslv.h"
+          echo "OPENSSL3_PREFIX=${prefix}" >> "${GITHUB_ENV}"
+
       - name: Validate repository contract
         run: scripts/ci/validate-repository-layout.sh
 
@@ -99,7 +125,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.QT_CACHE_ROOT }}
-          key: windows-mingw64-qt-${{ env.QT_VERSION }}-v1
+          key: windows-mingw64-qt-${{ env.QT_VERSION }}-openssl3-v2
 
       - name: Build Qt 6.11.0 MinGW from source
         if: steps.qt-cache.outputs.cache-hit != 'true'
@@ -125,7 +151,10 @@ jobs:
             -confirm-license \
             -nomake tests \
             -nomake examples \
-            -submodules qtbase,qt5compat,qtdeclarative,qtimageformats,qtmultimedia,qtserialport,qtsvg,qtshadertools,qttools,qttranslations,qtwebsockets
+            -openssl-runtime \
+            -submodules qtbase,qt5compat,qtdeclarative,qtimageformats,qtmultimedia,qtserialport,qtsvg,qtshadertools,qttools,qttranslations,qtwebsockets \
+            -- \
+            -DOPENSSL_ROOT_DIR="$(cygpath -m "${OPENSSL3_PREFIX}")"
           cmake --build . --parallel "$(nproc)"
           cmake --install .
 
@@ -134,7 +163,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ env.QT_CACHE_ROOT }}
-          key: windows-mingw64-qt-${{ env.QT_VERSION }}-v1
+          key: windows-mingw64-qt-${{ env.QT_VERSION }}-openssl3-v2
 
       - name: Verify and export Qt 6.11.0
         shell: msys2 {0}
@@ -267,9 +296,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DQt6_DIR="${QT6_DIR}" \
             -DCMAKE_PREFIX_PATH="${QT_PREFIX};${HAMLIB_PREFIX};${RTLSDR_PREFIX}" \
-            -DOPENSSL_ROOT_DIR="$(cygpath -m /mingw64)" \
-            -DOPENSSL_INCLUDE_DIR="$(cygpath -m /mingw64/include)" \
-            -DOPENSSL_CRYPTO_LIBRARY="$(cygpath -m /mingw64/lib/libcrypto.dll.a)" \
+            -DOPENSSL_ROOT_DIR="$(cygpath -m "${OPENSSL3_PREFIX}")" \
+            -DOPENSSL_INCLUDE_DIR="$(cygpath -m "${OPENSSL3_PREFIX}/include")" \
+            -DOPENSSL_CRYPTO_LIBRARY="$(cygpath -m "${OPENSSL3_PREFIX}/lib/libcrypto.dll.a")" \
             -DHamlib_INCLUDE_DIR="${HAMLIB_INCLUDE_DIR}" \
             -DHamlib_LIBRARY="${HAMLIB_LIBRARY}" \
             -DRtlSdr_INCLUDE_DIR="${RtlSdr_INCLUDE_DIR}" \
@@ -301,7 +330,7 @@ jobs:
       - name: Verify performance and decode lifecycle regressions
         run: |
           set -euo pipefail
-          export PATH="${QT_PREFIX}/bin:/mingw64/bin:${HAMLIB_PREFIX}/bin:${RTLSDR_PREFIX}/bin:${PATH}"
+          export PATH="${QT_PREFIX}/bin:${OPENSSL3_PREFIX}/bin:/mingw64/bin:${HAMLIB_PREFIX}/bin:${RTLSDR_PREFIX}/bin:${PATH}"
           cmake --build build-windows --target test_settings_profile_restart test_decode_list_model test_world_map_frame_cadence test_ft4_decode_cancellation test_wspr_worker_queue test_lab_storage_isolation test_q65_decoder_continuity test_fst4_decode_cancellation test_wspr_resource_cleanup --parallel "$(nproc)"
           ctest --test-dir build-windows -j1 --output-on-failure -R '^(test_settings_profile_restart|test_decode_list_model|test_world_map_frame_cadence|test_ft4_decode_cancellation|test_wspr_worker_queue|test_lab_storage_isolation|test_q65_decoder_continuity|test_fst4_decode_cancellation|test_wspr_resource_valid|test_wspr_resource_missing)$'
 
@@ -319,7 +348,7 @@ jobs:
       - name: Verify SSTV encrypted sharing
         run: |
           set -euo pipefail
-          export PATH="${QT_PREFIX}/bin:/mingw64/bin:${HAMLIB_PREFIX}/bin:${RTLSDR_PREFIX}/bin:${PATH}"
+          export PATH="${QT_PREFIX}/bin:${OPENSSL3_PREFIX}/bin:/mingw64/bin:${HAMLIB_PREFIX}/bin:${RTLSDR_PREFIX}/bin:${PATH}"
           cmake --build build-windows --target test_sstv_share_aead --parallel "$(nproc)"
           ctest --test-dir build-windows -R '^test_sstv_share_aead$' --output-on-failure
 
@@ -402,6 +431,7 @@ jobs:
 
           SEARCH_DIRS=(
             "${QT_PREFIX}/bin"
+            "${OPENSSL3_PREFIX}/bin"
             "/mingw64/bin"
             "${HAMLIB_PREFIX}/bin"
             "${RTLSDR_PREFIX}/bin"
