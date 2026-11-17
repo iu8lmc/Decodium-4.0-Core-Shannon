@@ -1703,7 +1703,8 @@ int ft2_sync_quality (float const* bitmetrics)
 }
 
 // Flipped-bit cap as a function of the candidate's sync quality. OFF by
-// default: set DECODIUM_FT2_MAX_HARD_SYNC=30 (or 26..28) to turn it on.
+// default and experimental: set DECODIUM_FT2_MAX_HARD_SYNC=26 (24..30) to
+// turn it on.
 //
 // The LDPC stage rejects FT2 words that flip more than 22 hard decisions:
 // that cap is what keeps noise-only candidates from turning into ghost
@@ -1716,12 +1717,18 @@ int ft2_sync_quality (float const* bitmetrics)
 // 1.8. With the option on, the cap is raised only for candidates with
 // nsync >= 22 AND smax >= 1.9; every other candidate keeps 22.
 //
-// Why it is not the default: on noise-only and interference-only slots it
-// adds no false decode (0 in 6000 + 1200 slots, like the plain 22), and at
-// 30 it recovers 13% more decodes on weak-signal slots (6% over all slots
-// with signals), but a wrong word found ON a real, undecoded signal has
-// good sync too and gets through: 9 false decodes in 3700 slots with
-// signals (three seed sets) against 0 at 22; 1, 2 and 3 at 24, 26 and 28.
+// The main pass tests the candidate's own nsync and smax. The local-rescue
+// and drift-rescue retries test the nsync of the retried demodulation but
+// the smax of the candidate they retry: smax comes from the sync search,
+// which a retry does not repeat. The accumulation, averaged and external
+// entry paths never raise the cap.
+//
+// Why it is not the default: on synthetic noise-only and interference-only
+// slots it adds no false decode (0 at 24..30, like the plain 22), and at 30
+// it recovers 13% more decodes on weak-signal slots (6% over all slots with
+// signals), but a wrong word found ON a real, undecoded signal has good
+// sync too and gets through. False decodes in 4650 slots with signals (four
+// seed sets): 1 at 22, and 2, 3, 4 and 13 at 24, 26, 28 and 30.
 // Numbers and method in doc/FT2_FLIPPED_BIT_CAP.md.
 //
 //   DECODIUM_FT2_MAX_HARD_SYNC        raised cap (unset, or <= 22: off)
