@@ -83,6 +83,25 @@ struct Ft2Config {
     // Vedi lab/README.md: 3/4 e' tarato per far convergere il min-sum, mentre
     // qui il min-sum prepara i posteriori per l'OSD, che e' un altro mestiere.
     unsigned alpha_w  = 49152;
+    // OSD sul codice concatenato (174,77): le 14 righe della CRC entrano
+    // nell'eliminazione di Gauss e ogni candidato e' una parola valida. Vedi
+    // OsdFast::crc_in_base. Spento = ricerca su (174,91) e filtro CRC, come
+    // prima, bit per bit.
+    bool  osd_k77 = false;
+    // Solo con osd_k77: i bit AP sono un vincolo della ricerca invece di
+    // un'ipotesi soft. Vedi OsdFast::ap_vincolo.
+    bool  ap_vincolo = false;
+    // Gate a margine (gate.hpp, margin_accept), solo con osd_k77. 0 = spento:
+    // decide nd_max, o il gate appreso se gate_mode e' acceso; e' una
+    // configurazione DI MISURA, perche' quei due gate sono tarati sui candidati
+    // della ricerca (174,91) e con bit AP lasciano passare circa il 9% delle
+    // parole di solo rumore (README). 1 = l'OSD
+    // accetta fino a nd <= margin_relax e decide margin_accept() su distanza,
+    // margine dal concorrente e, se margin.w_logit non e' zero, logit del gate
+    // appreso (che in quel caso viene calcolato anche a gate_mode spento).
+    int   margin_gate  = 0;
+    float margin_relax = 0.25f;
+    MarginGate margin;
 };
 
 class Ft2Decoder {
@@ -116,6 +135,8 @@ public:
         osd_.pair_span = cfg.pair_span;
         osd_.pair_search = cfg.pair_search;
         osd_.ntau = cfg.ntau;
+        osd_.crc_in_base = cfg.osd_k77;
+        osd_.ap_vincolo = cfg.ap_vincolo;
         ms_.set_alpha(cfg.alpha_w);
     }
 
@@ -165,7 +186,12 @@ public:
         // Solo se il gate e' attivo: altrimenti il costo di calcolarle (un
         // ordinamento su N per candidato chiuso) sarebbe un cambio silenzioso
         // di prestazioni a flag spento, non solo di comportamento.
-        if (cfg_.gate_mode) feat_.assign((size_t)n, GateFeatures{});
+        const bool margine = cfg_.osd_k77 && cfg_.margin_gate != 0;
+        // Il gate a margine puo' usare il logit del gate appreso come termine
+        // (MarginGate::w_logit): in quel caso le feature servono comunque.
+        const bool feature = cfg_.gate_mode || (margine && cfg_.margin.w_logit != 0.0f);
+        if (feature) feat_.assign((size_t)n, GateFeatures{});
+        if (cfg_.osd_k77) mfeat_.assign((size_t)n, MarginFeatures{});
 
         for (int off = 0; off < n; off += B) {
             const int cnt = std::min(B, n - off);
@@ -243,20 +269,49 @@ public:
                 // la sola distanza soft, a decidere. Non costa candidati alla
                 // CRC in piu': nd_max e' l'ultimo controllo dentro decode(),
                 // dopo che la CRC ha gia' selezionato il candidato.
-                const float base_nd = cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max;
+                const float base_nd = margine ? cfg_.margin_relax
+                                    : (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max);
+                // La soglia con bit AP e' base * r * r, in quest'ordine: in
+                // float (base * r) * r e base * (r * r) differiscono di un ulp.
+                int free_bits = N;
+                float ap_r = 1.0f;
                 if (apmask) {
-                    int free_bits = 0;
+                    free_bits = 0;
                     const uint8_t* m = &apmask[(size_t)i * N];
                     for (int v = 0; v < N; ++v) free_bits += !m[v];
-                    const float r = free_bits > 0 ? (float)N / (float)free_bits : 1.0f;
-                    osd_.nd_max = base_nd * r * r;
+                    ap_r = free_bits > 0 ? (float)N / (float)free_bits : 1.0f;
+                    osd_.nd_max = base_nd * ap_r * ap_r;
                 } else {
                     osd_.nd_max = base_nd;
                 }
                 float d = 0;
                 if (osd_.decode(ms_.posterior(b), word_.data(), &buf_[(size_t)b * N], &d,
                                 apmask ? &apmask[(size_t)i * N] : nullptr)) {
-                    if (cfg_.gate_mode) {
+                    if (cfg_.osd_k77) {
+                        MarginFeatures& mf = mfeat_[(size_t)i];
+                        mf.nd = d;
+                        mf.nd2 = osd_.last_nd2();
+                        mf.has2 = osd_.last_has_second();
+                        mf.log2_tested = std::log2(1.0f + (float)osd_.last_tested());
+                        mf.free_ratio = (float)free_bits / (float)N;
+                        mf.valid = true;
+                    }
+                    // Senza concorrente (tutti i bit d'informazione noti per
+                    // ipotesi AP: la parola possibile e' una sola) il margine
+                    // non ha niente da dire, e decide la regola di prima.
+                    const bool col_margine = margine && osd_.last_has_second();
+                    if (margine && !col_margine
+                        && d > (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max) * ap_r * ap_r) continue;
+                    if (col_margine) {
+                        float logit = 0.0f;
+                        if (feature) {
+                            const GateFeatures& g = fill_features(i, b, word_.data(), d,
+                                                                  apmask ? &apmask[(size_t)i * N] : nullptr, 1);
+                            if (cfg_.gate_mode && cfg_.gate_dump_cb) cfg_.gate_dump_cb(i, g, word_.data());
+                            logit = gate_logit(g, cfg_.gate_is_ft8);
+                        }
+                        if (!margin_accept(mfeat_[(size_t)i], cfg_.margin, logit)) { ++st_.gate_rejected; continue; }
+                    } else if (cfg_.gate_mode) {
                         const GateFeatures& g = fill_features(i, b, word_.data(), d,
                                                               apmask ? &apmask[(size_t)i * N] : nullptr, 1);
                         if (cfg_.gate_dump_cb) cfg_.gate_dump_cb(i, g, word_.data());
@@ -288,7 +343,10 @@ public:
     // commento in cima a gate_weights.hpp). Vuote (has_candidate()==false) se
     // il gate era spento o la parola non ha chiuso ne' via min-sum ne' via OSD.
     const GateFeatures& gate_features(int i) const { return feat_[(size_t)i]; }
-    bool has_candidate(int i) const { return cfg_.gate_mode && feat_[(size_t)i].f[4] > 0.0f; }
+    bool has_candidate(int i) const { return !feat_.empty() && feat_[(size_t)i].f[4] > 0.0f; }
+    // Grandezze del gate a margine per la parola i dell'ultima decode_batch()
+    // (solo con osd_k77): valid e' falso se l'OSD non ha prodotto un candidato.
+    const MarginFeatures& margin_features(int i) const { return mfeat_[(size_t)i]; }
 
 private:
     Ft2Config cfg_;
@@ -301,6 +359,7 @@ private:
     std::vector<float> buf_;
     std::vector<uint8_t> word_;
     std::vector<GateFeatures> feat_;
+    std::vector<MarginFeatures> mfeat_;
     Stats st_;
 
     // Feature del candidato per il gate appreso (strato 2). Costo: un
