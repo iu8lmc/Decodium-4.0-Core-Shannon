@@ -1728,8 +1728,11 @@ endif ()
 # inlined into our code, in many translation units. They are false positives
 # we cannot fix in our sources, so from GCC 16 on the diagnostic stays a
 # warning instead of failing the build.
+# The same holds for -Wmaybe-uninitialized: GCC 16 raises it on
+# Ft8AutoTxDecodeGate::slowDecoder(), whose members all have default
+# initialisers, when the class is inlined into a Qt test's metacall.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=array-bounds")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=array-bounds -Wno-error=maybe-uninitialized")
 endif ()
 
 if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
