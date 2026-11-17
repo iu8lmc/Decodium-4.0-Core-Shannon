@@ -419,7 +419,12 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(r.link.frequencyHz(), 14074000.0, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(r.link.modeName(), QStringLiteral("DIGU"), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(r.link.ptt(), 5000);
-        QTRY_VERIFY_WITH_TIMEOUT(r.link.sMeterDbm() < -80.0, 5000);   // -12 dB su S9 = -85 dBm
+        // DecolinkLink::onPoll() reads the S-meter only while receiving (in
+        // transmit it polls ALC, power and SWR instead), so release the PTT
+        // before expecting a reading.
+        r.relay.pttState = false;
+        QTRY_VERIFY_WITH_TIMEOUT(!r.link.ptt(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(r.link.sMeterDbm() < -80.0, 8000);   // -12 dB su S9 = -85 dBm
         QCOMPARE(r.link.sMeterDbm(), -85.0);
     }
 
