@@ -207,6 +207,14 @@ bool SstvWavPcmReader::isOpen() const noexcept
     return m_file.isOpen() && m_format.totalFrames > 0U;
 }
 
+// GCC cannot relate QByteArray::size() to the buffer behind constData() and
+// assumes the shared empty sentinel (one byte) may be read here, although
+// every read below follows a size check. Silence that false positive for
+// this function only.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
 bool SstvWavPcmReader::parse(QString* error)
 {
     if (m_cancelled.load(std::memory_order_acquire)) {
@@ -282,7 +290,7 @@ bool SstvWavPcmReader::parse(QString* error)
         }
         cursor = payload + padded;
     }
-    if (cursor != m_riffEnd || formatBytes.isEmpty()
+    if (cursor != m_riffEnd || formatBytes.size() < kMinimumFormatBytes
         || dataOffset == 0U || dataBytes == 0U) {
         return fail(error, QStringLiteral("WAV format or audio data is missing"));
     }
@@ -364,6 +372,9 @@ bool SstvWavPcmReader::parse(QString* error)
     m_format.extensible = extensible;
     return true;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 SstvWavReadStatus SstvWavPcmReader::readNext(
     QVector<short>* monoPcm16, QString* error)

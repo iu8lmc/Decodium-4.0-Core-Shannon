@@ -1,7 +1,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <complex>
 #include <limits>
 #include <memory>
@@ -88,6 +91,27 @@ inline float& bm_at (float* bitmetrics, int rows, int row, int col)
   return bitmetrics[row + rows * col];
 }
 
+// Troncamento a intero del demodulatore storico (tipizzazione implicita del
+// Fortran). Un valore fuori dal campo di int, o non finito, non si puo'
+// convertire: prima era comportamento indefinito, ora satura (NaN da' zero).
+// Per ogni valore rappresentabile il risultato e' quello di prima.
+inline std::int64_t ft2_legacy_trunc (float value)
+{
+  if (value >= 2147483648.0f)
+    {
+      return std::numeric_limits<std::int32_t>::max ();
+    }
+  if (value <= -2147483648.0f)
+    {
+      return std::numeric_limits<std::int32_t>::min ();
+    }
+  if (value != value)
+    {
+      return 0;
+    }
+  return static_cast<std::int32_t> (value);
+}
+
 float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pwr_eq,
                                  float* noise_var_eq_out = nullptr)
 {
@@ -96,7 +120,7 @@ float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pw
   static std::array<int, 4> const icos4c {{2, 3, 1, 0}};
   static std::array<int, 4> const icos4d {{3, 2, 0, 1}};
 
-  int noise_sum_eq = 0;
+  std::int64_t noise_sum_eq = 0;
   int nnoise_eq = 0;
   for (int k = 0; k < 4; ++k)
     {
@@ -104,22 +128,22 @@ float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pw
         {
           if (itone != icos4a[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
           if (itone != icos4b[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
           if (itone != icos4c[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
           if (itone != icos4d[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
         }
@@ -128,8 +152,8 @@ float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pw
   int noise_var_eq = 0;
   if (nnoise_eq > 0)
     {
-      noise_var_eq = static_cast<int> (static_cast<float> (noise_sum_eq)
-                                       / std::max (1.0f, static_cast<float> (nnoise_eq)));
+      noise_var_eq = static_cast<int> (ft2_legacy_trunc (static_cast<float> (noise_sum_eq)
+                                       / std::max (1.0f, static_cast<float> (nnoise_eq))));
     }
   if (static_cast<float> (noise_var_eq) < 1.0e-10f)
     {
@@ -155,7 +179,7 @@ float ft2_legacy_base_noise_var (std::array<std::array<float, 4>, 103> const& pw
   static std::array<int, 4> const icos4c {{2, 3, 1, 0}};
   static std::array<int, 4> const icos4d {{3, 2, 0, 1}};
 
-  int noise_sum = 0;
+  std::int64_t noise_sum = 0;
   int nnoise = 0;
   for (int k = 0; k < 4; ++k)
     {
@@ -163,22 +187,22 @@ float ft2_legacy_base_noise_var (std::array<std::array<float, 4>, 103> const& pw
         {
           if (itone != icos4a[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
           if (itone != icos4b[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
           if (itone != icos4c[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
           if (itone != icos4d[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
         }
@@ -949,6 +973,128 @@ inline void ftx_group_bit_lse (float const* values, int nt, int nbits, float* me
     }
 }
 
+// Metrica di bit FT2, scelta con DECODIUM_FT2_METRIC (letta una volta sola):
+//   assente, 0  somma logaritmica di esponenziali delle energie (storica);
+//   1 o "i0"    verosimiglianza non coerente esatta: log I0 (2 A |c| / N0) per
+//               ipotesi, con A e N0 stimati sui simboli di sincronismo;
+//   2 o "amp"   max-log sulle ampiezze |c|, senza alcuna stima.
+// Vale solo per le tre colonne non equalizzate di run_ft2_bitmetrics_impl.
+// Il valore si confronta per intero: qualunque altra stringa lascia la metrica
+// storica. La scelta diversa da quella storica (o un valore non riconosciuto)
+// e' scritta una volta su stderr.
+// SPENTA di default, sperimentale: vedi doc/FT2_BIT_METRIC_VARIANTS.md.
+inline int ft2_metric_mode ()
+{
+  static int const v = [] {
+    char const* raw = std::getenv ("DECODIUM_FT2_METRIC");
+    if (!raw || !raw[0] || std::strcmp (raw, "0") == 0)
+      {
+        return 0;
+      }
+    if (std::strcmp (raw, "1") == 0 || std::strcmp (raw, "i0") == 0)
+      {
+        std::fprintf (stderr, "[FT2] DECODIUM_FT2_METRIC=%s: metrica log I0 (sperimentale)\n", raw);
+        return 1;
+      }
+    if (std::strcmp (raw, "2") == 0 || std::strcmp (raw, "amp") == 0)
+      {
+        std::fprintf (stderr, "[FT2] DECODIUM_FT2_METRIC=%s: metrica max-log sulle ampiezze (sperimentale)\n", raw);
+        return 2;
+      }
+    std::fprintf (stderr, "[FT2] DECODIUM_FT2_METRIC=%s non riconosciuto: resta la metrica storica\n", raw);
+    return 0;
+  }();
+  return v;
+}
+
+// log I0 (x) per x >= 0: tabella a passo 1/16 fino a 64 con interpolazione
+// lineare (errore assoluto sotto 3e-4), oltre x - costante. Oltre 64 il
+// termine trascurato, meta' del logaritmo di x, cambia la differenza fra due
+// ipotesi vicine di meno dell'uno per cento.
+struct Ft2LogI0Table
+{
+  static constexpr int kPerUnit = 16;
+  static constexpr int kLimit = 64;
+  std::array<float, kPerUnit * kLimit + 2> value {};
+  float tail_offset {0.0f};
+
+  Ft2LogI0Table ()
+  {
+    for (size_t i = 0; i < value.size (); ++i)
+      {
+        double const x = static_cast<double> (i) / kPerUnit;
+        double const t = 0.25 * x * x;
+        double term = 1.0;
+        double sum = 1.0;
+        for (int k = 1; k < 400 && term > 1.0e-17 * sum; ++k)
+          {
+            term *= t / (static_cast<double> (k) * static_cast<double> (k));
+            sum += term;
+          }
+        value[i] = static_cast<float> (std::log (sum));
+      }
+    tail_offset = static_cast<float> (kLimit) - value[static_cast<size_t> (kPerUnit * kLimit)];
+  }
+};
+
+inline float ft2_log_i0 (float x)
+{
+  static Ft2LogI0Table const table;
+  if (!(x < static_cast<float> (Ft2LogI0Table::kLimit)))
+    {
+      return x - table.tail_offset;
+    }
+  float const position = std::max (x, 0.0f) * static_cast<float> (Ft2LogI0Table::kPerUnit);
+  int const index = static_cast<int> (position);
+  float const frac = position - static_cast<float> (index);
+  float const lo = table.value[static_cast<size_t> (index)];
+  return lo + frac * (table.value[static_cast<size_t> (index + 1)] - lo);
+}
+
+// Potenza media sui toni attesi dei 16 simboli di sincronismo FT2 e sugli
+// altri 48 toni degli stessi simboli (solo rumore), senza il troncamento a
+// intero di ft2_legacy_base_noise_var.
+void ft2_sync_levels (std::array<std::array<float, 4>, 103> const& pwr,
+                      float& sync_power, float& noise_power)
+{
+  static std::array<std::array<int, 4>, 4> const icos {{
+      {{0, 1, 3, 2}}, {{1, 0, 2, 3}}, {{2, 3, 1, 0}}, {{3, 2, 0, 1}}}};
+  float sync_sum = 0.0f;
+  float noise_sum = 0.0f;
+  for (int block = 0; block < 4; ++block)
+    {
+      for (int k = 0; k < 4; ++k)
+        {
+          std::array<float, 4> const& row = pwr[static_cast<size_t> (33 * block + k)];
+          int const expected = icos[static_cast<size_t> (block)][static_cast<size_t> (k)];
+          for (int itone = 0; itone < 4; ++itone)
+            {
+              if (itone == expected) sync_sum += row[static_cast<size_t> (itone)];
+              else noise_sum += row[static_cast<size_t> (itone)];
+            }
+        }
+    }
+  sync_power = sync_sum / 16.0f;
+  noise_power = noise_sum / 48.0f;
+}
+
+// Max-log di un gruppo: per ogni bit dell'indice di combinazione, massimo dei
+// valori col bit a 1 meno massimo dei valori col bit a 0.
+inline void ftx_group_bit_maxlog (float const* values, int nt, int nbits, float* metric)
+{
+  for (int bit = 0; bit < nbits; ++bit)
+    {
+      float max1 = -1.0e30f;
+      float max0 = -1.0e30f;
+      for (int i = 0; i < nt; ++i)
+        {
+          if ((i & (1 << bit)) != 0) max1 = std::max (max1, values[i]);
+          else max0 = std::max (max0, values[i]);
+        }
+      metric[bit] = max1 - max0;
+    }
+}
+
 void run_ft4_bitmetrics (Complex const* cd, float* bitmetrics, int* badsync)
 {
   static std::array<int, 4> const graymap {{0, 1, 3, 2}};
@@ -1092,6 +1238,21 @@ void run_ft2_bitmetrics_impl (Complex const* cd, float* bitmetrics, int* badsync
     }
   float beta = clamp_value (0.5f / noise_var, 0.01f, 50.0f);
 
+  // Metrica alternativa (DECODIUM_FT2_METRIC). Per log I0 serve il guadagno
+  // 2 A / N0: N0 e' la potenza media dei toni di solo rumore del sincronismo,
+  // A^2 la potenza media dei toni di sincronismo meno N0, non meno di N0.
+  int const metric_mode = ft2_metric_mode ();
+  float amp_gain = 0.0f;
+  if (metric_mode == 1)
+    {
+      float sync_power = 0.0f;
+      float noise_power = 0.0f;
+      ft2_sync_levels (pwr, sync_power, noise_power);
+      noise_power = std::max (noise_power, kTiny);
+      float const amp2 = std::max (sync_power - noise_power, noise_power);
+      amp_gain = 2.0f * std::sqrt (amp2) / noise_power;
+    }
+
   if (!check_ft4_sync (s4, 3))
     {
       *badsync = 1;
@@ -1118,14 +1279,33 @@ void run_ft2_bitmetrics_impl (Complex const* cd, float* bitmetrics, int* badsync
                          [static_cast<size_t> (graymap[static_cast<size_t> (value)])];
               },
               sums.data ());
-          for (int i = 0; i < nt; ++i)
+          if (metric_mode == 0)
             {
-              float const power = abs2 (sums[static_cast<size_t> (i)]);
-              sp[static_cast<size_t> (i)] = beta_eff * power;
+              for (int i = 0; i < nt; ++i)
+                {
+                  float const power = abs2 (sums[static_cast<size_t> (i)]);
+                  sp[static_cast<size_t> (i)] = beta_eff * power;
+                }
+            }
+          else
+            {
+              for (int i = 0; i < nt; ++i)
+                {
+                  float const magnitude = std::sqrt (abs2 (sums[static_cast<size_t> (i)]));
+                  sp[static_cast<size_t> (i)] =
+                      metric_mode == 1 ? ft2_log_i0 (amp_gain * magnitude) : magnitude;
+                }
             }
 
           std::array<float, 8> group_metric {};
-          ftx_group_bit_lse (sp.data (), nt, ibmax + 1, group_metric.data (), lse_work);
+          if (metric_mode == 2)
+            {
+              ftx_group_bit_maxlog (sp.data (), nt, ibmax + 1, group_metric.data ());
+            }
+          else
+            {
+              ftx_group_bit_lse (sp.data (), nt, ibmax + 1, group_metric.data (), lse_work);
+            }
 
           int const ipt = 1 + (ks - 1) * 2;
           for (int ib = 0; ib <= ibmax; ++ib)
@@ -2340,6 +2520,442 @@ extern "C" void ftx_ft2_bitmetrics_diag_c (Complex const* cd,
                            true,
                            bitmetrics_base, bmet_eq_raw, bmet_eq, cd_eq, ch_snr, use_cheq,
                            snr_min, snr_max, snr_mean, fading_depth, noise_var, noise_var_eq);
+}
+
+// Phase-tracking bit metrics for FT8: forward-backward (BCJR) over a
+// quantised carrier-phase x residual-frequency trellis.
+//
+// FT8 is continuous-phase 8-GFSK with h = 1: in the symbol-spaced spectra
+// cs[79][8] the transmitted tone of every symbol carries the SAME carrier
+// phase, up to the slowly varying channel phase and a residual frequency
+// error. The blind metrics throw that away (|sum| over 1..3 symbols); the
+// Costas-anchored coherent metrics interpolate the phase between three
+// anchors only. Here the phase is a hidden Markov state:
+//
+//   phase[k+1] = phase[k] + 2*pi*df[k]*Tsym + w,   w ~ N(0, sigma^2)
+//   df[k+1]    = df[k] or a neighbouring frequency state (prob. freq_walk)
+//
+// with NP phase states and NF frequency states kDfHz apart, i.e. the residual
+// frequency error left by the 0.5 Hz sync grid (and a slow drift) is tracked
+// inside the trellis instead of being searched beforehand. The 21 Costas
+// symbols are pilots (tone known), data symbols have a uniform tone prior.
+// Amplitude and noise variance are estimated from the data: noise from the
+// 147 off-tone bins of the Costas symbols, amplitude from the Costas tones,
+// then optionally re-estimated from the posteriors (em_rounds).
+//
+// Like the coherent and BICM metrics this is an EXTRA attempt, never a
+// replacement of the blind ones.
+//
+// cs: [79][8] symbol spectra from ftx_ft8_bitmetrics_capture_c (not tone
+// equalised). llr: [174], Decodium convention (positive = bit 1), RMS
+// normalised and multiplied by `scale` like the other FT8 metrics.
+// info (optional, 4 floats): RMS of the unnormalised LLRs, mean residual
+// frequency (Hz), estimated Es/N0 (linear), log-likelihood of the frame.
+// min_esn0: the attempt is skipped (return 0) when the pilot estimate of
+// Es/N0 is below this value; most sync candidates are noise and stop here.
+// Returns 1 on success, 0 when skipped or no usable estimate exists (llr zeroed).
+//
+// la (optional, [174], LLR units, positive = bit 1): extrinsic information
+// from the decoder (BICM-ID on top of the trellis, DECODIUM_FT8_BICM_V2_TRELLIS).
+// It enters twice: as the tone prior of every data symbol in the phase
+// recursion, so that the symbols the decoder is already sure of act as soft
+// pilots, and in the bit marginalisation, where each bit sees the prior of
+// the OTHER two bits of its symbol only (the output stays extrinsic).
+// la = nullptr is the plain demodulator, bit for bit.
+namespace
+{
+
+int ft8_bitmetrics_trellis_impl (Complex const* cs, float scale,
+                                 float sigma_deg, float freq_walk,
+                                 int em_rounds, float min_esn0,
+                                 float const* la, float* llr, float* info)
+{
+  constexpr int NN = 79;
+  constexpr int NP = 16;
+  constexpr int NF = 15;
+  constexpr int kMaxTaps = 24;
+  constexpr float kDfHz = 0.11f;
+  constexpr float kTsym = 0.16f;
+  constexpr float kTwoPi = 6.28318530717958647692f;
+  static int const icos7[7] = {3, 1, 4, 0, 6, 5, 2};
+  static int const graymap[8] = {0, 1, 3, 2, 5, 6, 4, 7};
+  static std::array<float, NP> const cos_p = [] {
+    std::array<float, NP> v {};
+    for (int p = 0; p < NP; ++p) v[static_cast<size_t> (p)] = std::cos (kTwoPi * static_cast<float> (p) / NP);
+    return v;
+  }();
+  static std::array<float, NP> const sin_p = [] {
+    std::array<float, NP> v {};
+    for (int p = 0; p < NP; ++p) v[static_cast<size_t> (p)] = std::sin (kTwoPi * static_cast<float> (p) / NP);
+    return v;
+  }();
+
+  std::fill_n (llr, 174, 0.0f);
+  if (info) std::fill_n (info, 4, 0.0f);
+
+  std::array<int, NN> pilot;
+  pilot.fill (-1);
+  for (int k = 0; k < 7; ++k)
+    {
+      pilot[static_cast<size_t> (k)] = icos7[k];
+      pilot[static_cast<size_t> (k + 36)] = icos7[k];
+      pilot[static_cast<size_t> (k + 72)] = icos7[k];
+    }
+
+  // First estimates from the pilots alone.
+  double noise_sum = 0.0;
+  double pilot_sum = 0.0;
+  double total_sum = 0.0;
+  for (int k = 0; k < NN; ++k)
+    {
+      for (int t = 0; t < 8; ++t)
+        {
+          double const pw = std::norm (cs[k * 8 + t]);
+          total_sum += pw;
+          if (pilot[static_cast<size_t> (k)] < 0) continue;
+          if (t == pilot[static_cast<size_t> (k)]) pilot_sum += pw;
+          else noise_sum += pw;
+        }
+    }
+  float sigma2 = static_cast<float> (noise_sum / 147.0);
+  if (!(sigma2 > 0.0f) || !std::isfinite (sigma2))
+    {
+      return 0;
+    }
+  float amp2 = static_cast<float> (pilot_sum / 21.0) - sigma2;
+  if (amp2 < min_esn0 * sigma2)
+    {
+      return 0;           // cheap gate: the pilots show no usable signal
+    }
+
+  // Transition kernels: for each frequency state the probability mass of
+  // N(advance, sigma^2) falling in each phase bin.
+  // sigma is clamped to 1..60 degrees: the widest kernel then spans 19 phase
+  // bins, inside kMaxTaps and inside the +-NP reach of convolve().
+  float const sigma_bins = std::min (std::max (std::isfinite (sigma_deg) ? sigma_deg : 10.0f, 1.0f), 60.0f) * NP / 360.0f;
+  std::array<std::array<float, kMaxTaps>, NF> taps {};
+  std::array<int, NF> tap_lo {};
+  std::array<int, NF> tap_n {};
+  for (int f = 0; f < NF; ++f)
+    {
+      float const adv = static_cast<float> (f - NF / 2) * kDfHz * kTsym * NP;   // bins per symbol
+      int const lo = static_cast<int> (std::floor (adv - 2.5f * sigma_bins));
+      int const hi = static_cast<int> (std::ceil (adv + 2.5f * sigma_bins));
+      if (lo < -NP || hi > NP || hi - lo + 1 > kMaxTaps)
+        {
+          return 0;       // cannot happen with the clamp above
+        }
+      int const n = hi - lo + 1;
+      float sum = 0.0f;
+      for (int j = 0; j < n; ++j)
+        {
+          float const a = (static_cast<float> (lo + j) - 0.5f - adv) / (sigma_bins * 1.41421356f);
+          float const b = (static_cast<float> (lo + j) + 0.5f - adv) / (sigma_bins * 1.41421356f);
+          float const w = 0.5f * (std::erf (b) - std::erf (a));
+          taps[static_cast<size_t> (f)][static_cast<size_t> (j)] = w;
+          sum += w;
+        }
+      for (int j = 0; j < n; ++j) taps[static_cast<size_t> (f)][static_cast<size_t> (j)] /= sum;
+      tap_lo[static_cast<size_t> (f)] = lo;
+      tap_n[static_cast<size_t> (f)] = n;
+    }
+  float const eps = std::max (0.0f, std::min (freq_walk, 0.3f));
+  auto stay = [eps] (int f) {
+    return 1.0f - eps * ((f > 0 ? 1.0f : 0.0f) + (f < NF - 1 ? 1.0f : 0.0f));
+  };
+
+  static thread_local std::vector<float> e_store;
+  static thread_local std::vector<float> lk_store;
+  static thread_local std::vector<float> alpha_store;
+  e_store.resize (static_cast<size_t> (NN) * NP * 8);
+  lk_store.resize (static_cast<size_t> (NN) * NP);
+  alpha_store.resize (static_cast<size_t> (NN) * NF * NP);
+  float* const e = e_store.data ();
+  float* const lk = lk_store.data ();
+  float* const alpha = alpha_store.data ();
+
+  // Priors from the decoder: per data symbol the tone prior (indexed by
+  // tone) and exp(la) of its three bits.
+  std::array<std::array<float, 8>, 58> tone_prior {};
+  std::array<std::array<float, 3>, 58> bit_odds {};
+  if (la)
+    {
+      for (int d = 0; d < 58; ++d)
+        {
+          for (int ib = 0; ib < 3; ++ib)
+            bit_odds[static_cast<size_t> (d)][static_cast<size_t> (ib)] =
+                decodium::ftx_expf (std::max (-20.0f, std::min (la[3 * d + ib], 20.0f)));
+          float sum = 0.0f;
+          for (int i = 0; i < 8; ++i)
+            {
+              float v = 1.0f;
+              for (int ib = 0; ib < 3; ++ib)
+                if ((i >> (2 - ib)) & 1) v *= bit_odds[static_cast<size_t> (d)][static_cast<size_t> (ib)];
+              tone_prior[static_cast<size_t> (d)][static_cast<size_t> (graymap[i])] = v;
+              sum += v;
+            }
+          for (float& v : tone_prior[static_cast<size_t> (d)]) v /= sum;
+        }
+    }
+
+  std::array<float, 174> raw {};
+  double loglik = 0.0;
+  double freq_mean = 0.0;
+  for (int round = 0; round <= std::max (0, em_rounds); ++round)
+    {
+      // Es/N0 kept inside a sane window: below -6 dB there is nothing to
+      // track, above 16 dB the blind metrics do not need help.
+      amp2 = std::max (0.25f * sigma2, std::min (amp2, 40.0f * sigma2));
+      float const amp = std::sqrt (amp2);
+      float const c = 2.0f * amp / sigma2;
+
+      loglik = 0.0;
+      for (int k = 0; k < NN; ++k)
+        {
+          int const pt = pilot[static_cast<size_t> (k)];
+          float ref = 0.0f;
+          if (pt >= 0) ref = std::abs (cs[k * 8 + pt]);
+          else
+            for (int t = 0; t < 8; ++t) ref = std::max (ref, std::abs (cs[k * 8 + t]));
+          float const offset = c * ref;
+          loglik += offset;
+          float* const ek = e + static_cast<size_t> (k) * NP * 8;
+          float* const lkk = lk + static_cast<size_t> (k) * NP;
+          std::fill_n (lkk, NP, 1.0e-30f);
+          for (int t = 0; t < 8; ++t)
+            {
+              float const yr = c * cs[k * 8 + t].real ();
+              float const yi = c * cs[k * 8 + t].imag ();
+              float* const et = ek + t * NP;
+              for (int p = 0; p < NP; ++p)
+                {
+                  float const x = yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)] - offset;
+                  et[p] = decodium::ftx_expf (std::min (x, 80.0f));
+                }
+              if (pt < 0 && la)
+                {
+                  float const w = tone_prior[static_cast<size_t> (k < 36 ? k - 7 : k - 14)][static_cast<size_t> (t)];
+                  for (int p = 0; p < NP; ++p) lkk[p] += w * et[p];
+                }
+              else if (pt < 0)
+                for (int p = 0; p < NP; ++p) lkk[p] += 0.125f * et[p];
+              else if (t == pt)
+                for (int p = 0; p < NP; ++p) lkk[p] += et[p];
+            }
+        }
+
+      // Forward pass.
+      std::array<std::array<float, NP>, NF> conv {};
+      std::array<float, 3 * NP> ext {};
+      auto convolve = [&] (float const* in, int f, bool forward, float* out) {
+        for (int p = 0; p < NP; ++p)
+          {
+            ext[static_cast<size_t> (p)] = in[p];
+            ext[static_cast<size_t> (p + NP)] = in[p];
+            ext[static_cast<size_t> (p + 2 * NP)] = in[p];
+          }
+        int const lo = tap_lo[static_cast<size_t> (f)];
+        int const n = tap_n[static_cast<size_t> (f)];
+        float const* w = taps[static_cast<size_t> (f)].data ();
+        // forward: out[p] = sum_j w[j] * in[p - (lo + j)]
+        // backward: out[p] = sum_j w[j] * in[p + (lo + j)]
+        std::fill_n (out, NP, 0.0f);
+        for (int j = 0; j < n; ++j)
+          {
+            float const* const src = ext.data () + (forward ? NP - lo - j : NP + lo + j);
+            float const wj = w[j];
+            for (int p = 0; p < NP; ++p) out[p] += wj * src[p];
+          }
+      };
+      for (int i = 0; i < NF * NP; ++i) alpha[i] = 1.0f / static_cast<float> (NF * NP);
+      bool ok = true;
+      for (int k = 0; k + 1 < NN && ok; ++k)
+        {
+          float const* const ak = alpha + static_cast<size_t> (k) * NF * NP;
+          float* const an = alpha + static_cast<size_t> (k + 1) * NF * NP;
+          float const* const lkk = lk + static_cast<size_t> (k) * NP;
+          std::array<float, NP> g {};
+          for (int f = 0; f < NF; ++f)
+            {
+              for (int p = 0; p < NP; ++p) g[static_cast<size_t> (p)] = ak[f * NP + p] * lkk[p];
+              convolve (g.data (), f, true, conv[static_cast<size_t> (f)].data ());
+            }
+          float sum = 0.0f;
+          for (int f = 0; f < NF; ++f)
+            {
+              float const s0 = stay (f);
+              for (int p = 0; p < NP; ++p)
+                {
+                  float v = s0 * conv[static_cast<size_t> (f)][static_cast<size_t> (p)];
+                  if (f > 0) v += eps * conv[static_cast<size_t> (f - 1)][static_cast<size_t> (p)];
+                  if (f < NF - 1) v += eps * conv[static_cast<size_t> (f + 1)][static_cast<size_t> (p)];
+                  an[f * NP + p] = v;
+                  sum += v;
+                }
+            }
+          if (!(sum > 0.0f) || !std::isfinite (sum)) { ok = false; break; }
+          float const inv = 1.0f / sum;
+          for (int i = 0; i < NF * NP; ++i) an[i] *= inv;
+          loglik += std::log (sum);
+        }
+      if (!ok)
+        {
+          return 0;
+        }
+
+      // Backward pass, posteriors and bit metrics on the way.
+      std::array<std::array<float, NP>, NF> beta {};
+      std::array<std::array<float, NP>, NF> hmix {};
+      for (auto& row : beta) row.fill (1.0f);
+      double em_num = 0.0;
+      freq_mean = 0.0;
+      for (int k = NN - 1; k >= 0; --k)
+        {
+          float const* const ak = alpha + static_cast<size_t> (k) * NF * NP;
+          float const* const ek = e + static_cast<size_t> (k) * NP * 8;
+          float const* const lkk = lk + static_cast<size_t> (k) * NP;
+          int const pt = pilot[static_cast<size_t> (k)];
+          std::array<float, NP> wp {};
+          float fnum = 0.0f;
+          float fden = 0.0f;
+          for (int f = 0; f < NF; ++f)
+            {
+              float fs = 0.0f;
+              for (int p = 0; p < NP; ++p)
+                {
+                  float const v = ak[f * NP + p] * beta[static_cast<size_t> (f)][static_cast<size_t> (p)];
+                  wp[static_cast<size_t> (p)] += v;
+                  fs += v * lkk[p];
+                }
+              fnum += fs * static_cast<float> (f - NF / 2);
+              fden += fs;
+            }
+          if (!(fden > 0.0f) || !std::isfinite (fden))
+            {
+              return 0;
+            }
+          if (k == NN - 1) loglik += std::log (fden);
+          freq_mean += static_cast<double> (kDfHz * fnum / fden) / NN;
+
+          std::array<float, 8> app {};
+          float app_sum = 0.0f;
+          float proj = 0.0f;
+          for (int t = 0; t < 8; ++t)
+            {
+              if (pt >= 0 && t != pt) continue;
+              float const yr = cs[k * 8 + t].real ();
+              float const yi = cs[k * 8 + t].imag ();
+              float const* const et = ek + t * NP;
+              float v = 0.0f;
+              float pr = 0.0f;
+              for (int p = 0; p < NP; ++p)
+                {
+                  float const w = wp[static_cast<size_t> (p)] * et[p];
+                  v += w;
+                  pr += w * (yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)]);
+                }
+              app[static_cast<size_t> (t)] = v;
+              app_sum += v;
+              proj += pr;
+            }
+          if (app_sum > 0.0f) em_num += static_cast<double> (proj / app_sum);
+
+          if (pt < 0)
+            {
+              int const data_index = k < 36 ? k - 7 : k - 14;       // 0..57
+              for (int ib = 0; ib < 3; ++ib)
+                {
+                  float p1 = 1.0e-30f;
+                  float p0 = 1.0e-30f;
+                  for (int i = 0; i < 8; ++i)
+                    {
+                      float v = app[static_cast<size_t> (graymap[i])];
+                      if (la)
+                        for (int jb = 0; jb < 3; ++jb)
+                          if (jb != ib && ((i >> (2 - jb)) & 1))
+                            v *= bit_odds[static_cast<size_t> (data_index)][static_cast<size_t> (jb)];
+                      if ((i >> (2 - ib)) & 1) p1 += v;
+                      else p0 += v;
+                    }
+                  raw[static_cast<size_t> (3 * data_index + ib)] = std::log (p1) - std::log (p0);
+                }
+            }
+
+          if (k == 0) break;
+          for (int f = 0; f < NF; ++f)
+            for (int p = 0; p < NP; ++p)
+              hmix[static_cast<size_t> (f)][static_cast<size_t> (p)] =
+                  lkk[p] * beta[static_cast<size_t> (f)][static_cast<size_t> (p)];
+          float sum = 0.0f;
+          for (int f = 0; f < NF; ++f)
+            {
+              float const s0 = stay (f);
+              std::array<float, NP> mixed {};
+              for (int p = 0; p < NP; ++p)
+                {
+                  float v = s0 * hmix[static_cast<size_t> (f)][static_cast<size_t> (p)];
+                  if (f > 0) v += eps * hmix[static_cast<size_t> (f - 1)][static_cast<size_t> (p)];
+                  if (f < NF - 1) v += eps * hmix[static_cast<size_t> (f + 1)][static_cast<size_t> (p)];
+                  mixed[static_cast<size_t> (p)] = v;
+                }
+              convolve (mixed.data (), f, false, beta[static_cast<size_t> (f)].data ());
+              for (int p = 0; p < NP; ++p) sum += beta[static_cast<size_t> (f)][static_cast<size_t> (p)];
+            }
+          if (!(sum > 0.0f) || !std::isfinite (sum))
+            {
+              return 0;
+            }
+          float const inv = static_cast<float> (NF * NP) / sum;
+          for (auto& row : beta)
+            for (float& v : row) v *= inv;
+        }
+
+      if (round < em_rounds)
+        {
+          // Re-estimate amplitude and noise from the posteriors.
+          float const amp_new = static_cast<float> (em_num / NN);
+          amp2 = amp_new > 0.0f ? amp_new * amp_new : 0.0f;
+          sigma2 = std::max (static_cast<float> ((total_sum - NN * static_cast<double> (amp2)) / (NN * 8.0)),
+                             0.25f * sigma2);
+        }
+    }
+
+  double sum2 = 0.0;
+  for (float v : raw) sum2 += static_cast<double> (v) * v;
+  float const rms = static_cast<float> (std::sqrt (sum2 / 174.0));
+  if (!(rms > 0.0f) || !std::isfinite (rms))
+    {
+      return 0;
+    }
+  for (int i = 0; i < 174; ++i) llr[i] = scale * raw[static_cast<size_t> (i)] / rms;
+  if (info)
+    {
+      info[0] = rms;
+      info[1] = static_cast<float> (freq_mean);
+      info[2] = amp2 / sigma2;
+      info[3] = static_cast<float> (loglik);
+    }
+  return 1;
+}
+
+}
+
+extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
+                                             float sigma_deg, float freq_walk,
+                                             int em_rounds, float min_esn0,
+                                             float* llr, float* info)
+{
+  return ft8_bitmetrics_trellis_impl (cs, scale, sigma_deg, freq_walk, em_rounds, min_esn0,
+                                      nullptr, llr, info);
+}
+
+extern "C" int ftx_ft8_bitmetrics_trellis_prior_c (Complex const* cs, float scale,
+                                                   float sigma_deg, float freq_walk,
+                                                   int em_rounds, float min_esn0,
+                                                   float const* la, float* llr, float* info)
+{
+  return ft8_bitmetrics_trellis_impl (cs, scale, sigma_deg, freq_walk, em_rounds, min_esn0,
+                                      la, llr, info);
 }
 
 extern "C" void ftx_ft8_bitmetrics_c (Complex const* cd0, int np2, int ibest, int imetric,

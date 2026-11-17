@@ -389,6 +389,10 @@ extern "C"
   void ftx_ft8_bitmetrics_coherent_c (std::complex<float> const* cs, float scale,
                                       float* llra, float* llrb, float* llrc,
                                       float* llrd, float* llre);
+  // Phase-tracking (forward-backward) metrics: see FtxBitmetrics.cpp.
+  int ftx_ft8_bitmetrics_trellis_c (std::complex<float> const* cs, float scale,
+                                    float sigma_deg, float freq_walk, int em_rounds,
+                                    float min_esn0, float* llr, float* info);
   // Metriche FT8 con l'estrinseca del decodificatore (BICM-ID, FtxBitmetrics.cpp),
   // e l'estrinseca stessa dai posteriori del min-sum (superldpc/decodium_bridge.cpp).
   void ftx_ft8_bitmetrics_bicm_c (std::complex<float> const* cs, float scale,
@@ -396,6 +400,13 @@ extern "C"
                                   float* llrc, float* llrd, float* llre);
   int superldpc_extrinsic174_91_c (float const* llr_in, int norder, float clamp,
                                   float* est_out);
+  // Second version of the BICM-ID feedback (DECODIUM_FT8_BICM_V2).
+  int superldpc_extrinsic174_91_v2_c (float const* llr_in, int norder, int word, int flags,
+                                     float clamp, float* est_out);
+  int ftx_ft8_bitmetrics_trellis_prior_c (std::complex<float> const* cs, float scale,
+                                          float sigma_deg, float freq_walk, int em_rounds,
+                                          float min_esn0, float const* la,
+                                          float* llr, float* info);
   // Governatore delle leve adattive (FtxDecodeBookkeeping.cpp)
   int ftx_ft8_leve_adattive_attive_c ();
   int ftx_ft8_leva_concessa_c (char const* nome_variabile);
@@ -580,6 +591,180 @@ int ft8_bicm_giri ()
   }();
   if (richiesti >= 0) return richiesti;
   return ftx_ft8_leve_adattive_attive_c () != 0 ? 1 : 0;
+}
+
+// BICM-ID, second version (DECODIUM_FT8_BICM_V2), ON by default. It acts only
+// where BICM-ID itself is active (DECODIUM_FT8_BICM or the governor); with
+// DECODIUM_FT8_BICM_V2=0 the first version above runs unchanged.
+//
+// What the first version is worth in the full decoder (ft8_stage_compare,
+// depth 3, DECODIUM_FT8_BICM=1 against =0, synthetic corpus with known
+// truth, held-out seeds, 300 signal slots + 200 noise-only slots): 3923
+// decodes against 3842 (+2.1%), false decodes 4 against 2, and +93% decode
+// time on slots full of weak signals, +100% on noise-only slots. The time
+// goes into one more five-word OSD batch for EVERY failed sync candidate, and
+// 92% of those candidates have fewer than 10 Costas symbols right.
+//
+// What changes here:
+//  - gate: the feedback runs only for candidates with at least `min_nsync`
+//    (10) of the 21 Costas symbols right. On the tuning corpus the candidates
+//    below 10 were 92.4% of the feedback attempts and gave 1 of its 60 decodes;
+//  - no probe decode: the extrinsic comes from the min-sum posteriors of the
+//    blind words (llra..llre) that the batch has just decoded and seen fail
+//    (superldpc_extrinsic174_91_v2_c);
+//  - the prior is the MEAN extrinsic of those five words, not that of llra
+//    alone, times `weight` (1.4), each word limited to +-`clamp` (3);
+//  - `rounds` (3) feedback rounds, each one a full attempt on all five sets,
+//    each fed by the five words of the round before;
+//  - with the phase-trellis round on (DECODIUM_FT8_TRELLIS=1) the same loop
+//    runs on top of it, `trellis_rounds` (3) times: the prior enters the
+//    trellis itself (ftx_ft8_bitmetrics_trellis_prior_c).
+//
+// Measured on the held-out seeds, depth 3, coherent attempt off / on (the
+// second is what the application runs once the governor grants the levers;
+// 500 and 230 slots):
+//   decodes  BICM off 3842 / 1666, first version 3923 / 1735, this 4090 / 1864
+//   false    2 / 1, 4 / 2, 3 / 1 (noise-only slots: 0, 1, 0 of 200)
+//   time     against the first version -35% / -29% on weak-signal slots, -30%
+//            on crowded slots, -48% / -39% on noise-only slots; against BICM
+//            off +26% / +18%, +15% / +9%, +4% / +7%.
+// Other depths, a check on 31 held-out slots only (BICM off / first version /
+// this): depth 1 239 / 254 / 277 decodes, no false decode; depth 4 with AP
+// and OSD 3/4 294 / 312 / 338, false 2 / 2 / 2; the same with sub-passes and
+// three cycles 312 / 329 / 357, false 0 / 1 / 0.
+// Trellis round forced on (230 slots): 2331 decodes against 2170 without the
+// feedback on the trellis (first version: 2143), false 1 / 1 / 2, time +5%
+// on weak-signal slots, +2% on crowded ones, unchanged on noise.
+//
+// Tried on the tuning corpus and NOT kept: the prior scaled with 2A/sigma^2
+// from the Costas symbols instead of the RMS factor (1137 decodes against
+// 1143), exact log-sum-exp of log I0 instead of max-log (1154 against 1143
+// with one round, 1260 against 1275 with two, one false decode more),
+// damping of the prior between rounds (1292 against 1317), the word with the
+// fewest unsatisfied checks as the source (same as the mean), a gate on the
+// unsatisfied checks (does not separate). Subtracting the input as the
+// min-sum saw it, i.e. after its clip (_CLIPFIX=1, the textbook extrinsic),
+// changes nothing on the synthetic corpus (1317 against 1319) and loses the
+// four decodes that BICM-ID adds on a recording of overlapping strong
+// signals: the clipped part left in the feedback tames the symbols hit by
+// interference. It stays off.
+//
+// With this version on, DECODIUM_FT8_BICM only switches the loop: the number
+// of rounds is DECODIUM_FT8_BICM_V2_ROUNDS.
+// Experiment knobs, read once: _ROUNDS (1..6), _WEIGHT, _CLAMP, _NSYNC,
+// _SRC=0 (llra word only), _CLIPFIX=1, _TRELLIS=n (feedback rounds on top of
+// the phase-trellis round, 0 = none), _DEBUG (logs every decode of the loop).
+constexpr bool kFt8BicmV2Default {true};
+
+struct Ft8BicmV2Config
+{
+  int mode {-1};            // -1 default policy, 0 off, 1 on
+  bool mean_source {true};  // mean extrinsic of the five blind words (false: llra only)
+  int rounds {3};
+  float weight {1.4f};      // weight of the prior
+  float clamp {3.0f};       // limit on the extrinsic of one word
+  int min_nsync {10};       // gate on the Costas hard-sync count
+  bool clipfix {false};     // subtract the clipped input (what the min-sum saw)
+  int trellis_rounds {3};   // feedback rounds on top of the phase-trellis round
+  bool debug {false};
+};
+
+Ft8BicmV2Config const& ft8_bicm_v2_config ()
+{
+  static Ft8BicmV2Config const config = [] {
+    Ft8BicmV2Config c;
+    char const* raw = std::getenv ("DECODIUM_FT8_BICM_V2");
+    if (raw && raw[0] != 0) c.mode = raw[0] != '0' ? 1 : 0;
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_SRC")) c.mean_source = v[0] != '0';
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_ROUNDS"))
+      c.rounds = std::max (1, std::min (6, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_WEIGHT"))
+      c.weight = std::max (0.0f, std::min (10.0f, static_cast<float> (std::atof (v))));
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_CLAMP"))
+      c.clamp = std::max (0.1f, std::min (50.0f, static_cast<float> (std::atof (v))));
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_NSYNC"))
+      c.min_nsync = std::max (0, std::min (21, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_TRELLIS"))
+      c.trellis_rounds = std::max (0, std::min (6, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_BICM_V2_CLIPFIX")) c.clipfix = v[0] != '0';
+    c.debug = std::getenv ("DECODIUM_FT8_BICM_V2_DEBUG") != nullptr;
+    return c;
+  }();
+  return config;
+}
+
+bool ft8_bicm_v2_enabled (Ft8BicmV2Config const& config)
+{
+  return config.mode < 0 ? kFt8BicmV2Default : config.mode == 1;
+}
+
+// Phase-tracking soft demodulator (ftx_ft8_bitmetrics_trellis_c) as ONE extra
+// metric round, run only after every other attempt failed for a candidate, so
+// it can only add decodes and its cost is bounded.
+//
+// DECODIUM_FT8_TRELLIS=1 forces it on for every request (including the
+// multi-cycle / sub-pass ones that the default policy leaves out), =0
+// switches it off; without the variable ft8_trellis_enabled() decides: the
+// round is granted by the adaptive lever governor, i.e. only after several
+// slots well inside the time budget, and withdrawn at the first slot that
+// gets close to it. It is not on unconditionally (kFt8TrellisDefault): it
+// adds decodes at an unchanged false-decode count, but on slots full of weak
+// signals the decode time grows by more than 10% at every depth (measured
+// +13..+38%).
+// With the levers granted (FT8_STAGE_COMPARE_GRANT_LEVERS=1 in
+// ft8_stage_compare), 230 held-out slots at depth 3: 1864 decodes without
+// this round, 2331 with it; one false decode on signal slots in both, none
+// on 100 noise-only slots in both.
+// Experiment knobs, read once: DECODIUM_FT8_TRELLIS_SIGMA (phase diffusion,
+// degrees per symbol), _FWALK (frequency-walk probability), _EM
+// (re-estimation rounds), _HARD (hard-error cap), _ESN0 / _NSYNC / _RMS (the
+// three gates), _DEBUG (logs every decode of this round).
+//
+// The gates and the tighter acceptance were chosen on a tuning corpus (seeds
+// disjoint from the report corpus): most sync candidates are noise, and the
+// gates keep the round away from them. On held-out seeds (50 weak-signal
+// slots, depth 3) they cost 1.6% of the round's own decodes (317 against 322)
+// and without them the decoder is about 15% slower.
+constexpr bool kFt8TrellisDefault {false};
+
+struct Ft8TrellisConfig
+{
+  int mode {-1};                // -1 default policy, 0 off, 1 forced on
+  float sigma_deg {10.0f};      // phase diffusion per symbol
+  float freq_walk {0.03f};      // probability of moving one frequency state per symbol
+  int em_rounds {0};            // amplitude/noise re-estimation rounds (no gain measured)
+  int max_hard {kFt8StrictHardErrors};  // tighter than the blind attempts (58)
+  float min_esn0 {1.6f};        // gate on the pilot Es/N0 estimate (linear)
+  int min_nsync {9};            // gate on the Costas hard-sync count
+  float min_rms {2.2f};         // gate on the RMS of the unnormalised LLRs
+  int osd_cap {2};              // upper bound on maxosd and norder in this round
+  bool debug {false};
+};
+
+Ft8TrellisConfig const& ft8_trellis_config ()
+{
+  static Ft8TrellisConfig const config = [] {
+    Ft8TrellisConfig c;
+    char const* raw = std::getenv ("DECODIUM_FT8_TRELLIS");
+    if (raw && raw[0] != 0) c.mode = raw[0] != '0' ? 1 : 0;
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_SIGMA"))
+      c.sigma_deg = std::max (1.0f, std::min (60.0f, static_cast<float> (std::atof (v))));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_FWALK"))
+      c.freq_walk = std::max (0.0f, std::min (0.3f, static_cast<float> (std::atof (v))));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_EM"))
+      c.em_rounds = std::max (0, std::min (3, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_HARD"))
+      c.max_hard = std::max (0, std::min (174, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_ESN0"))
+      c.min_esn0 = std::max (0.0f, static_cast<float> (std::atof (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_NSYNC"))
+      c.min_nsync = std::max (0, std::min (21, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_RMS"))
+      c.min_rms = std::max (0.0f, static_cast<float> (std::atof (v)));
+    c.debug = std::getenv ("DECODIUM_FT8_TRELLIS_DEBUG") != nullptr;
+    return c;
+  }();
+  return config;
 }
 
 int& ft8_classic_rescue_used ()
@@ -7093,6 +7278,22 @@ void plan_ft8_ldpc_decode (Ft8Request const& request, float f1, float sync, int 
   Keff = 91;
 }
 
+// Default policy of the phase-tracking round: it follows the adaptive lever
+// governor (FtxDecodeBookkeeping.cpp), like BICM-ID and the coherent pass, so
+// it runs only where the decode time leaves margin. The multi-cycle / sub-pass
+// ("harvest") requests are left out:
+// there every extra decode re-triggers the candidate search and the time cost
+// is the highest. DECODIUM_FT8_TRELLIS=1 overrides this policy too.
+bool ft8_trellis_enabled (Ft8TrellisConfig const& config, Ft8Request const& request)
+{
+  if (config.mode >= 0)
+    {
+      return config.mode > 0;
+    }
+  return (kFt8TrellisDefault || ftx_ft8_leve_adattive_attive_c () != 0)
+      && !request.lft8subpass && request.nft8cycles < 3;
+}
+
 bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& request,
                                 int decode_pass, bool use_var_downsample,
                                 bool equalized_pipeline, int imetric, int lsubtract,
@@ -7202,17 +7403,53 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
       && request.ndepth >= 3
       && !request.supplemental;
   int const metric_attempts = equalized_pipeline ? 1 : (try_equalized_metrics ? 2 : 1);
-  for (int metric_attempt = 0; metric_attempt < metric_attempts; ++metric_attempt)
+  // One more round for the phase-tracking metrics, after everything else
+  // failed. It works on the spectra of the plain (not tone-equalised) capture.
+  Ft8TrellisConfig const& trellis = ft8_trellis_config ();
+  bool const trellis_enabled = ft8_trellis_enabled (trellis, request);
+  int const total_attempts = metric_attempts + (trellis_enabled ? 1 : 0);
+  std::array<std::complex<float>, kFt8Nn * 8> plain_cs {};
+  int plain_nsync = 0;    // Costas count of the capture plain_cs comes from
+  int nsync = 0;
+  for (int metric_attempt = 0; metric_attempt < total_attempts; ++metric_attempt)
     {
-      bool const equalized_metrics = equalized_pipeline || metric_attempt != 0;
-      int nsync = 0;
-      ftx_ft8_bitmetrics_capture_c (cd0.data (), kFt8A7Np2, ibest, imetric,
-                                    kFt8BitMetricScale,
-                                    deep_bitmetrics ? 1 : 0,
-                                    equalized_metrics ? 1 : 0,
-                                    nullptr, current_cs.data (),
-                                    s8.data (), &nsync, llra.data (), llrb.data (),
-                                    llrc.data (), llrd.data (), llre.data ());
+      bool const trellis_attempt = metric_attempt >= metric_attempts;
+      bool const equalized_metrics =
+          trellis_attempt ? equalized_pipeline : (equalized_pipeline || metric_attempt != 0);
+      if (!trellis_attempt)
+        {
+          nsync = 0;
+          ftx_ft8_bitmetrics_capture_c (cd0.data (), kFt8A7Np2, ibest, imetric,
+                                        kFt8BitMetricScale,
+                                        deep_bitmetrics ? 1 : 0,
+                                        equalized_metrics ? 1 : 0,
+                                        nullptr, current_cs.data (),
+                                        s8.data (), &nsync, llra.data (), llrb.data (),
+                                        llrc.data (), llrd.data (), llre.data ());
+          if (trellis_enabled && !equalized_metrics)
+            {
+              plain_cs = current_cs;
+              plain_nsync = nsync;
+            }
+        }
+      else if (equalized_pipeline)
+        {
+          // No plain capture was made in this pipeline: make one now, into
+          // scratch outputs, only for its spectra.
+          std::array<float, 8 * kFt8Nn> scratch_s8 {};
+          std::array<float, 174> sa {}, sb {}, sc {}, sd {}, se {};
+          int scratch_nsync = 0;
+          ftx_ft8_bitmetrics_capture_c (cd0.data (), kFt8A7Np2, ibest, imetric,
+                                        kFt8BitMetricScale, 0, 0,
+                                        nullptr, plain_cs.data (),
+                                        scratch_s8.data (), &scratch_nsync, sa.data (),
+                                        sb.data (), sc.data (), sd.data (), se.data ());
+          nsync = scratch_nsync;
+        }
+      else
+        {
+          nsync = plain_nsync;
+        }
       *newdat = local_newdat;
 
   float const cq_signature_score = ft8_cq_signature_score (s8.data (), 8);
@@ -7229,7 +7466,7 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   std::array<float, 174> history_llrd {};
   std::array<float, 174> history_llre {};
   int history_nsync = 0;
-  bool const have_cq_history = cq_history != nullptr;
+  bool const have_cq_history = cq_history != nullptr && !trellis_attempt;
   if (have_cq_history)
     {
       ftx_ft8_bitmetrics_capture_c (cd0.data (), kFt8A7Np2, ibest, imetric,
@@ -7287,6 +7524,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
           });
         }
 
+      if (trellis_attempt && (nsync <= sync_threshold || nsync < trellis.min_nsync))
+        {
+          continue;       // the replays below were already tried
+        }
 	  if (nsync <= sync_threshold && !cq_sync_override)
 	    {
       bool replay_ok =
@@ -7433,7 +7674,7 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   // peggiora a segnale forte, quindi va SEMPRE come tentativo aggiuntivo e mai
   // al posto degli altri. Stessa scelta fatta per FT2 in Stage7.
   std::array<float, 174> coer_llra {}, coer_llrb {}, coer_llrc {}, coer_llrd {}, coer_llre {};
-  bool const usa_coerente = ft8_coerente_attivo ();
+  bool const usa_coerente = !trellis_attempt && ft8_coerente_attivo ();
   if (usa_coerente)
     {
       ftx_ft8_bitmetrics_coherent_c (current_cs.data (), kFt8BitMetricScale,
@@ -7444,6 +7685,9 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   // Tentativo BICM-ID: le stesse metriche, ricalcolate con l'estrinseca che il
   // decodificatore ha prodotto fallendo sulla llra. SPENTO di default,
   // DECODIUM_FT8_BICM=1 (o 2 per due giri).
+  // (Quanto segue descrive la prima versione, che gira con
+  // DECODIUM_FT8_BICM_V2=0; la seconda, accesa di default, costruisce la
+  // retroazione dentro il ciclo qui sotto: vedi Ft8BicmV2Config.)
   //
   // La sonda e' una decodifica in piu' sulla sola llra, senza a priori, come nel
   // banco: serve per i posteriori del min-sum, non per il suo esito. Se pero'
@@ -7456,9 +7700,24 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   // La preferenza FT8 da sola non implica il supporto SIMD della CPU e del
   // sistema: il BICM deve passare dallo stesso dispatcher a runtime della
   // decodifica (e rispettare lo spegnimento da interfaccia o di emergenza).
-  bool usa_bicm = ft8_bicm_giri () > 0 && ft8_use_superldpc () && !g_ft8_forza_classico
+  Ft8BicmV2Config const& bicm_v2 = ft8_bicm_v2_config ();
+  bool const bicm_v2_on = ft8_bicm_v2_enabled (bicm_v2);
+  bool usa_bicm = (!trellis_attempt || (bicm_v2_on && bicm_v2.trellis_rounds > 0))
+                 && ft8_bicm_giri () > 0 && ft8_use_superldpc () && !g_ft8_forza_classico
                  && superldpc_is_enabled_c () != 0;
-  if (usa_bicm)
+  // Second version: the feedback is built inside the loop below, from the
+  // words that have just failed, and only when all of them have failed.
+  bool const bicm_v2_attivo = usa_bicm && bicm_v2_on && nsync >= bicm_v2.min_nsync;
+  if (bicm_v2_on && !bicm_v2_attivo)
+    {
+      usa_bicm = false;       // gated out, or BICM-ID not available here
+    }
+  int const bicm_v2_giri = bicm_v2_attivo ? (trellis_attempt ? bicm_v2.trellis_rounds : bicm_v2.rounds) : 0;
+  std::array<std::array<float, 174>, 5> bicm_est {};   // extrinsic of the words a..e
+  std::array<bool, 5> bicm_est_ok {};
+  std::array<float, 174> bicm_la {};                   // prior fed to the demodulator
+  std::array<float, 174> trellis_bicm_llr {};
+  if (usa_bicm && !bicm_v2_attivo)
     {
       std::array<float, 174> est {};
       std::array<float, 174> sonda = llra;
@@ -7481,18 +7740,88 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
       usa_bicm = ottenuta;
     }
 
-  int const llr_attempts = (have_cq_history ? 2 : 1) + (usa_coerente ? 1 : 0) + (usa_bicm ? 1 : 0);
+  // Phase-tracking attempt: a single LLR set, so only the first blind pass
+  // and the a-priori passes built on it are run.
+  std::array<float, 174> trellis_llr {};
+  std::array<float, 4> trellis_info {};
+  if (trellis_attempt
+      && (ftx_ft8_bitmetrics_trellis_c (plain_cs.data (), kFt8BitMetricScale,
+                                        trellis.sigma_deg, trellis.freq_walk,
+                                        trellis.em_rounds, trellis.min_esn0,
+                                        trellis_llr.data (),
+                                        trellis_info.data ()) == 0
+          || trellis_info[0] < trellis.min_rms))
+    {
+      continue;           // gated out: not worth an LDPC decode
+    }
+
+  int const llr_attempts = (have_cq_history ? 2 : 1) + (usa_coerente ? 1 : 0)
+                           + (usa_bicm ? (bicm_v2_attivo ? bicm_v2_giri : 1) : 0);
   int const indice_coerente = have_cq_history ? 2 : 1;
   int const indice_bicm = indice_coerente + (usa_coerente ? 1 : 0);
   for (int llr_attempt = 0; llr_attempt < llr_attempts; ++llr_attempt)
     {
       bool const coerente = usa_coerente && llr_attempt == indice_coerente;
-      bool const bicm = usa_bicm && llr_attempt == indice_bicm;
-      float const* active_llra = bicm ? bicm_llra.data () : (coerente ? coer_llra.data () : (llr_attempt == 0 ? llra.data () : history_llra.data ()));
-      float const* active_llrb = bicm ? bicm_llrb.data () : (coerente ? coer_llrb.data () : (llr_attempt == 0 ? llrb.data () : history_llrb.data ()));
-      float const* active_llrc = bicm ? bicm_llrc.data () : (coerente ? coer_llrc.data () : (llr_attempt == 0 ? llrc.data () : history_llrc.data ()));
-      float const* active_llrd = bicm ? bicm_llrd.data () : (coerente ? coer_llrd.data () : (llr_attempt == 0 ? llrd.data () : history_llrd.data ()));
-      float const* active_llre = bicm ? bicm_llre.data () : (coerente ? coer_llre.data () : (llr_attempt == 0 ? llre.data () : history_llre.data ()));
+      bool const bicm = usa_bicm && llr_attempt >= indice_bicm;
+      // Second version of BICM-ID. The words whose posteriors feed a round
+      // are those of the blind attempt for the first round and those of the
+      // round before for the others.
+      bool const bicm_v2_cattura = bicm_v2_attivo && (llr_attempt == 0 || bicm);
+      if (bicm && bicm_v2_attivo)
+        {
+          std::array<float, 174> est {};
+          int n_est = 0;
+          for (size_t j = 0; j < 5; ++j)
+            {
+              if (!bicm_est_ok[j] || (!bicm_v2.mean_source && j != 0)) continue;
+              ++n_est;
+              for (size_t i = 0; i < 174; ++i) est[i] += bicm_est[j][i];
+            }
+          if (n_est > 0)
+            {
+              for (float& v : est) v /= static_cast<float> (n_est);
+            }
+          else
+            {
+              // No posteriors at hand (no batch decode, or the word was not
+              // in it): one probe decode, as in the first version.
+              float const* const sonda =
+                  llr_attempt == indice_bicm
+                      ? (trellis_attempt ? trellis_llr.data () : llra.data ())
+                      : (trellis_attempt ? trellis_bicm_llr.data () : bicm_llra.data ());
+              superldpc_set_ft8_mode_c (1);
+              if (superldpc_extrinsic174_91_v2_c (sonda, 2, -1, bicm_v2.clipfix ? 1 : 0,
+                                                 bicm_v2.clamp, est.data ()) != 0)
+                {
+                  break;      // accepted (nothing left to recover) or not available
+                }
+            }
+          bicm_est_ok.fill (false);
+          for (size_t i = 0; i < 174; ++i) bicm_la[i] = bicm_v2.weight * est[i];
+          if (trellis_attempt)
+            {
+              if (ftx_ft8_bitmetrics_trellis_prior_c (plain_cs.data (), kFt8BitMetricScale,
+                                                      trellis.sigma_deg, trellis.freq_walk,
+                                                      trellis.em_rounds, trellis.min_esn0,
+                                                      bicm_la.data (), trellis_bicm_llr.data (),
+                                                      nullptr) == 0)
+                {
+                  break;
+                }
+            }
+          else
+            {
+              ftx_ft8_bitmetrics_bicm_c (current_cs.data (), kFt8BitMetricScale, bicm_la.data (),
+                                         bicm_llra.data (), bicm_llrb.data (), bicm_llrc.data (),
+                                         bicm_llrd.data (), bicm_llre.data ());
+            }
+        }
+      float const* const trellis_active = bicm ? trellis_bicm_llr.data () : trellis_llr.data ();
+      float const* active_llra = trellis_attempt ? trellis_active : bicm ? bicm_llra.data () : (coerente ? coer_llra.data () : (llr_attempt == 0 ? llra.data () : history_llra.data ()));
+      float const* active_llrb = trellis_attempt ? trellis_active : bicm ? bicm_llrb.data () : (coerente ? coer_llrb.data () : (llr_attempt == 0 ? llrb.data () : history_llrb.data ()));
+      float const* active_llrc = trellis_attempt ? trellis_active : bicm ? bicm_llrc.data () : (coerente ? coer_llrc.data () : (llr_attempt == 0 ? llrc.data () : history_llrc.data ()));
+      float const* active_llrd = trellis_attempt ? trellis_active : bicm ? bicm_llrd.data () : (coerente ? coer_llrd.data () : (llr_attempt == 0 ? llrd.data () : history_llrd.data ()));
+      float const* active_llre = trellis_attempt ? trellis_active : bicm ? bicm_llre.data () : (coerente ? coer_llre.data () : (llr_attempt == 0 ? llre.data () : history_llre.data ()));
 
       // ---- Precalcolo a BLOCCHI delle passate di questo tentativo LLR.
       //
@@ -7534,6 +7863,7 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
           std::vector<PassoDaFare> da_fare;
           for (int pi = pass_first; pi <= pass_last; ++pi)
             {
+              if (trellis_attempt && pi >= 2 && pi <= 5) continue;
               std::array<float, 174> pre_llrz {};
               std::array<int, 174> pre_apmask {};
               int pre_iaptype = 0;
@@ -7572,6 +7902,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
               voce.Keff = 91; voce.maxosd = 2; voce.norder = 2;
               plan_ft8_ldpc_decode (request, f1, sync, pre_iaptype,
                                     voce.Keff, voce.maxosd, voce.norder);
+              if (trellis_attempt)
+                {
+                  voce.maxosd = std::min (voce.maxosd, trellis.osd_cap);
+                  voce.norder = std::min (voce.norder, std::max (trellis.osd_cap, 1));
+                }
               voce.llrz = pre_llrz;
               std::transform (pre_apmask.begin (), pre_apmask.end (),
                               voce.apmask_bits.begin (), [] (int value) {
@@ -7618,6 +7953,22 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
                                              da_fare[i].norder, blocco_msg.data (),
                                              blocco_cw.data (), blocco_ntype.data (),
                                              blocco_hard.data (), blocco_dmin.data ());
+              // Second version of BICM-ID: take the extrinsic of the blind
+              // words (passes 1..5 carry no a-priori mask) while the min-sum
+              // posteriors of this batch are still in the decoder.
+              if (bicm_v2_cattura)
+                {
+                  for (int k = 0; k < n; ++k)
+                    {
+                      PassoDaFare const& v = da_fare[gruppo[static_cast<size_t> (k)]];
+                      if (v.pass_index < 1 || v.pass_index > 5) continue;
+                      size_t const j = static_cast<size_t> (v.pass_index - 1);
+                      bicm_est_ok[j] =
+                          superldpc_extrinsic174_91_v2_c (v.llrz.data (), da_fare[i].norder, k,
+                                                         bicm_v2.clipfix ? 1 : 0, bicm_v2.clamp,
+                                                         bicm_est[j].data ()) == 0;
+                    }
+                }
               for (int k = 0; k < n; ++k)
                 {
                   PassoPronto out;
@@ -7639,6 +7990,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
           if (stage4_should_cancel ())
             {
               return false;
+            }
+          if (trellis_attempt && pass_index >= 2 && pass_index <= 5)
+            {
+              continue;
             }
           int pass_iaptype = 0;
           int pass_ready = 0;
@@ -7734,6 +8089,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
           int maxosd = 2;
           int norder = 2;
           plan_ft8_ldpc_decode (request, f1, sync, pass_iaptype, Keff, maxosd, norder);
+          if (trellis_attempt)
+            {
+              maxosd = std::min (maxosd, trellis.osd_cap);
+              norder = std::min (norder, std::max (trellis.osd_cap, 1));
+            }
 
           int ntype = 0;
           int pass_nharderrors = -1;
@@ -7874,6 +8234,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
               });
             }
           if (pass_nharderrors < 0 || pass_nharderrors > kFt8MaxHardErrors)
+            {
+              continue;
+            }
+          if (trellis_attempt && pass_nharderrors > trellis.max_hard)
             {
               continue;
             }
@@ -8091,6 +8455,25 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
                 << (ft8_expected_message_matches (*trace_target, trim_fixed (candidate_msg)) ? 1 : 0);
           });
         }
+      if (bicm && bicm_v2_attivo && bicm_v2.debug)
+        {
+          std::fprintf (stderr, "BICMV2 f=%.1f dt=%.2f trellis=%d round=%d pass=%d ap=%d hard=%d dmin=%.1f "
+                        "nsync=%d msg=%s\n",
+                        static_cast<double> (f1), static_cast<double> (xdt - 0.5f),
+                        trellis_attempt ? 1 : 0, llr_attempt - indice_bicm + 1, pass_index,
+                        pass_iaptype, pass_nharderrors, static_cast<double> (pass_dmin), nsync,
+                        trim_fixed (candidate_msg).c_str ());
+        }
+      if (trellis_attempt && trellis.debug)
+        {
+          std::fprintf (stderr, "TRELLIS f=%.1f dt=%.2f pass=%d ap=%d hard=%d dmin=%.1f nsync=%d sync=%.2f "
+                        "rms=%.2f df=%+.3f esn0=%.2f msg=%s\n",
+                        static_cast<double> (f1), static_cast<double> (xdt - 0.5f), pass_index,
+                        pass_iaptype, pass_nharderrors, static_cast<double> (pass_dmin), nsync,
+                        static_cast<double> (sync), static_cast<double> (trellis_info[0]),
+                        static_cast<double> (trellis_info[1]), static_cast<double> (trellis_info[2]),
+                        trim_fixed (candidate_msg).c_str ());
+        }
       nharderrors = pass_nharderrors;
       dmin = pass_dmin;
       nbadcrc = 0;
@@ -8109,6 +8492,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
     }
     }
 
+  if (trellis_attempt)
+    {
+      continue;           // replays and history were handled by the earlier rounds
+    }
   if (try_call_grid_cq_replay (call_grid_history_state, request, s8.data (),
                                nsync, sync, f1, xdt, xbase,
                                cq_signature_score, msg37, xsnr, itone,

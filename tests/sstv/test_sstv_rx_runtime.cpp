@@ -2355,7 +2355,7 @@ private slots:
         // Check interior pixels: the first/last analysis windows intentionally
         // straddle the protected-header and end-of-frame boundaries, while
         // the bounded decoder still completes those edge pixels.
-        for (const auto coordinate : {
+        for (const auto& coordinate : {
                  std::pair<std::uint32_t, std::uint32_t> {16U, 1U},
                  std::pair<std::uint32_t, std::uint32_t> {64U, 60U},
                  std::pair<std::uint32_t, std::uint32_t> {112U, 118U}}) {

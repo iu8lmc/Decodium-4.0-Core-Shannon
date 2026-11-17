@@ -120,8 +120,9 @@ constexpr int kApStoricoMax = 3;
 // ---------------------------------------------------------------------------
 // GOVERNATORE DELLE LEVE DI SENSIBILITA' (1.0.627)
 //
-// Le quattro leve (BICM-ID, passata coerente, AP dallo storico, accumulo a
-// energia) costano dal 30 al 50% di tempo di decodifica in piu'. Su una
+// Le leve (BICM-ID, passata coerente, AP dallo storico, accumulo a energia
+// e, dalla revisione del demodulatore, il giro a traliccio di fase) costano
+// dal 30 al 50% di tempo di decodifica in piu', il traliccio un altro 13-21%. Su una
 // macchina capace e' tempo che avanza; su una modesta e' la differenza fra
 // decodificare e non arrivare in fondo allo slot. La 1.0.626 le accendeva per
 // tutti e su un PC a 8 core e' morta al primo slot profondo.

@@ -11,6 +11,8 @@ int modeCalls = 0;
 int gateCalls = 0;
 int extrinsicCalls = 0;
 int lastMode = -1;
+int capCalls = 0;
+int lastCap = -1;
 unsigned cpuFeatures = 31;
 }
 
@@ -29,6 +31,11 @@ extern "C" void superldpc_simd_set_ft8_mode_c (int mode)
     ++modeCalls;
     lastMode = mode;
 }
+extern "C" void superldpc_simd_set_ft2_max_hard_c (int cap)
+{
+    ++capCalls;
+    lastCap = cap;
+}
 extern "C" void superldpc_simd_decode174_91_c (
     float const*, int, int, int, signed char const*, signed char*,
     signed char*, int*, int*, float*) { ++simdCalls; }
@@ -41,6 +48,13 @@ extern "C" int superldpc_simd_extrinsic174_91_c (float const*, int, float, float
     out[0] = 0.25f;
     return 1;
 }
+extern "C" int superldpc_simd_extrinsic174_91_v2_c (float const*, int, int, int, float,
+                                                  float* out)
+{
+    ++extrinsicCalls;
+    out[0] = 0.5f;
+    return 0;
+}
 extern "C" void superldpc_simd_gate_dump_open_c (char const*) { ++gateCalls; }
 extern "C" void superldpc_simd_gate_dump_close_c () { ++gateCalls; }
 extern "C" void superldpc_simd_gate_truth_set_c (signed char const*) { ++gateCalls; }
@@ -50,6 +64,7 @@ extern "C" void superldpc_set_enabled_c (int);
 extern "C" int superldpc_is_enabled_c ();
 extern "C" int superldpc_is_available_c ();
 extern "C" void superldpc_set_ft8_mode_c (int);
+extern "C" void superldpc_set_ft2_max_hard_c (int);
 extern "C" int superldpc_extrinsic174_91_c (float const*, int, float, float*);
 extern "C" void superldpc_gate_dump_open_c (char const*);
 extern "C" void superldpc_gate_dump_close_c ();
@@ -121,6 +136,32 @@ int main (int argc, char** argv)
         std::cerr << "scalar/batch/BICM dispatch regression: " << scenario << '\n';
         return 1;
     }
+    // The FT2 flipped-bit cap never reaches the SIMD unit in FT8 mode, is
+    // forwarded with every FT2 decode call, and a request of 0 clears it.
+    superldpc_set_ft2_max_hard_c (30);
+    superldpc_decode174_91_batch_c (
+        2, llr.data (), mask.data (), 91, 3, 3, message.data (),
+        codeword.data (), ntype.data (), nhard.data (), dmin.data ());
+    bool capOk = capCalls == 0;
+    superldpc_set_ft8_mode_c (0);
+    superldpc_decode174_91_batch_c (
+        2, llr.data (), mask.data (), 91, 3, 3, message.data (),
+        codeword.data (), ntype.data (), nhard.data (), dmin.data ());
+    capOk = capOk && capCalls == int (expectedSimd) && (!expectedSimd || lastCap == 30);
+    superldpc_decode174_91_c (llr.data (), 91, 3, 3, mask.data (),
+                             message.data (), codeword.data (), ntype.data (),
+                             nhard.data (), dmin.data ());
+    capOk = capOk && capCalls == (expectedSimd ? 2 : 0) && (!expectedSimd || lastCap == 30);
+    superldpc_set_ft2_max_hard_c (0);
+    superldpc_decode174_91_batch_c (
+        2, llr.data (), mask.data (), 91, 3, 3, message.data (),
+        codeword.data (), ntype.data (), nhard.data (), dmin.data ());
+    capOk = capOk && capCalls == (expectedSimd ? 3 : 0) && (!expectedSimd || lastCap == 0);
+    if (!capOk) {
+        std::cerr << "FT2 flipped-bit cap dispatch regression: " << scenario << '\n';
+        return 1;
+    }
+    superldpc_set_ft8_mode_c (1);
     // A UI change between checking availability and probing is also safe.
     superldpc_set_enabled_c (0);
 #if defined(DECODIUM_SUPERLDPC_TESTING)
