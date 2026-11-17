@@ -133,6 +133,7 @@ struct Options
   bool selftest = false;
   std::string dump;
   double dumpnd = 1.0;
+  double dumplogit = -1e9;
   std::string variants = "base,new";
   bool chain = false;
   std::vector<double> clips {0.0, 2.5, 2.0};
@@ -633,7 +634,8 @@ struct Catena
 // (via: 0 = chiusa dal min-sum, sempre accettata; 1 = OSD). Le soglie -- nd in
 // FT2, logit in FT8, piu' i bit ribaltati -- si applicano fuori linea, cosi'
 // lo stesso file serve a contare decodifiche e false decodifiche a qualsiasi
-// soglia. Sul rumore le righe con nd > dumpnd si saltano. In coda a ogni punto:
+// soglia. Sul rumore le righe con nd > dumpnd o con logit < dumplogit si
+// saltano. In coda a ogni punto:
 //   T seme S|N ebn0 trame clip us_per_trama
 void run_chain (Options const& o, Code const& code, FILE* f)
 {
@@ -679,11 +681,12 @@ void run_chain (Options const& o, Code const& code, FILE* f)
                       gate_threshold_delta () = -1e9f;
                       if (!dec[k]->decode (&llr[static_cast<size_t> (g) * kN], am, bits, &nhard, &nd, &bp))
                         continue;
-                      if (!segnale && !bp && static_cast<double> (nd) > o.dumpnd) continue;
                       bool const vero = segnale && std::memcmp (bits, truth, kN) == 0;
                       // il logit esiste solo dove il gate appreso e' acceso (FT8)
                       double const logit = (bp || !o.ft8) ? 99.0
                           : static_cast<double> (gate_logit (dec[k]->dec.gate_features (0), true));
+                      if (!segnale && !bp
+                          && (static_cast<double> (nd) > o.dumpnd || logit < o.dumplogit)) continue;
                       std::fprintf (f, "C %d %c %.2f %d %d %.2f %d %d %.5f %d %.4f\n", seed,
                                     segnale ? 'S' : 'N', ebn0, i, g, o.clips[k], bp ? 0 : 1,
                                     vero ? 1 : 0, static_cast<double> (nd), nhard, logit);
@@ -873,6 +876,7 @@ int main (int argc, char** argv)
       else if (k == "selftest") o.selftest = v != "0";
       else if (k == "dump") o.dump = v;
       else if (k == "dumpnd") o.dumpnd = std::atof (v.c_str ());
+      else if (k == "dumplogit") o.dumplogit = std::atof (v.c_str ());
       else if (k == "variants") o.variants = v;
       else { std::fprintf (stderr, "argomento sconosciuto: %s\n", k.c_str ()); return 2; }
     }

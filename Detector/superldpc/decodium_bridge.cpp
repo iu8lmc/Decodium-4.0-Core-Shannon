@@ -136,12 +136,27 @@ void manopole_ft8 (Ft2Config& c) {
         float const v = static_cast<float> (std::atof (e));
         if (v > 0.0f && v <= 1.0f) c.nd_max = v;
     }
+    if (char const* e = std::getenv ("DECODIUM_LDPC_PAIR_SEARCH")) {
+        c.pair_search = (e[0] != '0');
+    }
+}
+
+// DECODIUM_LDPC_LLR_CLIP: taglio degli LLR in ingresso (Ft2Config::llr_clip),
+// in multipli della media dei |LLR| della parola; 0 = nessun taglio. Vale per
+// tutti i preset e, a differenza delle manopole qui sopra, in ENTRAMBI i modi:
+// stava dentro manopole_ft8(), quindi in FT2 veniva ignorata in silenzio, e
+// tests/ft2_llr_clip_bench.cpp, che la imposta proprio per confrontare i tagli
+// sul demodulatore FT2, misurava due volte la stessa configurazione.
+//
+// Senza la variabile resta 2,5 in entrambi i modi. Il valore 2 e' stato
+// misurato sulle metriche FSK vere e NON e' un guadagno con i preset di
+// esercizio (README, "Taglio degli LLR sulle metriche FSK"): alla soglia
+// invariata toglie false decodifiche e decodifiche insieme, e a pari false
+// decodifiche non decodifica di piu'.
+void taglio_llr (Ft2Config& c) {
     if (char const* e = std::getenv ("DECODIUM_LDPC_LLR_CLIP")) {
         float const v = static_cast<float> (std::atof (e));
         if (v >= 0.0f) c.llr_clip = v;      // 0 = nessun taglio
-    }
-    if (char const* e = std::getenv ("DECODIUM_LDPC_PAIR_SEARCH")) {
-        c.pair_search = (e[0] != '0');
     }
 }
 
@@ -605,6 +620,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.gate_is_ft8 = g_modo_ft8;
             c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
+            taglio_llr (c);
             // Ricerca su (174,77) e gate a margine: vedi k77_scelto(). Il
             // vincolo AP dentro la ricerca segue lo stesso interruttore del
             // controllo di coerenza a valle (DECODIUM_LDPC_AP_CHECK).
@@ -628,6 +644,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.gate_is_ft8 = g_modo_ft8;
             c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
+            taglio_llr (c);
             slot2 = new Ft2Decoder (shared_code(), c);
         }
         return *slot2;
@@ -644,6 +661,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
         c.gate_is_ft8 = g_modo_ft8;
         c.gate_dump_cb = gate_dump_callback;
         manopole_ft8 (c);
+        taglio_llr (c);
         slot3 = new Ft2Decoder (shared_code(), c);
     }
     return *slot3;
