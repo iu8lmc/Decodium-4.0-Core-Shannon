@@ -411,6 +411,30 @@ add_executable (ft2_llr_clip_bench ft2_llr_clip_bench.cpp)
 target_link_libraries (ft2_llr_clip_bench wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_dependencies (test_qt_helpers ft2_llr_clip_bench)
 
+# Banco e collaudo della ricerca OSD sul codice (174,77) e del gate a margine
+# di superldpc (DECODIUM_LDPC_K77, spento di default nel programma). Facoltativo
+# e fuori dalle librerie del progetto: compila da se' il bridge con le stesse
+# opzioni della build x86 e definisce i pochi simboli che gli servono, quindi
+# gira solo su una CPU con AVX2. `selftest=1` e' l'unico collaudo delle 14
+# righe della CRC-14 e della ricerca (174,77).
+option (DECODIUM_BUILD_SUPERLDPC_K77_BENCH
+  "Build tests/tools/superldpc_k77_bench and register its selftest (x86-64 with AVX2 only)" OFF)
+if (DECODIUM_BUILD_SUPERLDPC_K77_BENCH AND DECODIUM_SUPERLDPC_X86_TARGET
+    AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_executable (superldpc_k77_bench tools/superldpc_k77_bench.cpp
+    ${PROJECT_SOURCE_DIR}/Detector/superldpc/decodium_bridge.cpp
+    ${PROJECT_SOURCE_DIR}/Detector/FtxLdpc.cpp
+    ${PROJECT_SOURCE_DIR}/lib/crc14.cpp
+    ${PROJECT_SOURCE_DIR}/lib/crc13.cpp)
+  set_target_properties (superldpc_k77_bench PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  target_include_directories (superldpc_k77_bench PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_definitions (superldpc_k77_bench PRIVATE SUPERLDPC_HAVE_GATE_WEIGHTS=1)
+  target_compile_options (superldpc_k77_bench PRIVATE -O3 -mavx2 -mfma)
+  find_package (Threads REQUIRED)
+  target_link_libraries (superldpc_k77_bench Boost::boost Threads::Threads)
+  add_test (NAME superldpc_k77_selftest COMMAND $<TARGET_FILE:superldpc_k77_bench> selftest=1)
+endif ()
+
 add_executable (test_tx_pipeline test_tx_pipeline.cpp)
 target_link_libraries (test_tx_pipeline wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_tx_pipeline COMMAND $<TARGET_FILE:test_tx_pipeline>)
