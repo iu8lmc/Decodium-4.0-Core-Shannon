@@ -318,6 +318,10 @@ add_decodium_sstv_integration_test (test_sstv_qso_log
   test_sstv_qso_log.cpp)
 add_decodium_sstv_integration_test (test_sstv_rx_runtime
   test_sstv_rx_runtime.cpp)
+# 38 full-length receive loopbacks, all CPU bound on one thread: on the CI
+# runners the first 17 alone use the 300 s that ctest --timeout allows, so
+# give this executable its own budget instead of the default.
+set_tests_properties (test_sstv_rx_runtime PROPERTIES TIMEOUT 1800)
 add_executable (analyze_sstv_capture EXCLUDE_FROM_ALL tools/analyze_sstv_capture.cpp)
 target_link_libraries (analyze_sstv_capture PRIVATE Decodium::SstvIntegration Qt6::Core)
 target_compile_features (analyze_sstv_capture PRIVATE cxx_std_17)
