@@ -134,6 +134,8 @@ struct Options
   std::string dump;
   double dumpnd = 1.0;
   std::string variants = "base,new";
+  bool chain = false;
+  std::vector<double> clips {0.0, 2.5, 2.0};
 };
 
 std::vector<std::string> split (std::string const& s)
@@ -361,10 +363,13 @@ struct Direct
   bool ft8;
   Direct (Code const& code, Ft2Config const& c, bool ft8_) : dec (code, c), ft8 (ft8_) {}
 
-  int decode (float const* llr_dec, signed char const* apm, uint8_t* bits, int* nhard_out)
+  int decode (float const* llr_dec, signed char const* apm, uint8_t* bits, int* nhard_out,
+              float* nd_out = nullptr, bool* by_bp = nullptr)
   {
     float llr[kN];
+    float nd = 0;
     uint8_t mask[kN], acc = 0;
+    long const bp_prima = dec.stats ().by_bp;
     int nap = 0;
     for (int v = 0; v < kN; ++v)
       {
@@ -372,8 +377,10 @@ struct Direct
         mask[v] = apm[v] != 0;
         nap += mask[v];
       }
-    dec.decode_batch (llr, 1, bits, &acc, nullptr, mask);
+    dec.decode_batch (llr, 1, bits, &acc, &nd, mask);
     if (!acc) return 0;
+    if (nd_out) *nd_out = nd;
+    if (by_bp) *by_bp = dec.stats ().by_bp > bp_prima;
     int nhard = 0;
     for (int v = 0; v < kN; ++v) nhard += (bits[v] ? 1 : 0) != (llr_dec[v] >= 0.0f ? 1 : 0);
     if (nhard_out) *nhard_out = nhard;
@@ -445,6 +452,253 @@ void run_dump (Options const& o, Code const& code, FILE* f)
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// chan=chain: catena a livello di simbolo dopo la sincronizzazione, con le
+// metriche di bit che il demodulatore passa DAVVERO al decoder, cioe' piu'
+// insiemi di LLR per la stessa trama e non uno solo.
+//
+//   FT8: 79 simboli 8-FSK ortogonali (tre blocchi Costas), fase della portante
+//        costante sulla trama, AWGN complesso. Cinque insiemi come
+//        run_ft8_bitmetrics: max-log sul modulo della somma coerente di gruppi
+//        di 1, 2 e 3 simboli (A, B, C), l'insieme a un simbolo diviso per il
+//        massimo (D) e, bit per bit, il piu' grande in modulo dei tre (E);
+//        ciascuno normalizzato al valore efficace e scalato per 2,83.
+//   FT2: 103 simboli 4-FSK (quattro blocchi di sincronismo da 4 simboli), tre
+//        insiemi su gruppi di 1, 2 e 4 simboli che attraversano i blocchi di
+//        sincronismo come in run_ft2_bitmetrics, normalizzati come
+//        normalizebmet sulle 206 righe. Qui il demodulatore vero usa una
+//        log-somma di esponenziali sulle potenze equalizzate; il banco usa il
+//        max-log sulle ampiezze, quindi per FT2 e' un'approssimazione.
+//
+// Tempo e frequenza sono ideali e non c'e' l'interferenza fra simboli del
+// GFSK. Una trama e' decodificata se almeno un insieme restituisce la parola
+// trasmessa; ha una falsa decodifica se almeno un insieme restituisce un'altra
+// parola. E' cosi' che conta il decoder vero, che prova gli insiemi uno dopo
+// l'altro: i falsi per trama sono piu' di quelli per parola.
+struct Catena
+{
+  bool ft8;
+  int M, bps, nsimb, nset;
+  std::vector<int> dato;        // per simbolo: indice del primo bit, -1 = sincronismo
+  std::vector<int> tono_sync;
+  std::mt19937_64 rng;
+  std::normal_distribution<double> nrm {0.0, 1.0};
+
+  Catena (bool ft8_, uint64_t seed) : ft8 (ft8_), rng (seed)
+  {
+    static int const costas[7] = {3, 1, 4, 0, 6, 5, 2};
+    M = ft8 ? 8 : 4; bps = ft8 ? 3 : 2; nsimb = ft8 ? 79 : 103; nset = ft8 ? 5 : 3;
+    dato.assign (static_cast<size_t> (nsimb), -1);
+    tono_sync.assign (static_cast<size_t> (nsimb), 0);
+    if (ft8)
+      {
+        for (int k = 0; k < 7; ++k)
+          tono_sync[static_cast<size_t> (k)] = tono_sync[static_cast<size_t> (36 + k)]
+              = tono_sync[static_cast<size_t> (72 + k)] = costas[k];
+        for (int k = 0; k < 29; ++k)
+          {
+            dato[static_cast<size_t> (7 + k)] = 3 * k;
+            dato[static_cast<size_t> (43 + k)] = 87 + 3 * k;
+          }
+      }
+    else
+      {
+        for (int blocco = 0; blocco < 3; ++blocco)
+          for (int k = 0; k < 29; ++k)
+            dato[static_cast<size_t> (4 + 33 * blocco + k)] = 58 * blocco + 2 * k;
+        for (int s = 0; s < nsimb; ++s)
+          if (dato[static_cast<size_t> (s)] < 0) tono_sync[static_cast<size_t> (s)] = s & 3;
+      }
+  }
+
+  // out: nset * 174 LLR nella convenzione di Decodium (positivo = bit 1).
+  void llr (uint8_t const* cw, double ebn0_db, float* out)
+  {
+    static int const gray8[8] = {0, 1, 3, 2, 5, 6, 4, 7};
+    static int const gray4[4] = {0, 1, 3, 2};
+    int const* gray = ft8 ? gray8 : gray4;
+    double const amp = std::sqrt (std::pow (10.0, ebn0_db / 10.0) * bps * 91.0 / 174.0);
+    double const sd = std::sqrt (0.5);
+    double const fase = 6.283185307179586 * (static_cast<double> (rng () >> 11) / 9007199254740992.0);
+    double const cr = amp * std::cos (fase), ci = amp * std::sin (fase);
+    std::vector<double> yr (static_cast<size_t> (nsimb * M)), yi (static_cast<size_t> (nsimb * M));
+    for (int s = 0; s < nsimb; ++s)
+      {
+        for (int t = 0; t < M; ++t)
+          {
+            yr[static_cast<size_t> (s * M + t)] = sd * nrm (rng);
+            yi[static_cast<size_t> (s * M + t)] = sd * nrm (rng);
+          }
+        if (!cw) continue;
+        int tono = tono_sync[static_cast<size_t> (s)];
+        if (dato[static_cast<size_t> (s)] >= 0)
+          {
+            int v = 0;
+            for (int b = 0; b < bps; ++b) v = (v << 1) | cw[dato[static_cast<size_t> (s)] + b];
+            tono = gray[v];
+          }
+        yr[static_cast<size_t> (s * M + tono)] += cr;
+        yi[static_cast<size_t> (s * M + tono)] += ci;
+      }
+    int const nrighe = ft8 ? kN : 2 * nsimb;
+    std::vector<float> bm (static_cast<size_t> (5 * nrighe), 0.0f);
+    static int const gruppi_ft8[3] = {1, 2, 3}, gruppi_ft2[3] = {1, 2, 4};
+    std::vector<double> A;
+    for (int g = 0; g < 3; ++g)
+      {
+        int const nsym = ft8 ? gruppi_ft8[g] : gruppi_ft2[g];
+        int const nbits = bps * nsym, nt = 1 << nbits;
+        A.resize (static_cast<size_t> (nt));
+        // inizio (simbolo) e prima riga di ogni gruppo
+        std::vector<std::pair<int, int>> inizi;
+        if (ft8)
+          {
+            for (int meta = 0; meta < 2; ++meta)
+              for (int k = 0; k < 29; k += nsym)
+                inizi.emplace_back ((meta ? 43 : 7) + k, 87 * meta + 3 * k);
+          }
+        else
+          {
+            for (int ks = 0; ks + nsym <= nsimb; ks += nsym) inizi.emplace_back (ks, 2 * ks);
+          }
+        for (auto const& in : inizi)
+          {
+            for (int i = 0; i < nt; ++i)
+              {
+                double sr = 0, si = 0;
+                for (int l = 0; l < nsym; ++l)
+                  {
+                    int const d = (i >> (bps * (nsym - 1 - l))) & (M - 1);
+                    sr += yr[static_cast<size_t> ((in.first + l) * M + gray[d])];
+                    si += yi[static_cast<size_t> ((in.first + l) * M + gray[d])];
+                  }
+                A[static_cast<size_t> (i)] = std::sqrt (sr * sr + si * si);
+              }
+            for (int ib = 0; ib < nbits; ++ib)
+              {
+                int const riga = in.second + ib;
+                if (riga >= nrighe) continue;
+                int const bit = nbits - 1 - ib;
+                double m0 = -1.0, m1 = -1.0;
+                for (int i = 0; i < nt; ++i)
+                  {
+                    if ((i >> bit) & 1) m1 = std::max (m1, A[static_cast<size_t> (i)]);
+                    else m0 = std::max (m0, A[static_cast<size_t> (i)]);
+                  }
+                bm[static_cast<size_t> (g * nrighe + riga)] = static_cast<float> (m1 - m0);
+                if (ft8 && nsym == 1)
+                  {
+                    double const den = std::max (m0, m1);
+                    bm[static_cast<size_t> (3 * nrighe + riga)]
+                        = den > 0 ? static_cast<float> ((m1 - m0) / den) : 0.0f;
+                  }
+              }
+          }
+      }
+    if (ft8)
+      for (int v = 0; v < kN; ++v)
+        {
+          float best = bm[static_cast<size_t> (v)];
+          for (int g = 1; g < 3; ++g)
+            if (std::fabs (bm[static_cast<size_t> (g * nrighe + v)]) > std::fabs (best))
+              best = bm[static_cast<size_t> (g * nrighe + v)];
+          bm[static_cast<size_t> (4 * nrighe + v)] = best;
+        }
+    for (int g = 0; g < nset; ++g)
+      {
+        float const* r = &bm[static_cast<size_t> (g * nrighe)];
+        double s1 = 0, s2 = 0;
+        for (int v = 0; v < nrighe; ++v) { s1 += r[v]; s2 += static_cast<double> (r[v]) * r[v]; }
+        double const mean = ft8 ? 0.0 : s1 / nrighe, var = s2 / nrighe - mean * mean;
+        double const sig = var > 0 ? std::sqrt (var) : std::sqrt (s2 / nrighe);
+        float* o = out + static_cast<size_t> (g) * kN;
+        if (ft8)
+          for (int v = 0; v < kN; ++v) o[v] = static_cast<float> (2.83 * r[v] / sig);
+        else
+          for (int s = 0; s < nsimb; ++s)
+            {
+              int const d = dato[static_cast<size_t> (s)];
+              if (d < 0) continue;
+              for (int b = 0; b < 2; ++b) o[d + b] = static_cast<float> (2.83 * r[2 * s + b] / sig);
+            }
+      }
+  }
+};
+
+// chan=chain: ogni trama passa, per ogni valore di clips=, da un decoder con il
+// preset di esercizio e i gate APERTI (nd fino a 0,25; soglia del gate appreso
+// tolta), e si scrive una riga per ogni parola accettata:
+//   C seme S|N ebn0 trama insieme clip via vero nd nhard logit
+// (via: 0 = chiusa dal min-sum, sempre accettata; 1 = OSD). Le soglie -- nd in
+// FT2, logit in FT8, piu' i bit ribaltati -- si applicano fuori linea, cosi'
+// lo stesso file serve a contare decodifiche e false decodifiche a qualsiasi
+// soglia. Sul rumore le righe con nd > dumpnd si saltano. In coda a ogni punto:
+//   T seme S|N ebn0 trame clip us_per_trama
+void run_chain (Options const& o, Code const& code, FILE* f)
+{
+  signed char rv[77];
+  ftx_ft2_rvec_c (rv);
+  static uint8_t rvec[77];
+  for (int i = 0; i < 77; ++i) rvec[i] = static_cast<uint8_t> (rv[i] & 1);
+  std::vector<Direct*> dec;
+  for (double clip : o.clips)
+    {
+      Ft2Config c = shipped_config (o.ft8, rvec);
+      c.llr_clip = static_cast<float> (clip);
+      c.nd_max = 0.25f;
+      dec.push_back (new Direct (code, c, o.ft8));
+    }
+  Generator msg (o.ft8, true, 1);
+  uint8_t m77[77], truth[kN], bits[kN];
+  signed char am[kN];
+  std::memset (am, 0, sizeof am);
+  std::vector<float> llr (static_cast<size_t> (5) * kN);
+  for (int seed : o.seeds)
+    {
+      for (size_t p = 0; p <= o.ebn0.size (); ++p)
+        {
+          bool const segnale = p < o.ebn0.size ();
+          double const ebn0 = segnale ? o.ebn0[p] : 0.0;
+          int const n = segnale ? o.n : o.noise;
+          uint64_t const s = static_cast<uint64_t> (seed) * 1000 + (segnale ? p + 1 : 0);
+          Catena cat (o.ft8, s);
+          msg.rng.seed (s ^ 0x5DEECE66Dull);
+          std::vector<double> sec (o.clips.size (), 0.0);
+          for (int i = 0; i < n; ++i)
+            {
+              msg.message (m77);
+              project_encode (m77, truth);
+              cat.llr (segnale ? truth : nullptr, ebn0, llr.data ());
+              for (size_t k = 0; k < o.clips.size (); ++k)
+                {
+                  auto const t0 = std::chrono::steady_clock::now ();
+                  for (int g = 0; g < cat.nset; ++g)
+                    {
+                      int nhard = 0; float nd = 0; bool bp = false;
+                      gate_threshold_delta () = -1e9f;
+                      if (!dec[k]->decode (&llr[static_cast<size_t> (g) * kN], am, bits, &nhard, &nd, &bp))
+                        continue;
+                      if (!segnale && !bp && static_cast<double> (nd) > o.dumpnd) continue;
+                      bool const vero = segnale && std::memcmp (bits, truth, kN) == 0;
+                      // il logit esiste solo dove il gate appreso e' acceso (FT8)
+                      double const logit = (bp || !o.ft8) ? 99.0
+                          : static_cast<double> (gate_logit (dec[k]->dec.gate_features (0), true));
+                      std::fprintf (f, "C %d %c %.2f %d %d %.2f %d %d %.5f %d %.4f\n", seed,
+                                    segnale ? 'S' : 'N', ebn0, i, g, o.clips[k], bp ? 0 : 1,
+                                    vero ? 1 : 0, static_cast<double> (nd), nhard, logit);
+                    }
+                  sec[k] += std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+                }
+            }
+          for (size_t k = 0; k < o.clips.size (); ++k)
+            std::fprintf (f, "T %d %c %.2f %d %.2f %.1f\n", seed, segnale ? 'S' : 'N', ebn0, n,
+                          o.clips[k], 1e6 * sec[k] / n);
+          std::fflush (f);
+        }
+    }
+}
+
 
 bool check (bool cond, char const* cosa)
 {
@@ -608,7 +862,8 @@ int main (int argc, char** argv)
       if (p == std::string::npos) { std::fprintf (stderr, "argomento non valido: %s\n", argv[i]); return 2; }
       std::string const k = a.substr (0, p), v = a.substr (p + 1);
       if (k == "mode") o.ft8 = v != "ft2";
-      else if (k == "chan") o.fsk = v != "bpsk";
+      else if (k == "chan") { o.fsk = v != "bpsk"; o.chain = v == "chain"; }
+      else if (k == "clips") { o.clips.clear (); for (auto const& s : split (v)) o.clips.push_back (std::atof (s.c_str ())); }
       else if (k == "ebn0") { o.ebn0.clear (); for (auto const& s : split (v)) o.ebn0.push_back (std::atof (s.c_str ())); }
       else if (k == "seeds") { o.seeds.clear (); for (auto const& s : split (v)) o.seeds.push_back (std::atoi (s.c_str ())); }
       else if (k == "n") o.n = std::atoi (v.c_str ());
@@ -627,7 +882,8 @@ int main (int argc, char** argv)
     {
       FILE* f = std::fopen (o.dump.c_str (), "w");
       if (!f) { std::fprintf (stderr, "non posso scrivere %s\n", o.dump.c_str ()); return 2; }
-      run_dump (o, code, f);
+      if (o.chain) run_chain (o, code, f);
+      else run_dump (o, code, f);
       std::fclose (f);
       return 0;
     }
