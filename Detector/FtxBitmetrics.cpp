@@ -971,6 +971,122 @@ inline void ftx_group_bit_lse (float const* values, int nt, int nbits, float* me
     }
 }
 
+// Metrica di bit FT2, scelta con DECODIUM_FT2_METRIC (letta una volta sola):
+//   assente, 0  somma logaritmica di esponenziali delle energie (storica);
+//   1 o "i0"    verosimiglianza non coerente esatta: log I0 (2 A |c| / N0) per
+//               ipotesi, con A e N0 stimati sui simboli di sincronismo;
+//   2 o "amp"   max-log sulle ampiezze |c|, senza alcuna stima.
+// Vale solo per le tre colonne non equalizzate di run_ft2_bitmetrics_impl.
+// SPENTA di default: vedi docs/diagnostics/performance.md.
+inline int ft2_metric_mode ()
+{
+  static int const v = [] {
+    char const* raw = std::getenv ("DECODIUM_FT2_METRIC");
+    if (!raw)
+      {
+        return 0;
+      }
+    if (raw[0] == '1' || raw[0] == 'i')
+      {
+        return 1;
+      }
+    if (raw[0] == '2' || raw[0] == 'a')
+      {
+        return 2;
+      }
+    return 0;
+  }();
+  return v;
+}
+
+// log I0 (x) per x >= 0: tabella a passo 1/16 fino a 64 con interpolazione
+// lineare (errore assoluto sotto 3e-4), oltre x - costante. Oltre 64 il
+// termine trascurato, meta' del logaritmo di x, cambia la differenza fra due
+// ipotesi vicine di meno dell'uno per cento.
+struct Ft2LogI0Table
+{
+  static constexpr int kPerUnit = 16;
+  static constexpr int kLimit = 64;
+  std::array<float, kPerUnit * kLimit + 2> value {};
+  float tail_offset {0.0f};
+
+  Ft2LogI0Table ()
+  {
+    for (size_t i = 0; i < value.size (); ++i)
+      {
+        double const x = static_cast<double> (i) / kPerUnit;
+        double const t = 0.25 * x * x;
+        double term = 1.0;
+        double sum = 1.0;
+        for (int k = 1; k < 400 && term > 1.0e-17 * sum; ++k)
+          {
+            term *= t / (static_cast<double> (k) * static_cast<double> (k));
+            sum += term;
+          }
+        value[i] = static_cast<float> (std::log (sum));
+      }
+    tail_offset = static_cast<float> (kLimit) - value[static_cast<size_t> (kPerUnit * kLimit)];
+  }
+};
+
+inline float ft2_log_i0 (float x)
+{
+  static Ft2LogI0Table const table;
+  if (!(x < static_cast<float> (Ft2LogI0Table::kLimit)))
+    {
+      return x - table.tail_offset;
+    }
+  float const position = std::max (x, 0.0f) * static_cast<float> (Ft2LogI0Table::kPerUnit);
+  int const index = static_cast<int> (position);
+  float const frac = position - static_cast<float> (index);
+  float const lo = table.value[static_cast<size_t> (index)];
+  return lo + frac * (table.value[static_cast<size_t> (index + 1)] - lo);
+}
+
+// Potenza media sui toni attesi dei 16 simboli di sincronismo FT2 e sugli
+// altri 48 toni degli stessi simboli (solo rumore), senza il troncamento a
+// intero di ft2_legacy_base_noise_var.
+void ft2_sync_levels (std::array<std::array<float, 4>, 103> const& pwr,
+                      float& sync_power, float& noise_power)
+{
+  static std::array<std::array<int, 4>, 4> const icos {{
+      {{0, 1, 3, 2}}, {{1, 0, 2, 3}}, {{2, 3, 1, 0}}, {{3, 2, 0, 1}}}};
+  float sync_sum = 0.0f;
+  float noise_sum = 0.0f;
+  for (int block = 0; block < 4; ++block)
+    {
+      for (int k = 0; k < 4; ++k)
+        {
+          std::array<float, 4> const& row = pwr[static_cast<size_t> (33 * block + k)];
+          int const expected = icos[static_cast<size_t> (block)][static_cast<size_t> (k)];
+          for (int itone = 0; itone < 4; ++itone)
+            {
+              if (itone == expected) sync_sum += row[static_cast<size_t> (itone)];
+              else noise_sum += row[static_cast<size_t> (itone)];
+            }
+        }
+    }
+  sync_power = sync_sum / 16.0f;
+  noise_power = noise_sum / 48.0f;
+}
+
+// Max-log di un gruppo: per ogni bit dell'indice di combinazione, massimo dei
+// valori col bit a 1 meno massimo dei valori col bit a 0.
+inline void ftx_group_bit_maxlog (float const* values, int nt, int nbits, float* metric)
+{
+  for (int bit = 0; bit < nbits; ++bit)
+    {
+      float max1 = -1.0e30f;
+      float max0 = -1.0e30f;
+      for (int i = 0; i < nt; ++i)
+        {
+          if ((i & (1 << bit)) != 0) max1 = std::max (max1, values[i]);
+          else max0 = std::max (max0, values[i]);
+        }
+      metric[bit] = max1 - max0;
+    }
+}
+
 void run_ft4_bitmetrics (Complex const* cd, float* bitmetrics, int* badsync)
 {
   static std::array<int, 4> const graymap {{0, 1, 3, 2}};
@@ -1114,6 +1230,21 @@ void run_ft2_bitmetrics_impl (Complex const* cd, float* bitmetrics, int* badsync
     }
   float beta = clamp_value (0.5f / noise_var, 0.01f, 50.0f);
 
+  // Metrica alternativa (DECODIUM_FT2_METRIC). Per log I0 serve il guadagno
+  // 2 A / N0: N0 e' la potenza media dei toni di solo rumore del sincronismo,
+  // A^2 la potenza media dei toni di sincronismo meno N0, non meno di N0.
+  int const metric_mode = ft2_metric_mode ();
+  float amp_gain = 0.0f;
+  if (metric_mode == 1)
+    {
+      float sync_power = 0.0f;
+      float noise_power = 0.0f;
+      ft2_sync_levels (pwr, sync_power, noise_power);
+      noise_power = std::max (noise_power, kTiny);
+      float const amp2 = std::max (sync_power - noise_power, noise_power);
+      amp_gain = 2.0f * std::sqrt (amp2) / noise_power;
+    }
+
   if (!check_ft4_sync (s4, 3))
     {
       *badsync = 1;
@@ -1140,14 +1271,33 @@ void run_ft2_bitmetrics_impl (Complex const* cd, float* bitmetrics, int* badsync
                          [static_cast<size_t> (graymap[static_cast<size_t> (value)])];
               },
               sums.data ());
-          for (int i = 0; i < nt; ++i)
+          if (metric_mode == 0)
             {
-              float const power = abs2 (sums[static_cast<size_t> (i)]);
-              sp[static_cast<size_t> (i)] = beta_eff * power;
+              for (int i = 0; i < nt; ++i)
+                {
+                  float const power = abs2 (sums[static_cast<size_t> (i)]);
+                  sp[static_cast<size_t> (i)] = beta_eff * power;
+                }
+            }
+          else
+            {
+              for (int i = 0; i < nt; ++i)
+                {
+                  float const magnitude = std::sqrt (abs2 (sums[static_cast<size_t> (i)]));
+                  sp[static_cast<size_t> (i)] =
+                      metric_mode == 1 ? ft2_log_i0 (amp_gain * magnitude) : magnitude;
+                }
             }
 
           std::array<float, 8> group_metric {};
-          ftx_group_bit_lse (sp.data (), nt, ibmax + 1, group_metric.data (), lse_work);
+          if (metric_mode == 2)
+            {
+              ftx_group_bit_maxlog (sp.data (), nt, ibmax + 1, group_metric.data ());
+            }
+          else
+            {
+              ftx_group_bit_lse (sp.data (), nt, ibmax + 1, group_metric.data (), lse_work);
+            }
 
           int const ipt = 1 + (ks - 1) * 2;
           for (int ib = 0; ib <= ibmax; ++ib)
