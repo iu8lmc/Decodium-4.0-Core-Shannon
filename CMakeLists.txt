@@ -1732,7 +1732,12 @@ endif ()
 # Ft8AutoTxDecodeGate::slowDecoder(), whose members all have default
 # initialisers, when the class is inlined into a Qt test's metacall.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=array-bounds -Wno-error=maybe-uninitialized")
+  # -Wdangling-pointer: raised on a conditional expression choosing between
+  # QList initialiser lists in tests/test_decodium_updater.cpp; the QList
+  # owns a copy, nothing refers to the temporaries afterwards.
+  # -Wstringop-overflow / -Wstringop-overread: already known false positives
+  # of this compiler in three files further down; same family.
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=array-bounds -Wno-error=maybe-uninitialized -Wno-error=dangling-pointer -Wno-error=stringop-overflow -Wno-error=stringop-overread")
 endif ()
 
 if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
