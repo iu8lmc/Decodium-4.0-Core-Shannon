@@ -3292,7 +3292,7 @@ int main(int argc, char* argv[])
     int const labMonitorMs = parseLabDelayMs(labMonitorMsOption, 8000);
     int const labSstvRxMs = parseLabDelayMs(labSstvRxMsOption, 0);
     int const labSstvTxMs = parseLabDelayMs(labSstvTxMsOption, 0);
-    int const labSstvTxWaitTimeoutMs = parseLabDelayMs(
+    [[maybe_unused]] int const labSstvTxWaitTimeoutMs = parseLabDelayMs(
         labSstvTxWaitTimeoutOption, 60'000);
     QString const labSstvMode = parser.value(labSstvModeOption).trimmed();
     QString const labSstvRxMode = parser.value(labSstvRxModeOption).trimmed();
@@ -3301,8 +3301,8 @@ int main(int argc, char* argv[])
     QString const labSstvTxImageFile = parser.value(labSstvTxImageFileOption).trimmed();
     QString const labSstvTxWaitFile = parser.value(labSstvTxWaitFileOption).trimmed();
     QString const labSstvImage = parser.value(labSstvImageOption).trimmed();
-    bool const labSstvVox = parser.isSet(labSstvVoxOption);
-    bool const labHamDrm = parser.isSet(labHamDrmOption);
+    [[maybe_unused]] bool const labSstvVox = parser.isSet(labSstvVoxOption);
+    [[maybe_unused]] bool const labHamDrm = parser.isSet(labHamDrmOption);
     QString const labHamDrmProfile = parser.value(labHamDrmProfileOption).trimmed();
     int const labBcastMs = parseLabDelayMs(labBcastMsOption, 14000);
     int const labDigiMs = parseLabDelayMs(labDigiMsOption, 14000);

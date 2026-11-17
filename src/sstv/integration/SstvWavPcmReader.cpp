@@ -282,7 +282,7 @@ bool SstvWavPcmReader::parse(QString* error)
         }
         cursor = payload + padded;
     }
-    if (cursor != m_riffEnd || formatBytes.isEmpty()
+    if (cursor != m_riffEnd || formatBytes.size() < kMinimumFormatBytes
         || dataOffset == 0U || dataBytes == 0U) {
         return fail(error, QStringLiteral("WAV format or audio data is missing"));
     }
