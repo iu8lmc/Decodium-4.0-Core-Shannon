@@ -419,7 +419,7 @@ void run_dump (Options const& o, Code const& code, FILE* f)
                   if (segnale && o.apwrong) { gen.message (m77); project_encode (m77, ipotesi); }
                   ap_apply (am, ipotesi, llr);
                 }
-              int nhard = 0;
+              int nhard = kN;       // resta cosi' se Ft2Decoder non accetta
               int const acc = d.decode (llr, am, bits, &nhard);
               bool const vero = segnale && std::memcmp (bits, truth, kN) == 0;
               MarginFeatures const& mf = d.dec.margin_features (0);
@@ -430,7 +430,8 @@ void run_dump (Options const& o, Code const& code, FILE* f)
                 }
               if (!segnale && static_cast<double> (mf.nd) > o.dumpnd) continue;
               // nhard e' valido solo se Ft2Decoder ha accettato; a gate aperti
-              // succede per ogni candidato dell'OSD.
+              // succede per ogni candidato dell'OSD che ha un concorrente (con
+              // ap=77 non ne ha, decide la regola di prima e il dump non serve).
               std::fprintf (f, "D %d %c %.2f %d %.5f %.5f %d %.3f %.4f %d %.4f\n", seed,
                             segnale ? 'S' : 'N', ebn0, vero ? 1 : 0,
                             static_cast<double> (mf.nd), static_cast<double> (mf.nd2),

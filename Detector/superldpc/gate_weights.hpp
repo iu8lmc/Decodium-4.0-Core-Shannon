@@ -61,5 +61,5 @@ static const float GATE_THRESHOLD_FT8 = -4.168874f;
 // sul codice concatenato (174,77), DECODIUM_LDPC_K77=1.
 // Tarati con tests/tools/superldpc_k77_bench.cpp (dump=) sui semi 1, 2, 3 e
 // riportati sui semi 11, 12, 13: vedi README, "Ricerca su (174,77)".
-static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.04f, 0.2045f, 0.0f};
-static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.03f, 0.0f};
+static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.04f, 0.2000f, 0.65f};
+static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.040f, 1.0f};

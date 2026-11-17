@@ -269,15 +269,15 @@ public:
                 const float base_nd = margine ? cfg_.margin_relax
                                     : (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max);
                 int free_bits = N;
+                float ap_r2 = 1.0f;
                 if (apmask) {
                     free_bits = 0;
                     const uint8_t* m = &apmask[(size_t)i * N];
                     for (int v = 0; v < N; ++v) free_bits += !m[v];
                     const float r = free_bits > 0 ? (float)N / (float)free_bits : 1.0f;
-                    osd_.nd_max = base_nd * r * r;
-                } else {
-                    osd_.nd_max = base_nd;
+                    ap_r2 = r * r;
                 }
+                osd_.nd_max = base_nd * ap_r2;
                 float d = 0;
                 if (osd_.decode(ms_.posterior(b), word_.data(), &buf_[(size_t)b * N], &d,
                                 apmask ? &apmask[(size_t)i * N] : nullptr)) {
@@ -290,7 +290,13 @@ public:
                         mf.free_ratio = (float)free_bits / (float)N;
                         mf.valid = true;
                     }
-                    if (margine) {
+                    // Senza concorrente (tutti i bit d'informazione noti per
+                    // ipotesi AP: la parola possibile e' una sola) il margine
+                    // non ha niente da dire, e decide la regola di prima.
+                    const bool col_margine = margine && osd_.last_has_second();
+                    if (margine && !col_margine
+                        && d > (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max) * ap_r2) continue;
+                    if (col_margine) {
                         float logit = 0.0f;
                         if (feature) {
                             const GateFeatures& g = fill_features(i, b, word_.data(), d,
