@@ -279,6 +279,7 @@ void ap_apply (signed char const* mask, uint8_t const* bits, float* llr)
 struct Tally
 {
   long words = 0, ok = 0, falsi = 0;
+  long parole_false = 0;        // solo chan=chain: parole, non trame
   double sec = 0;
 };
 
@@ -627,6 +628,60 @@ struct Catena
   }
 };
 
+// chan=chain senza dump=: le stesse trame attraverso il bridge, come
+// run_bridge. Qui "parole" sono trame: ok se almeno un insieme di metriche
+// restituisce la parola trasmessa, falsa se almeno uno ne restituisce un'altra
+// (parole_false conta invece le parole sbagliate, una per insieme).
+Tally run_bridge_chain (Options const& o, uint64_t seed, bool segnale, double ebn0, int n)
+{
+  constexpr int kBlock = 16;
+  Catena cat (o.ft8, seed);
+  Generator gen (o.ft8, true, seed ^ 0x5DEECE66Dull);
+  int const ns = cat.nset;
+  size_t const nw = static_cast<size_t> (kBlock) * static_cast<size_t> (ns);
+  std::vector<float> llr (nw * kN);
+  std::vector<signed char> apmask (nw * kN, 0), msg (nw * 91), cw (nw * kN);
+  std::vector<int> ntype (nw), nhard (nw);
+  std::vector<float> dmin (nw);
+  std::vector<uint8_t> truth (static_cast<size_t> (kBlock) * kN);
+  uint8_t m77[77];
+  Tally t;
+  superldpc_simd_set_ft8_mode_c (o.ft8 ? 1 : 0);
+  for (int off = 0; off < n; off += kBlock)
+    {
+      int const cnt = std::min (kBlock, n - off);
+      for (int b = 0; b < cnt; ++b)
+        {
+          uint8_t* tw = &truth[static_cast<size_t> (b) * kN];
+          gen.message (m77);
+          project_encode (m77, tw);
+          cat.llr (segnale ? tw : nullptr, ebn0, &llr[static_cast<size_t> (b * ns) * kN]);
+        }
+      auto const t0 = std::chrono::steady_clock::now ();
+      superldpc_simd_decode174_91_batch_c (cnt * ns, llr.data (), apmask.data (), 91, 3,
+                                           o.ft8 ? 2 : 3, msg.data (), cw.data (),
+                                           ntype.data (), nhard.data (), dmin.data ());
+      t.sec += std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+      for (int b = 0; b < cnt; ++b)
+        {
+          ++t.words;
+          bool ok = false, falsa = false;
+          for (int g = 0; g < ns; ++g)
+            {
+              size_t const w = static_cast<size_t> (b * ns + g);
+              if (ntype[w] == 0) continue;
+              bool uguale = segnale;
+              for (int v = 0; v < kN && uguale; ++v)
+                uguale = cw[w * kN + static_cast<size_t> (v)]
+                         == static_cast<signed char> (truth[static_cast<size_t> (b) * kN + static_cast<size_t> (v)]);
+              if (uguale) ok = true; else { falsa = true; ++t.parole_false; }
+            }
+          t.ok += ok; t.falsi += falsa;
+        }
+    }
+  return t;
+}
+
 // chan=chain: ogni trama passa, per ogni valore di clips=, da un decoder con il
 // preset di esercizio e i gate APERTI (nd fino a 0,25; soglia del gate appreso
 // tolta), e si scrive una riga per ogni parola accettata:
@@ -892,8 +947,10 @@ int main (int argc, char** argv)
       return 0;
     }
 
+  if (o.chain && o.ap > 0) { std::fprintf (stderr, "chan=chain non ha i bit AP\n"); return 2; }
   std::printf ("# mode=%s chan=%s ap=%d%s n=%d noise=%d per seme, Eb/N0 riferito a 91 bit\n",
-               o.ft8 ? "ft8" : "ft2", o.fsk ? (o.ft8 ? "8fsk" : "4fsk") : "bpsk", o.ap,
+               o.ft8 ? "ft8" : "ft2",
+               o.chain ? "catena (trame)" : (o.fsk ? (o.ft8 ? "8fsk" : "4fsk") : "bpsk"), o.ap,
                o.apwrong ? " (ipotesi AP sbagliata)" : "", o.n, o.noise);
   std::printf ("# variante seme punto parole ok falsi FER us/parola\n");
   std::map<std::string, std::map<std::string, Tally>> somma;
@@ -902,7 +959,11 @@ int main (int argc, char** argv)
     {
       // Le variabili si leggono alla costruzione del decoder, che e' per
       // thread: una variante = un thread nuovo.
-      bool const nuovo = variante != "base";
+      // "clipX" e' la base con DECODIUM_LDPC_LLR_CLIP=X (clip0 = senza taglio).
+      bool const taglio = variante.rfind ("clip", 0) == 0;
+      if (taglio) setenv ("DECODIUM_LDPC_LLR_CLIP", variante.c_str () + 4, 1);
+      else unsetenv ("DECODIUM_LDPC_LLR_CLIP");
+      bool const nuovo = variante != "base" && !taglio;
       if (nuovo) { setenv ("DECODIUM_LDPC_K77", "1", 1); setenv ("DECODIUM_LDPC_MARGIN", variante == "k77" ? "0" : "1", 1); }
       else { setenv ("DECODIUM_LDPC_K77", "0", 1); setenv ("DECODIUM_LDPC_MARGIN", "0", 1); }
       std::thread th ([&] {
@@ -915,8 +976,9 @@ int main (int argc, char** argv)
                 char nome[32];
                 if (segnale) std::snprintf (nome, sizeof nome, "%.2fdB", ebn0);
                 else std::snprintf (nome, sizeof nome, "rumore");
-                Tally const t = run_bridge (o, static_cast<uint64_t> (seed) * 1000 + (segnale ? p + 1 : 0),
-                                            segnale, ebn0, segnale ? o.n : o.noise);
+                uint64_t const sp = static_cast<uint64_t> (seed) * 1000 + (segnale ? p + 1 : 0);
+                Tally const t = o.chain ? run_bridge_chain (o, sp, segnale, ebn0, segnale ? o.n : o.noise)
+                                        : run_bridge (o, sp, segnale, ebn0, segnale ? o.n : o.noise);
                 std::printf ("%-5s %4d %-8s %7ld %7ld %5ld %.4f %6.1f\n", variante.c_str (), seed, nome,
                              t.words, t.ok, t.falsi,
                              segnale ? 1.0 - static_cast<double> (t.ok) / static_cast<double> (t.words) : 0.0,
@@ -924,6 +986,7 @@ int main (int argc, char** argv)
                 std::fflush (stdout);
                 Tally& s = somma[nome][variante];
                 s.words += t.words; s.ok += t.ok; s.falsi += t.falsi; s.sec += t.sec;
+                s.parole_false += t.parole_false;
                 if (variante == split (o.variants)[0] && seed == o.seeds[0]) ordine.push_back (nome);
               }
           }
@@ -935,10 +998,12 @@ int main (int argc, char** argv)
     for (std::string const& variante : split (o.variants))
       {
         Tally const& s = somma[nome][variante];
-        std::printf ("T %-5s %-8s parole=%ld ok=%ld falsi=%ld FER=%.4f us/parola=%.1f\n",
+        std::printf ("T %-5s %-8s parole=%ld ok=%ld falsi=%ld FER=%.4f us/parola=%.1f",
                      variante.c_str (), nome.c_str (), s.words, s.ok, s.falsi,
                      nome == "rumore" ? 0.0 : 1.0 - static_cast<double> (s.ok) / static_cast<double> (s.words),
                      1e6 * s.sec / static_cast<double> (s.words));
+        if (o.chain) std::printf (" parole_false=%ld", s.parole_false);
+        std::printf ("\n");
       }
   return 0;
 }
