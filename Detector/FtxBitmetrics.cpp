@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <complex>
 #include <limits>
@@ -88,6 +89,27 @@ inline float& bm_at (float* bitmetrics, int rows, int row, int col)
   return bitmetrics[row + rows * col];
 }
 
+// Troncamento a intero del demodulatore storico (tipizzazione implicita del
+// Fortran). Un valore fuori dal campo di int, o non finito, non si puo'
+// convertire: prima era comportamento indefinito, ora satura (NaN da' zero).
+// Per ogni valore rappresentabile il risultato e' quello di prima.
+inline std::int64_t ft2_legacy_trunc (float value)
+{
+  if (value >= 2147483648.0f)
+    {
+      return std::numeric_limits<std::int32_t>::max ();
+    }
+  if (value <= -2147483648.0f)
+    {
+      return std::numeric_limits<std::int32_t>::min ();
+    }
+  if (value != value)
+    {
+      return 0;
+    }
+  return static_cast<std::int32_t> (value);
+}
+
 float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pwr_eq,
                                  float* noise_var_eq_out = nullptr)
 {
@@ -96,7 +118,7 @@ float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pw
   static std::array<int, 4> const icos4c {{2, 3, 1, 0}};
   static std::array<int, 4> const icos4d {{3, 2, 0, 1}};
 
-  int noise_sum_eq = 0;
+  std::int64_t noise_sum_eq = 0;
   int nnoise_eq = 0;
   for (int k = 0; k < 4; ++k)
     {
@@ -104,22 +126,22 @@ float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pw
         {
           if (itone != icos4a[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
           if (itone != icos4b[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
           if (itone != icos4c[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
           if (itone != icos4d[static_cast<size_t> (k)])
             {
-              noise_sum_eq += static_cast<int> (pwr_eq[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
+              noise_sum_eq += ft2_legacy_trunc (pwr_eq[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
               ++nnoise_eq;
             }
         }
@@ -128,8 +150,8 @@ float ft2_legacy_equalized_beta (std::array<std::array<float, 4>, 103> const& pw
   int noise_var_eq = 0;
   if (nnoise_eq > 0)
     {
-      noise_var_eq = static_cast<int> (static_cast<float> (noise_sum_eq)
-                                       / std::max (1.0f, static_cast<float> (nnoise_eq)));
+      noise_var_eq = static_cast<int> (ft2_legacy_trunc (static_cast<float> (noise_sum_eq)
+                                       / std::max (1.0f, static_cast<float> (nnoise_eq))));
     }
   if (static_cast<float> (noise_var_eq) < 1.0e-10f)
     {
@@ -155,7 +177,7 @@ float ft2_legacy_base_noise_var (std::array<std::array<float, 4>, 103> const& pw
   static std::array<int, 4> const icos4c {{2, 3, 1, 0}};
   static std::array<int, 4> const icos4d {{3, 2, 0, 1}};
 
-  int noise_sum = 0;
+  std::int64_t noise_sum = 0;
   int nnoise = 0;
   for (int k = 0; k < 4; ++k)
     {
@@ -163,22 +185,22 @@ float ft2_legacy_base_noise_var (std::array<std::array<float, 4>, 103> const& pw
         {
           if (itone != icos4a[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
           if (itone != icos4b[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k + 33)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
           if (itone != icos4c[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k + 66)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
           if (itone != icos4d[static_cast<size_t> (k)])
             {
-              noise_sum += static_cast<int> (pwr[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
+              noise_sum += ft2_legacy_trunc (pwr[static_cast<size_t> (k + 99)][static_cast<size_t> (itone)]);
               ++nnoise;
             }
         }
