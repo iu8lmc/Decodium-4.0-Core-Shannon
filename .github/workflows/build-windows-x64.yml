@@ -224,6 +224,9 @@ jobs:
           curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" \
             "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
           tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          # GCC 16 rejects the implicit assert() in lib/precise_time.c; this is the
+          # same patch the native SSTV workflow applies to its Hamlib build.
+          patch -d "hamlib-${HAMLIB_VERSION}" -p1 < tests/sstv/fixtures/hamlib-4.7.0-windows-assert.patch
           cd "hamlib-${HAMLIB_VERSION}"
           ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
           make -j"$(nproc)"
