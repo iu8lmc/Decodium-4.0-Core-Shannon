@@ -21,6 +21,9 @@
 //   chan=bpsk  AWGN/BPSK, LLR esatti
 //   chan=fsk   M-FSK non coerente simbolo per simbolo (M=8 per mode=ft8, M=4
 //              per mode=ft2), metriche max-log sulle ampiezze come ft8b/ft4
+//   chan=chain catena FSK a livello di simbolo con gli insiemi di metriche del
+//              demodulatore, contata a trame (vedi piu' sotto, "chan=chain");
+//              variants=base,clip2.0,clip0,new confronta i tagli degli LLR
 // In entrambi gli LLR sono normalizzati come fa il demodulatore (deviazione
 // standard 1 sulla parola, poi x 2,83): il gate appreso di FT8 dipende dalla
 // scala, quindi senza questo passo non si misurerebbe la configurazione vera.
