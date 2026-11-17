@@ -71,9 +71,10 @@ of 0.7 and 1.4 on `2 A / N0`, a floor of 2, 3 and 4 on `A^2 / N0` and a fixed
 value of 3 were also tried: between 1437 and 1451 decodes of 3200, within the
 noise; those knobs are not in the code.
 
-Decode time of the full decoder: no measurable change for either variant.
-Two sets of three interleaved runs (150 and 210 slots, shared machine) differ
-by less than the run-to-run spread of about 5%. The metric function alone,
+Decode time of the full decoder: not resolved for either variant. Three sets
+of three interleaved runs on weak slots (150, 210 and 200 slots, shared
+machine) gave +2%, about 0 and +3.5% for `i0` and -3%, about 0 and +1% for
+`amp`, all within the run-to-run spread of about 5%. The metric function alone,
 measured once on a loaded machine: 156 us existing, 175 us `i0`, 74 us `amp`
 (indicative).
 

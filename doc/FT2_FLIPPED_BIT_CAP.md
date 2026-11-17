@@ -104,9 +104,11 @@ not decode (or on the residue of a subtracted strong one): the sync is good
 because a signal is there. 5 of the 6 on V are in the strong slots; the 3
 extra ones on W are in weak slots.
 
-Decode time: no measurable change. Two sets of three interleaved runs (200
-and 210 slots, one process per slot, shared machine) differ by less than
-the run-to-run spread of about 5%.
+Decode time with C = 30 on weak slots, one process per slot, shared machine,
+three sets of interleaved runs: +1.8% (200 slots, 3 runs each), about 0 (210
+slots, 3 runs each) and +5.7% (200 slots, 6 runs each: 28.5 s against
+27.0 s). The cost is somewhere between 0 and +6%, of the same size as the
+run-to-run spread; the default path is not affected.
 
 ## Result
 
