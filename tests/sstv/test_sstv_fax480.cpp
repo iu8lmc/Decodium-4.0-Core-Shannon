@@ -207,7 +207,7 @@ private slots:
     void vis85MissingControlToneIsRejectedAB() {
         constexpr std::uint32_t rate=12'000U;
         const SstvFax480Mapper mapper(SstvFax480Profile::LibsstvVis480,rate);
-        for (const auto interval : {std::pair<unsigned,unsigned>{300U,310U}, {640U,670U}, {300U,311U}}) {
+        for (const auto& interval : {std::pair<unsigned,unsigned>{300U,310U}, {640U,670U}, {300U,311U}}) {
             SstvFax480AutoRx receiver(SstvFax480Profile::LibsstvVis480,rate);
             for (std::uint64_t sample=0;sample<rate*2U;sample+=6U) {
                 const auto pos=mapper.position(sample);
