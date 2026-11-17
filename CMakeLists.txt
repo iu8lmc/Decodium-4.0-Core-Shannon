@@ -3162,6 +3162,13 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # Keep the warning visible while avoiding a build failure for this file only.
   set_source_files_properties (src/bridge/DecodiumBridgeSstvQsoAssociation.cpp PROPERTIES
     COMPILE_FLAGS "-Wno-error=stringop-overflow")
+
+  # GCC 16 (MinGW) follows QByteArray's one-byte empty sentinel into the
+  # "bext" structure reads of BWFFile.cpp and reports array-bounds, although
+  # the accessor returns early unless the chunk holds the whole structure.
+  # Keep the warning visible while avoiding a build failure for this file only.
+  set_source_files_properties (Audio/BWFFile.cpp PROPERTIES
+    COMPILE_FLAGS "-Wno-error=array-bounds")
 endif ()
 # With OpenMP unavailable, the scheduler's OpenMP-only thread-limit constant
 # is unused. Keep the diagnostic visible without failing this macOS unit.
