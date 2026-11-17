@@ -16,6 +16,17 @@ using namespace decodium::cw;
 
 namespace {
 
+// rig_caps::morse_qsize exists from Hamlib 4.6 on. Older releases (4.5.5 is
+// what Ubuntu 24.04 ships) have no per-rig queue size, which is the same
+// behaviour as the 0 default, so there is nothing to set there.
+template <typename Caps>
+auto useDefaultMorseQueueSize(Caps& caps, int) -> decltype(caps.morse_qsize, void())
+{
+    caps.morse_qsize = 0; // Hamlib default, as used by the IC-7100.
+}
+template <typename Caps>
+void useDefaultMorseQueueSize(Caps&, long) {}
+
 // Real Hamlib FIFO, dummy backend only.  The model rejects commands when a
 // finite, 60-character keyer buffer is full, draining at 20 WPM.  This is a
 // simulated failure condition, not a claim about every Icom's buffer size.
@@ -32,7 +43,7 @@ public:
         m_caps = *m_rig->caps;
         m_caps.send_morse = &send;
         m_caps.stop_morse = &stop;
-        m_caps.morse_qsize = 0; // Hamlib default, as used by the IC-7100.
+        useDefaultMorseQueueSize(m_caps, 0);
         m_rig->caps = &m_caps;
         s_instance = this;
         m_open = rig_open(m_rig) == RIG_OK;
