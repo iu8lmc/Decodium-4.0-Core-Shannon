@@ -461,6 +461,67 @@ variabili il comportamento e' quello di default.
 | `DECODIUM_LDPC_ALPHA`, `DECODIUM_LDPC_MAX_ITER` | normalizzazione (in 1/65536) e iterazioni del min-sum | 37888 e 10 |
 | `DECODIUM_LDPC_NTAU`, `DECODIUM_LDPC_PAIR_SPAN`, `DECODIUM_LDPC_SPAN2_BASE` | ampiezza della ricerca del preset di esercizio | 13, 64 e 64 |
 
+#### Estrinseca per la demodulazione iterativa FT8 (BICM-ID), seconda versione
+
+Il decoder FT8 (`Detector/FtxFt8Stage4.cpp`) rimanda al demodulatore
+l'informazione estrinseca del min-sum, cioe' posteriori meno LLR d'ingresso.
+La prima versione (`superldpc_extrinsic174_91_c`) fa per questo una decodifica
+di sonda in piu' sulla sola `llra`, per ogni candidato che ha fallito. La
+seconda (`superldpc_extrinsic174_91_v2_c`, `word >= 0`) non decodifica niente:
+rilegge i posteriori che il blocco appena decodificato ha lasciato nel decoder
+del thread, per ciascuna delle cinque parole senza a priori (`llra`..`llre`).
+Il chiamante ne fa la media, la pesa, e ripete il giro tre volte, ma solo per
+i candidati con almeno 10 simboli Costas giusti su 21. E' accesa di default
+dove gira il BICM-ID (variabile `DECODIUM_FT8_BICM` o governatore);
+`DECODIUM_FT8_BICM_V2=0` torna alla prima versione.
+
+Misurato nel decoder intero (`ft8_stage_compare`, profondita' 3) su slot
+sintetici a verita' nota con semi mai usati per la taratura: 300 slot con
+segnali (AWGN, deriva, cammino di fase, fading, QRM) e 200 di solo rumore;
+fra parentesi lo stesso con la passata coerente accesa, su 230 slot.
+
+| | BICM spento | prima versione | seconda versione |
+|---|---|---|---|
+| decodifiche vere | 3842 (1666) | 3923 (1735) | 4090 (1864) |
+| false decodifiche, slot con segnali | 2 (1) | 3 (2) | 3 (1) |
+| false decodifiche, 200 (100) slot di rumore | 0 (0) | 1 (0) | 0 (0) |
+| tempo, 16 slot di segnali deboli | 50,8 s (70,6) | 97,9 s (118,0) | 64,1 s (83,2) |
+| tempo, 5 slot affollati | 21,2 s (26,0) | 34,5 s (40,6) | 24,3 s (28,4) |
+| tempo, 10 slot di rumore | 27,9 s (37,8) | 55,7 s (65,9) | 28,9 s (40,4) |
+
+La prima versione vale quindi +2,1% di decodifiche per quasi il doppio del
+tempo: il costo sta nel blocco OSD in piu' per OGNI candidato fallito, e il
+92% di quei candidati ha meno di 10 simboli Costas giusti. La seconda vale
++6,5% rispetto al BICM spento e costa dal 30 al 48% in meno della prima.
+
+Con il giro a traliccio di fase forzato (`DECODIUM_FT8_TRELLIS=1`, spento di
+default) la stessa retroazione entra nel traliccio come a priori sui toni
+(`ftx_ft8_bitmetrics_trellis_prior_c`): 2331 decodifiche contro 2170 senza
+retroazione sul traliccio, una falsa decodifica in entrambi, nessuna su 100
+slot di rumore, tempo +5% sugli slot di segnali deboli.
+
+Il bit 0 di `flags` sottrae l'ingresso come lo ha visto il min-sum, cioe' dopo
+il taglio a 2,5 volte la media (l'estrinseca "da manuale"). Resta spento: sugli
+slot sintetici non cambia nulla (1317 decodifiche contro 1319), e su una
+registrazione di segnali forti sovrapposti toglie le quattro decodifiche che il
+BICM-ID aggiunge, perche' la parte tagliata che resta nella retroazione smorza
+i simboli colpiti dall'interferenza.
+
+Provati sul corpus di taratura e NON tenuti: la scala dell'a priori da
+2A/sigma^2 stimato sui simboli Costas invece che dall'RMS (1137 contro 1143),
+il log-sum-exp esatto di log I0 al posto del max-log (1154 contro 1143 con un
+giro, 1260 contro 1275 con due, una falsa decodifica in piu'), lo smorzamento
+dell'a priori fra un giro e l'altro (1292 contro 1317), la parola con meno
+check insoddisfatti come sorgente (uguale alla media), una soglia sui check
+insoddisfatti (non separa).
+
+Limiti della misura: slot sintetici e profondita' 3. Alle altre profondita' c'e'
+solo un controllo su 31 slot (BICM spento / prima / seconda versione):
+profondita' 1 239 / 254 / 277 decodifiche e nessuna falsa; profondita' 4 con AP
+294 / 312 / 338 e 2 / 2 / 2 false; lo stesso con sotto-passate e tre cicli
+312 / 329 / 357 e 0 / 1 / 0 false. Su registrazioni vere ci sono solo otto
+file senza verita' nota (stesse decodifiche della prima versione, piu' una).
+
 #### Riprodurre le misure
 
 Il banco non fa parte della build normale. Con

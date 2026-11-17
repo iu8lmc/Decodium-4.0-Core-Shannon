@@ -2554,10 +2554,21 @@ extern "C" void ftx_ft2_bitmetrics_diag_c (Complex const* cd,
 // min_esn0: the attempt is skipped (return 0) when the pilot estimate of
 // Es/N0 is below this value; most sync candidates are noise and stop here.
 // Returns 1 on success, 0 when skipped or no usable estimate exists (llr zeroed).
-extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
-                                             float sigma_deg, float freq_walk,
-                                             int em_rounds, float min_esn0,
-                                             float* llr, float* info)
+//
+// la (optional, [174], LLR units, positive = bit 1): extrinsic information
+// from the decoder (BICM-ID on top of the trellis, DECODIUM_FT8_BICM_V2_TRELLIS).
+// It enters twice: as the tone prior of every data symbol in the phase
+// recursion, so that the symbols the decoder is already sure of act as soft
+// pilots, and in the bit marginalisation, where each bit sees the prior of
+// the OTHER two bits of its symbol only (the output stays extrinsic).
+// la = nullptr is the plain demodulator, bit for bit.
+namespace
+{
+
+int ft8_bitmetrics_trellis_impl (Complex const* cs, float scale,
+                                 float sigma_deg, float freq_walk,
+                                 int em_rounds, float min_esn0,
+                                 float const* la, float* llr, float* info)
 {
   constexpr int NN = 79;
   constexpr int NP = 16;
@@ -2663,6 +2674,30 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
   float* const lk = lk_store.data ();
   float* const alpha = alpha_store.data ();
 
+  // Priors from the decoder: per data symbol the tone prior (indexed by
+  // tone) and exp(la) of its three bits.
+  std::array<std::array<float, 8>, 58> tone_prior {};
+  std::array<std::array<float, 3>, 58> bit_odds {};
+  if (la)
+    {
+      for (int d = 0; d < 58; ++d)
+        {
+          for (int ib = 0; ib < 3; ++ib)
+            bit_odds[static_cast<size_t> (d)][static_cast<size_t> (ib)] =
+                decodium::ftx_expf (std::max (-20.0f, std::min (la[3 * d + ib], 20.0f)));
+          float sum = 0.0f;
+          for (int i = 0; i < 8; ++i)
+            {
+              float v = 1.0f;
+              for (int ib = 0; ib < 3; ++ib)
+                if ((i >> (2 - ib)) & 1) v *= bit_odds[static_cast<size_t> (d)][static_cast<size_t> (ib)];
+              tone_prior[static_cast<size_t> (d)][static_cast<size_t> (graymap[i])] = v;
+              sum += v;
+            }
+          for (float& v : tone_prior[static_cast<size_t> (d)]) v /= sum;
+        }
+    }
+
   std::array<float, 174> raw {};
   double loglik = 0.0;
   double freq_mean = 0.0;
@@ -2697,7 +2732,12 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
                   float const x = yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)] - offset;
                   et[p] = decodium::ftx_expf (std::min (x, 80.0f));
                 }
-              if (pt < 0)
+              if (pt < 0 && la)
+                {
+                  float const w = tone_prior[static_cast<size_t> (k < 36 ? k - 7 : k - 14)][static_cast<size_t> (t)];
+                  for (int p = 0; p < NP; ++p) lkk[p] += w * et[p];
+                }
+              else if (pt < 0)
                 for (int p = 0; p < NP; ++p) lkk[p] += 0.125f * et[p];
               else if (t == pt)
                 for (int p = 0; p < NP; ++p) lkk[p] += et[p];
@@ -2829,7 +2869,11 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
                   float p0 = 1.0e-30f;
                   for (int i = 0; i < 8; ++i)
                     {
-                      float const v = app[static_cast<size_t> (graymap[i])];
+                      float v = app[static_cast<size_t> (graymap[i])];
+                      if (la)
+                        for (int jb = 0; jb < 3; ++jb)
+                          if (jb != ib && ((i >> (2 - jb)) & 1))
+                            v *= bit_odds[static_cast<size_t> (data_index)][static_cast<size_t> (jb)];
                       if ((i >> (2 - ib)) & 1) p1 += v;
                       else p0 += v;
                     }
@@ -2892,6 +2936,26 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
       info[3] = static_cast<float> (loglik);
     }
   return 1;
+}
+
+}
+
+extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
+                                             float sigma_deg, float freq_walk,
+                                             int em_rounds, float min_esn0,
+                                             float* llr, float* info)
+{
+  return ft8_bitmetrics_trellis_impl (cs, scale, sigma_deg, freq_walk, em_rounds, min_esn0,
+                                      nullptr, llr, info);
+}
+
+extern "C" int ftx_ft8_bitmetrics_trellis_prior_c (Complex const* cs, float scale,
+                                                   float sigma_deg, float freq_walk,
+                                                   int em_rounds, float min_esn0,
+                                                   float const* la, float* llr, float* info)
+{
+  return ft8_bitmetrics_trellis_impl (cs, scale, sigma_deg, freq_walk, em_rounds, min_esn0,
+                                      la, llr, info);
 }
 
 extern "C" void ftx_ft8_bitmetrics_c (Complex const* cd0, int np2, int ibest, int imetric,

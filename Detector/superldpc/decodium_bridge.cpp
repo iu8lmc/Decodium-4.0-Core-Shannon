@@ -934,6 +934,73 @@ extern "C" int superldpc_simd_extrinsic174_91_c (float const* llr_in, int norder
 }
 
 // ---------------------------------------------------------------------------
+// Extrinsic information, second version (DECODIUM_FT8_BICM_V2).
+//
+// Two differences from superldpc_simd_extrinsic174_91_c:
+//
+//  - word >= 0: no decode at all. The posteriors of word `word` of the LAST
+//    batch decoded on this thread with the same preset are reused, so the
+//    feedback costs no extra min-sum/OSD run (the caller has just decoded
+//    that word and seen it fail). word < 0 decodes llr_in as the first
+//    version does.
+//  - flags bit 0: subtract the input the min-sum really saw. decode_batch()
+//    clips the input at llr_clip times the mean |LLR| of the word; the first
+//    version subtracts the unclipped value, so on a clipped bit the result
+//    carries -(|llr| - limit) of the channel's own opinion with the wrong
+//    sign, which is not extrinsic.
+//    The FT8 caller leaves this bit OFF: on synthetic slots it makes no
+//    difference, on a recording of overlapping strong signals the clipped
+//    part left in the feedback is what recovers four more decodes (it tames
+//    the symbols hit by interference). See Ft8BicmV2Config in FtxFt8Stage4.cpp.
+//
+// llr_in: [174], the input of that word, Decodium convention.
+// Returns 1 if the decode accepted a word (word < 0 only), 0 otherwise,
+// -1 if the posteriors of `word` are not available (est_out zeroed).
+extern "C" int superldpc_simd_extrinsic174_91_v2_c (float const* llr_in, int norder,
+                                                  int word, int flags, float clamp,
+                                                  float* est_out)
+{
+    if (!llr_in || !est_out) return -1;
+    if (clamp <= 0.0f) clamp = 2.0f;
+
+    Ft2Decoder& dec = decoder_for_preset (norder);
+
+    float llr[kN];
+    for (int i = 0; i < kN; ++i) llr[i] = -llr_in[i];   // -> superldpc convention
+
+    uint8_t accepted = 0;
+    int lane = word;
+    if (word < 0) {
+        uint8_t bits[kN];
+        dec.decode_batch (llr, 1, bits, &accepted);
+        lane = 0;
+    } else if (word >= dec.batch_size ()) {
+        std::memset (est_out, 0, sizeof (float) * kN);
+        return -1;
+    }
+
+    const int16_t* post = dec.posterior (lane);
+    if (!post) { std::memset (est_out, 0, sizeof (float) * kN); return word < 0 && accepted ? 1 : -1; }
+
+    float lim = 0.0f;
+    if ((flags & 1) != 0 && dec.llr_clip () > 0.0f) {
+        float s = 0.0f;
+        for (int i = 0; i < kN; ++i) s += std::fabs (llr[i]);
+        lim = dec.llr_clip () * s / kN;
+    }
+    for (int i = 0; i < kN; ++i) {
+        float in = llr[i];
+        if (lim > 0.0f) in = in > lim ? lim : (in < -lim ? -lim : in);
+        const float p = (float) post[i] / Ft2Decoder::kPosteriorFix;
+        float v = -(p - in);                            // -> Decodium convention
+        if (v > clamp) v = clamp;
+        if (v < -clamp) v = -clamp;
+        est_out[i] = v;
+    }
+    return accepted ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // Versione a blocco.
 //
 // Il min-sum lavora su 16 parole per registro AVX2 o 8 per registro NEON: con
