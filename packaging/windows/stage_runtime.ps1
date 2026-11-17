@@ -74,4 +74,4 @@ while ($queue.Count -gt 0) {
     }
 }
 
-Write-Output "Runtime pronto in $out: $((Get-ChildItem $out -Filter *.dll).Count) DLL"
+Write-Output "Runtime pronto in ${out}: $((Get-ChildItem $out -Filter *.dll).Count) DLL"
