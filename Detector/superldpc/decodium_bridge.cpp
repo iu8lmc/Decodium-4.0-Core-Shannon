@@ -118,6 +118,10 @@ extern "C" void superldpc_simd_set_ft8_mode_c (int on) { g_modo_ft8 = on != 0; }
 // Si applicano a TUTTI i preset e SOLO in modalita' FT8: la taratura FT2
 // resta quella che tiene i nominativi fantasma a zero, qualunque cosa si
 // misuri qui. Senza variabili impostate non cambia nulla.
+// (Fuori da questa regola, e quindi attive ANCHE in FT2 se impostate, ci sono
+// solo DECODIUM_LDPC_LLR_CLIP, vedi taglio_llr(), e DECODIUM_LDPC_K77 con le
+// sue due manopole, vedi k77_scelto(): spente o al valore di prima se non le
+// si imposta.)
 void manopole_ft8 (Ft2Config& c) {
     if (!g_modo_ft8) return;
     if (char const* e = std::getenv ("DECODIUM_LDPC_OSD_ORDER")) {
@@ -147,6 +151,8 @@ void manopole_ft8 (Ft2Config& c) {
 // stava dentro manopole_ft8(), quindi in FT2 veniva ignorata in silenzio, e
 // tests/ft2_llr_clip_bench.cpp, che la imposta proprio per confrontare i tagli
 // sul demodulatore FT2, misurava due volte la stessa configurazione.
+// Si accetta solo un numero scritto per intero fra 0 e 10: un valore che non
+// e' un numero ("off", "2,5") NON spegne il taglio, viene ignorato.
 //
 // Senza la variabile resta 2,5 in entrambi i modi. Il valore 2 e' stato
 // misurato sulle metriche FSK vere e NON e' un guadagno con i preset di
@@ -155,8 +161,9 @@ void manopole_ft8 (Ft2Config& c) {
 // decodifiche non decodifica di piu'.
 void taglio_llr (Ft2Config& c) {
     if (char const* e = std::getenv ("DECODIUM_LDPC_LLR_CLIP")) {
-        float const v = static_cast<float> (std::atof (e));
-        if (v >= 0.0f) c.llr_clip = v;      // 0 = nessun taglio
+        char* fine = nullptr;
+        float const v = std::strtof (e, &fine);
+        if (fine != e && *fine == 0 && v >= 0.0f && v <= 10.0f) c.llr_clip = v;  // 0 = nessun taglio
     }
 }
 
@@ -325,6 +332,7 @@ float gate_delta_scelto () {
 // sola soglia su nd restituisce la sensibilita' di prima. Paga insieme al gate
 // a margine, e in FT8 il gate a margine paga insieme al gate appreso, di cui
 // usa il logit.
+#ifdef SUPERLDPC_HAVE_GATE_WEIGHTS
 bool env_bool (char const* nome, bool predefinito) {
     char const* e = std::getenv (nome);
     if (!e || e[0] == 0) return predefinito;
@@ -333,7 +341,7 @@ bool env_bool (char const* nome, bool predefinito) {
 
 bool k77_scelto () { return env_bool ("DECODIUM_LDPC_K77", false); }
 
-bool margine_scelto () { return env_bool ("DECODIUM_LDPC_MARGIN", false); }
+bool k77_senza_gate () { return env_bool ("DECODIUM_LDPC_K77_NOGATE", false); }
 
 MarginGate margine_parametri () {
     MarginGate m = g_modo_ft8 ? MARGIN_GATE_FT8 : MARGIN_GATE_FT2;
@@ -343,6 +351,13 @@ MarginGate margine_parametri () {
     }
     return m;
 }
+#else
+// I parametri del gate a margine stanno in gate_weights.hpp: senza i pesi la
+// ricerca su (174,77) non si puo' accendere.
+bool k77_scelto () { return false; }
+bool k77_senza_gate () { return false; }
+MarginGate margine_parametri () { return MarginGate {}; }
+#endif
 
 // Raccolta LLR reali per il riaddestramento del gate (SUPERLDPC-AI-SPEC-001
 // §2b, vedi il commento su gate_weights.hpp e Detector/superldpc/lab/neural/gate/).
@@ -626,7 +641,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             // controllo di coerenza a valle (DECODIUM_LDPC_AP_CHECK).
             c.osd_k77 = k77_scelto ();
             c.ap_vincolo = c.osd_k77 && superldpc_ap_check ();
-            c.margin_gate = (c.osd_k77 && margine_scelto ()) ? 1 : 0;
+            c.margin_gate = (c.osd_k77 && !k77_senza_gate ()) ? 1 : 0;
             c.margin = margine_parametri ();
             slot1 = new Ft2Decoder (shared_code(), c);
         }

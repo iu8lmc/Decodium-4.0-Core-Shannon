@@ -92,7 +92,10 @@ struct Ft2Config {
     // un'ipotesi soft. Vedi OsdFast::ap_vincolo.
     bool  ap_vincolo = false;
     // Gate a margine (gate.hpp, margin_accept), solo con osd_k77. 0 = spento:
-    // decide nd_max, o il gate appreso se gate_mode e' acceso. 1 = l'OSD
+    // decide nd_max, o il gate appreso se gate_mode e' acceso; e' una
+    // configurazione DI MISURA, perche' quei due gate sono tarati sui candidati
+    // della ricerca (174,91) e con bit AP lasciano passare circa il 9% delle
+    // parole di solo rumore (README). 1 = l'OSD
     // accetta fino a nd <= margin_relax e decide margin_accept() su distanza,
     // margine dal concorrente e, se margin.w_logit non e' zero, logit del gate
     // appreso (che in quel caso viene calcolato anche a gate_mode spento).
@@ -268,16 +271,19 @@ public:
                 // dopo che la CRC ha gia' selezionato il candidato.
                 const float base_nd = margine ? cfg_.margin_relax
                                     : (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max);
+                // La soglia con bit AP e' base * r * r, in quest'ordine: in
+                // float (base * r) * r e base * (r * r) differiscono di un ulp.
                 int free_bits = N;
-                float ap_r2 = 1.0f;
+                float ap_r = 1.0f;
                 if (apmask) {
                     free_bits = 0;
                     const uint8_t* m = &apmask[(size_t)i * N];
                     for (int v = 0; v < N; ++v) free_bits += !m[v];
-                    const float r = free_bits > 0 ? (float)N / (float)free_bits : 1.0f;
-                    ap_r2 = r * r;
+                    ap_r = free_bits > 0 ? (float)N / (float)free_bits : 1.0f;
+                    osd_.nd_max = base_nd * ap_r * ap_r;
+                } else {
+                    osd_.nd_max = base_nd;
                 }
-                osd_.nd_max = base_nd * ap_r2;
                 float d = 0;
                 if (osd_.decode(ms_.posterior(b), word_.data(), &buf_[(size_t)b * N], &d,
                                 apmask ? &apmask[(size_t)i * N] : nullptr)) {
@@ -295,7 +301,7 @@ public:
                     // non ha niente da dire, e decide la regola di prima.
                     const bool col_margine = margine && osd_.last_has_second();
                     if (margine && !col_margine
-                        && d > (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max) * ap_r2) continue;
+                        && d > (cfg_.gate_mode ? cfg_.gate_relax : cfg_.nd_max) * ap_r * ap_r) continue;
                     if (col_margine) {
                         float logit = 0.0f;
                         if (feature) {

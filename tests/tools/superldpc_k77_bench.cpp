@@ -9,8 +9,9 @@
 // plausibilita', soglia sui bit ribaltati (58 in FT8, 22 in FT2) e coerenza
 // AP. Non i preset del README. La variante "base" gira con DECODIUM_LDPC_K77=0
 // (la ricerca su (174,91) di prima), la variante "new" con DECODIUM_LDPC_K77=1
-// DECODIUM_LDPC_MARGIN=1, "k77" con la sola ricerca nuova e i gate di prima;
-// tutte vedono le stesse parole, generate dallo stesso seme.
+// (ricerca nuova e gate a margine), "k77" con la sola ricerca nuova e i gate
+// di prima (DECODIUM_LDPC_K77_NOGATE=1, configurazione di misura); tutte
+// vedono le stesse parole, generate dallo stesso seme.
 //
 // Per ogni Eb/N0 (riferito ai 91 bit, come nel README) stampa FER e false
 // decodifiche sulle parole con segnale, e le false accettazioni sulle parole
@@ -105,6 +106,17 @@ void ftx_ft2_rvec_c (signed char* out77)
 namespace {
 
 constexpr int kN = 174;
+
+// setenv/unsetenv non esistono con MSVC. valore == nullptr toglie la variabile.
+void imposta_env (char const* nome, char const* valore)
+{
+#ifdef _WIN32
+  _putenv_s (nome, valore ? valore : "");
+#else
+  if (valore) setenv (nome, valore, 1);
+  else unsetenv (nome);
+#endif
+}
 
 Code project_code ()
 {
@@ -964,11 +976,11 @@ int main (int argc, char** argv)
       // thread: una variante = un thread nuovo.
       // "clipX" e' la base con DECODIUM_LDPC_LLR_CLIP=X (clip0 = senza taglio).
       bool const taglio = variante.rfind ("clip", 0) == 0;
-      if (taglio) setenv ("DECODIUM_LDPC_LLR_CLIP", variante.c_str () + 4, 1);
-      else unsetenv ("DECODIUM_LDPC_LLR_CLIP");
+      imposta_env ("DECODIUM_LDPC_LLR_CLIP", taglio ? variante.c_str () + 4 : nullptr);
       bool const nuovo = variante != "base" && !taglio;
-      if (nuovo) { setenv ("DECODIUM_LDPC_K77", "1", 1); setenv ("DECODIUM_LDPC_MARGIN", variante == "k77" ? "0" : "1", 1); }
-      else { setenv ("DECODIUM_LDPC_K77", "0", 1); setenv ("DECODIUM_LDPC_MARGIN", "0", 1); }
+      // "k77" e' la ricerca nuova con i gate di prima (DECODIUM_LDPC_K77_NOGATE).
+      imposta_env ("DECODIUM_LDPC_K77", nuovo ? "1" : "0");
+      imposta_env ("DECODIUM_LDPC_K77_NOGATE", variante == "k77" ? "1" : "0");
       std::thread th ([&] {
         for (int seed : o.seeds)
           {

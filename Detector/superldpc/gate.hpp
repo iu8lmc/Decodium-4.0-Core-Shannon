@@ -122,13 +122,11 @@ inline bool gate_accept(const GateFeatures& g, bool ft8 = false) {
                                  + gate_threshold_delta();
 }
 #else
-// Senza i pesi non c'e' logit: il gate a margine resta compilabile con il solo
-// termine di margine. Soglia FT8 tarata come quelle di gate_weights.hpp (15
-// falsi su 1,2 milioni di parole di rumore, semi 1-3) ma non riportata su semi
-// diversi ne' misurata con bit AP: la build del programma definisce sempre
-// SUPERLDPC_HAVE_GATE_WEIGHTS e non passa di qui.
-static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.0f, 0.0325f, 1.0f};
-static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.040f, 1.0f};
+// Senza i pesi non c'e' logit e non ci sono nemmeno i parametri del gate a
+// margine (MARGIN_GATE_FT8, MARGIN_GATE_FT2: stanno in gate_weights.hpp e sono
+// tarati insieme al logit). Chi li chiede senza SUPERLDPC_HAVE_GATE_WEIGHTS non
+// compila, apposta: una soglia per il solo termine di margine non e' mai stata
+// misurata su semi diversi da quelli di taratura ne' con bit AP.
 inline float gate_logit(const GateFeatures&, bool = false) { return 1.0f; }
 inline bool gate_accept(const GateFeatures&, bool = false) { return true; }
 #endif
