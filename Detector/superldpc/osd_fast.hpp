@@ -75,10 +75,8 @@
 #define OSD_TSTART() do {} while (0)
 #endif
 
-// Conteggio dei candidati sottoposti alla CRC-14: -DOSD_COUNT lo accende,
-// altrimenti costo zero. Sta nei cicli piu' caldi del decoder, quindi non puo'
-// essere sempre attivo; ma e' la grandezza che predice i nominativi fantasma
-// (vedi il commento su n_crc piu' sotto).
+// Conteggio dei candidati sottoposti alla CRC-14: e' la grandezza che predice
+// i nominativi fantasma (vedi il commento su n_crc piu' sotto).
 // Sempre attivo: un'addizione per candidato (16 per blocco AVX2). Serve al
 // gate appreso (feature 10 e 11 in gate.hpp): il rango del candidato accettato
 // e' la grandezza che predice i fantasmi. n_crc resta cumulativo per le
@@ -170,7 +168,7 @@ public:
           colmask_(code.N), cm_gen_(code.N, 0), gpiv_(code.M), dcrc_(code.N),
           pkey_(code.N), tau_idx_(code.M + NCRCB), mrows_(code.M),
           alt_{std::vector<uint8_t>(code.N), std::vector<uint8_t>(code.N)},
-          apinfo_(code.N), base77_(code.M + NCRCB) {
+          apinfo_(code.N) {
         if (code.M + NCRCB > 64 * MWMAX) throw std::runtime_error("OsdFast: M troppo grande");
         if (code.N >= 512) throw std::runtime_error("OsdFast: N troppo grande per la chiave di sort");
         if (code.N < NCRC) throw std::runtime_error("OsdFast: N < 91, layout CRC non compatibile");
@@ -186,16 +184,15 @@ public:
         // Le 14 righe della CRC, ricavate dalla stessa crc14_syn: la riga j
         // tocca i bit v il cui contributo alla sindrome ha il bit j acceso.
         // Una parola ha sindrome nulla se e solo se soddisfa tutte e 14.
-        for (int m = 0; m < code.M; ++m) base77_[m] = base_[m];
         for (int j = 0; j < NCRCB; ++j) {
-            base77_[code.M + j] = Row{};
-            for (int v = 0; v < NCRC; ++v) if ((g_[v] >> j) & 1) setb(base77_[code.M + j], v);
+            crcrow_[j] = Row{};
+            for (int v = 0; v < NCRC; ++v) if ((g_[v] >> j) & 1) setb(crcrow_[j], v);
         }
     }
 
     // Le 14 righe di parita' della CRC-14 come insiemi di bit, per i test.
     bool crc_row_bit(int j, int v) const {
-        return (base77_[(size_t)c_.M + j].w[v >> 6] >> (v & 63)) & 1ull;
+        return (crcrow_[j].w[v >> 6] >> (v & 63)) & 1ull;
     }
 
     bool decode(const int16_t* L, uint8_t* out, const float* llr_ch = nullptr,
@@ -456,7 +453,7 @@ public:
     double t_sort = 0, t_gauss = 0, t_pre = 0, t_crc = 0, t_enum = 0;
     long n_search = 0, n_elim = 0;
 
-    // Candidati sottoposti alla CRC-14 (contati solo con -DOSD_COUNT).
+    // Candidati sottoposti alla CRC-14 (contati sempre, vedi OSD_C).
     //
     // E' LA grandezza che predice i nominativi fantasma, e per molto tempo non
     // e' stata contata. La CRC ammette un candidato sbagliato ogni 16384:
@@ -665,7 +662,8 @@ private:
         radix_sort_by_absL(N);
 
         OSD_T(t_sort);
-        std::copy(base77_.begin(), base77_.end(), rows_.begin());
+        std::copy(base_.begin(), base_.end(), rows_.begin());
+        std::copy(crcrow_, crcrow_ + NCRCB, rows_.begin() + c_.M);
         int nused = 0;
         for (int k = 0; k < N && nused < M; ++k) {
             const int col = perm_[k], wd = col >> 6, sh = col & 63;
@@ -817,26 +815,30 @@ private:
     // 16384, e i pivot sono le 97 posizioni MENO affidabili: i loro pesi sono
     // piccoli, quindi la somma interrotta di weight() non si interrompe quasi
     // mai e costa ~50 termini a candidato. Cosi' sono 13 letture senza salti.
+    // La tabella (16 KB) si alloca alla prima ricerca su (174,77): un OsdFast
+    // con crc_in_base spento non la porta.
     void build_lut(int M) {
+        if (lut_.empty()) lut_.assign((size_t)8 * MWMAX * 256, 0);
         const int nb = (M + 7) >> 3;
         for (int b = 0; b < nb; ++b) {
-            int32_t* t = lut_[b];
+            int32_t* t = &lut_[(size_t)b << 8];
             t[0] = 0;
             for (int x = 1; x < 256; ++x) {
                 const int r = (b << 3) + fl_ctz64((uint64_t)x);
                 t[x] = t[x & (x - 1)] + (r < M ? w_[r] : 0);
             }
         }
-        for (int b = nb; b < 8 * MWMAX; ++b) std::memset(lut_[b], 0, sizeof lut_[b]);
+        for (int b = nb; b < 8 * MWMAX; ++b) std::memset(&lut_[(size_t)b << 8], 0, 256 * sizeof(int32_t));
     }
 
     inline long weight_lut(const Mask& d) const {
         long s = 0;
         for (int w = 0; w < MWMAX; ++w) {
             const uint64_t x = d[w];
-            const int32_t (*t)[256] = &lut_[w << 3];
-            s += t[0][x & 255] + t[1][(x >> 8) & 255] + t[2][(x >> 16) & 255] + t[3][(x >> 24) & 255]
-               + t[4][(x >> 32) & 255] + t[5][(x >> 40) & 255] + t[6][(x >> 48) & 255] + t[7][x >> 56];
+            const int32_t* t = lut_.data() + ((size_t)w << 11);
+            s += t[x & 255] + t[256 + ((x >> 8) & 255)] + t[512 + ((x >> 16) & 255)]
+               + t[768 + ((x >> 24) & 255)] + t[1024 + ((x >> 32) & 255)]
+               + t[1280 + ((x >> 40) & 255)] + t[1536 + ((x >> 48) & 255)] + t[1792 + (x >> 56)];
         }
         return s;
     }
@@ -853,7 +855,9 @@ private:
     // non plausibile tre volte su quattro.
     inline void eval77(const Mask& d, int t1, int t2, int t3, long lb) {
         OSD_C(1);
-        if ((d[0] & apm_[0]) | (d[1] & apm_[1])) return;        // smentisce un bit noto
+        uint64_t smentiti = 0;
+        for (int w = 0; w < MWMAX; ++w) smentiti |= d[w] & apm_[w];
+        if (smentiti) return;                                   // smentisce un bit noto
         const long score = lb + weight_lut(d);
         if (score >= bound_) return;
         // La stessa terna di flip puo' arrivare per strade diverse
@@ -945,6 +949,6 @@ private:
     std::vector<uint8_t> alt_[2];
     Mask apm_{};
     std::vector<uint8_t> apinfo_;
-    std::vector<Row> base77_;
-    int32_t lut_[8 * MWMAX][256] = {};
+    Row crcrow_[NCRCB] = {};                        // le 14 righe della CRC-14
+    std::vector<int32_t> lut_;                      // [8*MWMAX][256], vedi build_lut
 };
