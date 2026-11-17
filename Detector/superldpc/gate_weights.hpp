@@ -55,3 +55,11 @@ static const float GATE_B_FT8 = -7.126093f;
 static const float GATE_MU_FT8[12] = {0.108834f, 0.226586f, 0.028659f, 0.027788f, 2.227563f, 1.000000f, 0.257168f, 0.086401f, 1.000000f, 1.000000f, 0.000000f, 0.000000f};
 static const float GATE_SD_FT8[12] = {0.022140f, 0.027959f, 0.011783f, 0.037801f, 0.184993f, 0.000001f, 0.061984f, 0.017733f, 0.000001f, 0.000001f, 1.000000f, 1.000000f};
 static const float GATE_THRESHOLD_FT8 = -4.168874f;
+
+// --- Gate a margine (gate.hpp, margin_accept): parametri per modo, nell'ordine
+// {c_gap, gap_cap, c_cnt, w_logit, thr, ap_pow}. Valgono solo con la ricerca
+// sul codice concatenato (174,77), DECODIUM_LDPC_K77=1.
+// Tarati con tests/tools/superldpc_k77_bench.cpp (dump=) sui semi 1, 2, 3 e
+// riportati sui semi 11, 12, 13: vedi README, "Ricerca su (174,77)".
+static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.04f, 0.2045f, 0.0f};
+static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.03f, 0.0f};

@@ -64,6 +64,8 @@ static uint8_t const* rvec_ft2 () {
     return v;
 }
 
+static bool superldpc_ap_check ();
+
 namespace {
 
 constexpr int kN = 174;
@@ -276,6 +278,42 @@ float gate_delta_scelto () {
         return f;
     }();
     return v;
+}
+
+// OSD sul codice concatenato (174,77) e gate a margine (OsdFast::crc_in_base,
+// gate.hpp margin_accept). Valgono solo per il preset di esercizio (norder <=
+// 3), in entrambi i modi, e si leggono a ogni costruzione del decoder (una per
+// thread), come NTAU e PAIR_SPAN.
+//
+//   DECODIUM_LDPC_K77=1      le 14 righe della CRC entrano nell'eliminazione
+//                            di Gauss: 77 posizioni d'informazione, ogni
+//                            candidato passa la CRC per costruzione.
+//   DECODIUM_LDPC_MARGIN=1   (solo con K77) decide margin_accept() al posto di
+//                            nd_max e del gate appreso.
+//   DECODIUM_LDPC_MARGIN_THR sposta la soglia del gate a margine: manopola di
+//                            misura, come DECODIUM_LDPC_GATE_DELTA.
+//
+// K77 da solo NON e' un guadagno: senza gate la ricerca decodifica di piu'
+// (FER non filtrata a 1 dB da ~0,10 a ~0,06) ma alla stessa quantita' di false
+// decodifiche la sola soglia su nd restituisce la sensibilita' di prima. Paga
+// insieme al gate a margine; i default e le misure sono nel README.
+bool env_bool (char const* nome, bool predefinito) {
+    char const* e = std::getenv (nome);
+    if (!e || e[0] == 0) return predefinito;
+    return e[0] != '0';
+}
+
+bool k77_scelto () { return env_bool ("DECODIUM_LDPC_K77", false); }
+
+bool margine_scelto () { return env_bool ("DECODIUM_LDPC_MARGIN", false); }
+
+MarginGate margine_parametri () {
+    MarginGate m = g_modo_ft8 ? MARGIN_GATE_FT8 : MARGIN_GATE_FT2;
+    if (char const* e = std::getenv ("DECODIUM_LDPC_MARGIN_THR")) {
+        float const v = static_cast<float> (std::atof (e));
+        if (v > -1.0f && v <= 1.0f) m.thr = v;
+    }
+    return m;
 }
 
 // Raccolta LLR reali per il riaddestramento del gate (SUPERLDPC-AI-SPEC-001
@@ -554,6 +592,13 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.gate_is_ft8 = g_modo_ft8;
             c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
+            // Ricerca su (174,77) e gate a margine: vedi k77_scelto(). Il
+            // vincolo AP dentro la ricerca segue lo stesso interruttore del
+            // controllo di coerenza a valle (DECODIUM_LDPC_AP_CHECK).
+            c.osd_k77 = k77_scelto ();
+            c.ap_vincolo = c.osd_k77 && superldpc_ap_check ();
+            c.margin_gate = (c.osd_k77 && margine_scelto ()) ? 1 : 0;
+            c.margin = margine_parametri ();
             slot1 = new Ft2Decoder (shared_code(), c);
         }
         return *slot1;
