@@ -48,6 +48,13 @@ extern "C" int superldpc_simd_extrinsic174_91_c (float const*, int, float, float
     out[0] = 0.25f;
     return 1;
 }
+extern "C" int superldpc_simd_extrinsic174_91_v2_c (float const*, int, int, int, float,
+                                                  float* out)
+{
+    ++extrinsicCalls;
+    out[0] = 0.5f;
+    return 0;
+}
 extern "C" void superldpc_simd_gate_dump_open_c (char const*) { ++gateCalls; }
 extern "C" void superldpc_simd_gate_dump_close_c () { ++gateCalls; }
 extern "C" void superldpc_simd_gate_truth_set_c (signed char const*) { ++gateCalls; }

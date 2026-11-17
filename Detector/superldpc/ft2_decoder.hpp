@@ -337,6 +337,13 @@ public:
     // successo dell'OSD, NON funziona (vedi README).
     int unsat(int b) const { return ms_.unsat(b); }
 
+    // Read-only views for the caller that turns the posteriors of the last
+    // decode_batch() into extrinsic information (BICM-ID): words per min-sum
+    // call (posterior(b)/unsat(b) index the LAST call only) and the input
+    // clip, so that what is subtracted is the LLR the min-sum really saw.
+    int batch_size() const { return cfg_.batch; }
+    float llr_clip() const { return cfg_.llr_clip; }
+
     // Feature del gate per la parola i dell'ultima decode_batch(), valide sia
     // per le accettate sia per quelle scartate dal gate (gate_mode=1). Servono
     // alla raccolta dati sul traffico vero per il riaddestramento (vedi il
