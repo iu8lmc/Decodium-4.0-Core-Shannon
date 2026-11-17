@@ -266,7 +266,7 @@ HamDrmEncodedObject makeObject()
     std::vector<std::uint8_t> body(113U, 0x5aU);
     const auto encoded = encodeHamDrmObject(metadata, body, 47U);
     require(encoded.ok(), "test MOT object did not encode");
-    return std::move(*encoded.value);
+    return *encoded.value;
 }
 
 class FixedSource final : public SstvPcm16Source
