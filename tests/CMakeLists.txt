@@ -1086,6 +1086,8 @@ add_executable(test_wspr_resource_cleanup ${wspr_resource_sources})
 set_target_properties(test_wspr_resource_cleanup PROPERTIES AUTOMOC OFF)
 target_include_directories(test_wspr_resource_cleanup PRIVATE ${FFTW3_INCLUDE_DIRS})
 target_link_libraries(test_wspr_resource_cleanup PRIVATE ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+# Its CTest entries have other names, so name it for the CI aggregate here.
+add_dependencies(decodium_regression_test_binaries test_wspr_resource_cleanup)
 foreach(wspr_case IN ITEMS valid missing cancel mixed early after-read)
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-${wspr_case}")
 endforeach()

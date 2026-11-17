@@ -1880,6 +1880,33 @@ add_subdirectory (src/rotor)
 
 if (BUILD_TESTING AND EXISTS ${CMAKE_SOURCE_DIR}/tests AND IS_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
   add_subdirectory (tests)
+
+  # decodium_regression_test_binaries is what CI builds before running the
+  # non-SSTV suite. Its hand-written list in tests/CMakeLists.txt had fallen
+  # behind add_test(): tests whose executable was not on it were reported as
+  # "Not Run". Add every CTest entry, from this directory down, whose name is
+  # also an executable target. The SSTV tests keep their own aggregate.
+  function (decodium_add_regression_test_targets dir)
+    if ("${dir}" STREQUAL "${CMAKE_SOURCE_DIR}/tests/sstv")
+      return ()
+    endif ()
+    get_property (_tests DIRECTORY "${dir}" PROPERTY TESTS)
+    foreach (_test IN LISTS _tests)
+      if (TARGET ${_test})
+        get_target_property (_type ${_test} TYPE)
+        if (_type STREQUAL "EXECUTABLE")
+          add_dependencies (decodium_regression_test_binaries ${_test})
+        endif ()
+      endif ()
+    endforeach ()
+    get_property (_subdirectories DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach (_subdirectory IN LISTS _subdirectories)
+      decodium_add_regression_test_targets ("${_subdirectory}")
+    endforeach ()
+  endfunction ()
+  if (TARGET decodium_regression_test_binaries AND NOT CMAKE_VERSION VERSION_LESS 3.12)
+    decodium_add_regression_test_targets ("${CMAKE_SOURCE_DIR}")
+  endif ()
 endif ()
 
 # build a library of package functionality (without and optionally with OpenMP support)
