@@ -449,9 +449,10 @@ private:
     const Mask& colmask(int t) {
         if (cm_gen_[t] != gen_) {
             Mask cm{};
-            const int v = info_[t], wd = v >> 6;
-            const uint64_t bit = 1ull << (v & 63);
-            for (int r = 0; r < c_.M; ++r) if (rows_[r].w[wd] & bit) cm[r >> 6] |= 1ull << (r & 63);
+            // Senza salto: il bit e' 0 o 1 con la stessa probabilita' e un
+            // `if` qui sbaglia predizione una volta su due, per ogni riga.
+            const int v = info_[t], wd = v >> 6, sh = v & 63;
+            for (int r = 0; r < c_.M; ++r) cm[r >> 6] |= ((rows_[r].w[wd] >> sh) & 1ull) << (r & 63);
             colmask_[t] = cm; cm_gen_[t] = gen_;
         }
         return colmask_[t];
