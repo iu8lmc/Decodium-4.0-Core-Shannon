@@ -2383,7 +2383,7 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
   constexpr int NP = 16;
   constexpr int NF = 15;
   constexpr int kMaxTaps = 24;
-  constexpr float kDfHz = 0.08f;
+  constexpr float kDfHz = 0.11f;
   constexpr float kTsym = 0.16f;
   constexpr float kTwoPi = 6.28318530717958647692f;
   static int const icos7[7] = {3, 1, 4, 0, 6, 5, 2};
