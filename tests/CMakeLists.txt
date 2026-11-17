@@ -793,7 +793,16 @@ target_link_libraries (test_dxcc_lookup Qt6::Test Qt6::Core)
 add_test (NAME test_dxcc_lookup COMMAND $<TARGET_FILE:test_dxcc_lookup>)
 
 add_executable (test_filedownload test_filedownload.cpp)
-target_link_libraries (test_filedownload wsjt_qt wsjt_cxx Qt6::Test)
+# wsjt_cxx (Detector/FtxFst4Ldpc.cpp) calls gen_fst4wave_, which lives in
+# wsjt_qt (Modulator/FtxWaveformGenerator.cpp). With a single left-to-right
+# pass over the two archives that reference stays unresolved in unoptimised
+# builds, so scan them as a group like link_wsjtx_cycle_group() does.
+if (APPLE OR WIN32)
+  target_link_libraries (test_filedownload wsjt_qt wsjt_cxx Qt6::Test)
+else ()
+  target_link_libraries (test_filedownload
+    "-Wl,--start-group" wsjt_qt wsjt_cxx "-Wl,--end-group" Qt6::Test)
+endif ()
 add_test (NAME test_filedownload COMMAND $<TARGET_FILE:test_filedownload>)
 
 # 1.0.234 Sprint 3 / Phase 2 performance roadmap:
