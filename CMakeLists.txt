@@ -1723,6 +1723,15 @@ elseif (MSVC)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /permissive-")
 endif ()
 
+# GCC 16 reports -Warray-bounds inside Qt's own headers (qendian.h,
+# qsharedpointer_impl.h, QByteArray's one-byte empty sentinel) once they are
+# inlined into our code, in many translation units. They are false positives
+# we cannot fix in our sources, so from GCC 16 on the diagnostic stays a
+# warning instead of failing the build.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=array-bounds")
+endif ()
+
 if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pragmas")
 endif ()
