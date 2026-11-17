@@ -323,6 +323,9 @@ add_dependencies (test_qt_helpers ft2_make_test_wav)
 add_executable (ft4_make_test_wav ft4_make_test_wav.cpp)
 target_link_libraries (ft4_make_test_wav wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_dependencies (test_qt_helpers ft4_make_test_wav)
+add_executable (ft8_make_test_wav ft8_make_test_wav.cpp)
+target_link_libraries (ft8_make_test_wav wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_dependencies (test_qt_helpers ft8_make_test_wav)
 
 # Banco del ricevitore asincrono FT2 (FT2 asincrono, fase F0): scene
 # lunghe con trasmissioni a istanti casuali e simulazione del path vivo del
