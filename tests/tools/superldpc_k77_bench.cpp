@@ -29,7 +29,9 @@
 // standard 1 sulla parola, poi x 2,83): il gate appreso di FT8 dipende dalla
 // scala, quindi senza questo passo non si misurerebbe la configurazione vera.
 //
-// Non fa parte della build: si compila a mano dalla radice dei sorgenti.
+// Non fa parte della build normale: -DDECODIUM_BUILD_SUPERLDPC_K77_BENCH=ON
+// costruisce il target superldpc_k77_bench e registra selftest=1 in ctest
+// (tests/CMakeLists.txt). A mano, dalla radice dei sorgenti:
 //
 //   g++ -O3 -DNDEBUG -std=gnu++17 -mavx2 -mfma -DSUPERLDPC_HAVE_GATE_WEIGHTS=1 -I.
 //       -o superldpc_k77_bench tests/tools/superldpc_k77_bench.cpp

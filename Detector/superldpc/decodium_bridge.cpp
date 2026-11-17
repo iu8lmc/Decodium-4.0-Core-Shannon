@@ -309,29 +309,35 @@ float gate_delta_scelto () {
 //
 //   DECODIUM_LDPC_K77        1: le 14 righe della CRC entrano nell'eliminazione
 //                            di Gauss, 77 posizioni d'informazione, ogni
-//                            candidato passa la CRC per costruzione.
+//                            candidato passa la CRC per costruzione, e decide
+//                            margin_accept() al posto di nd_max e del gate
+//                            appreso.
 //                            0: ricerca su (174,91) e filtro CRC, com'era.
-//   DECODIUM_LDPC_MARGIN     (solo con K77) 1: decide margin_accept() al posto
-//                            di nd_max e del gate appreso. 0: decidono quelli.
+//   DECODIUM_LDPC_K77_NOGATE (solo con K77) 1: la ricerca nuova con i gate di
+//                            prima. SOLO PER MISURARE, vedi sotto.
 //   DECODIUM_LDPC_MARGIN_THR sposta la soglia del gate a margine: manopola di
 //                            misura, come DECODIUM_LDPC_GATE_DELTA.
 //
-// Senza una scelta esplicita sono SPENTE tutte e due, in entrambi i modi, e il
-// decoder e' quello di prima bit per bit. Le misure (README, "Ricerca su
-// (174,77) e gate a margine") non bastano per accenderle:
-//   FT8: al banco la coppia decodifica dal 2 al 5% di parole in piu' alla
-//        soglia con meno false decodifiche (13 contro 21 su 1,2 milioni di
-//        parole di rumore), e con bit AP molte meno; ma nel decoder vero il
-//        profilo di esercizio costa dal 9 al 14% di tempo in piu' e sul corpus di
-//        WAV non si vede guadagno (84 decodifiche contro 86).
+// Senza una scelta esplicita e' SPENTA, in entrambi i modi, e il decoder decide
+// come prima. Le misure (README, "Ricerca su (174,77) e gate a margine") non
+// bastano per accenderla:
+//   FT8: al banco decodifica dal 2 al 5% di parole in piu' alla soglia (circa
+//        0,02 dB su 8-FSK, 0,03-0,04 dB su BPSK, 0,01 dB sulle trame della
+//        catena FSK) con meno false decodifiche (13 contro 21 su 1,2 milioni
+//        di parole di rumore), e con bit AP molte meno; ma nel decoder vero il
+//        profilo di esercizio costa il 16% di tempo in piu' (l'8% rispetto
+//        all'albero di partenza, che non ha colmask() senza salti) e sul
+//        corpus di WAV non si vede guadagno (84 decodifiche contro 86).
 //   FT2: decide gia' la soglia a 22 bit ribaltati; nessun guadagno a pari
-//        false decodifiche, e il 20-30% di tempo in piu'.
+//        false decodifiche (la soglia FT2 del gate a margine non e' validata:
+//        gate_weights.hpp), e il 22% di tempo in piu'.
 //
-// K77 da solo NON e' un guadagno: senza gate la ricerca decodifica di piu' ma
-// lascia passare piu' falsi, e alla stessa quantita' di false decodifiche la
-// sola soglia su nd restituisce la sensibilita' di prima. Paga insieme al gate
-// a margine, e in FT8 il gate a margine paga insieme al gate appreso, di cui
-// usa il logit.
+// K77 non si accende senza il gate a margine. Con i gate di prima (NOGATE) la
+// ricerca decodifica di piu' ma lascia passare piu' falsi: senza AP 31 contro
+// 24 su 1,2 milioni di parole di rumore, e con 32 bit AP in FT8 13 342 su
+// 150 000 (8,9%, contro lo 0,87% del default), perche' il gate appreso e'
+// tarato sui candidati della ricerca (174,91). In FT8 il gate a margine paga
+// insieme al gate appreso, di cui usa il logit.
 #ifdef SUPERLDPC_HAVE_GATE_WEIGHTS
 bool env_bool (char const* nome, bool predefinito) {
     char const* e = std::getenv (nome);
@@ -636,7 +642,8 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
             taglio_llr (c);
-            // Ricerca su (174,77) e gate a margine: vedi k77_scelto(). Il
+            // Ricerca su (174,77) e gate a margine: vedi k77_scelto(). Le due
+            // cose vanno insieme, salvo DECODIUM_LDPC_K77_NOGATE. Il
             // vincolo AP dentro la ricerca segue lo stesso interruttore del
             // controllo di coerenza a valle (DECODIUM_LDPC_AP_CHECK).
             c.osd_k77 = k77_scelto ();

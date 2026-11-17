@@ -439,9 +439,9 @@ sopra, semi mai visti):
 - FT2: 0 false contro 1 su 1,5 milioni di trame (troppo poche per distinguere),
   decodifiche dallo 0,1% al 2,9% in piu' (0,02 dB).
 - Il tempo dell'LDPC cresce del 65% in FT8 e piu' che raddoppia in FT2. Nel
-  decoder vero era dal 9 al 14% sul profilo di esercizio di FT8 e dal 10 al
-  25% in FT2 (sezione "Ricerca su (174,77) e gate a margine"): e' il motivo per
-  cui le due opzioni restano spente.
+  decoder vero, rispetto allo stesso binario a opzione spenta, sono circa il
+  16% sul profilo di esercizio di FT8 e il 22% in FT2 (sezione "Ricerca su
+  (174,77) e gate a margine"): e' il motivo per cui l'opzione resta spenta.
 
 #### Opzioni da ambiente
 
@@ -450,9 +450,9 @@ variabili il comportamento e' quello di default.
 
 | variabile | effetto | default |
 |---|---|---|
-| `DECODIUM_LDPC_LLR_CLIP` | taglio degli LLR in multipli della media dei moduli della parola; 0 lo spegne. Tutti i preset, entrambi i modi | 2,5 |
-| `DECODIUM_LDPC_K77` | 1: OSD sul codice (174,77), con i bit AP come vincolo se `DECODIUM_LDPC_AP_CHECK` e' acceso. Solo preset di esercizio | 0 |
-| `DECODIUM_LDPC_MARGIN` | 1 (solo con K77): decide il gate a margine | 0 |
+| `DECODIUM_LDPC_LLR_CLIP` | taglio degli LLR in multipli della media dei moduli della parola; 0 lo spegne. Tutti i preset, entrambi i modi. Vale solo un numero fra 0 e 10 scritto con il punto; qualunque altra cosa viene ignorata | 2,5 |
+| `DECODIUM_LDPC_K77` | 1: OSD sul codice (174,77) **e** gate a margine, con i bit AP come vincolo se `DECODIUM_LDPC_AP_CHECK` e' acceso. Solo preset di esercizio, entrambi i modi (in FT2 la soglia non e' validata, vedi sotto) | 0 |
+| `DECODIUM_LDPC_K77_NOGATE` | 1 (solo con K77): la ricerca (174,77) con i gate di prima al posto del gate a margine. **Solo per misurare**: con bit AP in FT8 lascia passare circa il 9% delle parole di solo rumore | 0 |
 | `DECODIUM_LDPC_MARGIN_THR` | sposta la soglia del gate a margine; manopola di misura | 0,2000 FT8, 0,040 FT2 |
 | `DECODIUM_LDPC_GATE` | gate appreso acceso o spento, in entrambi i modi | acceso in FT8, spento in FT2 |
 | `DECODIUM_LDPC_GATE_DELTA`, `DECODIUM_LDPC_GATE_RELAX` | soglia del gate appreso e allargamento dell'OSD a gate acceso; manopole di misura | 0 e 0,25 |
@@ -463,7 +463,11 @@ variabili il comportamento e' quello di default.
 
 #### Riprodurre le misure
 
-Il banco non fa parte della build; si compila dalla radice dei sorgenti:
+Il banco non fa parte della build normale. Con
+`-DDECODIUM_BUILD_SUPERLDPC_K77_BENCH=ON` (x86-64, GCC o Clang) CMake
+costruisce il target `superldpc_k77_bench` e registra in ctest
+`superldpc_k77_selftest`, che e' `selftest=1`. A mano, dalla radice dei
+sorgenti:
 
     g++ -O3 -DNDEBUG -std=gnu++17 -mavx2 -mfma -DSUPERLDPC_HAVE_GATE_WEIGHTS=1 -I. \
         -o superldpc_k77_bench tests/tools/superldpc_k77_bench.cpp \
@@ -483,7 +487,8 @@ Il banco non fa parte della build; si compila dalla radice dei sorgenti:
         ebn0=3,3.5,4,4.5 n=20000 noise=400000 seeds=21,22,23
 
 `base` e' il default, `clipX` e' il default con `DECODIUM_LDPC_LLR_CLIP=X`,
-`new` e' `DECODIUM_LDPC_K77=1 DECODIUM_LDPC_MARGIN=1`. Un seme FT8 della
+`new` e' `DECODIUM_LDPC_K77=1`, `k77` aggiunge `DECODIUM_LDPC_K77_NOGATE=1`.
+Un seme FT8 della
 catena dura una decina di minuti su un core.
 
 ### Un bug trovato nel decoder di Decodium
@@ -529,10 +534,15 @@ rischio di divergere dal riferimento. Non vale il cambio.
 ### Ricerca su (174,77) e gate a margine (17 novembre 2026: nel codice, spenti)
 
 Due cose nuove, tutte e due solo in ricezione e tutte e due **spente di
-default**: `DECODIUM_LDPC_K77=1` e `DECODIUM_LDPC_MARGIN=1` le accendono, per
-il solo preset di esercizio (`norder <= 3`). Senza variabili il decoder e'
-quello di prima, bit per bit (verificato: liste di decodifica identiche ai
-binari di riferimento su tutti i WAV di FT8 e FT2).
+default**: `DECODIUM_LDPC_K77=1` le accende insieme, per il solo preset di
+esercizio (`norder <= 3`). Senza variabili il decoder decide come prima
+(verificato: uscite del bridge identiche a quelle dell'albero di partenza su
+24 configurazioni con e senza bit AP, e liste di decodifica identiche a un
+binario costruito dall'albero di partenza con le stesse opzioni su tutti i
+WAV: 40 file FT8, 24 FT2, 24 FT4).
+
+La ricerca non si accende senza il gate. `DECODIUM_LDPC_K77_NOGATE=1` la lascia
+ai gate di prima ed esiste solo per misurare quanto e' peggio (piu' sotto).
 
 **(a) OSD sul codice concatenato.** La CRC-14 e' lineare, quindi i suoi 14
 vincoli sono 14 righe di parita' in piu': `OsdFast::crc_in_base` le ricava da
@@ -576,7 +586,15 @@ FT8, senza AP (1,2 milioni di parole di rumore):
 | BPSK | 1,5 dB | 56709 | 57264 |
 | BPSK | rumore, falsi | 17 | 13 |
 
-Sono circa 0,03-0,05 dB. Con bit AP il guadagno e' soprattutto sui falsi,
+In dB e' poco: letto sulla pendenza delle curve, circa 0,02 dB su 8-FSK (da
++383 a +823 parole dove la curva ne sale 27 000-36 000 per dB), 0,03-0,04 dB su
+BPSK e 0,01 dB sulle trame della catena FSK (FER 0,5 a 2,42 contro 2,43 dB,
+tabella in "Cosa gira davvero in Decodium"). Una seconda misura indipendente
+sul canale 8-FSK (semi 201-203) da' lo stesso quadro: 22652 contro 22027
+parole a 3,5 dB e 40864 contro 40105 a 4,0 dB su 60 000, 13 falsi contro 17 su
+1,2 milioni di parole di rumore.
+
+Con bit AP il guadagno e' soprattutto sui falsi,
 perche' la regola di prima ne lascia passare molti (FT8, 8-FSK):
 
 | bit AP | prima: giuste a meta' curva / falsi su rumore / falsi con ipotesi sbagliata su segnale (600 000 parole) | K77 + margine |
@@ -588,34 +606,73 @@ perche' la regola di prima ne lascia passare molti (FT8, 8-FSK):
 FT2, senza AP (6 milioni di parole di rumore): 12375 -> 12926 a 4,5 dB,
 27501 -> 28073 a 5,0, 44746 -> 45010 a 5,5, 55284 -> 55351 a 6,0; falsi sul
 rumore 3 -> 5. Non e' un guadagno a pari false decodifiche: in FT2 decide gia'
-la soglia a 22 bit ribaltati.
+la soglia a 22 bit ribaltati. La seconda misura (semi 201-203) non cambia il
+giudizio: 1 falso contro 2 su 2,1 milioni di parole di rumore senza AP, ma 1
+contro 0 su 900 000 con 32 bit AP; 28082 contro 27532 parole a 5,0 dB. I
+conteggi dei falsi sono troppo piccoli per dire qualcosa, quindi
+`MARGIN_GATE_FT2` **non e' validato** a pari o meno false decodifiche, e in
+FT2 `DECODIUM_LDPC_K77=1` e' da considerare sperimentale.
 
 Altre due cose misurate, che conviene sapere:
 
-- La sola ricerca (174,77) con i gate di prima NON paga: decodifica di piu'
-  (FT8 4,0 dB: 41117 contro 40086, semi 11-13) ma i falsi sul rumore salgono da
-  24 a 31.
+- La sola ricerca (174,77) con i gate di prima (`DECODIUM_LDPC_K77_NOGATE=1`)
+  NON paga, e con bit AP e' molto peggio del default. Senza AP decodifica di
+  piu' (FT8 4,0 dB: 41117 contro 40086, semi 11-13) ma i falsi sul rumore
+  salgono da 24 a 31. Con 32 bit AP in FT8 accetta 13 342 parole di solo rumore
+  su 150 000 (8,9%; semi 201-203), contro 2611 su 300 000 del default (0,87%) e
+  442 su 300 000 con il gate a margine: il gate appreso e' tarato sui candidati
+  della ricerca (174,91) e su quelli della (174,77) non filtra piu'. Per questo
+  `DECODIUM_LDPC_K77=1` accende sempre anche il gate a margine.
 - In FT8 il margine da solo (`w_logit = 0`) non batte il gate appreso: a 22
   falsi su 1,2 milioni (semi di taratura), 40035 parole contro 40045 a 4,0 dB. Il guadagno viene dalla
   somma di margine e logit del gate appreso.
 
 **Perche' restano spenti.** Nel decoder vero (`ft8_stage_compare`,
-`ft2_stage_compare` sugli stessi WAV dei binari di riferimento):
+`ft2_stage_compare`), tre binari costruiti con le stesse opzioni: l'albero di
+partenza, questo con l'opzione spenta, questo con `DECODIUM_LDPC_K77=1`. Tempo
+di CPU sommato sugli 8 WAV, macchina condivisa con altri lavori:
 
-| | decodifiche prima / dopo | tempo prima / dopo |
+| | decodifiche: partenza / spenta / accesa | tempo di CPU: partenza / spenta / accesa |
 |---|---|---|
-| FT8, 8 WAV, profondita' 1 | 67 / 68 | 1,19 s / 1,26 s |
-| FT8, profondita' 2 | 69 / 69 | 2,40 s / 2,39 s |
-| FT8, profondita' 3 (esercizio) | 86 / 84 | 20,4 / 20,3 / 20,9 s contro 23,1 / 23,1 / 22,7 s (da +9% a +14%, tre coppie) |
-| FT2, 8 WAV, profondita' 1 / 2 / 3 | 49, 62, 63 / uguali | 0,31, 1,00, 1,12 s / 0,34, 1,25, 1,34 s |
+| FT8, profondita' 1 (una corsa) | 67 / 67 / 68 | 1,16 / 1,27 / 1,28 s |
+| FT8, profondita' 2 (due corse) | 69 / 69 / 69 | 2,37 / 2,35 / 2,41 s |
+| FT8, profondita' 3, esercizio (tre corse) | 86 / 86 / 84 | 22,9 / 21,3 / 24,7 s (22,7-23,1 / 21,0-21,7 / 24,0-25,4) |
+| FT2, profondita' 1 (cinque corse) | 49 / 49 / 49 | 0,34 / 0,30 / 0,35 s |
+| FT2, profondita' 2 | 62 / 62 / 62 | 1,16 / 1,11 / 1,36 s |
+| FT2, profondita' 3 | 63 / 63 / 63 | 1,30 / 1,24 / 1,51 s |
+
+Sul profilo di esercizio di FT8 l'opzione accesa costa l'8% rispetto
+all'albero di partenza e il 16% rispetto allo stesso binario a opzione spenta,
+e perde due decodifiche ("K1JT HA5WA 73" e "N1API F2VX 73") senza guadagnarne.
+In FT2 costa il 16-17% e il 22-23%, con gli stessi 174 messaggi. La differenza
+fra le due basi e' `colmask()` senza salti (paragrafo seguente), che c'e' in
+entrambi i casi.
 
 Nessuna falsa decodifica in piu' (FT2: 174 decodifiche giuste e 0 fuori dalla
-verita' in entrambi i casi; FT8: 0 decodifiche su 40 WAV di solo rumore in
-entrambi i casi), ma nemmeno un guadagno visibile, e il tempo cresce attorno
-al 10% e oltre: ogni candidato del codice (174,77) va pesato, mentre prima la CRC ne
+verita' in tutti e tre i casi; FT8: 0 decodifiche su 40 WAV di solo rumore),
+ma nemmeno un guadagno visibile, e il tempo cresce oltre il 10%: ogni candidato
+del codice (174,77) va pesato, mentre prima la CRC ne
 scartava 16383 su 16384 con uno XOR. Il corpus e' piccolo (una novantina di
-decodifiche) e non puo' vedere uno 0,05 dB; quello che dice e' che il costo c'e'
+decodifiche) e non puo' vedere uno 0,02 dB; quello che dice e' che il costo c'e'
 e il guadagno non si vede.
+
+**Una modifica che invece e' sempre attiva: `colmask()` senza salti.** La
+maschera di colonna di un bit d'informazione si costruiva con un `if` per riga
+di parita' su un bit che vale 0 o 1 con la stessa probabilita'; ora e' uno
+shift e un OR, con lo stesso risultato (uscite del bridge identiche bit per
+bit). Tempo dell'LDPC per parola, microbanco sul bridge, 20 000 parole, minimo
+di cinque corse alternate:
+
+| | partenza | ora, default | ora, `DECODIUM_LDPC_K77=1` |
+|---|---|---|---|
+| FT8, solo rumore | 64,6 us | 50,5 us | 85,2 us |
+| FT8, segnale a 3,5 dB | 85,1 us | 69,9 us | 87,3 us |
+| FT2, solo rumore | 64,8 us | 49,5 us | 103,9 us |
+| FT2, segnale a 4,5 dB | 77,0 us | 63,8 us | 75,5 us |
+
+Nel decoder vero l'LDPC e' una parte del totale: il default e' piu' veloce
+dell'albero di partenza del 7% sul profilo di esercizio di FT8 e del 4-5% in
+FT2 alle profondita' 2 e 3 (tabella sopra), con liste di decodifica identiche.
 
 ## Uso
 
