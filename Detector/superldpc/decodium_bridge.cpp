@@ -112,6 +112,18 @@ static thread_local bool g_modo_ft8 = false;
 
 extern "C" void superldpc_simd_set_ft8_mode_c (int on) { g_modo_ft8 = on != 0; }
 
+// FT2 only: flipped-bit cap requested by the caller for the next words on
+// this thread, 0 = none (the mode default applies). FtxFt2Stage7 can raise
+// it for candidates whose sync quality rules out a noise-only candidate
+// (opt-in, DECODIUM_FT2_MAX_HARD_SYNC; see ft2_max_hard_sync() there for the
+// measurements). It can only relax the default, is ignored in FT8 mode and
+// yields to DECODIUM_LDPC_MAX_HARD.
+static thread_local int g_ft2_max_hard = 0;
+
+extern "C" void superldpc_simd_set_ft2_max_hard_c (int n) {
+    g_ft2_max_hard = (n > 0 && n <= kN) ? n : 0;
+}
+
 // Manopole per misurare in FT8 quanto costa ciascun filtro tarato su FT2.
 // Si applicano a TUTTI i preset e SOLO in modalita' FT8: la taratura FT2
 // resta quella che tiene i nominativi fantasma a zero, qualunque cosa si
@@ -621,6 +633,9 @@ static bool superldpc_ap_check () {
 // dell'originale: lo stadio 4 applica comunque a valle 58 per i messaggi
 // standard e 36 per i non standard.
 // DECODIUM_LDPC_MAX_HARD forza il valore per entrambi i modi.
+// In FT2 the caller may raise 22 per candidate (g_ft2_max_hard above) when
+// the sync quality confirms a signal; without that request, which is the
+// default, it stays 22.
 static int superldpc_max_hard () {
     static int const forzato = [] {
         char const* raw = std::getenv ("DECODIUM_LDPC_MAX_HARD");
@@ -629,7 +644,8 @@ static int superldpc_max_hard () {
         return (n > 0 && n <= kN) ? n : 0;
     }();
     if (forzato) return forzato;
-    return g_modo_ft8 ? 58 : 22;
+    if (g_modo_ft8) return 58;
+    return g_ft2_max_hard > 22 ? g_ft2_max_hard : 22;
 }
 
 // Parola con TUTTI i 77 bit del messaggio imposti dall'a priori (tipo 8):

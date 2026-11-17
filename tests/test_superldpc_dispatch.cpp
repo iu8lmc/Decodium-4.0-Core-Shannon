@@ -29,6 +29,7 @@ extern "C" void superldpc_simd_set_ft8_mode_c (int mode)
     ++modeCalls;
     lastMode = mode;
 }
+extern "C" void superldpc_simd_set_ft2_max_hard_c (int) {}
 extern "C" void superldpc_simd_decode174_91_c (
     float const*, int, int, int, signed char const*, signed char*,
     signed char*, int*, int*, float*) { ++simdCalls; }
