@@ -593,8 +593,9 @@ int ft8_bicm_giri ()
 // DECODIUM_FT8_TRELLIS=1 forces it on for every request (including the
 // multi-cycle / sub-pass ones that the default policy leaves out), =0
 // switches it off; without the variable kFt8TrellisDefault and
-// ft8_trellis_enabled() decide. It is OFF by default: with it on the measured
-// decode time grows by more than 10% (see ft8_trellis_enabled()).
+// ft8_trellis_enabled() decide. It is OFF by default: it adds decodes at an
+// unchanged false-decode count, but on slots full of weak signals the decode
+// time grows by more than 10% at every depth (measured +13..+38%).
 // Experiment knobs, read once: DECODIUM_FT8_TRELLIS_SIGMA (phase diffusion,
 // degrees per symbol), _FWALK (frequency-walk probability), _EM
 // (re-estimation rounds), _HARD (hard-error cap), _ESN0 / _NSYNC / _RMS (the
@@ -602,7 +603,9 @@ int ft8_bicm_giri ()
 //
 // The gates and the tighter acceptance were chosen on a tuning corpus (seeds
 // disjoint from the report corpus): most sync candidates are noise, and the
-// gates keep the round away from them. @@GATECOST@@
+// gates keep the round away from them. On held-out seeds (50 weak-signal
+// slots, depth 3) they cost 1.6% of the round's own decodes (317 against 322)
+// and without them the decoder is about 15% slower.
 constexpr bool kFt8TrellisDefault {false};
 
 struct Ft8TrellisConfig
@@ -7156,9 +7159,10 @@ void plan_ft8_ldpc_decode (Ft8Request const& request, float f1, float sync, int 
   Keff = 91;
 }
 
-// Default policy of the phase-tracking round. The multi-cycle / sub-pass
-// ("harvest") requests are left out: there every extra decode re-triggers the
-// candidate search, and the measured decode time grew by more than 10%.
+// Default policy of the phase-tracking round (only used if kFt8TrellisDefault
+// is ever set). The multi-cycle / sub-pass ("harvest") requests are left out:
+// there every extra decode re-triggers the candidate search and the time cost
+// is the highest. DECODIUM_FT8_TRELLIS=1 overrides this policy too.
 bool ft8_trellis_enabled (Ft8TrellisConfig const& config, Ft8Request const& request)
 {
   if (config.mode >= 0)
