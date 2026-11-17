@@ -3170,6 +3170,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set_source_files_properties (Audio/BWFFile.cpp PROPERTIES
     COMPILE_FLAGS "-Wno-error=array-bounds")
 endif ()
+# The widgets executable compiles the panadapter registration without
+# src/ui/PanadapterItem.cpp (only decodium_qml has it). UBSan's vptr check on
+# QPointer<PanadapterItem> would reference "typeinfo for PanadapterItem" and
+# break that link, so leave this one check out for this file. The flag has
+# no effect when the build is not sanitised.
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties (src/bridge/DecodiumBridgePanadapterRegistration.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-sanitize=vptr")
+endif ()
 # With OpenMP unavailable, the scheduler's OpenMP-only thread-limit constant
 # is unused. Keep the diagnostic visible without failing this macOS unit.
 if (APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
