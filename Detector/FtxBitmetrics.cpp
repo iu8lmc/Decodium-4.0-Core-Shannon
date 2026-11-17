@@ -2342,6 +2342,371 @@ extern "C" void ftx_ft2_bitmetrics_diag_c (Complex const* cd,
                            snr_min, snr_max, snr_mean, fading_depth, noise_var, noise_var_eq);
 }
 
+// Phase-tracking bit metrics for FT8: forward-backward (BCJR) over a
+// quantised carrier-phase x residual-frequency trellis.
+//
+// FT8 is continuous-phase 8-GFSK with h = 1: in the symbol-spaced spectra
+// cs[79][8] the transmitted tone of every symbol carries the SAME carrier
+// phase, up to the slowly varying channel phase and a residual frequency
+// error. The blind metrics throw that away (|sum| over 1..3 symbols); the
+// Costas-anchored coherent metrics interpolate the phase between three
+// anchors only. Here the phase is a hidden Markov state:
+//
+//   phase[k+1] = phase[k] + 2*pi*df[k]*Tsym + w,   w ~ N(0, sigma^2)
+//   df[k+1]    = df[k] or a neighbouring frequency state (prob. freq_walk)
+//
+// with NP phase states and NF frequency states of 0.05 Hz, i.e. the residual
+// frequency error left by the 0.5 Hz sync grid (and a slow drift) is tracked
+// inside the trellis instead of being searched beforehand. The 21 Costas
+// symbols are pilots (tone known), data symbols have a uniform tone prior.
+// Amplitude and noise variance are estimated from the data: noise from the
+// 147 off-tone bins of the Costas symbols, amplitude from the Costas tones,
+// then optionally re-estimated from the posteriors (em_rounds).
+//
+// Like the coherent and BICM metrics this is an EXTRA attempt, never a
+// replacement of the blind ones.
+//
+// cs: [79][8] symbol spectra from ftx_ft8_bitmetrics_capture_c (not tone
+// equalised). llr: [174], Decodium convention (positive = bit 1), RMS
+// normalised and multiplied by `scale` like the other FT8 metrics.
+// info (optional, 4 floats): RMS of the unnormalised LLRs, mean residual
+// frequency (Hz), estimated Es/N0 (linear), log-likelihood of the frame.
+// Returns 1 on success, 0 when no usable estimate exists (llr zeroed).
+extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
+                                             float sigma_deg, float freq_walk,
+                                             int em_rounds, float* llr, float* info)
+{
+  constexpr int NN = 79;
+  constexpr int NP = 32;
+  constexpr int NF = 15;
+  constexpr int kMaxTaps = 24;
+  constexpr float kDfHz = 0.05f;
+  constexpr float kTsym = 0.16f;
+  constexpr float kTwoPi = 6.28318530717958647692f;
+  static int const icos7[7] = {3, 1, 4, 0, 6, 5, 2};
+  static int const graymap[8] = {0, 1, 3, 2, 5, 6, 4, 7};
+  static std::array<float, NP> const cos_p = [] {
+    std::array<float, NP> v {};
+    for (int p = 0; p < NP; ++p) v[static_cast<size_t> (p)] = std::cos (kTwoPi * static_cast<float> (p) / NP);
+    return v;
+  }();
+  static std::array<float, NP> const sin_p = [] {
+    std::array<float, NP> v {};
+    for (int p = 0; p < NP; ++p) v[static_cast<size_t> (p)] = std::sin (kTwoPi * static_cast<float> (p) / NP);
+    return v;
+  }();
+
+  std::fill_n (llr, 174, 0.0f);
+  if (info) std::fill_n (info, 4, 0.0f);
+
+  std::array<int, NN> pilot;
+  pilot.fill (-1);
+  for (int k = 0; k < 7; ++k)
+    {
+      pilot[static_cast<size_t> (k)] = icos7[k];
+      pilot[static_cast<size_t> (k + 36)] = icos7[k];
+      pilot[static_cast<size_t> (k + 72)] = icos7[k];
+    }
+
+  // First estimates from the pilots alone.
+  double noise_sum = 0.0;
+  double pilot_sum = 0.0;
+  double total_sum = 0.0;
+  for (int k = 0; k < NN; ++k)
+    {
+      for (int t = 0; t < 8; ++t)
+        {
+          double const pw = std::norm (cs[k * 8 + t]);
+          total_sum += pw;
+          if (pilot[static_cast<size_t> (k)] < 0) continue;
+          if (t == pilot[static_cast<size_t> (k)]) pilot_sum += pw;
+          else noise_sum += pw;
+        }
+    }
+  float sigma2 = static_cast<float> (noise_sum / 147.0);
+  if (!(sigma2 > 0.0f) || !std::isfinite (sigma2))
+    {
+      return 0;
+    }
+  float amp2 = static_cast<float> (pilot_sum / 21.0) - sigma2;
+
+  // Transition kernels: for each frequency state the probability mass of
+  // N(advance, sigma^2) falling in each phase bin.
+  float const sigma_bins = std::max (sigma_deg, 1.0f) * NP / 360.0f;
+  std::array<std::array<float, kMaxTaps>, NF> taps {};
+  std::array<int, NF> tap_lo {};
+  std::array<int, NF> tap_n {};
+  for (int f = 0; f < NF; ++f)
+    {
+      float const adv = static_cast<float> (f - NF / 2) * kDfHz * kTsym * NP;   // bins per symbol
+      int const lo = static_cast<int> (std::floor (adv - 3.0f * sigma_bins - 0.5f));
+      int const hi = static_cast<int> (std::ceil (adv + 3.0f * sigma_bins + 0.5f));
+      int const n = std::min (hi - lo + 1, kMaxTaps);
+      float sum = 0.0f;
+      for (int j = 0; j < n; ++j)
+        {
+          float const a = (static_cast<float> (lo + j) - 0.5f - adv) / (sigma_bins * 1.41421356f);
+          float const b = (static_cast<float> (lo + j) + 0.5f - adv) / (sigma_bins * 1.41421356f);
+          float const w = 0.5f * (std::erf (b) - std::erf (a));
+          taps[static_cast<size_t> (f)][static_cast<size_t> (j)] = w;
+          sum += w;
+        }
+      for (int j = 0; j < n; ++j) taps[static_cast<size_t> (f)][static_cast<size_t> (j)] /= sum;
+      tap_lo[static_cast<size_t> (f)] = lo;
+      tap_n[static_cast<size_t> (f)] = n;
+    }
+  float const eps = std::max (0.0f, std::min (freq_walk, 0.3f));
+  auto stay = [eps] (int f) {
+    return 1.0f - eps * ((f > 0 ? 1.0f : 0.0f) + (f < NF - 1 ? 1.0f : 0.0f));
+  };
+
+  static thread_local std::vector<float> e_store;
+  static thread_local std::vector<float> lk_store;
+  static thread_local std::vector<float> alpha_store;
+  e_store.resize (static_cast<size_t> (NN) * NP * 8);
+  lk_store.resize (static_cast<size_t> (NN) * NP);
+  alpha_store.resize (static_cast<size_t> (NN) * NF * NP);
+  float* const e = e_store.data ();
+  float* const lk = lk_store.data ();
+  float* const alpha = alpha_store.data ();
+
+  std::array<float, 174> raw {};
+  double loglik = 0.0;
+  double freq_mean = 0.0;
+  for (int round = 0; round <= std::max (0, em_rounds); ++round)
+    {
+      // Es/N0 kept inside a sane window: below -6 dB there is nothing to
+      // track, above 16 dB the blind metrics do not need help.
+      amp2 = std::max (0.25f * sigma2, std::min (amp2, 40.0f * sigma2));
+      float const amp = std::sqrt (amp2);
+      float const c = 2.0f * amp / sigma2;
+
+      loglik = 0.0;
+      for (int k = 0; k < NN; ++k)
+        {
+          int const pt = pilot[static_cast<size_t> (k)];
+          float ref = 0.0f;
+          if (pt >= 0) ref = std::abs (cs[k * 8 + pt]);
+          else
+            for (int t = 0; t < 8; ++t) ref = std::max (ref, std::abs (cs[k * 8 + t]));
+          float const offset = c * ref;
+          loglik += offset;
+          float* const ek = e + static_cast<size_t> (k) * NP * 8;
+          for (int t = 0; t < 8; ++t)
+            {
+              float const yr = c * cs[k * 8 + t].real ();
+              float const yi = c * cs[k * 8 + t].imag ();
+              for (int p = 0; p < NP; ++p)
+                {
+                  float const x = yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)] - offset;
+                  ek[p * 8 + t] = std::exp (std::max (-80.0f, std::min (x, 80.0f)));
+                }
+            }
+          float* const lkk = lk + static_cast<size_t> (k) * NP;
+          for (int p = 0; p < NP; ++p)
+            {
+              float v = 0.0f;
+              if (pt >= 0) v = ek[p * 8 + pt];
+              else
+                {
+                  for (int t = 0; t < 8; ++t) v += ek[p * 8 + t];
+                  v *= 0.125f;
+                }
+              lkk[p] = v + 1.0e-30f;
+            }
+        }
+
+      // Forward pass.
+      std::array<std::array<float, NP>, NF> conv {};
+      std::array<float, 3 * NP> ext {};
+      auto convolve = [&] (float const* in, int f, bool forward, float* out) {
+        for (int p = 0; p < NP; ++p)
+          {
+            ext[static_cast<size_t> (p)] = in[p];
+            ext[static_cast<size_t> (p + NP)] = in[p];
+            ext[static_cast<size_t> (p + 2 * NP)] = in[p];
+          }
+        int const lo = tap_lo[static_cast<size_t> (f)];
+        int const n = tap_n[static_cast<size_t> (f)];
+        float const* w = taps[static_cast<size_t> (f)].data ();
+        for (int p = 0; p < NP; ++p)
+          {
+            float v = 0.0f;
+            // forward: out[p] = sum_j w[j] * in[p - (lo + j)]
+            // backward: out[p] = sum_j w[j] * in[p + (lo + j)]
+            if (forward)
+              for (int j = 0; j < n; ++j) v += w[j] * ext[static_cast<size_t> (p + NP - lo - j)];
+            else
+              for (int j = 0; j < n; ++j) v += w[j] * ext[static_cast<size_t> (p + NP + lo + j)];
+            out[p] = v;
+          }
+      };
+      for (int i = 0; i < NF * NP; ++i) alpha[i] = 1.0f / static_cast<float> (NF * NP);
+      bool ok = true;
+      for (int k = 0; k + 1 < NN && ok; ++k)
+        {
+          float const* const ak = alpha + static_cast<size_t> (k) * NF * NP;
+          float* const an = alpha + static_cast<size_t> (k + 1) * NF * NP;
+          float const* const lkk = lk + static_cast<size_t> (k) * NP;
+          std::array<float, NP> g {};
+          for (int f = 0; f < NF; ++f)
+            {
+              for (int p = 0; p < NP; ++p) g[static_cast<size_t> (p)] = ak[f * NP + p] * lkk[p];
+              convolve (g.data (), f, true, conv[static_cast<size_t> (f)].data ());
+            }
+          float sum = 0.0f;
+          for (int f = 0; f < NF; ++f)
+            {
+              float const s0 = stay (f);
+              for (int p = 0; p < NP; ++p)
+                {
+                  float v = s0 * conv[static_cast<size_t> (f)][static_cast<size_t> (p)];
+                  if (f > 0) v += eps * conv[static_cast<size_t> (f - 1)][static_cast<size_t> (p)];
+                  if (f < NF - 1) v += eps * conv[static_cast<size_t> (f + 1)][static_cast<size_t> (p)];
+                  an[f * NP + p] = v;
+                  sum += v;
+                }
+            }
+          if (!(sum > 0.0f) || !std::isfinite (sum)) { ok = false; break; }
+          float const inv = 1.0f / sum;
+          for (int i = 0; i < NF * NP; ++i) an[i] *= inv;
+          loglik += std::log (sum);
+        }
+      if (!ok)
+        {
+          return 0;
+        }
+
+      // Backward pass, posteriors and bit metrics on the way.
+      std::array<std::array<float, NP>, NF> beta {};
+      std::array<std::array<float, NP>, NF> hmix {};
+      for (auto& row : beta) row.fill (1.0f);
+      double em_num = 0.0;
+      freq_mean = 0.0;
+      for (int k = NN - 1; k >= 0; --k)
+        {
+          float const* const ak = alpha + static_cast<size_t> (k) * NF * NP;
+          float const* const ek = e + static_cast<size_t> (k) * NP * 8;
+          float const* const lkk = lk + static_cast<size_t> (k) * NP;
+          int const pt = pilot[static_cast<size_t> (k)];
+          std::array<float, NP> wp {};
+          float fnum = 0.0f;
+          float fden = 0.0f;
+          for (int f = 0; f < NF; ++f)
+            {
+              float fs = 0.0f;
+              for (int p = 0; p < NP; ++p)
+                {
+                  float const v = ak[f * NP + p] * beta[static_cast<size_t> (f)][static_cast<size_t> (p)];
+                  wp[static_cast<size_t> (p)] += v;
+                  fs += v * lkk[p];
+                }
+              fnum += fs * static_cast<float> (f - NF / 2);
+              fden += fs;
+            }
+          if (!(fden > 0.0f) || !std::isfinite (fden))
+            {
+              return 0;
+            }
+          if (k == NN - 1) loglik += std::log (fden);
+          freq_mean += static_cast<double> (kDfHz * fnum / fden) / NN;
+
+          std::array<float, 8> app {};
+          float app_sum = 0.0f;
+          float proj = 0.0f;
+          for (int t = 0; t < 8; ++t)
+            {
+              if (pt >= 0 && t != pt) continue;
+              float const yr = cs[k * 8 + t].real ();
+              float const yi = cs[k * 8 + t].imag ();
+              float v = 0.0f;
+              float pr = 0.0f;
+              for (int p = 0; p < NP; ++p)
+                {
+                  float const w = wp[static_cast<size_t> (p)] * ek[p * 8 + t];
+                  v += w;
+                  pr += w * (yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)]);
+                }
+              app[static_cast<size_t> (t)] = v;
+              app_sum += v;
+              proj += pr;
+            }
+          if (app_sum > 0.0f) em_num += static_cast<double> (proj / app_sum);
+
+          if (pt < 0)
+            {
+              int const data_index = k < 36 ? k - 7 : k - 14;       // 0..57
+              for (int ib = 0; ib < 3; ++ib)
+                {
+                  float p1 = 1.0e-30f;
+                  float p0 = 1.0e-30f;
+                  for (int i = 0; i < 8; ++i)
+                    {
+                      float const v = app[static_cast<size_t> (graymap[i])];
+                      if ((i >> (2 - ib)) & 1) p1 += v;
+                      else p0 += v;
+                    }
+                  raw[static_cast<size_t> (3 * data_index + ib)] = std::log (p1) - std::log (p0);
+                }
+            }
+
+          if (k == 0) break;
+          for (int f = 0; f < NF; ++f)
+            for (int p = 0; p < NP; ++p)
+              hmix[static_cast<size_t> (f)][static_cast<size_t> (p)] =
+                  lkk[p] * beta[static_cast<size_t> (f)][static_cast<size_t> (p)];
+          float sum = 0.0f;
+          for (int f = 0; f < NF; ++f)
+            {
+              float const s0 = stay (f);
+              std::array<float, NP> mixed {};
+              for (int p = 0; p < NP; ++p)
+                {
+                  float v = s0 * hmix[static_cast<size_t> (f)][static_cast<size_t> (p)];
+                  if (f > 0) v += eps * hmix[static_cast<size_t> (f - 1)][static_cast<size_t> (p)];
+                  if (f < NF - 1) v += eps * hmix[static_cast<size_t> (f + 1)][static_cast<size_t> (p)];
+                  mixed[static_cast<size_t> (p)] = v;
+                }
+              convolve (mixed.data (), f, false, beta[static_cast<size_t> (f)].data ());
+              for (int p = 0; p < NP; ++p) sum += beta[static_cast<size_t> (f)][static_cast<size_t> (p)];
+            }
+          if (!(sum > 0.0f) || !std::isfinite (sum))
+            {
+              return 0;
+            }
+          float const inv = static_cast<float> (NF * NP) / sum;
+          for (auto& row : beta)
+            for (float& v : row) v *= inv;
+        }
+
+      if (round < em_rounds)
+        {
+          // Re-estimate amplitude and noise from the posteriors.
+          float const amp_new = static_cast<float> (em_num / NN);
+          amp2 = amp_new > 0.0f ? amp_new * amp_new : 0.0f;
+          sigma2 = std::max (static_cast<float> ((total_sum - NN * static_cast<double> (amp2)) / (NN * 8.0)),
+                             0.25f * sigma2);
+        }
+    }
+
+  double sum2 = 0.0;
+  for (float v : raw) sum2 += static_cast<double> (v) * v;
+  float const rms = static_cast<float> (std::sqrt (sum2 / 174.0));
+  if (!(rms > 0.0f) || !std::isfinite (rms))
+    {
+      return 0;
+    }
+  for (int i = 0; i < 174; ++i) llr[i] = scale * raw[static_cast<size_t> (i)] / rms;
+  if (info)
+    {
+      info[0] = rms;
+      info[1] = static_cast<float> (freq_mean);
+      info[2] = amp2 / sigma2;
+      info[3] = static_cast<float> (loglik);
+    }
+  return 1;
+}
+
 extern "C" void ftx_ft8_bitmetrics_c (Complex const* cd0, int np2, int ibest, int imetric,
                                       float* s8_out, int* nsync_out,
                                       float* llra, float* llrb, float* llrc,
