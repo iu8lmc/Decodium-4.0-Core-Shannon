@@ -715,6 +715,16 @@ target_compile_definitions (test_nonstandard_call_directed PRIVATE DECODIUM_SOUR
 target_link_libraries (test_nonstandard_call_directed wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_nonstandard_call_directed COMMAND $<TARGET_FILE:test_nonstandard_call_directed>)
 
+# Saturating integer truncation of the FT2 legacy noise estimate. The helpers
+# are file-local, so the test includes Detector/FtxBitmetrics.cpp itself.
+add_executable (test_ft2_bitmetrics_overflow test_ft2_bitmetrics_overflow.cpp)
+set_target_properties (test_ft2_bitmetrics_overflow PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON)
+target_include_directories (test_ft2_bitmetrics_overflow PRIVATE ${FFTW3_INCLUDE_DIRS})
+target_link_libraries (test_ft2_bitmetrics_overflow PRIVATE ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+add_test (NAME test_ft2_bitmetrics_overflow COMMAND $<TARGET_FILE:test_ft2_bitmetrics_overflow>)
+
 if (DECODIUM_SUPERLDPC_ARM64_TARGET)
   add_executable (test_superldpc_neon test_superldpc_neon.cpp)
   set_target_properties (test_superldpc_neon PROPERTIES
@@ -992,6 +1002,7 @@ set (_decodium_regression_test_targets
   test_rtlsdr_capabilities
   test_rtlsdr_tuning_plan
   test_ft2link_qml_adapter
+  test_ft2_bitmetrics_overflow
   )
 if (TARGET test_superldpc_neon)
   list (APPEND _decodium_regression_test_targets test_superldpc_neon)

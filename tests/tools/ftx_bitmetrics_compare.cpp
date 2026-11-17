@@ -25,6 +25,14 @@
 //
 // Esce con 0 se tutte le uscite coincidono, 1 altrimenti. I tempi stampati
 // sono indicativi: le due librerie sono chiamate a turno sugli stessi dati.
+//
+// Differenze attese rispetto a origin/main prima della correzione del
+// trabocco in ft2_legacy_base_noise_var / ft2_legacy_equalized_beta: le
+// sezioni FT2 differiscono (e il programma esce con 1) nei vettori in cui il
+// vecchio codice traboccava un int, cioe' ai livelli estremi del generatore
+// (circa 80-90 vettori su 3900 per ftx_ft2_bitmetrics_c con 4000 vettori).
+// Le sezioni FT8 e FT4 devono restare identiche. Il comportamento nuovo e'
+// fissato da tests/test_ft2_bitmetrics_overflow.cpp.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
