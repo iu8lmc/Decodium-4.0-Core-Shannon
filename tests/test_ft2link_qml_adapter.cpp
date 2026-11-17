@@ -5417,7 +5417,11 @@ private Q_SLOTS:
     // The ultra-low-SNR search is intentionally bounded, but 2.5 seconds is
     // below the repeatable completion time of the hosted macOS, Windows and
     // Linux runners.  Keep the test finite while allowing the full search.
-    qputenv ("DECODIUM_FT2LINK_W2300_MAX_DECODE_MS", "10000");
+    // Ten seconds was still a wall-clock race: on a slower hosted runner the
+    // first phase search ran past it (11.5 and 12.9 s seen) and the replay
+    // decoded nothing.  The full search finishes in about 14 s on a slow
+    // 4-core host, so leave a wide margin; a passing run does not wait for it.
+    qputenv ("DECODIUM_FT2LINK_W2300_MAX_DECODE_MS", "45000");
 
     FT2LinkQmlAdapter adapter;
     QVariantMap options;
