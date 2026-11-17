@@ -3290,8 +3290,8 @@ int main(int argc, char* argv[])
     };
     int const labReapplyMs = parseLabDelayMs(labReapplyMsOption, 6500);
     int const labMonitorMs = parseLabDelayMs(labMonitorMsOption, 8000);
-    int const labSstvRxMs = parseLabDelayMs(labSstvRxMsOption, 0);
-    int const labSstvTxMs = parseLabDelayMs(labSstvTxMsOption, 0);
+    [[maybe_unused]] int const labSstvRxMs = parseLabDelayMs(labSstvRxMsOption, 0);
+    [[maybe_unused]] int const labSstvTxMs = parseLabDelayMs(labSstvTxMsOption, 0);
     [[maybe_unused]] int const labSstvTxWaitTimeoutMs = parseLabDelayMs(
         labSstvTxWaitTimeoutOption, 60'000);
     QString const labSstvMode = parser.value(labSstvModeOption).trimmed();
