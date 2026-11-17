@@ -2355,7 +2355,7 @@ extern "C" void ftx_ft2_bitmetrics_diag_c (Complex const* cd,
 //   phase[k+1] = phase[k] + 2*pi*df[k]*Tsym + w,   w ~ N(0, sigma^2)
 //   df[k+1]    = df[k] or a neighbouring frequency state (prob. freq_walk)
 //
-// with NP phase states and NF frequency states of 0.05 Hz, i.e. the residual
+// with NP phase states and NF frequency states kDfHz apart, i.e. the residual
 // frequency error left by the 0.5 Hz sync grid (and a slow drift) is tracked
 // inside the trellis instead of being searched beforehand. The 21 Costas
 // symbols are pilots (tone known), data symbols have a uniform tone prior.
@@ -2371,16 +2371,19 @@ extern "C" void ftx_ft2_bitmetrics_diag_c (Complex const* cd,
 // normalised and multiplied by `scale` like the other FT8 metrics.
 // info (optional, 4 floats): RMS of the unnormalised LLRs, mean residual
 // frequency (Hz), estimated Es/N0 (linear), log-likelihood of the frame.
-// Returns 1 on success, 0 when no usable estimate exists (llr zeroed).
+// min_esn0: the attempt is skipped (return 0) when the pilot estimate of
+// Es/N0 is below this value; most sync candidates are noise and stop here.
+// Returns 1 on success, 0 when skipped or no usable estimate exists (llr zeroed).
 extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
                                              float sigma_deg, float freq_walk,
-                                             int em_rounds, float* llr, float* info)
+                                             int em_rounds, float min_esn0,
+                                             float* llr, float* info)
 {
   constexpr int NN = 79;
-  constexpr int NP = 32;
+  constexpr int NP = 16;
   constexpr int NF = 15;
   constexpr int kMaxTaps = 24;
-  constexpr float kDfHz = 0.05f;
+  constexpr float kDfHz = 0.08f;
   constexpr float kTsym = 0.16f;
   constexpr float kTwoPi = 6.28318530717958647692f;
   static int const icos7[7] = {3, 1, 4, 0, 6, 5, 2};
@@ -2429,6 +2432,10 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
       return 0;
     }
   float amp2 = static_cast<float> (pilot_sum / 21.0) - sigma2;
+  if (amp2 < min_esn0 * sigma2)
+    {
+      return 0;           // cheap gate: the pilots show no usable signal
+    }
 
   // Transition kernels: for each frequency state the probability mass of
   // N(advance, sigma^2) falling in each phase bin.
@@ -2439,8 +2446,8 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
   for (int f = 0; f < NF; ++f)
     {
       float const adv = static_cast<float> (f - NF / 2) * kDfHz * kTsym * NP;   // bins per symbol
-      int const lo = static_cast<int> (std::floor (adv - 3.0f * sigma_bins - 0.5f));
-      int const hi = static_cast<int> (std::ceil (adv + 3.0f * sigma_bins + 0.5f));
+      int const lo = static_cast<int> (std::floor (adv - 2.5f * sigma_bins));
+      int const hi = static_cast<int> (std::ceil (adv + 2.5f * sigma_bins));
       int const n = std::min (hi - lo + 1, kMaxTaps);
       float sum = 0.0f;
       for (int j = 0; j < n; ++j)
@@ -2492,27 +2499,22 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
           float const offset = c * ref;
           loglik += offset;
           float* const ek = e + static_cast<size_t> (k) * NP * 8;
+          float* const lkk = lk + static_cast<size_t> (k) * NP;
+          std::fill_n (lkk, NP, 1.0e-30f);
           for (int t = 0; t < 8; ++t)
             {
               float const yr = c * cs[k * 8 + t].real ();
               float const yi = c * cs[k * 8 + t].imag ();
+              float* const et = ek + t * NP;
               for (int p = 0; p < NP; ++p)
                 {
                   float const x = yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)] - offset;
-                  ek[p * 8 + t] = std::exp (std::max (-80.0f, std::min (x, 80.0f)));
+                  et[p] = decodium::ftx_expf (std::min (x, 80.0f));
                 }
-            }
-          float* const lkk = lk + static_cast<size_t> (k) * NP;
-          for (int p = 0; p < NP; ++p)
-            {
-              float v = 0.0f;
-              if (pt >= 0) v = ek[p * 8 + pt];
-              else
-                {
-                  for (int t = 0; t < 8; ++t) v += ek[p * 8 + t];
-                  v *= 0.125f;
-                }
-              lkk[p] = v + 1.0e-30f;
+              if (pt < 0)
+                for (int p = 0; p < NP; ++p) lkk[p] += 0.125f * et[p];
+              else if (t == pt)
+                for (int p = 0; p < NP; ++p) lkk[p] += et[p];
             }
         }
 
@@ -2529,16 +2531,14 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
         int const lo = tap_lo[static_cast<size_t> (f)];
         int const n = tap_n[static_cast<size_t> (f)];
         float const* w = taps[static_cast<size_t> (f)].data ();
-        for (int p = 0; p < NP; ++p)
+        // forward: out[p] = sum_j w[j] * in[p - (lo + j)]
+        // backward: out[p] = sum_j w[j] * in[p + (lo + j)]
+        std::fill_n (out, NP, 0.0f);
+        for (int j = 0; j < n; ++j)
           {
-            float v = 0.0f;
-            // forward: out[p] = sum_j w[j] * in[p - (lo + j)]
-            // backward: out[p] = sum_j w[j] * in[p + (lo + j)]
-            if (forward)
-              for (int j = 0; j < n; ++j) v += w[j] * ext[static_cast<size_t> (p + NP - lo - j)];
-            else
-              for (int j = 0; j < n; ++j) v += w[j] * ext[static_cast<size_t> (p + NP + lo + j)];
-            out[p] = v;
+            float const* const src = ext.data () + (forward ? NP - lo - j : NP + lo + j);
+            float const wj = w[j];
+            for (int p = 0; p < NP; ++p) out[p] += wj * src[p];
           }
       };
       for (int i = 0; i < NF * NP; ++i) alpha[i] = 1.0f / static_cast<float> (NF * NP);
@@ -2619,11 +2619,12 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
               if (pt >= 0 && t != pt) continue;
               float const yr = cs[k * 8 + t].real ();
               float const yi = cs[k * 8 + t].imag ();
+              float const* const et = ek + t * NP;
               float v = 0.0f;
               float pr = 0.0f;
               for (int p = 0; p < NP; ++p)
                 {
-                  float const w = wp[static_cast<size_t> (p)] * ek[p * 8 + t];
+                  float const w = wp[static_cast<size_t> (p)] * et[p];
                   v += w;
                   pr += w * (yr * cos_p[static_cast<size_t> (p)] + yi * sin_p[static_cast<size_t> (p)]);
                 }

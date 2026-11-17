@@ -393,7 +393,7 @@ extern "C"
   // Phase-tracking (forward-backward) metrics: see FtxBitmetrics.cpp.
   int ftx_ft8_bitmetrics_trellis_c (std::complex<float> const* cs, float scale,
                                     float sigma_deg, float freq_walk, int em_rounds,
-                                    float* llr, float* info);
+                                    float min_esn0, float* llr, float* info);
   // e l'estrinseca stessa dai posteriori del min-sum (superldpc/decodium_bridge.cpp).
   void ftx_ft8_bitmetrics_bicm_c (std::complex<float> const* cs, float scale,
                                   float const* la, float* llra, float* llrb,
@@ -596,6 +596,8 @@ struct Ft8TrellisConfig
   float freq_walk {0.03f};      // probability of moving one 0.05 Hz state per symbol
   int em_rounds {0};            // amplitude/noise re-estimation rounds
   int max_hard {kFt8MaxHardErrors};
+  float min_esn0 {1.5f};        // gate on the pilot Es/N0 estimate (linear)
+  int min_nsync {9};            // gate on the Costas hard-sync count
   bool debug {false};
 };
 
@@ -613,6 +615,10 @@ Ft8TrellisConfig const& ft8_trellis_config ()
       c.em_rounds = std::max (0, std::min (3, std::atoi (v)));
     if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_HARD"))
       c.max_hard = std::max (0, std::min (kFt8MaxHardErrors, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_ESN0"))
+      c.min_esn0 = std::max (0.0f, static_cast<float> (std::atof (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_NSYNC"))
+      c.min_nsync = std::max (0, std::atoi (v));
     c.debug = std::getenv ("DECODIUM_FT8_TRELLIS_DEBUG") != nullptr;
     return c;
   }();
@@ -7349,7 +7355,7 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
           });
         }
 
-      if (trellis_attempt && nsync <= sync_threshold)
+      if (trellis_attempt && (nsync <= sync_threshold || nsync < trellis.min_nsync))
         {
           continue;       // the replays below were already tried
         }
@@ -7555,7 +7561,8 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   if (trellis_attempt
       && ftx_ft8_bitmetrics_trellis_c (plain_cs.data (), kFt8BitMetricScale,
                                        trellis.sigma_deg, trellis.freq_walk,
-                                       trellis.em_rounds, trellis_llr.data (),
+                                       trellis.em_rounds, trellis.min_esn0,
+                                       trellis_llr.data (),
                                        trellis_info.data ()) == 0)
     {
       continue;
