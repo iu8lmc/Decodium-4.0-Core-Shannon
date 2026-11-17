@@ -617,7 +617,14 @@ private slots:
              SstvAvtMode::Avt94, 1'221'510U},
         };
 
+        // The TX source builder holds the final AVT component for 10 ms
+        // (SstvAvtEncoderConfig::terminalHoldMs) after the protocol frames,
+        // so the exported audio is 120 frames longer at 12 kHz.
+        constexpr std::uint64_t terminalHoldFramesAt12k = 120U;
+
         for (const auto& item : cases) {
+            const std::uint64_t expectedFrames =
+                item.totalFramesAt12k + terminalHoldFramesAt12k;
             const SstvAvtModeSpec spec = SstvAvtProtocol::spec(
                 item.protocolMode);
             SstvTxSourceBuilderConfig builderConfig;
@@ -632,8 +639,8 @@ private slots:
             QCOMPARE(built.width, spec.width);
             QCOMPARE(built.height, spec.height);
             QCOMPARE(built.headerFrames, std::uint64_t {96'510U});
-            QCOMPARE(built.imageEndFrame, item.totalFramesAt12k);
-            QCOMPARE(built.totalFrames, item.totalFramesAt12k);
+            QCOMPARE(built.imageEndFrame, expectedFrames);
+            QCOMPARE(built.totalFrames, expectedFrames);
 
             const QString wavPath = directory.filePath(
                 QString::fromLatin1(spec.stableId)
@@ -645,20 +652,20 @@ private slots:
                 std::move(built.source), request);
             QVERIFY2(result.ok, qPrintable(result.error));
             QCOMPARE(result.metrics.samplesWritten,
-                     item.totalFramesAt12k);
+                     expectedFrames);
             QCOMPARE(result.fileSizeBytes,
                      static_cast<qint64>(SstvWavStreamWriter::kHeaderBytes
-                                         + item.totalFramesAt12k * 2U));
+                                         + expectedFrames * 2U));
 
             const QByteArray wav = readFile(wavPath);
             QCOMPARE(wav.left(4), QByteArrayLiteral("RIFF"));
             QCOMPARE(littleEndian32(wav, 24), std::uint32_t {12'000U});
             QCOMPARE(littleEndian32(wav, 40),
                      static_cast<std::uint32_t>(
-                         item.totalFramesAt12k * 2U));
+                         expectedFrames * 2U));
             QCOMPARE(static_cast<std::uint64_t>(wav.size()),
                      SstvWavStreamWriter::kHeaderBytes
-                         + item.totalFramesAt12k * 2U);
+                         + expectedFrames * 2U);
         }
     }
 

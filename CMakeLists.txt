@@ -1723,6 +1723,23 @@ elseif (MSVC)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /permissive-")
 endif ()
 
+# GCC 16 reports -Warray-bounds inside Qt's own headers (qendian.h,
+# qsharedpointer_impl.h, QByteArray's one-byte empty sentinel) once they are
+# inlined into our code, in many translation units. They are false positives
+# we cannot fix in our sources, so from GCC 16 on the diagnostic stays a
+# warning instead of failing the build.
+# The same holds for -Wmaybe-uninitialized: GCC 16 raises it on
+# Ft8AutoTxDecodeGate::slowDecoder(), whose members all have default
+# initialisers, when the class is inlined into a Qt test's metacall.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
+  # -Wdangling-pointer: raised on a conditional expression choosing between
+  # QList initialiser lists in tests/test_decodium_updater.cpp; the QList
+  # owns a copy, nothing refers to the temporaries afterwards.
+  # -Wstringop-overflow / -Wstringop-overread: already known false positives
+  # of this compiler in three files further down; same family.
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=array-bounds -Wno-error=maybe-uninitialized -Wno-error=dangling-pointer -Wno-error=stringop-overflow -Wno-error=stringop-overread")
+endif ()
+
 if (NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pragmas")
 endif ()
@@ -1880,6 +1897,33 @@ add_subdirectory (src/rotor)
 
 if (BUILD_TESTING AND EXISTS ${CMAKE_SOURCE_DIR}/tests AND IS_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
   add_subdirectory (tests)
+
+  # decodium_regression_test_binaries is what CI builds before running the
+  # non-SSTV suite. Its hand-written list in tests/CMakeLists.txt had fallen
+  # behind add_test(): tests whose executable was not on it were reported as
+  # "Not Run". Add every CTest entry, from this directory down, whose name is
+  # also an executable target. The SSTV tests keep their own aggregate.
+  function (decodium_add_regression_test_targets dir)
+    if ("${dir}" STREQUAL "${CMAKE_SOURCE_DIR}/tests/sstv")
+      return ()
+    endif ()
+    get_property (_tests DIRECTORY "${dir}" PROPERTY TESTS)
+    foreach (_test IN LISTS _tests)
+      if (TARGET ${_test})
+        get_target_property (_type ${_test} TYPE)
+        if (_type STREQUAL "EXECUTABLE")
+          add_dependencies (decodium_regression_test_binaries ${_test})
+        endif ()
+      endif ()
+    endforeach ()
+    get_property (_subdirectories DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach (_subdirectory IN LISTS _subdirectories)
+      decodium_add_regression_test_targets ("${_subdirectory}")
+    endforeach ()
+  endfunction ()
+  if (TARGET decodium_regression_test_binaries AND NOT CMAKE_VERSION VERSION_LESS 3.12)
+    decodium_add_regression_test_targets ("${CMAKE_SOURCE_DIR}")
+  endif ()
 endif ()
 
 # build a library of package functionality (without and optionally with OpenMP support)
@@ -3162,6 +3206,22 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # Keep the warning visible while avoiding a build failure for this file only.
   set_source_files_properties (src/bridge/DecodiumBridgeSstvQsoAssociation.cpp PROPERTIES
     COMPILE_FLAGS "-Wno-error=stringop-overflow")
+
+  # GCC 16 (MinGW) follows QByteArray's one-byte empty sentinel into the
+  # "bext" structure reads of BWFFile.cpp and reports array-bounds, although
+  # the accessor returns early unless the chunk holds the whole structure.
+  # Keep the warning visible while avoiding a build failure for this file only.
+  set_source_files_properties (Audio/BWFFile.cpp PROPERTIES
+    COMPILE_FLAGS "-Wno-error=array-bounds")
+endif ()
+# The widgets executable compiles the panadapter registration without
+# src/ui/PanadapterItem.cpp (only decodium_qml has it). UBSan's vptr check on
+# QPointer<PanadapterItem> would reference "typeinfo for PanadapterItem" and
+# break that link, so leave this one check out for this file. The flag has
+# no effect when the build is not sanitised.
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties (src/bridge/DecodiumBridgePanadapterRegistration.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-sanitize=vptr")
 endif ()
 # With OpenMP unavailable, the scheduler's OpenMP-only thread-limit constant
 # is unused. Keep the diagnostic visible without failing this macOS unit.

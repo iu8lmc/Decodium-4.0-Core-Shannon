@@ -80,8 +80,10 @@ void TestQsoWaterfallRecovery::qmlKeepsWaterfallItemAndRearmsAfterLayoutSettles(
     QVERIFY(!qml.isEmpty());
     QVERIFY(qml.contains(QStringLiteral("function onQsoLogCompleted(call)")));
     QVERIFY(qml.contains(QStringLiteral("bridge.rearmSpectrumAfterQsoLog()")));
-    QVERIFY(qml.contains(QStringLiteral("Qt.callLater(function()")));
-    QVERIFY(qml.contains(QStringLiteral("waterfallDisplay.resetWaterfall()")));
+    // Since 1.0.1004 logging a QSO re-arms the spectrum feed but keeps the
+    // waterfall history: the deferred resetWaterfall() the handler used to
+    // schedule was removed on purpose, so it must not come back.
+    QVERIFY(!qml.contains(QStringLiteral("waterfallDisplay.resetWaterfall()")));
 }
 
 QTEST_MAIN(TestQsoWaterfallRecovery)

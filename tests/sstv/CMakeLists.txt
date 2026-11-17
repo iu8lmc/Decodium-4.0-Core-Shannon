@@ -318,6 +318,10 @@ add_decodium_sstv_integration_test (test_sstv_qso_log
   test_sstv_qso_log.cpp)
 add_decodium_sstv_integration_test (test_sstv_rx_runtime
   test_sstv_rx_runtime.cpp)
+# 38 full-length receive loopbacks, all CPU bound on one thread: on the CI
+# runners the first 17 alone use the 300 s that ctest --timeout allows, so
+# give this executable its own budget instead of the default.
+set_tests_properties (test_sstv_rx_runtime PROPERTIES TIMEOUT 1800)
 add_executable (analyze_sstv_capture EXCLUDE_FROM_ALL tools/analyze_sstv_capture.cpp)
 target_link_libraries (analyze_sstv_capture PRIVATE Decodium::SstvIntegration Qt6::Core)
 target_compile_features (analyze_sstv_capture PRIVATE cxx_std_17)
@@ -2247,6 +2251,7 @@ if (APPLE AND TARGET decodium_sstv_share_aead)
   target_link_libraries (test_sstv_local_integration_provider PRIVATE decodium_sstv_share_aead)
   target_compile_definitions (test_sstv_local_integration_provider PRIVATE DECODIUM_TEST_MAC_E2EE=1)
   add_executable (test_sstv_macos_keychain test_sstv_macos_keychain.cpp)
+  add_dependencies (decodium_sstv_test_binaries test_sstv_macos_keychain)
   target_link_libraries (test_sstv_macos_keychain PRIVATE decodium_sstv_share_aead)
   set_target_properties (test_sstv_macos_keychain PROPERTIES AUTOMOC OFF CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
   add_test (NAME test_sstv_macos_keychain COMMAND $<TARGET_FILE:test_sstv_macos_keychain>)

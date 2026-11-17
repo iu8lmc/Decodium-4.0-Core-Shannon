@@ -225,6 +225,21 @@ namespace
     return ok ? value : -15.0f;
   }
 
+  // FT2 level, when it has to differ from the common one. At -15 dB the FT2
+  // decoder is on its threshold (one synthetic trial in three to five
+  // decodes); at -14 dB it decodes every time.
+  float target_ft2_snr_db (float common)
+  {
+    QByteArray const raw = qgetenv ("DECODIUM_WEAK_TEST_FT2_SNR");
+    if (raw.isEmpty ())
+      {
+        return common;
+      }
+    bool ok = false;
+    float const value = raw.toFloat (&ok);
+    return ok ? value : common;
+  }
+
   int target_trials ()
   {
     QByteArray const raw = qgetenv ("DECODIUM_WEAK_TEST_TRIALS");
@@ -763,7 +778,8 @@ int main (int argc, char* argv[])
   QTextStream out {stdout};
   QString const message = target_message ();
   QString const want = canonical (message);
-  float const snrDb = target_snr_db ();
+  float const commonSnrDb = target_snr_db ();
+  float const ft2SnrDb = target_ft2_snr_db (commonSnrDb);
   int const trials = target_trials ();
   bool const acceptedMiss = accept_decode_miss ();
   std::array<ModeConfig, 3> const modes {{
@@ -780,6 +796,7 @@ int main (int argc, char* argv[])
         {
           continue;
         }
+      float const snrDb = mode.mode == Mode::Ft2 ? ft2SnrDb : commonSnrDb;
       bool recovered = false;
       int recoveredSnr = 99;
       bool synthesized = false;

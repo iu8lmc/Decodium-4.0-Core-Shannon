@@ -3196,7 +3196,12 @@ private:
   Q_SLOT void ft8_ap_pass_meta ()
   {
     QCOMPARE (ftx_ft8_select_npasses_c (0, 0, 0, 50, 3), 5);
-    QCOMPARE (ftx_ft8_select_npasses_c (1, 0, 0, 50, 3), 13);
+    // 5 base passes + 2 for each a priori type of the default table. With the
+    // whole-message a priori (type 8) enabled by default, nQSOProgress 3 has
+    // six types {3, 4, 5, 6, 1, 8}: see ap_pass_counts () and ap_types () in
+    // Detector/FtxDecodeBookkeeping.cpp. The former 13 was the four-type
+    // table, selected only with DECODIUM_FT8_AP_MSG=0 and DECODIUM_FT8_AP_CQ=0.
+    QCOMPARE (ftx_ft8_select_npasses_c (1, 0, 0, 50, 3), 17);
     QCOMPARE (ftx_ft8_select_npasses_c (1, 1, 0, 50, 3), 7);
 
     int apsym[58];

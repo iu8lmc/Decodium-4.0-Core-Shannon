@@ -7,6 +7,7 @@
 #include <qendian.h>
 #include <QAudioFormat>
 #include <QByteArray>
+#include <QByteArrayView>
 #include <QDateTime>
 #include <QDate>
 #include <QTime>
@@ -169,7 +170,13 @@ public:
 
   BroadcastAudioExtension const * bext () const
   {
-    return bext_.isEmpty () ? nullptr : reinterpret_cast<BroadcastAudioExtension const *> (bext_.constData ());
+    // A "bext" chunk read from a file can be shorter than the fixed part
+    // of the structure: reading fields through it would run past the end
+    // of the buffer. Going through QByteArrayView also keeps QByteArray's
+    // one-byte empty sentinel out of the pointer the compiler sees.
+    QByteArrayView const chunk {bext_};
+    if (size_t (chunk.size ()) < sizeof (BroadcastAudioExtension)) return nullptr;
+    return reinterpret_cast<BroadcastAudioExtension const *> (chunk.data ());
   }
 
   BroadcastAudioExtension * bext ()
@@ -179,6 +186,11 @@ public:
         bext_.data ();
         bext_.fill ('\0', sizeof (BroadcastAudioExtension));
         new (bext_.data ()) BroadcastAudioExtension {};
+      }
+    else if (size_t (bext_.size ()) < sizeof (BroadcastAudioExtension))
+      {
+        // pad a truncated chunk so that every field is inside the buffer
+        bext_.append (qsizetype (sizeof (BroadcastAudioExtension)) - bext_.size (), '\0');
       }
     return reinterpret_cast<BroadcastAudioExtension *> (bext_.data ());
   }

@@ -708,7 +708,7 @@ add_test (NAME test_q65_doppler COMMAND $<TARGET_FILE:test_q65_doppler>)
 set_tests_properties (test_q65_doppler PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Material")
 target_link_libraries (test_ftx_weak_decode wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_ftx_weak_decode COMMAND $<TARGET_FILE:test_ftx_weak_decode>)
-set_tests_properties (test_ftx_weak_decode PROPERTIES ENVIRONMENT "DECODIUM_WEAK_TEST_SNR=-15")
+set_tests_properties (test_ftx_weak_decode PROPERTIES ENVIRONMENT "DECODIUM_WEAK_TEST_SNR=-15;DECODIUM_WEAK_TEST_FT2_SNR=-14")
 add_test (NAME test_ft8_bicm_generic_fallback COMMAND $<TARGET_FILE:test_ftx_weak_decode>)
 set_tests_properties (test_ft8_bicm_generic_fallback PROPERTIES
   ENVIRONMENT "DECODIUM_WEAK_TEST_MODE=FT8;DECODIUM_WEAK_TEST_SNR=-15;DECODIUM_WEAK_TEST_TRIALS=1;DECODIUM_FT8_BICM=1;DECODIUM_FT2_DISABLE_SUPERLDPC=1")
@@ -830,7 +830,16 @@ target_link_libraries (test_dxcc_lookup Qt6::Test Qt6::Core)
 add_test (NAME test_dxcc_lookup COMMAND $<TARGET_FILE:test_dxcc_lookup>)
 
 add_executable (test_filedownload test_filedownload.cpp)
-target_link_libraries (test_filedownload wsjt_qt wsjt_cxx Qt6::Test)
+# wsjt_cxx (Detector/FtxFst4Ldpc.cpp) calls gen_fst4wave_, which lives in
+# wsjt_qt (Modulator/FtxWaveformGenerator.cpp). With a single left-to-right
+# pass over the two archives that reference stays unresolved in unoptimised
+# builds, so scan them as a group like link_wsjtx_cycle_group() does.
+if (APPLE OR WIN32)
+  target_link_libraries (test_filedownload wsjt_qt wsjt_cxx Qt6::Test)
+else ()
+  target_link_libraries (test_filedownload
+    "-Wl,--start-group" wsjt_qt wsjt_cxx "-Wl,--end-group" Qt6::Test)
+endif ()
 add_test (NAME test_filedownload COMMAND $<TARGET_FILE:test_filedownload>)
 
 # 1.0.234 Sprint 3 / Phase 2 performance roadmap:
@@ -1115,6 +1124,8 @@ add_executable(test_wspr_resource_cleanup ${wspr_resource_sources})
 set_target_properties(test_wspr_resource_cleanup PROPERTIES AUTOMOC OFF)
 target_include_directories(test_wspr_resource_cleanup PRIVATE ${FFTW3_INCLUDE_DIRS})
 target_link_libraries(test_wspr_resource_cleanup PRIVATE ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+# Its CTest entries have other names, so name it for the CI aggregate here.
+add_dependencies(decodium_regression_test_binaries test_wspr_resource_cleanup)
 foreach(wspr_case IN ITEMS valid missing cancel mixed early after-read)
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wspr-resources-${wspr_case}")
 endforeach()

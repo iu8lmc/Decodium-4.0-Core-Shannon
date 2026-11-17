@@ -102,7 +102,7 @@ decodium::ft2link::W2300WaveformConfig liveW2300RxConfig ()
           // while allowing explicit diagnostic and RF-lab requests enough
           // time to complete an ultra-low-SNR W2300 search on slower hosts.
           config.maxDecodeMillis = static_cast<int> (
-              std::max<long> (250, std::min<long> (12000, requested)));
+              std::max<long> (250, std::min<long> (60000, requested)));
         }
     }
   return config;

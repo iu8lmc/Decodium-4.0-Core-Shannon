@@ -2212,8 +2212,11 @@ private slots:
         service.setRosterVisibleColumns(visibleColumns);
         QCOMPARE(service.rosterVisibleColumns(), visibleColumns);
         QVERIFY(service.availableAwardPrograms().size() >= 328);
-        QVERIFY(std::any_of(service.availableAwardPrograms().cbegin(),
-                            service.availableAwardPrograms().cend(),
+        // The accessor returns a new list on every call: the two iterators
+        // must come from the same object.
+        QStringList const awardPrograms = service.availableAwardPrograms();
+        QVERIFY(std::any_of(awardPrograms.cbegin(),
+                            awardPrograms.cend(),
                             [](const QString& label) {
                                 return label.contains(QStringLiteral("FT8DMC:"),
                                                       Qt::CaseInsensitive);
@@ -2271,8 +2274,9 @@ private slots:
         };
         QCOMPARE(service.availablePropagationModes(), expectedPropagationModes);
         QTRY_COMPARE_WITH_TIMEOUT(service.propagationStatistics().size(), 20, 5000);
-        QVERIFY(std::any_of(service.availablePropagationTypes().cbegin(),
-                            service.availablePropagationTypes().cend(),
+        QVariantList const propagationTypes = service.availablePropagationTypes();
+        QVERIFY(std::any_of(propagationTypes.cbegin(),
+                            propagationTypes.cend(),
                             [](const QVariant& value) {
                                 return value.toMap().value(QStringLiteral("label"))
                                            == QStringLiteral("Meteor Scatter");
