@@ -2439,7 +2439,9 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
 
   // Transition kernels: for each frequency state the probability mass of
   // N(advance, sigma^2) falling in each phase bin.
-  float const sigma_bins = std::max (sigma_deg, 1.0f) * NP / 360.0f;
+  // sigma is clamped to 1..60 degrees: the widest kernel then spans 19 phase
+  // bins, inside kMaxTaps and inside the +-NP reach of convolve().
+  float const sigma_bins = std::min (std::max (std::isfinite (sigma_deg) ? sigma_deg : 10.0f, 1.0f), 60.0f) * NP / 360.0f;
   std::array<std::array<float, kMaxTaps>, NF> taps {};
   std::array<int, NF> tap_lo {};
   std::array<int, NF> tap_n {};
@@ -2448,7 +2450,11 @@ extern "C" int ftx_ft8_bitmetrics_trellis_c (Complex const* cs, float scale,
       float const adv = static_cast<float> (f - NF / 2) * kDfHz * kTsym * NP;   // bins per symbol
       int const lo = static_cast<int> (std::floor (adv - 2.5f * sigma_bins));
       int const hi = static_cast<int> (std::ceil (adv + 2.5f * sigma_bins));
-      int const n = std::min (hi - lo + 1, kMaxTaps);
+      if (lo < -NP || hi > NP || hi - lo + 1 > kMaxTaps)
+        {
+          return 0;       // cannot happen with the clamp above
+        }
+      int const n = hi - lo + 1;
       float sum = 0.0f;
       for (int j = 0; j < n; ++j)
         {

@@ -389,11 +389,11 @@ extern "C"
   void ftx_ft8_bitmetrics_coherent_c (std::complex<float> const* cs, float scale,
                                       float* llra, float* llrb, float* llrc,
                                       float* llrd, float* llre);
-  // Metriche FT8 con l'estrinseca del decodificatore (BICM-ID, FtxBitmetrics.cpp),
   // Phase-tracking (forward-backward) metrics: see FtxBitmetrics.cpp.
   int ftx_ft8_bitmetrics_trellis_c (std::complex<float> const* cs, float scale,
                                     float sigma_deg, float freq_walk, int em_rounds,
                                     float min_esn0, float* llr, float* info);
+  // Metriche FT8 con l'estrinseca del decodificatore (BICM-ID, FtxBitmetrics.cpp),
   // e l'estrinseca stessa dai posteriori del min-sum (superldpc/decodium_bridge.cpp).
   void ftx_ft8_bitmetrics_bicm_c (std::complex<float> const* cs, float scale,
                                   float const* la, float* llra, float* llrb,
@@ -590,14 +590,19 @@ int ft8_bicm_giri ()
 // metric round, run only after every other attempt failed for a candidate, so
 // it can only add decodes and its cost is bounded.
 //
-// DECODIUM_FT8_TRELLIS=1 forces it on for every request, =0 switches it off;
-// without the variable kFt8TrellisDefault and ft8_trellis_enabled() decide.
-// DECODIUM_FT8_TRELLIS_SIGMA overrides the phase diffusion (degrees per
-// symbol), DECODIUM_FT8_TRELLIS_DEBUG logs every decode of this round.
+// DECODIUM_FT8_TRELLIS=1 forces it on for every request (including the
+// multi-cycle / sub-pass ones that the default policy leaves out), =0
+// switches it off; without the variable kFt8TrellisDefault and
+// ft8_trellis_enabled() decide. It is OFF by default: with it on the measured
+// decode time grows by more than 10% (see ft8_trellis_enabled()).
+// Experiment knobs, read once: DECODIUM_FT8_TRELLIS_SIGMA (phase diffusion,
+// degrees per symbol), _FWALK (frequency-walk probability), _EM
+// (re-estimation rounds), _HARD (hard-error cap), _ESN0 / _NSYNC / _RMS (the
+// three gates), _DEBUG (logs every decode of this round).
 //
 // The gates and the tighter acceptance were chosen on a tuning corpus (seeds
 // disjoint from the report corpus): most sync candidates are noise, and the
-// gates keep the round away from them at a cost below 1% of its own decodes.
+// gates keep the round away from them. @@GATECOST@@
 constexpr bool kFt8TrellisDefault {false};
 
 struct Ft8TrellisConfig
@@ -622,6 +627,18 @@ Ft8TrellisConfig const& ft8_trellis_config ()
     if (raw && raw[0] != 0) c.mode = raw[0] != '0' ? 1 : 0;
     if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_SIGMA"))
       c.sigma_deg = std::max (1.0f, std::min (60.0f, static_cast<float> (std::atof (v))));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_FWALK"))
+      c.freq_walk = std::max (0.0f, std::min (0.3f, static_cast<float> (std::atof (v))));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_EM"))
+      c.em_rounds = std::max (0, std::min (3, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_HARD"))
+      c.max_hard = std::max (0, std::min (174, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_ESN0"))
+      c.min_esn0 = std::max (0.0f, static_cast<float> (std::atof (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_NSYNC"))
+      c.min_nsync = std::max (0, std::min (21, std::atoi (v)));
+    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_RMS"))
+      c.min_rms = std::max (0.0f, static_cast<float> (std::atof (v)));
     c.debug = std::getenv ("DECODIUM_FT8_TRELLIS_DEBUG") != nullptr;
     return c;
   }();
@@ -7266,6 +7283,7 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   bool const trellis_enabled = ft8_trellis_enabled (trellis, request);
   int const total_attempts = metric_attempts + (trellis_enabled ? 1 : 0);
   std::array<std::complex<float>, kFt8Nn * 8> plain_cs {};
+  int plain_nsync = 0;    // Costas count of the capture plain_cs comes from
   int nsync = 0;
   for (int metric_attempt = 0; metric_attempt < total_attempts; ++metric_attempt)
     {
@@ -7282,7 +7300,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
                                         nullptr, current_cs.data (),
                                         s8.data (), &nsync, llra.data (), llrb.data (),
                                         llrc.data (), llrd.data (), llre.data ());
-          if (trellis_enabled && !equalized_metrics) plain_cs = current_cs;
+          if (trellis_enabled && !equalized_metrics)
+            {
+              plain_cs = current_cs;
+              plain_nsync = nsync;
+            }
         }
       else if (equalized_pipeline)
         {
@@ -7296,6 +7318,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
                                         nullptr, plain_cs.data (),
                                         scratch_s8.data (), &scratch_nsync, sa.data (),
                                         sb.data (), sc.data (), sd.data (), se.data ());
+          nsync = scratch_nsync;
+        }
+      else
+        {
+          nsync = plain_nsync;
         }
       *newdat = local_newdat;
 
