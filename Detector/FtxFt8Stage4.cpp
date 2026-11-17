@@ -587,17 +587,30 @@ int ft8_bicm_giri ()
 }
 
 // Phase-tracking soft demodulator (ftx_ft8_bitmetrics_trellis_c) as ONE extra
-// metric attempt, run only after every other attempt failed for a candidate.
-// Tuning knobs are read once from the environment.
+// metric round, run only after every other attempt failed for a candidate, so
+// it can only add decodes and its cost is bounded.
+//
+// DECODIUM_FT8_TRELLIS=1 forces it on for every request, =0 switches it off;
+// without the variable kFt8TrellisDefault and ft8_trellis_enabled() decide.
+// DECODIUM_FT8_TRELLIS_SIGMA overrides the phase diffusion (degrees per
+// symbol), DECODIUM_FT8_TRELLIS_DEBUG logs every decode of this round.
+//
+// The gates and the tighter acceptance were chosen on a tuning corpus (seeds
+// disjoint from the report corpus): most sync candidates are noise, and the
+// gates keep the round away from them at a cost below 1% of its own decodes.
+constexpr bool kFt8TrellisDefault {false};
+
 struct Ft8TrellisConfig
 {
-  bool enabled {false};
+  int mode {-1};                // -1 default policy, 0 off, 1 forced on
   float sigma_deg {10.0f};      // phase diffusion per symbol
-  float freq_walk {0.03f};      // probability of moving one 0.05 Hz state per symbol
-  int em_rounds {0};            // amplitude/noise re-estimation rounds
-  int max_hard {kFt8MaxHardErrors};
-  float min_esn0 {1.5f};        // gate on the pilot Es/N0 estimate (linear)
+  float freq_walk {0.03f};      // probability of moving one frequency state per symbol
+  int em_rounds {0};            // amplitude/noise re-estimation rounds (no gain measured)
+  int max_hard {kFt8StrictHardErrors};  // tighter than the blind attempts (58)
+  float min_esn0 {1.6f};        // gate on the pilot Es/N0 estimate (linear)
   int min_nsync {9};            // gate on the Costas hard-sync count
+  float min_rms {2.2f};         // gate on the RMS of the unnormalised LLRs
+  int osd_cap {2};              // upper bound on maxosd and norder in this round
   bool debug {false};
 };
 
@@ -606,19 +619,9 @@ Ft8TrellisConfig const& ft8_trellis_config ()
   static Ft8TrellisConfig const config = [] {
     Ft8TrellisConfig c;
     char const* raw = std::getenv ("DECODIUM_FT8_TRELLIS");
-    c.enabled = raw && raw[0] != 0 && raw[0] != '0';
+    if (raw && raw[0] != 0) c.mode = raw[0] != '0' ? 1 : 0;
     if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_SIGMA"))
       c.sigma_deg = std::max (1.0f, std::min (60.0f, static_cast<float> (std::atof (v))));
-    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_FWALK"))
-      c.freq_walk = std::max (0.0f, std::min (0.3f, static_cast<float> (std::atof (v))));
-    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_EM"))
-      c.em_rounds = std::max (0, std::min (3, std::atoi (v)));
-    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_HARD"))
-      c.max_hard = std::max (0, std::min (kFt8MaxHardErrors, std::atoi (v)));
-    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_ESN0"))
-      c.min_esn0 = std::max (0.0f, static_cast<float> (std::atof (v)));
-    if (char const* v = std::getenv ("DECODIUM_FT8_TRELLIS_NSYNC"))
-      c.min_nsync = std::max (0, std::atoi (v));
     c.debug = std::getenv ("DECODIUM_FT8_TRELLIS_DEBUG") != nullptr;
     return c;
   }();
@@ -7136,6 +7139,18 @@ void plan_ft8_ldpc_decode (Ft8Request const& request, float f1, float sync, int 
   Keff = 91;
 }
 
+// Default policy of the phase-tracking round. The multi-cycle / sub-pass
+// ("harvest") requests are left out: there every extra decode re-triggers the
+// candidate search, and the measured decode time grew by more than 10%.
+bool ft8_trellis_enabled (Ft8TrellisConfig const& config, Ft8Request const& request)
+{
+  if (config.mode >= 0)
+    {
+      return config.mode > 0;
+    }
+  return kFt8TrellisDefault && !request.lft8subpass && request.nft8cycles < 3;
+}
+
 bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& request,
                                 int decode_pass, bool use_var_downsample,
                                 bool equalized_pipeline, int imetric, int lsubtract,
@@ -7248,7 +7263,8 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   // One more round for the phase-tracking metrics, after everything else
   // failed. It works on the spectra of the plain (not tone-equalised) capture.
   Ft8TrellisConfig const& trellis = ft8_trellis_config ();
-  int const total_attempts = metric_attempts + (trellis.enabled ? 1 : 0);
+  bool const trellis_enabled = ft8_trellis_enabled (trellis, request);
+  int const total_attempts = metric_attempts + (trellis_enabled ? 1 : 0);
   std::array<std::complex<float>, kFt8Nn * 8> plain_cs {};
   int nsync = 0;
   for (int metric_attempt = 0; metric_attempt < total_attempts; ++metric_attempt)
@@ -7266,7 +7282,7 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
                                         nullptr, current_cs.data (),
                                         s8.data (), &nsync, llra.data (), llrb.data (),
                                         llrc.data (), llrd.data (), llre.data ());
-          if (trellis.enabled && !equalized_metrics) plain_cs = current_cs;
+          if (trellis_enabled && !equalized_metrics) plain_cs = current_cs;
         }
       else if (equalized_pipeline)
         {
@@ -7559,13 +7575,14 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   std::array<float, 174> trellis_llr {};
   std::array<float, 4> trellis_info {};
   if (trellis_attempt
-      && ftx_ft8_bitmetrics_trellis_c (plain_cs.data (), kFt8BitMetricScale,
-                                       trellis.sigma_deg, trellis.freq_walk,
-                                       trellis.em_rounds, trellis.min_esn0,
-                                       trellis_llr.data (),
-                                       trellis_info.data ()) == 0)
+      && (ftx_ft8_bitmetrics_trellis_c (plain_cs.data (), kFt8BitMetricScale,
+                                        trellis.sigma_deg, trellis.freq_walk,
+                                        trellis.em_rounds, trellis.min_esn0,
+                                        trellis_llr.data (),
+                                        trellis_info.data ()) == 0
+          || trellis_info[0] < trellis.min_rms))
     {
-      continue;
+      continue;           // gated out: not worth an LDPC decode
     }
 
   int const llr_attempts = (have_cq_history ? 2 : 1) + (usa_coerente ? 1 : 0) + (usa_bicm ? 1 : 0);
@@ -7660,6 +7677,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
               voce.Keff = 91; voce.maxosd = 2; voce.norder = 2;
               plan_ft8_ldpc_decode (request, f1, sync, pre_iaptype,
                                     voce.Keff, voce.maxosd, voce.norder);
+              if (trellis_attempt)
+                {
+                  voce.maxosd = std::min (voce.maxosd, trellis.osd_cap);
+                  voce.norder = std::min (voce.norder, std::max (trellis.osd_cap, 1));
+                }
               voce.llrz = pre_llrz;
               std::transform (pre_apmask.begin (), pre_apmask.end (),
                               voce.apmask_bits.begin (), [] (int value) {
@@ -7826,6 +7848,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
           int maxosd = 2;
           int norder = 2;
           plan_ft8_ldpc_decode (request, f1, sync, pass_iaptype, Keff, maxosd, norder);
+          if (trellis_attempt)
+            {
+              maxosd = std::min (maxosd, trellis.osd_cap);
+              norder = std::min (norder, std::max (trellis.osd_cap, 1));
+            }
 
           int ntype = 0;
           int pass_nharderrors = -1;
