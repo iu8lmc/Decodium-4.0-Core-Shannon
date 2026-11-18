@@ -820,6 +820,10 @@ target_link_libraries (test_callsign_intelligence Qt6::Test Qt6::Core Qt6::Netwo
 if (APPLE)
   target_link_libraries (test_callsign_intelligence "-framework Security")
 endif ()
+if (WIN32)
+  # SecureSettings.cpp uses the Windows data-protection API (CryptProtectData).
+  target_link_libraries (test_callsign_intelligence crypt32)
+endif ()
 add_test (NAME test_callsign_intelligence COMMAND $<TARGET_FILE:test_callsign_intelligence>)
 
 add_executable (test_dxcc_lookup
@@ -834,7 +838,9 @@ add_executable (test_filedownload test_filedownload.cpp)
 # wsjt_qt (Modulator/FtxWaveformGenerator.cpp). With a single left-to-right
 # pass over the two archives that reference stays unresolved in unoptimised
 # builds, so scan them as a group like link_wsjtx_cycle_group() does.
-if (APPLE OR WIN32)
+# MinGW uses GNU ld and needs the group as well; only the Apple and MSVC
+# linkers rescan archives by themselves.
+if (APPLE OR MSVC)
   target_link_libraries (test_filedownload wsjt_qt wsjt_cxx Qt6::Test)
 else ()
   target_link_libraries (test_filedownload
