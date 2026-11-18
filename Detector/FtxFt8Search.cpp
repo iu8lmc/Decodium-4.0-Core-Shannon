@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdlib>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -784,6 +785,19 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
     }
   int ncand0 = k;
 
+  // Two candidates in adjacent 3.125 Hz bins at the same time are normally
+  // reduced to the stronger one. Near the decoding threshold that discards
+  // decodes: time and frequency are estimated from the 21 Costas symbols
+  // only, and the two starting points give two different estimates, one of
+  // which is sometimes close enough to decode. Around nfqso both are already
+  // kept; DECODIUM_FT8_KEEP_NEIGHBOURS=<ratio> keeps both everywhere when the
+  // weaker sync is at least <ratio> times the stronger (0.01 keeps them
+  // always). Off by default: the gain is paid in decode time, see
+  // doc/FT8_ADJACENT_CANDIDATES.md.
+  static float const keep_ratio = [] {
+    char const* v = std::getenv ("DECODIUM_FT8_KEEP_NEIGHBOURS");
+    return v ? std::max (0.0f, std::min (1.0f, static_cast<float> (std::atof (v)))) : 0.0f;
+  }();
   for (int i = 0; i < ncand0; ++i)
     {
       if (candidate0[static_cast<size_t> (i)].sync <= 0.0f) continue;
@@ -795,6 +809,9 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
           float const xdtdelta = std::fabs (candidate0[static_cast<size_t> (i)].dt
                                             - candidate0[static_cast<size_t> (j)].dt);
           if (fdiff < 4.0f
+              && !(keep_ratio > 0.0f
+                   && std::min (candidate0[static_cast<size_t> (i)].sync, candidate0[static_cast<size_t> (j)].sync)
+                      >= keep_ratio * std::max (candidate0[static_cast<size_t> (i)].sync, candidate0[static_cast<size_t> (j)].sync))
               && std::fabs (candidate0[static_cast<size_t> (i)].frequency - static_cast<float> (nfqso)) > 3.0f
               && xdtdelta < 0.1f)
             {
