@@ -1,4 +1,10 @@
 #include "DecodeListModel.h"
+#include "DecodiumLogging.hpp"
+
+// Standalone model tests do not link the application diagnostic writer. Windows
+// budgeted-update telemetry still needs a sink; it is outside this test scope.
+void DecodiumLogging::diag(DiagCategory, QString const&) {}
+
 #include <QtTest>
 #include <QQmlComponent>
 #include <QQmlContext>
