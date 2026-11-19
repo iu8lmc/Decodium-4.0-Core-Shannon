@@ -5,6 +5,7 @@
 
 import QtQuick.Templates as DecoTemplates
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
@@ -282,9 +283,10 @@ Popup {
     }
 
     function openImportAdifDialog() {
-        var path = bridge.openFileDialog(qsTr("Importa file ADIF"),
+        var path = bridge.openFileDialogForWindow(qsTr("Importa file ADIF"),
                                          "",
-                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")])
+                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")],
+                                         nativeHostWindow || (logWindow.parent ? logWindow.parent.Window.window : null))
         if (path.length > 0 && appEngine && appEngine.logManager) {
             if (appEngine.logManager.importFromAdifAsync)
                 appEngine.logManager.importFromAdifAsync(path)
@@ -295,9 +297,10 @@ Popup {
     }
 
     function openAddLogbookDialog() {
-        var path = bridge.openFileDialog(qsTr("Carica logbook ADIF"),
+        var path = bridge.openFileDialogForWindow(qsTr("Carica logbook ADIF"),
                                          "",
-                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")])
+                                         [qsTr("ADIF files (*.adi *.adif)"), qsTr("All files (*)")],
+                                         nativeHostWindow || (logWindow.parent ? logWindow.parent.Window.window : null))
         if (path.length > 0 && appEngine && appEngine.logManager) {
             appEngine.logManager.addLogbook(path, "")
             clearSelection()

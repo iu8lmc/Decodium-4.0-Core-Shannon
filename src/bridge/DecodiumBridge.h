@@ -1812,6 +1812,10 @@ public:
     Q_INVOKABLE QString openFileDialog(const QString& title,
                                        const QString& initialPath,
                                        const QStringList& nameFilters = QStringList()) const;
+    Q_INVOKABLE QString openFileDialogForWindow(const QString& title,
+                                                const QString& initialPath,
+                                                const QStringList& nameFilters,
+                                                QObject* owner) const;
     Q_INVOKABLE QString saveFileDialog(const QString& title,
                                        const QString& initialPath,
                                        const QStringList& nameFilters = QStringList()) const;

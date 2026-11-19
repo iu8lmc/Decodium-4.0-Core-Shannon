@@ -3556,6 +3556,18 @@ add_custom_command (TARGET decodium_qml POST_BUILD
 )
 
 if (APPLE)
+  set (DECODIUM_MACOS_DEVELOPMENT_SIGN_IDENTITY "" CACHE STRING
+    "Optional local Apple Development signing identity for stable macOS Keychain access")
+  if (DECODIUM_MACOS_DEVELOPMENT_SIGN_IDENTITY)
+    find_program (DECODIUM_CODESIGN_EXECUTABLE codesign REQUIRED)
+    add_custom_command (TARGET decodium_qml POST_BUILD
+      COMMAND "${DECODIUM_CODESIGN_EXECUTABLE}" --force
+        --sign "${DECODIUM_MACOS_DEVELOPMENT_SIGN_IDENTITY}"
+        --identifier org.decodium.development --timestamp=none
+        "$<TARGET_FILE:decodium_qml>"
+      COMMENT "Signing the local Decodium executable with the configured development identity"
+      VERBATIM)
+  endif ()
   add_custom_command (TARGET wsjtx POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E remove_directory
       $<TARGET_FILE_DIR:wsjtx>/sounds

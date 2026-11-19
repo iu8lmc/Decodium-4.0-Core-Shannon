@@ -295,6 +295,10 @@ static void prepareFileDialogForActivation(QFileDialog& dialog,
 {
     dialog.setWindowModality(Qt::ApplicationModal);
     dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    // A detached logbook can be always-on-top. Its dialog must not be
+    // hidden behind it, otherwise the modal operation appears frozen.
+    if (ownerWindow && ownerWindow->flags().testFlag(Qt::WindowStaysOnTopHint))
+        dialog.setWindowFlag(Qt::WindowStaysOnTopHint, true);
 
     // Create the native window handle before showing it so the transient
     // relationship is established before the window enters the desktop.
@@ -331,6 +335,26 @@ QString DecodiumBridge::openFileDialog(const QString& title,
         return QString();
     }
     QStringList const files = dialog.selectedFiles();
+    return files.isEmpty() ? QString() : files.first();
+}
+
+QString DecodiumBridge::openFileDialogForWindow(const QString& title,
+                                                const QString& initialPath,
+                                                const QStringList& nameFilters,
+                                                QObject* owner) const
+{
+    auto* ownerWindow = qobject_cast<QWindow*>(owner);
+    if (!ownerWindow || !ownerWindow->isVisible())
+        return openFileDialog(title, initialPath, nameFilters);
+
+    QFileDialog dialog(nullptr, title, localDialogPath(initialPath),
+                       dialogFilterString(nameFilters));
+    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setAcceptMode(QFileDialog::AcceptOpen);
+    prepareFileDialogForActivation(dialog, ownerWindow);
+    if (dialog.exec() != QDialog::Accepted)
+        return QString();
+    const QStringList files = dialog.selectedFiles();
     return files.isEmpty() ? QString() : files.first();
 }
 

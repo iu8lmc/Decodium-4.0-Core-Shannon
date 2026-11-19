@@ -27,7 +27,9 @@
 
 #include "qt_helpers.hpp"
 
+#ifndef Q_MOC_RUN
 #include "ui_wf_palette_design_dialog.h"
+#endif
 
 namespace
 {

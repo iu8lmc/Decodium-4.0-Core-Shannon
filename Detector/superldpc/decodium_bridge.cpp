@@ -35,6 +35,18 @@
 //
 //  * Un'istanza per thread (thread_local): FT2DecodeWorker decodifica in
 //    parallelo e il decoder ha stato interno.
+// GCC may emit weak out-of-line libstdc++ template instantiations from this
+// AVX2 translation unit. The linker can then reuse them in baseline code,
+// including JTTY startup, before the decoder's CPU dispatch is reached.
+// Give the standard-library definitions the baseline x86 target; restore the
+// AVX2 target before defining the explicitly dispatched SIMD backend.
+#if defined(__GNUC__) && !defined(__clang__) && (defined(__x86_64__) || defined(__i386__))
+#pragma GCC push_options
+#pragma GCC target("no-avx,no-avx2,no-fma")
+#include <bits/stdc++.h>
+#pragma GCC pop_options
+#endif
+
 #include "ft2_decoder.hpp"
 #include <atomic>
 #include <chrono>
