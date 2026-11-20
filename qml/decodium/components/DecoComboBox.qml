@@ -4,6 +4,8 @@ import QtQuick.Controls
 ComboBox {
     id: control
 
+    property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
+
     property color decoTextColor: typeof bridge !== "undefined" && bridge && bridge.themeManager
                                   ? bridge.themeManager.textPrimary : "#e8f4fd"
     property color decoMutedTextColor: typeof bridge !== "undefined" && bridge && bridge.themeManager
@@ -60,7 +62,7 @@ ComboBox {
         return ""
     }
 
-    implicitWidth: Math.max(120, implicitContentWidth + leftPadding + rightPadding)
+    implicitWidth: Math.max(120, (implicitContentWidth + leftPadding + rightPadding) * scaleFactor)
     implicitHeight: Math.max(34, implicitContentHeight + topPadding + bottomPadding)
     leftPadding: 10
     rightPadding: 34

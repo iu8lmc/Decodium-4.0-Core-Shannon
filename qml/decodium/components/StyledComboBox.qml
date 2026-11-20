@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Controls
 
 ComboBox {
+    property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
+
     id: control
 
     property color bgDeep: bridge.themeManager.bgDeep

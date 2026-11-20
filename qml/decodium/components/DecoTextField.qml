@@ -26,6 +26,7 @@ FocusScope {
     property bool selectByMouse: true
     property string passwordCharacter: "*"
     property int passwordMaskDelay: 0
+    property bool scaleAdjusted: false
     property int leftPadding: 0
     property int rightPadding: 0
     property int topPadding: 0
@@ -34,6 +35,7 @@ FocusScope {
     property int rightInset: 0
     property int topInset: 0
     property int bottomInset: 0
+    property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
     property Item background: null
     readonly property bool hovered: hoverHandler.hovered
 
@@ -41,8 +43,6 @@ FocusScope {
     signal accepted()
     signal textEdited()
 
-    implicitWidth: Math.max(160, input.implicitWidth + leftPadding + rightPadding + leftInset + rightInset)
-    implicitHeight: Math.max(32, input.implicitHeight + topPadding + bottomPadding + topInset + bottomInset)
     clip: true
     activeFocusOnTab: true
 
@@ -59,10 +59,10 @@ FocusScope {
         background.parent = control
         background.z = -1
         background.anchors.fill = control
-        background.anchors.leftMargin = control.leftInset
-        background.anchors.rightMargin = control.rightInset
-        background.anchors.topMargin = control.topInset
-        background.anchors.bottomMargin = control.bottomInset
+        background.anchors.leftMargin = control.leftInset * scaleFactor
+        background.anchors.rightMargin = control.rightInset * scaleFactor
+        background.anchors.topMargin = control.topInset * scaleFactor
+        background.anchors.bottomMargin = control.bottomInset * scaleFactor
     }
 
     onActiveFocusChanged: {
@@ -70,12 +70,28 @@ FocusScope {
             input.forceActiveFocus()
     }
 
+    implicitWidth: Math.max(160, (input.implicitWidth + leftPadding + rightPadding + leftInset + rightInset) * scaleFactor)
+    implicitHeight: Math.max(32, (input.implicitHeight + topPadding + bottomPadding + topInset + bottomInset) * scaleFactor)
+
     function selectAll() { input.selectAll() }
     function deselect() { input.deselect() }
     function clear() { input.clear() }
     function copy() { input.copy() }
     function cut() { input.cut() }
     function paste() { input.paste() }
+    function isScaled() { return scaleFactor > 1 }
+
+    function adjustPadding() {
+        leftPadding *= scaleFactor
+        rightPadding *= scaleFactor
+        topPadding *= scaleFactor
+        bottomPadding *= scaleFactor
+        leftInset *= scaleFactor
+        rightInset *= scaleFactor
+        topInset *= scaleFactor
+        bottomInset *= scaleFactor
+        scaleAdjusted = true
+    }
 
     HoverHandler {
         id: hoverHandler
@@ -84,10 +100,10 @@ FocusScope {
     TextInput {
         id: input
         anchors.fill: parent
-        anchors.leftMargin: control.leftInset + control.leftPadding
-        anchors.rightMargin: control.rightInset + control.rightPadding
-        anchors.topMargin: control.topInset + control.topPadding
-        anchors.bottomMargin: control.bottomInset + control.bottomPadding
+        anchors.leftMargin: (control.leftInset + control.leftPadding) * scaleFactor
+        anchors.rightMargin: (control.rightInset + control.rightPadding) * scaleFactor
+        anchors.topMargin: (control.topInset + control.topPadding) * scaleFactor
+        anchors.bottomMargin: (control.bottomInset + control.bottomPadding) * scaleFactor
         color: control.enabled ? control.color : Qt.rgba(control.color.r, control.color.g, control.color.b, 0.45)
         selectionColor: control.selectionColor
         selectedTextColor: control.selectedTextColor

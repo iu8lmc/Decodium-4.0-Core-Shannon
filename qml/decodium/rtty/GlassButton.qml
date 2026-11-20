@@ -17,9 +17,11 @@ Button {
     // e' piu' lungo — meglio una fila un po' piu' larga che una parola tagliata.
     property int minimumWidth: 72
 
-    implicitHeight: 32
-    implicitWidth: Math.max(minimumWidth, contentText.implicitWidth + 22)
-    font.pixelSize: 13
+    property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
+
+    implicitHeight: 32 * scaleFactor
+    implicitWidth: Math.max(minimumWidth * scaleFactor, (contentText.implicitWidth + 22) * scaleFactor)
+    font.pixelSize: 13 * scaleFactor
 
     // Niente margine interno del tema. Un Button di Qt Controls ne ha uno suo,
     // e con lo stile Material vale una quindicina di punti per lato: la
@@ -45,7 +47,7 @@ Button {
     }
 
     background: Rectangle {
-        radius: root.cornerRadius
+        radius: root.cornerRadius * scaleFactor
         color: {
             if (!root.enabled)
                 return Qt.rgba(Theme.bgLight.r, Theme.bgLight.g, Theme.bgLight.b, 0.35)

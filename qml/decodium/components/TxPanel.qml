@@ -3043,11 +3043,13 @@ Item {
         readonly property bool isDisabled: bridge && (bridge.txDisabledMask & (1 << (txNum - 1))) !== 0
         signal editRequested(int txNum, string message)
 
+        property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
+
         Layout.fillWidth: false
-        Layout.preferredWidth: txPanel.compactTxButtonWidth
-        Layout.maximumWidth: 220
-        Layout.minimumWidth: 104
-        Layout.preferredHeight: 44
+        Layout.preferredWidth: txPanel.compactTxButtonWidth * scaleFactor
+        Layout.maximumWidth: 220 * scaleFactor
+        Layout.minimumWidth: 104 * scaleFactor
+        Layout.preferredHeight: 44 * scaleFactor
         padding: 0
         leftPadding: 0
         rightPadding: 0
@@ -3074,20 +3076,20 @@ Item {
                 if (isCQ) return accentGreen
                 return glassBorder
             }
-            border.width: isSelected || isTransmitting ? 2 : 1
-            radius: 7
+            border.width: (isSelected || isTransmitting ? 2 : 1) * scaleFactor
+            radius: 7 * scaleFactor
 
             Behavior on color { ColorAnimation { duration: 150 } }
         }
 
         contentItem: Item {
-            implicitWidth: txPanel.compactTxButtonWidth
-            implicitHeight: 44
+            implicitWidth: txPanel.compactTxButtonWidth * scaleFactor
+            implicitHeight: 44 * scaleFactor
 
             Column {
                 anchors.centerIn: parent
-                width: parent.width - 14
-                spacing: 1
+                width: parent.width - 14 * scaleFactor
+                spacing: 1 * scaleFactor
 
                 Text {
                     width: parent.width
@@ -3099,7 +3101,7 @@ Item {
                         return textSecondary
                     }
                     font.family: decodiumMonoFontFamily
-                    font.pixelSize: 10
+                    font.pixelSize: 10 * scaleFactor
                     font.bold: isSelected || isTransmitting
                     font.strikeout: txButton.isDisabled
                     horizontalAlignment: Text.AlignHCenter
@@ -3110,7 +3112,7 @@ Item {
                     text: message
                     color: isTransmitting ? errorRed : textPrimary
                     font.family: decodiumMonoFontFamily
-                    font.pixelSize: 9
+                    font.pixelSize: 9 * scaleFactor
                     font.strikeout: txButton.isDisabled
                     elide: Text.ElideMiddle
                     horizontalAlignment: Text.AlignHCenter
@@ -3140,23 +3142,23 @@ Item {
             id: txButtonContextMenu
             MenuItem {
                 text: qsTr("Edit TX%1 message").arg(txNum)
-                height: 32
+                height: 32 * scaleFactor
                 onTriggered: editRequested(txNum, message)
-                contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: 12; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
+                contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: 12 * scaleFactor; leftPadding: 10 * scaleFactor; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.25) : "transparent" }
             }
             MenuItem {
                 text: txButton.isDisabled ? qsTr("Re-enable TX%1").arg(txNum) : qsTr("Skip TX%1 (skip auto-seq)").arg(txNum)
-                height: 32
+                height: 32 * scaleFactor
                 onTriggered: if (bridge) bridge.setTxDisabled(txNum, !txButton.isDisabled)
-                contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: 12; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
+                contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: 12 * scaleFactor; leftPadding: 10 * scaleFactor; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { color: parent.highlighted ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.25) : "transparent" }
             }
             background: Rectangle {
-                implicitWidth: 230
+                implicitWidth: 230 * scaleFactor
                 color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
                 border.color: glassBorder
-                radius: 6
+                radius: 6 * scaleFactor
             }
         }
     }

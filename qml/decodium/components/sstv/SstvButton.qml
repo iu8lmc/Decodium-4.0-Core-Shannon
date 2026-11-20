@@ -5,10 +5,13 @@ import QtQuick.Templates as T
 
 T.Button {
     id: control
-    implicitWidth: Math.max(80, implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(40, implicitContentHeight + topPadding + bottomPadding)
-    padding: 10
-    horizontalPadding: 16
+    // The SSTV components also load without the application bridge (tests).
+    property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings
+                                && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
+    implicitWidth: Math.max(80 * scaleFactor, (implicitContentWidth + leftPadding + rightPadding) * scaleFactor)
+    implicitHeight: Math.max(40 * scaleFactor, (implicitContentHeight + topPadding + bottomPadding) * scaleFactor)
+    padding: 10 * scaleFactor
+    horizontalPadding: 16 * scaleFactor
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.name: text
@@ -24,7 +27,7 @@ T.Button {
     }
     background: Rectangle {
         objectName: "sstvPlainButtonBackground"
-        radius: 6
+        radius: 6 * scaleFactor
         color: control.down || control.checked ? control.palette.highlight
              : control.hovered ? Qt.lighter(control.palette.button, 1.18)
              : control.palette.button
