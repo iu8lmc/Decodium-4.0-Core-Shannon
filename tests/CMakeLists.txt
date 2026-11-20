@@ -707,6 +707,10 @@ target_compile_definitions (test_q65_doppler PRIVATE DECODIUM_SOURCE_DIR="${PROJ
 add_test (NAME test_q65_doppler COMMAND $<TARGET_FILE:test_q65_doppler>)
 set_tests_properties (test_q65_doppler PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Material")
 target_link_libraries (test_ftx_weak_decode wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+if (MINGW)
+  # The offline FT8 stage uses large stack frames, as does ft8_stage_compare.
+  target_link_options (test_ftx_weak_decode PRIVATE -Wl,--stack,67108864)
+endif ()
 add_test (NAME test_ftx_weak_decode COMMAND $<TARGET_FILE:test_ftx_weak_decode>)
 set_tests_properties (test_ftx_weak_decode PROPERTIES ENVIRONMENT "DECODIUM_WEAK_TEST_SNR=-15;DECODIUM_WEAK_TEST_FT2_SNR=-14")
 add_test (NAME test_ft8_bicm_generic_fallback COMMAND $<TARGET_FILE:test_ftx_weak_decode>)

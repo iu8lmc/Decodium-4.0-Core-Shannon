@@ -8,6 +8,11 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
+#endif
+
 #if defined(__GLIBC__)
 #include <malloc.h>
 #endif
@@ -15,6 +20,14 @@
 int main ()
 {
   auto residentKiB = [] {
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS_EX counters {};
+    counters.cb = sizeof counters;
+    if (!GetProcessMemoryInfo (GetCurrentProcess (),
+                               reinterpret_cast<PROCESS_MEMORY_COUNTERS *> (&counters),
+                               sizeof counters)) return -1L;
+    return static_cast<long> (counters.PrivateUsage / 1024);
+#else
     std::ifstream status ("/proc/self/status");
     std::string key;
     while (status >> key)
@@ -23,6 +36,7 @@ int main ()
         status.ignore (10000, '\n');
       }
     return -1L;
+#endif
   };
   auto const before = residentKiB ();
   for (int iteration = 0; iteration < 300; ++iteration)
@@ -38,7 +52,11 @@ int main ()
             ok = false;
       });
       worker.join ();
-      if (!ok) return 1;
+      if (!ok)
+        {
+          std::cerr << "sequential transform failed at iteration=" << iteration << '\n';
+          return 1;
+        }
     }
   std::atomic<int> failures {0};
   std::vector<std::thread> workers;
@@ -65,5 +83,11 @@ int main ()
 #if defined(__GLIBC__)
   malloc_trim (0);
 #endif
-  std::cout << "threads=300 concurrent=8 beforeKiB=" << before << " afterKiB=" << residentKiB () << '\n';
+  std::cout << "threads=300 concurrent=8 metric="
+#if defined(_WIN32)
+            << "private"
+#else
+            << "rss"
+#endif
+            << " beforeKiB=" << before << " afterKiB=" << residentKiB () << '\n';
 }

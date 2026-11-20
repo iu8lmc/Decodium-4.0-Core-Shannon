@@ -220,6 +220,19 @@ static void L(const char* msg) {
     DIAG_INFO(QString::fromLocal8Bit(msg));
 }
 
+static bool startupProfileEnabled()
+{
+    static bool const enabled = qEnvironmentVariableIntValue("DECODIUM_STARTUP_PROFILE") > 0;
+    return enabled;
+}
+
+static void startupProfileLog(const QString& message)
+{
+    if (startupProfileEnabled()) {
+        qInfo().noquote() << "[STARTUP-PROFILE]" << message;
+    }
+}
+
 static QString firstInstalledFontFamily(QStringList const& candidates)
 {
     QStringList families = QFontDatabase::families();
@@ -1251,6 +1264,11 @@ static QString sanitizedCacheComponent(QString value)
 
 static QByteArray windowsQmlContentFingerprint(QString *qmlRootPath = nullptr)
 {
+    QElapsedTimer profileTimer;
+    const bool profile = startupProfileEnabled();
+    if (profile)
+        profileTimer.start();
+    quint64 bytesRead = 0;
     QString const qmlRoot = QDir(QCoreApplication::applicationDirPath())
         .absoluteFilePath(QStringLiteral("qml"));
     if (qmlRootPath)
@@ -1295,9 +1313,16 @@ static QByteArray windowsQmlContentFingerprint(QString *qmlRootPath = nullptr)
             hash.addData(QByteArrayLiteral("<unreadable>\n"));
             continue;
         }
-        while (!file.atEnd())
-            hash.addData(file.read(64 * 1024));
+        while (!file.atEnd()) {
+            QByteArray const chunk = file.read(64 * 1024);
+            bytesRead += static_cast<quint64>(chunk.size());
+            hash.addData(chunk);
+        }
         hash.addData(QByteArrayLiteral("\n"));
+    }
+    if (profile) {
+        startupProfileLog(QStringLiteral("qml_fingerprint_ms=%1 files=%2 bytes=%3")
+            .arg(profileTimer.elapsed()).arg(qmlFiles.size()).arg(bytesRead));
     }
     return hash.result().toHex().left(16);
 }
@@ -1681,6 +1706,13 @@ static bool ensureLegacySqliteDatabase()
 
 int main(int argc, char* argv[])
 {
+    QElapsedTimer startupTimer;
+    startupTimer.start();
+    auto profileCheckpoint = [&startupTimer](const char *name) {
+        if (startupProfileEnabled())
+            startupProfileLog(QStringLiteral("%1_ms=%2").arg(QString::fromLatin1(name)).arg(startupTimer.elapsed()));
+    };
+    profileCheckpoint("main_entry");
     QString labStorageError;
     auto const labStorage = decodium::lab::configureStorage(argc, argv, &labStorageError);
     if (labStorage == decodium::lab::StorageSetup::Failed) {
@@ -1692,6 +1724,7 @@ int main(int argc, char* argv[])
     } else {
         std::fprintf(stderr, "[LAB] Early storage isolation active; normal migration skipped\n");
     }
+    profileCheckpoint("storage_configured");
 
     // Validate the test-only profile switch before startup workers exist.
     for (int i = 1; i < argc; ++i) {
@@ -2330,6 +2363,7 @@ int main(int argc, char* argv[])
     } diagnosticLogCleanup;
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
+    profileCheckpoint("qapplication_ready");
 #ifdef Q_OS_LINUX
     configureLinuxVulkanGpuSelection();
 #endif
@@ -3052,6 +3086,7 @@ int main(int argc, char* argv[])
         L(("Command line error: " + parser.errorText()).toLocal8Bit().constData());
         return -1;
     }
+    profileCheckpoint("command_line_parsed");
     if (parser.isSet(helpOption)) {
         const QByteArray help = parser.helpText().toLocal8Bit();
         std::fwrite(help.constData(), 1, static_cast<std::size_t>(help.size()), stdout);
@@ -3182,6 +3217,7 @@ int main(int argc, char* argv[])
     DecodiumLogging::reopenDiagnosticLog();
     L(("Application identity: " + app.applicationName().toLocal8Bit()).constData());
     ensureLegacySqliteDatabase();
+    profileCheckpoint("sqlite_ready");
 
     QString configName = parser.value(configOption).trimmed();
     QSettings rootSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
@@ -3206,6 +3242,7 @@ int main(int argc, char* argv[])
 #ifdef Q_OS_WIN
     configureWindowsQmlDiskCache(configName);
 #endif
+    profileCheckpoint("qml_cache_configured");
     QString languageOverride = parser.value(languageOption).trimmed();
 
     QString const labCallsign = parser.value(labCallsignOption).trimmed().toUpper();
@@ -3533,9 +3570,11 @@ int main(int argc, char* argv[])
     });
 
     L("bridge constructing");
+    profileCheckpoint("pre_bridge");
     QElapsedTimer bridgeConstructionTimer;
     bridgeConstructionTimer.start();
     DecodiumBridge bridge;
+    profileCheckpoint("bridge_ready");
     qInfo() << "[STARTUP-TIMING] bridge_constructor_ms=" << bridgeConstructionTimer.elapsed();
     if (parser.isSet(testOption)
         && qEnvironmentVariableIntValue("DECODIUM_LAB_SDR_LIFECYCLE") > 0) {

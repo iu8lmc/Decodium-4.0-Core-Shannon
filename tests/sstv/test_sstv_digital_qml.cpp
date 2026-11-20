@@ -875,8 +875,11 @@ private slots:
 
         window->show();
         QTRY_VERIFY_WITH_TIMEOUT(window->isVisible(), 2'000);
+        QSignalSpy releaseSpy(window, SIGNAL(releaseRequested()));
+        QVERIFY(releaseSpy.isValid());
         QVERIFY(window->close());
         QTRY_VERIFY_WITH_TIMEOUT(!window->isVisible(), 2'000);
+        QCOMPARE(releaseSpy.size(), 1);
         QCOMPARE(bridge.calls(),
                  QStringList({QStringLiteral("stop-rx"),
                               QStringLiteral("cancel-tx"),

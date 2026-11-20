@@ -1862,6 +1862,8 @@ GlassApplicationWindow {
     property bool ft2LinkPanelDetached: false
     property bool liveMapDetached: false
     property bool liveMapMinimized: false
+    // Keep the last SSTV page while its lazily loaded workspace is evicted.
+    property int sstvWorkspacePageIndex: 0
     // 1.0.275 (fork-only) — DX Cluster floating window state
     property bool dxClusterDetached: true   // default detached (era sempre floating)
     property bool dxClusterMinimized: false
@@ -1912,7 +1914,10 @@ GlassApplicationWindow {
         // A Window close event is still being dispatched. Unload on the next
         // event-loop turn so the handler never destroys its own sender.
         Qt.callLater(function() {
-            if (!mainWindow.applicationClosing && loader) {
+            // The operator may reopen the window before this deferred cleanup
+            // runs. Keep the freshly shown instance alive in that case.
+            if (!mainWindow.applicationClosing && loader && loader.item
+                    && !loader.item.visible) {
                 mainWindow.releaseLoaderGraphics(loader)
                 loader.active = false
             }
@@ -2023,6 +2028,7 @@ GlassApplicationWindow {
         source: "components/sstv/SstvWorkspace.qml"
         onLoaded: {
             item.engine = bridge
+            item.pageIndex = mainWindow.sstvWorkspacePageIndex
             item.show()
             item.raise()
             item.requestActivate()
@@ -2030,6 +2036,17 @@ GlassApplicationWindow {
         onStatusChanged: {
             if (status === Loader.Error)
                 bridge.leaveSstvWorkspace()
+        }
+    }
+    Connections {
+        target: sstvWorkspaceLoader.item
+        ignoreUnknownSignals: true
+        function onPageIndexChanged() {
+            if (sstvWorkspaceLoader.item)
+                mainWindow.sstvWorkspacePageIndex = sstvWorkspaceLoader.item.pageIndex
+        }
+        function onReleaseRequested() {
+            mainWindow.releaseLoadedWindow(sstvWorkspaceLoader)
         }
     }
 

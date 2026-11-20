@@ -11,6 +11,8 @@ import ".."
 GlassWindow {
     id: win
 
+    signal releaseRequested()
+
     property var engine: null
     readonly property var theme: win.engine ? win.engine.themeManager : null
     themeManagerOverride: win.theme
@@ -68,6 +70,7 @@ GlassWindow {
                 && typeof win.engine.leaveSstvWorkspace === "function")
             win.engine.leaveSstvWorkspace()
         close.accepted = true
+        releaseRequested()
     }
 
     Rectangle {

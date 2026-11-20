@@ -8,6 +8,10 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#if defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
+#endif
 #if defined(__GLIBC__)
 #include <malloc.h>
 #endif
@@ -68,8 +72,18 @@ int main ()
 #if defined(__GLIBC__)
   malloc_trim (0);
 #endif
+#if defined(_WIN32)
+  PROCESS_MEMORY_COUNTERS_EX counters {};
+  counters.cb = sizeof counters;
+  if (!GetProcessMemoryInfo (GetCurrentProcess (),
+                             reinterpret_cast<PROCESS_MEMORY_COUNTERS *> (&counters),
+                             sizeof counters)) return 2;
+  std::cout << "sequential=25 concurrent=8 hash=" << expected
+            << " privateKiB=" << counters.PrivateUsage / 1024 << '\n';
+#else
   std::ifstream status ("/proc/self/status");
   std::string key; long rss = -1;
   while (status >> key) { if (key == "VmRSS:") { status >> rss; break; } status.ignore (10000, '\n'); }
   std::cout << "sequential=25 concurrent=8 hash=" << expected << " rssKiB=" << rss << '\n';
+#endif
 }
