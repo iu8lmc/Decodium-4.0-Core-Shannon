@@ -1,0 +1,1 @@
+{"accumulo": false, "autoseq": true, "hold": false, "tx": false, "wait": true}

@@ -1,0 +1,1 @@
+{"found": [{"call": "K1ABC", "freq": "1500", "grid": "FN42", "message": "K1ABC FN42 20", "mode": "WSPR"}], "tx": false}

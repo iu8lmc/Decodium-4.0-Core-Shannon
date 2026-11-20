@@ -1,0 +1,4 @@
+A/B harness: RTTY/JTTY rows, UTC, rounded frequency, empty inputs and ALL.TXT RX/TX: OK
+macOS isolated original app: {"file": true, "jtty": true, "rtty": true, "tx": false}
+macOS isolated refactored app: {"file": true, "jtty": true, "rtty": true, "tx": false}
+CAT and monitoring disabled. Synthetic bridge slot input, not physical RF or demodulator proof.

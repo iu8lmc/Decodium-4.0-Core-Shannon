@@ -1,0 +1,4 @@
+a write: UI settings passed with CAT disabled
+a restart: UI settings passed with CAT disabled
+b write: UI settings passed with CAT disabled
+b restart: UI settings passed with CAT disabled

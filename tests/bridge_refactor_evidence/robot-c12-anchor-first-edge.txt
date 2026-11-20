@@ -1,0 +1,18 @@
+=== SHIFT 0
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 0 9.50278
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 1 2.23333
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 2 0.569444
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 158 174.933
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 159 155.25
+=== SHIFT 7
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 0 129.056
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 1 44.2972
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 2 4.64722
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 158 2.95
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 159 3.03889
+=== SHIFT 10
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 0 139.733
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 1 122.778
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 2 22.175
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 158 0.505556
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM column/mean RGB error: 159 0.505556

@@ -1,0 +1,1 @@
+[{"bytes": 5, "fileName": "_CON.txt", "id": 1, "ok": true}, {"bytes": 4, "fileName": "data.bin", "id": 2, "ok": true}, {"bytes": 3, "fileName": "collision.txt", "id": 3, "ok": true}, {"bytes": 3, "fileName": "collision (2).txt", "id": 4, "ok": true}, {"bytes": 0, "fileName": "", "id": 5, "ok": false}]

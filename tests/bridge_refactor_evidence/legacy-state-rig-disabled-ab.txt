@@ -1,0 +1,2 @@
+before {"alt": true, "available": true, "bridgeMessage": true, "cat": false, "guardReset": true, "inputLevel": true, "outputLevel": true, "period": true, "reentry": true, "rigEnabled": false, "rxSynced": true, "tx": false, "txSynced": true, "usesLegacy": true}
+after {"alt": true, "available": true, "bridgeMessage": true, "cat": false, "guardReset": true, "inputLevel": true, "outputLevel": true, "period": true, "reentry": true, "rigEnabled": false, "rxSynced": true, "tx": false, "txSynced": true, "usesLegacy": true}

@@ -1,0 +1,9 @@
+jt65_symspec_compare exit 0 JT65 symspec compare passed for /private/tmp/decodium-wsjtx-ref/130610_2343.wav
+  nqsym=552 max_savg_diff=0@-1 max_ref_diff=0@-1 max_ss_diff=0@(-1,-1)
+  raw: max_savg_raw_diff=0@-1 max_ss_raw_diff=0@(-1,-1)
+
+jt65_sync_compare exit 0 JT65 sync compare passed for /private/tmp/decodium-wsjtx-ref/130610_2343.wav with nqsym=552
+
+jt65_decode65a_compare exit 1 JT65 decode65a compare failed for /private/tmp/decodium-wsjtx-ref/130610_2343.wav
+  wrapped sync2=434.730652 dt=1.74633026 nft=1 nspecial=0 qual=1000.00006 nhist=4 nsmo=0 decoded='N2SU W0JMW R-14       '
+  direct  sync2=177.360123 dt=4.09254742 nft=0 nspecial=0 qual=60.1470032 nhist=12 nsmo=0 decoded='                      '

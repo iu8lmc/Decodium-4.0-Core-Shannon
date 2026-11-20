@@ -1,0 +1,7 @@
+before raw ['[FST4-RAW-AB] 1001 023115 -11  2.3 1533 `  9W1JOI 6J2RKM/R R AK66                  |023115 -11  2.3 1533 `  9I9WHQ 6I2PEO/P OJ52                    |023115 -12  2.3 1533 `  8R0EJM 6S2OTX/R KB52                    |023115 -12  2.3 1533 `  9X6JGW FI7GBB/R R AK64                  |023115 -12  2.3 1533 `  9C3CTA/R GK1YMN R BA32                  '] callbacks []
+before hashes ['[FST4-PCM-HASH] 1001 5eeb50dd0c35ed35c2c3df42d719b8478d02051a082259507c80fea5af6608d4']
+before {"displayedExpected": false, "expectedMessage": false}
+after raw ['[FST4-RAW-AB] 1001 023200 -11  2.3 1533 `  9W1JOI 6J2RKM/R R AK66                  |023200 -11  2.3 1533 `  9I9WHQ 6I2PEO/P OJ52                    |023200 -12  2.3 1533 `  8R0EJM 6S2OTX/R KB52                    |023200 -12  2.3 1533 `  9X6JGW FI7GBB/R R AK64                  |023200 -12  2.3 1533 `  9C3CTA/R GK1YMN R BA32                  '] callbacks []
+after hashes ['[FST4-PCM-HASH] 1001 5eeb50dd0c35ed35c2c3df42d719b8478d02051a082259507c80fea5af6608d4']
+after {"displayedExpected": false, "expectedMessage": false}
+PCM matched; clean-signal decode remains unsuccessful

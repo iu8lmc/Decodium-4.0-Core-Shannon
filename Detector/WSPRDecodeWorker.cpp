@@ -81,7 +81,19 @@ WSPRDecodeWorker::WSPRDecodeWorker (QObject * parent)
 
 void WSPRDecodeWorker::decode (DecodeRequest const& request)
 {
+  auto discardRetired = [this, &request] {
+    if (request.serial > m_retiredSerial.load (std::memory_order_acquire))
+      return false;
+    // Completion is required even when skipped: the bridge owns the WAV and
+    // removes it in onWsprDecodeReady before checking session validity.
+    Q_EMIT decodeReady (request.serial, {}, {}, 0);
+    return true;
+  };
+  if (discardRetired ()) return;
+
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  // A mode change may have occurred while another decoder held this mutex.
+  if (discardRetired ()) return;
 
   OutputCollector collector;
   QVector<QByteArray> argv_storage;
@@ -99,9 +111,17 @@ void WSPRDecodeWorker::decode (DecodeRequest const& request)
       argv << item.data ();
     }
 
+  struct CancelContext { std::atomic<quint64> const* retired; quint64 serial; };
+  CancelContext cancelContext {&m_retiredSerial, request.serial};
+  auto const cancelled = [](void* opaque) -> int {
+    auto const* context = static_cast<CancelContext const*> (opaque);
+    return context->serial <= context->retired->load (std::memory_order_acquire);
+  };
+  wsprd_set_cancel_callback (cancelled, &cancelContext);
   wsprd_set_output_callback (&wsprd_worker_callback, &collector);
   int const exitCode = wsprd_run (argv.size (), argv.data ());
   wsprd_set_output_callback (nullptr, nullptr);
+  wsprd_set_cancel_callback (nullptr, nullptr);
 
   Q_EMIT decodeReady (request.serial, collector.rows, collector.diagnostics, exitCode);
 }

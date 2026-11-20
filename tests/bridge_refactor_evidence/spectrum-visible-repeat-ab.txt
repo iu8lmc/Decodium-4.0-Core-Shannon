@@ -1,0 +1,2 @@
+before {"advanced": true, "cat": false, "consumer": true, "gpuAvailable": false, "tx": false}
+after {"advanced": true, "cat": false, "consumer": true, "gpuAvailable": false, "tx": false}

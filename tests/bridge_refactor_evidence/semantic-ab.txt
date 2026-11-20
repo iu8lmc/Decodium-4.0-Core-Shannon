@@ -1,0 +1,1 @@
+Decode semantic A/B: 224 mode, contest, QSO and message combinations match; production telemetry; hash context controlled

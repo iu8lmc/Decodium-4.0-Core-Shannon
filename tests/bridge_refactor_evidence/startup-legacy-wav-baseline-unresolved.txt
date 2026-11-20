@@ -1,0 +1,111 @@
+m - Clear576e21fffc - test
+Qt TempLocation: /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T
+engine OK
+QML import path: /private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml
+QML import path: /private/tmp/decodium-color-baseline/Decodium4.app/Contents/MacOS
+QML import path: qrc:/qt-project.org/imports
+QML import path: qrc:/qt/qml
+DecoRTTY: sottosistema RTTY avviato
+JTTY: controller avviato
+CW: modulo avviato
+Rotore: modulo avviato
+QSG Live Map enabled by default; CPU WorldMapItem fallback remains available via LiveMapUseGpu=false
+qmlPath=/private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/BootLoader.qml
+QML file BootLoader: exists=1 size=10570 path=/private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/BootLoader.qml
+QML file Main: exists=1 size=896402 path=/private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/Main.qml
+QML file SettingsDialog: exists=1 size=92144 path=/private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/components/SettingsDialog.qml
+loading QML...
+BootLoader: centered on primary screen at 552,267 size 1200x700
+BootLoader: window visible at +32 ms, starting async load of Main.qml
+QML object created OK from: file:///private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/BootLoader.qml
+[UI] Transactional pipeline cache applied to window: load= "/Users/salvo/.qttest/Library/Caches/IU8LMC/Decodium - Clear576e21fffc - test/qsg_pipeline_cache_v2_397857bfe297_bootstrap_metal_6_12_0.bin" save= "/Users/salvo/.qttest/Library/Caches/IU8LMC/Decodium - Clear576e21fffc - test/qsg_pipeline_cache_v2_397857bfe297_bootstrap_metal_6_12_0.bin.stage.29778" seeded= false
+engine.load() returned in 76 ms
+Qt Quick graphics API (after engine.load): Metal / RHI
+DevOverlay: frameSwapped wired su 1 QQuickWindow(s), RHI backend = Metal
+QML OK - entering event loop
+Qt Quick graphics API (event loop start): Metal / RHI
+BootLoader: starting Main.qml load at +233 ms
+Main.qml startup +0 ms: Component.onCompleted begin
+Main.qml startup +0 ms: fox/caller queue state restored
+Main.qml startup +0 ms: dx-pedition mode: always start classic (restore disabled by user)
+Main.qml startup +1 ms: decode panel settings restored
+Main.qml startup +1 ms: main window state read
+Main.qml startup +1 ms: main window geometry applied x=552 y=408 w=1200 h=480
+Main.qml startup +24 ms: main window show/raise/requestActivate done
+Main.qml startup +24 ms: bridge notified ready
+Main.qml startup +24 ms: visual startup staging armed
+Main.qml window shown at 552,408 size 1200x480
+BootLoader: Main window graphics configured before show=true
+BootLoader: Main.qml created as top-level window in 1352 ms
+Main.qml startup +413 ms: live map popout restore: hidden visible=true detached=false
+[DxccLookup] loaded 346 entities, 7536 prefixes, 21510 exact calls from "/private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/cty.dat"
+[2026-11-07 16:28:05.092075] [0x0000000202d6ff80] [info]    Configuration Settings (/Users/salvo/.qttest/Library/Preferences/decodium4.ini)
+[2026-11-07 16:28:05.122862] [0x0000000202d6ff80] [info]    Reading frequencies
+[2026-11-07 16:28:05.122875] [0x0000000202d6ff80] [info]    read_settings found FrequenciesForRegionModes_v2
+Ignoring invalid saved radio button id 0 for CATDataBits - falling back to 9
+Ignoring invalid saved radio button id 0 for CATStopBits - falling back to 3
+[2026-11-07 16:28:05.200497] [0x000000016de8f000] [info]    Loading CTY.DAT from /Users/salvo/.qttest/Library/Application Support/IU8LMC/Decodium - Clear576e21fffc - test/embedded-ft2/cty.dat
+UDP MessageClient[legacy primary]::start server= 127.0.0.1 port= 2237 listen= 2238 ttl= 1
+UDP MessageClient[legacy primary]: bound local= 0.0.0.0:2238 requested= 2238 mode= fixed-shared interface= any-ipv4
+UDP MessageClient[legacy primary]: sending initial heartbeat target= 127.0.0.1:2237
+UDP MessageClient[legacy secondary]::start server= 127.0.0.1 port= 2239 listen= 0 ttl= 1
+UDP MessageClient[legacy secondary]: bound local= 0.0.0.0:60979 requested= ephemeral mode= ephemeral interface= any-ipv4
+UDP MessageClient[legacy secondary]: sending initial heartbeat target= 127.0.0.1:2239
+Legacy secondary UDP MessageClient started: server=127.0.0.1:2239 listen=0 clientId=Decodium interface=all ttl=1
+[2026-11-07 16:28:05.244347] [0x000000016de8f000] [info]    Loaded CTY.DAT version VER20250115, Dodecanese from /Users/salvo/.qttest/Library/Application Support/IU8LMC/Decodium - Clear576e21fffc - test/embedded-ft2/cty.dat
+Reporting config legacy: UDP primary server=127.0.0.1:2237 listen=2238 clientId=Decodium interface=all ttl=1 acceptRequests=enabled
+Reporting config legacy: UDP secondary enabled server=127.0.0.1:2239 listen=ephemeral clientId=Decodium interface=all ttl=1 loggedADIF=enabled
+Reporting config legacy: UDP tertiary disabled server=127.0.0.1:2237 listen=ephemeral clientId=Decodium interface=all ttl=1 loggedADIF=enabled
+Reporting config legacy: N1MM UDP disabled target=127.0.0.1:2333
+[SPECIALOP-TIMING] FT8 reconfigure ms=5 activity=0 superfox=0
+Populating font family aliases took 31 ms. Replace uses of missing font family "Courier" with one that exists to avoid this cost. 
+Embedded legacy station identity synced: call=IU8LMC grid=JM75
+UDP MessageClient[legacy primary]::start server= 127.0.0.1 port= 2237 listen= 2238 ttl= 1
+UDP MessageClient[legacy primary]: sending initial heartbeat target= 127.0.0.1:2237
+Legacy UDP reporting refreshed: primary=127.0.0.1:2237 listen=2238 clientId=Decodium secondary=enabled tertiary=disabled
+[2026-11-07 16:28:05.387684] [0x0000000202d6ff80] [debug]   WorkedBefore::reload: CTY.DAT version VER20250115
+[Bridge] LotW: loading cached users...
+[LAB] startup auto-monitor suppressed by --lab-no-monitor
+[Bridge] LotW: 237085 users loaded from cache
+UDP MessageClient[legacy primary]::start server= 127.0.0.1 port= 2237 listen= 2238 ttl= 1
+UDP MessageClient[legacy primary]: sending initial heartbeat target= 127.0.0.1:2237
+Legacy UDP reporting refreshed: primary=127.0.0.1:2237 listen=2238 clientId=Decodium secondary=enabled tertiary=disabled
+[Bridge] US state data: download started
+[Bridge] US state data: loaded 288692 calls, 92754 locators
+[LAB] runtime overrides delayed callsign= IU8LMC grid= <settings> audioIn= <settings> audioOut= <settings> txOutputLevel= <settings> mode= FT8 dialHz= <settings> dialReapply= 0 dxCall= <settings> dxGrid= <settings> txPeriod= <settings> effectiveHz= 14074000 monitor= forced-off profile= W2300
+Main.qml startup +5151 ms: waterfall visual stage ready (safe-slot)
+[PANDBG] Panadapter PCM frame feed registered route=C++_I16_ring qml_bypass=1 bridge_vector_float=0 targets= 1
+[PANDBG] Panadapter PCM frame feed connected route=C++_I16_ring qml_bypass=1 bridge_vector_float=0
+[Waterfall] theme=Ocean Blue isLight=false paletteIndex=3
+[GPUDBG] Panadapter spectrum C++ overlay path active api= Metal dpr= 2 logical= 1176x64 texture= 2352x128 reason= grid/labels/markers batched into one QSG texture; QML repeaters bypassed
+[GPUDBG] Panadapter waterfall GPU texture path active api= Metal qsb= yes reason= shader unavailable/disabled; colored texture upload
+Main.qml startup +8415 ms: live map visual stage ready (safe-slot)
+[WorldMapGpuItem] QSG renderer enabled; CPU fallback remains WorldMapItem
+[MAPGEO] geographic input=0 states=0 counties=0 earthquakes=0 polygons=0 rings=0 points=0 shape=none
+[MAPGEO] coverage input=0 accepted=0 grid4=0 grid6=0 active=0 missing=0 psk=0 worked=0 confirmed=0
+[WorldMapGpuItem] renderer api=Metal conservative=0 frameMs=80 greylineShader=1
+[RigDetect] gia' configurato (IU8LMC su /dev/COM3): nessuna proposta al primo avvio
+[UPDATE] Checking GitHub releases repository= elisir80/Decodium-4.0-Core-Shannon role= primary
+[UPDATE] GitHub release check failed repository= elisir80/Decodium-4.0-Core-Shannon error= Error transferring https://api.github.com/repos/elisir80/Decodium-4.0-Core-Shannon/releases/latest - server replied with status code 403
+[UPDATE] Primary has no newer release; checking fallback primary_version= unavailable current_version= 1.0.737
+[UPDATE] Checking GitHub releases repository= iu8lmc/Decodium-4.0-Core-Shannon role= secondary
+[UPDATE] GitHub release check failed repository= iu8lmc/Decodium-4.0-Core-Shannon error= Error transferring https://api.github.com/repos/iu8lmc/Decodium-4.0-Core-Shannon/releases/latest - server replied with status code 403
+[MAIN-TL] save_settings elapsed_ms=73 mode=FT8 cat=hamlib monitoring=0 tx=0 path=[/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-clear-lab-lxcl9ct2/Decodium/Decodium3.ini] async=1
+[Bridge] Impostazioni salvate
+[Bridge] WAV: 180000 campioni @ 12000 Hz → decodifica FT8 (ft8-k1abc-1500.wav)...
+file:///private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/components/SettingsDialog.qml:187:5: QML Dialog: Binding loop detected for property "implicitHeight":
+qrc:/qt-project.org/imports/QtQuick/Controls/Material/Dialog.qml:18:5
+QML WARNING: file:///private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/components/SettingsDialog.qml:187:5: QML Dialog: Binding loop detected for property "implicitHeight":
+qrc:/qt-project.org/imports/QtQuick/Controls/Material/Dialog.qml:18:5
+file:///private/tmp/decodium-color-baseline/Decodium4.app/Contents/Resources/qml/decodium/components/SettingsDialog.qml:187:5: QML Dialog: Binding loop detected for property "implicitHeight":
+qrc:/qt-project.org/imports/QtQuick/Controls/Material/Dialog.qml:18:5
+Lazy component loaded: SettingsDialog tab=0
+[CLEAR-PROBE] timeout
+[LAB] quit requested
+Graphics cache session marked clean; staged caches will be promoted after window teardown
+app.exec() exited
+[PANDBG] Panadapter render suspended visibility= 0 backlog_dropped=1
+[PANDBG] Panadapter PCM frame feed unregistered targets= 0
+rx.shutdown {"active":false,"state":"shutdown"}
+[AMP] lettura amplificatore disattivata
+

@@ -1,0 +1,1 @@
+CAT backend switch A/B: normalization, SSTV guard, disconnect and legacy routing passed

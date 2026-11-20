@@ -1,0 +1,5 @@
+{"first_column_maximum_error": 2, "first_column_mean_absolute_error": 0.041666666666666664, "first_column_p95_error": 0, "height": 120, "last_column_maximum_error": 255, "last_column_mean_absolute_error": 67.31111111111112, "last_column_p95_error": 255, "max_mae": 5.0, "max_p95": 15, "maximum_error": 255, "mean_absolute_error": 2.62625, "median_error": 0, "p95_error": 2, "width": 160}
+{"frames": 1733632, "sample_rate": 48000, "internal_zero_runs": []}
+PASS two Decodium apps: robot-c12 edge limits {'first': None, 'last': None} coverage 1 rx_discontinuities 0 artifacts /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-avt-two-app-robot-c12-0acni4po
+before tx= {"durationMs": 14271, "modeId": "robot-c12", "state": "Completed", "success": true} rxCoverage= 1 rxComplete= True endToEndPassed= True
+after tx= {"durationMs": 14270, "modeId": "robot-c12", "state": "Completed", "success": true} rxCoverage= 1 rxComplete= True endToEndPassed= True

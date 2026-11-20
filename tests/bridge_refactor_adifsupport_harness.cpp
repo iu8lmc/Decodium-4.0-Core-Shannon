@@ -1,0 +1,4 @@
+#include <QtCore>
+#include "AdifDocumentInternal.h"
+#include "bridge_refactor_under_test.inc"
+int main(int argc,char**argv){QCoreApplication app(argc,argv);QTemporaryDir d;QString path=d.filePath("big.adi");QFile f(path);if(!f.open(QIODevice::WriteOnly))return 1;f.write(QByteArray(65534,' '));f.write("<EOR>\n<eor>\n<EOR");f.close();QTextStream o(stdout);o<<"count|"<<countAdifRecordsLightweight(path)<<'|'<<countAdifRecordsLightweight(d.filePath("missing"))<<'\n';ParsedAdifRecord a,b,c;a.fields["CALL"]=" k1abc ";b.fields["CALL"]="K1ABC";c.fields["CALL"]="";QSet<QString> calls{"OLD"};rebuildWorkedCallsFromDocument(calls,{a,b,c});o<<"worked|"<<calls.size()<<'|'<<calls.contains("K1ABC")<<'|'<<calls.contains("OLD")<<'\n';QMap<QString,QString> fields;for(QString mode:{"ft4","q65-30","cw"}){setAdifModeFields(fields,mode);o<<"mode|"<<mode<<'|'<<fields.value("MODE")<<'|'<<fields.value("SUBMODE")<<'\n';}}

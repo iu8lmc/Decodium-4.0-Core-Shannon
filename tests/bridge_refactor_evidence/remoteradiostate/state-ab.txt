@@ -1,0 +1,1 @@
+Remote state A/B: connection guards, telemetry masks, frequency tolerance and band update passed

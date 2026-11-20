@@ -1,0 +1,3 @@
+empty|0|1|0
+rtty|1|K1ABC|FN42|599|599|Name, Town|1|0|1
+cw|1|K2XYZ|579|589|CW|0|2

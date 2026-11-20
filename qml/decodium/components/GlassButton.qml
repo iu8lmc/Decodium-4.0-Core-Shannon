@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 
 Button {
+    property real scaleFactor: (typeof bridge !== "undefined" && bridge && bridge.settings && bridge.settings.uiScale) ? bridge.settings.uiScale : 1
     id: glassButton
 
     property color textPrimary: bridge.themeManager.textPrimary
@@ -13,7 +14,7 @@ Button {
 
     contentItem: Text {
         text: glassButton.text
-        font.pixelSize: 13
+        font.pixelSize: 13 * scaleFactor
         color: textColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
@@ -22,7 +23,7 @@ Button {
     background: Rectangle {
         color: glassButton.hovered ? hoverColor : glassColor
         border.color: borderColor
-        radius: 8
+        radius: 8 * scaleFactor
 
         Behavior on color {
             ColorAnimation { duration: 150 }

@@ -218,6 +218,20 @@ QByteArray LogBook::QSOToADIF (QString const& hisCall, QString const& hisGrid, Q
   t += " <freq:" + QString::number(safeDialFreq.size()) + ">" + safeDialFreq;
   t += " <station_callsign:" + QString::number(safeMyCall.size()) + ">" + safeMyCall;
   if(!safeMyGrid.isEmpty()) t += " <my_gridsquare:" + QString::number(safeMyGrid.size()) + ">" + safeMyGrid;
+  if (auto const* const cty = countries ())
+    {
+      auto const entity = cty->lookup (safeHisCall);
+      if (entity.CQ_zone >= 1 && entity.CQ_zone <= 40)
+        {
+          auto const cqz = QString::number (entity.CQ_zone);
+          t += " <cqz:" + QString::number (cqz.size ()) + ">" + cqz;
+        }
+      if (entity.ITU_zone >= 1 && entity.ITU_zone <= 90)
+        {
+          auto const ituz = QString::number (entity.ITU_zone);
+          t += " <ituz:" + QString::number (ituz.size ()) + ">" + ituz;
+        }
+    }
   if(!safeTxPower.isEmpty()) t += " <tx_pwr:" + QString::number(safeTxPower.size()) + ">" + safeTxPower;
   if(!safeComments.isEmpty()) t += " <comment:" + QString::number(safeComments.size()) + ">" + safeComments;
   if(!safeName.isEmpty()) t += " <name:" + QString::number(safeName.size()) + ">" + safeName;

@@ -1,0 +1,1 @@
+TX recording A/B: identical PCM WAV, invalid input rejection and asynchronous completion passed

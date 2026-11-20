@@ -1,0 +1,12 @@
+before {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+before {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "readback": "persisted", "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "readback": "persisted", "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+before {"cat_disabled": true, "gallery_import": true, "signed_encrypted_transfer": true, "verified_images": 2}
+after {"cat_disabled": true, "gallery_import": true, "signed_encrypted_transfer": true, "verified_images": 2}
+before {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+before {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "readback": "persisted", "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"accepted": true, "associated": true, "cat": false, "done": true, "error": "", "failureReported": true, "read": true, "readback": "persisted", "rejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+before {"cat_disabled": true, "gallery_import": true, "signed_encrypted_transfer": true, "verified_images": 2}
+after {"cat_disabled": true, "gallery_import": true, "signed_encrypted_transfer": true, "verified_images": 2}

@@ -1,0 +1,2 @@
+{"available": false, "latest": "", "message": "Update checks are disabled in this build.", "offline": false}
+{"available": false, "latest": "", "message": "Update checks are disabled in this build.", "offline": false}

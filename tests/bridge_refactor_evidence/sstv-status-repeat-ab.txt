@@ -1,0 +1,4 @@
+status before {"active": true, "cat": false, "idle": true, "readback": "persisted", "ready": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false}
+status after {"active": true, "cat": false, "idle": true, "readback": "persisted", "ready": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false}
+image-status before {"cat": false, "cleared": true, "correct": true, "encoded": true, "fed": true, "present": true, "readback": "persisted", "reset": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false}
+image-status after {"cat": false, "cleared": true, "correct": true, "encoded": true, "fed": true, "present": true, "readback": "persisted", "reset": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false}

@@ -1,0 +1,1 @@
+satellite half-duplex A/B: validation, CAT/PTT guards, successful TX preparation, cancellation, restore and timer verification passed

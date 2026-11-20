@@ -1,0 +1,2 @@
+before {"cat": false, "correct": true, "encoded": true, "fed": true, "noEarlySave": true, "present": true, "rawLinked": true, "readback": "persisted", "shutdown": true, "started": true, "stopped": true, "stored": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "correct": true, "encoded": true, "fed": true, "noEarlySave": true, "present": true, "rawLinked": true, "readback": "persisted", "shutdown": true, "started": true, "stopped": true, "stored": true, "tx": false, "wasShutdown": false}

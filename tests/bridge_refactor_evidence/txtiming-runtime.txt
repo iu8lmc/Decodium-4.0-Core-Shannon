@@ -1,0 +1,5 @@
+Focused A/B: synchronous/FT2 timing, safe-slot retry, stale guard and phase lock: OK (clock and TX callbacks substituted).
+test_ft8_auto_tx_decode_gate passed; prior PCM offset A/B regression included in full suite.
+FT8: original and refactored macOS BlackHole pairs decoded sender CQ with legacy receiver and CAT disabled.
+FT2: original pair decoded sender CQ; first refactored pair timed out without a decode, second decoded successfully. Cause of variability not established.
+Virtual audio only; late-slot and phase-lock branches not individually observed in the real app; no physical RF.

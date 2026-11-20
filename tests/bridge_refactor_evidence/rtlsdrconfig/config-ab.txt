@@ -1,0 +1,1 @@
+RTL-SDR configuration A/B: direct sampling, enabled and demodulator guards passed

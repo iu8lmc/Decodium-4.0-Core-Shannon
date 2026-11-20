@@ -1,0 +1,4 @@
+register|2
+destroyed|1
+pruned|1
+removed|0

@@ -1,0 +1,1 @@
+Auto Call completion A/B: guards, counter, candidate reset and limit notification passed

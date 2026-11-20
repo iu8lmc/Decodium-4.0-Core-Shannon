@@ -1,0 +1,3 @@
+[LAB-NATIVE-PCM] {"cat":false,"native":true,"tx":false}
+TX SoundOutput sink opened fmt= rate=48000 ch=2 sample=2 bytes=4 cfg=6 dev= BlackHole 2ch
+TX SoundOutput start state= IdleState error= NoError bytesFree= 65536 buffer= 65536

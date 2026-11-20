@@ -1,0 +1,1 @@
+b: map consumer register, unregister and destruction calls passed; CAT disabled

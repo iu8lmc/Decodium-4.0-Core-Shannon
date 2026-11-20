@@ -1,0 +1,2 @@
+before {"busy": true, "cat": false, "clear": true, "tx": false}
+after {"busy": true, "cat": false, "clear": true, "tx": false}

@@ -1,0 +1,43 @@
+Existing before.json / after.json review; no execution. Exact JSON equality is not a functional correctness criterion.
+Pairs: 39; byte-independent JSON equality: 22; values differ: 17.
+Differences include measured timing/window counts, a 2 ms SSTV duration difference, and the intentional Fox elastic fix. The offset_calls difference contains measured elapsed time.
+
+- audio_channel_loopback: active_windows, first_active_mod15
+- audio_device_init: first_active_mod15
+- foxelastic_fix: window
+- graphics_startup: equal
+- legacy_bridge_audio: active_windows, first_active_mod15
+- legacy_preflight: active_windows, first_active_mod15
+- legacy_waterfall: equal
+- localupdate: equal
+- mamdispatch: equal
+- mamenqueue: equal
+- mamlog: equal
+- mampromote: equal
+- mamprune: equal
+- mamqueue: equal
+- mamrecovery: equal
+- modulator_finish: first_active_mod15
+- periodic_tx: first_active_mod15
+- periodic_tx_direct: active_windows, first_active_mod15
+- periodic_tx_late_audio: first_active_mod15
+- satellitehd: equal
+- sendtx: active_windows, first_active_mod15
+- specialop: equal
+- sstv_storage_startup_share: equal
+- sstv_tx_lifecycle: tx
+- start_tx: first_active_mod15
+- syncschedule: equal
+- tx_audio_startup: active_windows, first_active_mod15
+- tx_audio_startup_constructor: first_active_mod15
+- tx_output_device: active_windows, first_active_mod15
+- tx_partner_guard: active_windows, first_active_mod15
+- tx_pcm_offset: first_active_mod15, offset_calls
+- txbuffers: equal
+- txformat: equal
+- txlead: equal
+- txpcm: equal
+- txpolicy: equal
+- txselection: equal
+- txslot: equal
+- txtimingcontrols: equal

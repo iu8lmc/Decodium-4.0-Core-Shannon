@@ -1,0 +1,125 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -210,11 +210,12 @@
+     {
+       bool hasInput=false,hasOutput=false;
+       for(const auto &dev : QMediaDevices::audioInputs()) if(dev.description()=="BlackHole 2ch") hasInput=true;
+-      for(const auto &dev : QMediaDevices::audioOutputs()) if(dev.description()=="BlackHole 2ch") hasOutput=true;
++      const QString labOutput=qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1 ? "BlackHole 16ch" : "BlackHole 2ch";
++      for(const auto &dev : QMediaDevices::audioOutputs()) if(dev.description()==labOutput) hasOutput=true;
+       if(!hasInput || !hasOutput) {fprintf(stderr,"LAB BlackHole input/output missing\n"); return 9;}
+       QSettings qs;
+       qs.setValue("SOUND/inputAudioDevice","BlackHole 2ch");
+-      qs.setValue("SOUND/outputAudioDevice","BlackHole 2ch");
++      qs.setValue("SOUND/outputAudioDevice",labOutput);
+       qs.setValue("radio0/enableCAT",false);
+       qs.setValue("radio0/enableSerialPTT",false);
+       qs.sync();
+@@ -508,8 +509,30 @@
+       splash.finish(mainWindowPtr);
+     }
+   const bool labLiveRx=qEnvironmentVariableIntValue("QSSTV_BSR_RX_LIVE")==1;
+-  if(labLiveRx) mainWindowPtr->switchMode(TRXDRM);
++  const bool labReverse=qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1;
++  if(labLiveRx || labReverse) mainWindowPtr->switchMode(TRXDRM);
+   mainWindowPtr->startRunning(files.isEmpty());   // decoding files replaces the sound card receiver until it is done
++  if(labReverse)
++    {
++      auto *timer=new QTimer(&app);
++      auto txCount=std::make_shared<int>(0);
++      QObject::connect(txWidgetPtr,&txWidget::txStopped,&app,[txCount]() {
++        ++*txCount;
++        const QString path=qEnvironmentVariable(*txCount==1 ? "QSSTV_REVERSE_INITIAL_DONE" : "QSSTV_REVERSE_REPAIR_DONE");
++        QFile marker(path); if(marker.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {marker.write("done"); marker.close();}
++        fprintf(stderr,"LAB reverse TX stopped %d and RX restarted\n",*txCount);
++      });
++      QObject::connect(timer,&QTimer::timeout,&app,[&app,timer]() {
++        if(!QFile::exists(qEnvironmentVariable("QSSTV_REVERSE_RX_READY"))) return;
++        timer->stop();
++        QImage image(qEnvironmentVariable("QSSTV_REVERSE_IMAGE"));
++        drmTxParams prm=drmParams; prm.robMode=2; prm.bandwith=1; prm.qam=1; prm.protection=0; prm.interleaver=0; prm.reedSolomon=0;
++        const bool started=txWidgetPtr->sendDrmTestImage(prm,image,4000);
++        fprintf(stderr,"LAB reverse initial image TX started %d\n",int(started));
++        if(!started) app.exit(8);
++      });
++      timer->start(250);
++    }
+   if(labLiveRx)
+     {
+       auto *timer=new QTimer(&app);
+--- a/src/sound/soundqtmultimedia.cpp
++++ b/src/sound/soundqtmultimedia.cpp
+@@ -71,7 +71,8 @@
+   if(qEnvironmentVariableIntValue("QSSTV_BSR_TX_LIVE")==1)
+     {
+       fprintf(stderr,"LAB live audio input=%s output=%s\n",qPrintable(inDev.description()),qPrintable(outDev.description()));
+-      if(inDev.description()!="BlackHole 2ch" || outDev.description()!="BlackHole 2ch") return false;
++      const QString labOutput=qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1 ? "BlackHole 16ch" : "BlackHole 2ch";
++      if(inDev.description()!="BlackHole 2ch" || outDev.description()!=labOutput) return false;
+     }
+ 
+   // Capture mono, same as soundPulse (PulseAudio does the downmix if the hardware is
+--- a/src/drmtx/drmtx.cpp
++++ b/src/drmtx/drmtx.cpp
+@@ -155,6 +155,12 @@
+   txList.last().filename=drmTxFileName.baseName();
+   txList.last().extension=drmTxFileName.suffix();
+   txList.last().ba=baDRM;
++  const QString labOriginal=qEnvironmentVariable("QSSTV_REVERSE_ORIGINAL");
++  if(!labOriginal.isEmpty()) {
++    QFile f(labOriginal); if(f.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
++      const auto written=f.write(baDRM); fprintf(stderr,"LAB reverse original bytes=%lld written=%lld id=%u\n",static_cast<long long>(baDRM.size()),static_cast<long long>(written),txTransportID);
++    }
++  }
+ 
+   if (useHybrid)
+     {
+--- a/src/mainwidgets/txfunctions.cpp
++++ b/src/mainwidgets/txfunctions.cpp
+@@ -1,3 +1,4 @@
++#include <QTimer>
+ /***************************************************************************
+  *   Copyright (C) 2000-2014 by Johan Maes                                 *
+  *   on4qz@telenet.be                                                      *
+@@ -598,8 +599,10 @@
+   txSession *sessionPtr;
+   fixForm fx(mainWindowPtr);
+   trID=drmTxPtr->processFIX(bsrByteArray);
++  if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1) fprintf(stderr,"LAB reverse processFIX id=%d\n",trID);
+   if(trID<0)  return false;
+   sessionPtr=drmTxPtr->getSessionPtr((uint)trID);
++  if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1) fprintf(stderr,"LAB reverse session found=%d\n",int(sessionPtr!=NULL));
+   if (sessionPtr==NULL)
+     {
+       stce= new displayMBoxEvent("BSR Received","This BSR is not for you");
+@@ -610,6 +613,10 @@
+     {
+       // take it from the transmitlist
+       fx.setInfoInternal(paramsToMode(sessionPtr->drmParams),sessionPtr->filename,fixBlockList.count(),&sessionPtr->ba);
++      if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1) {
++        fprintf(stderr,"LAB reverse BSR matched id=%d blocks=%d\n",trID,int(fixBlockList.count()));
++        QTimer::singleShot(5000,&fx,&QDialog::accept);
++      }
+       if(fx.exec()==QDialog::Rejected) return false;
+       drmTxPtr->initDRMFIX(sessionPtr);
+     }
+--- a/src/dispatch/dispatcher.cpp
++++ b/src/dispatch/dispatcher.cpp
+@@ -353,7 +353,16 @@
+ 
+ void dispatcher::startDRMFIXTx(QByteArray ba)
+ {
+-  if(mainWindowPtr->busyMode()>=0) return;
++  if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1) {
++    fprintf(stderr,"LAB reverse prepareFix busy=%d bytes=%lld\n",mainWindowPtr->busyMode(),static_cast<long long>(ba.size()));
++    QFile f(qEnvironmentVariable("QSSTV_REVERSE_RECEIVED_BSR"));
++    if(f.open(QIODevice::WriteOnly | QIODevice::NewOnly)) f.write(ba);
++  }
++  if(mainWindowPtr->busyMode()>=0) {
++    if(qEnvironmentVariableIntValue("QSSTV_REVERSE_DEFER")==1)
++      QTimer::singleShot(1000,this,[this,ba]() {startDRMFIXTx(ba);});
++    return;
++  }
+   if(!txWidgetPtr->functionsPtr()->prepareFIX(ba)) return;
+   startTX(txFunctions::TXSENDDRMFIX);
+ }

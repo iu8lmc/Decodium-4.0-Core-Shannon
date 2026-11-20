@@ -1,0 +1,5 @@
+missing|0
+morse|1|1|1|20
+stop|1
+guards|0
+ptt|1|1

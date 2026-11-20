@@ -1,0 +1,4 @@
+A write: 20 real Bridge colours and preferences passed; CAT disabled
+A restart: 20 real Bridge colours and preferences passed; CAT disabled
+B write: 20 real Bridge colours and preferences passed; CAT disabled
+B restart: 20 real Bridge colours and preferences passed; CAT disabled

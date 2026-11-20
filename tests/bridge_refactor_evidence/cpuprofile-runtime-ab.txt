@@ -1,0 +1,2 @@
+{"autoCount": 8, "automatic": true, "lowOff": true, "lowOn": true, "manual": true, "max": 24, "min": 1}
+{"autoCount": 8, "automatic": true, "lowOff": true, "lowOn": true, "manual": true, "max": 24, "min": 1}

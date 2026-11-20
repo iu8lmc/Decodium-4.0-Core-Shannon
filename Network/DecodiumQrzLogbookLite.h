@@ -26,13 +26,19 @@ public:
     bool replaceDuplicates() const { return m_replaceDuplicates; }
     void setReplaceDuplicates(bool replace) { m_replaceDuplicates = replace; }
 
-    void uploadAdif(const QString& dxCall, const QByteArray& adifRecord);
+    void uploadAdif(const QString& dxCall,
+                    const QByteArray& adifRecord,
+                    quint32 requestId = 0);
     Q_INVOKABLE void testApi();
 
 signals:
     void apiKeyOk();
     void qsoLogged(const QString& dxCall);
     void errorOccurred(const QString& msg);
+    void adifUploadFinished(quint32 requestId,
+                            const QString& dxCall,
+                            bool ok,
+                            const QString& detail);
 
 private:
     QByteArray formBody(const QList<QPair<QString, QString>>& fields) const;

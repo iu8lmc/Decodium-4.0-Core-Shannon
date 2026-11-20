@@ -1,0 +1,6 @@
+before raw ['[JT65-RAW-AB] 1001 0222 -22 -0.0 1477 #  XM5979JQU-6E3             |0222  -1 -0.0 1500 #  CQ K1ABC FN42             '] callbacks []
+before display {"decoded":true,"tx":false,"messages":["CQ K1ABC FN42"]}
+before {"displayedExpected": true, "expectedMessage": true}
+after raw ['[JT65-RAW-AB] 1001 0222 -22 -0.0 1477 #  XM5979JQU-6E3             |0222  -1 -0.0 1500 #  CQ K1ABC FN42             '] callbacks []
+after display {"decoded":true,"tx":false,"messages":["CQ K1ABC FN42"]}
+after {"displayedExpected": true, "expectedMessage": true}

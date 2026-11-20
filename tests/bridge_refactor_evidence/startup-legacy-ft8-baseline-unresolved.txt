@@ -1,0 +1,72 @@
+probe= ['timeout legacy=true rows=0'] rx_tail= Decodium-4.0-Core-Shannon role= secondary
+[UPDATE] Selected GitHub release repository= iu8lmc/Decodium-4.0-Core-Shannon version= 1.0.738 asset= release-page
+[MAIN-TL] save_settings elapsed_ms=50 mode=FT8 cat=hamlib monitoring=1 tx=0 path=[/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-legacy-pair-ixvxv9ll/rx/Decodium/Decodium3.ini] async=1
+[Bridge] Impostazioni salvate
+[2026-11-07 16:24:56.839410] [0x000000017051f000] [info]    FT8 DSP rollout active: stage=4 downsample=cpp subtract=cpp saved_subtractions=cpp async_core=cpp (runtime baseline)
+[DECODEMETRIC] mode=FT8 serial=1 wait_ms=0 decode_ms=76 total_ms=79 threads_req=6 threads_active=24 audio=180000 nout=0 depth=2 nfa=0 nfb=5000 ap=0 low=0 subpass=0 cycles=1 requested_low=0 requested_subpass=0 requested_cycles=1 requested_depth=2 supplemental=0 max_ms=1800 constrained=0 hashprep_ms=0 hashreplay=0 candthin=30 thread=0x17051f000 freqpart=0 pressure_limited=0 ap_storico=0 ap_voci=0 ap_ciclo=1 ap_msg=0 ap_msgmem=0 ap_msgok=0 ap_mycall=0
+[FT8UIDISPATCH] delivered utc=152445 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152445 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[HASHMETRIC] initial_seed_batch collected= 1 collected_calls= 2894 collected_files= 10 collection_ms= 2313 applied= 64 elapsed_ms= 0 slowest_call_ms= 0 remaining= 2830
+[FT8UIDISPATCH] delivered utc=152500 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[LEVE] sensibilita' ACCESE: decode_ms=0 budget=1800 pressione=0
+[FT8UIDISPATCH] delivered utc=152500 rows=0 cycles=1 wall_ms=1 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.73 max_resume_lag_ms=0.73
+[FT8UIDISPATCH] delivered utc=152500 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[PANDBG] Panadapter visual FFT GPU retry probe reason= force_gpu_first_reprobe fallback=FFTW_CPU_on_failure
+[PANDBG] Panadapter visual FFT GPU path disabled reason= PanadapterItem rejected GPU FFT I16 frame fallback=FFTW_CPU
+[LEVE] sensibilita' spente: decode_ms=4164 budget=4164 pressione=0
+[DECODEMETRIC] mode=FT8 serial=6 wait_ms=0 decode_ms=4164 total_ms=4164 threads_req=6 threads_active=24 audio=180000 nout=0 depth=3 nfa=0 nfb=5000 ap=0 low=0 subpass=1 cycles=1 requested_low=1 requested_subpass=1 requested_cycles=3 requested_depth=3 supplemental=0 max_ms=4164 constrained=0 hashprep_ms=0 hashreplay=0 candthin=30 thread=0x17051f000 freqpart=4 pressure_limited=0 ap_storico=0 ap_voci=0 ap_ciclo=6 ap_msg=0 ap_msgmem=0 ap_msgok=0 ap_mycall=0
+[FT8UIDISPATCH] delivered utc=152500 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152515 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152515 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152515 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[LEVE] sensibilita' ACCESE: decode_ms=107 budget=5200 pressione=0
+[FT8UIDISPATCH] delivered utc=152515 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152530 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152530 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.02 max_resume_lag_ms=0.02
+[FT8UIDISPATCH] delivered utc=152530 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152530 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[PANDBG] Panadapter visual FFT GPU retry probe reason= force_gpu_first_reprobe fallback=FFTW_CPU_on_failure
+[PANDBG] Panadapter visual FFT GPU path disabled reason= PanadapterItem rejected GPU FFT I16 frame fallback=FFTW_CPU
+[FT8UIDISPATCH] delivered utc=152545 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[DECODEMETRIC] mode=FT8 serial=16 wait_ms=0 decode_ms=0 total_ms=0 threads_req=6 threads_active=24 audio=180000 nout=0 depth=2 nfa=0 nfb=5000 ap=0 low=0 subpass=0 cycles=1 requested_low=0 requested_subpass=0 requested_cycles=1 requested_depth=2 supplemental=0 max_ms=1800 constrained=0 hashprep_ms=0 hashreplay=0 candthin=30 thread=0x17051f000 freqpart=0 pressure_limited=0 ap_storico=0 ap_voci=0 ap_ciclo=16 ap_msg=0 ap_msgmem=0 ap_msgok=0 ap_mycall=0
+[FT8UIDISPATCH] delivered utc=152545 rows=0 cycles=1 wall_ms=1 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.02 max_resume_lag_ms=0.02
+[FT8UIDISPATCH] delivered utc=152545 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[FT8UIDISPATCH] delivered utc=152545 rows=0 cycles=1 wall_ms=0 cycle_cpu_ms=0.00 max_cycle_cpu_ms=0.00 resume_lag_ms=0.01 max_resume_lag_ms=0.01
+[LEGACY-DELTA] timeout legacy=true rows=0
+[LAB] quit requested
+Graphics cache session marked clean; staged caches will be promoted after window teardown
+app.exec() exited
+[PANDBG] Panadapter render suspended visibility= 0 backlog_dropped=1
+[PANDBG] Panadapter PCM frame feed unregistered targets= 0
+rx.shutdown {"active":false,"state":"shutdown"}
+[2026-11-07 16:26:06.651086] [0x0000000202d6ff80] [trace]   force signal: true enforce_mode_and_split: false Transceiver::TransceiverState(online: yes Frequency {0Hz, 0Hz} Mode: UNK; SPLIT: unknown; PTT: off; POWER: 0mWatts; SWR: 0; ALC: 0 (invalid); TUNE: false)
+
+[AMP] lettura amplificatore disattivata
+ tx_tail= Shannon version= 1.0.738 asset= release-page
+[LAB] runtime overrides pre-sendtx callsign= 9H1SR grid= JM75 audioIn= BlackHole 16ch audioOut= BlackHole 2ch txOutputLevel= 70.0 mode= FT8 dialHz= <settings> dialReapply= 0 dxCall= <settings> dxGrid= <settings> txPeriod= 0 effectiveHz= 14074000 monitor= <settings> profile= W2300
+TX SoundOutput sink opened fmt= rate=48000 ch=2 sample=2 bytes=4 cfg=6 dev= BlackHole 2ch
+TX SoundOutput start state= IdleState error= NoError bytesFree= 65536 buffer= 65536
+[Bridge] TX: CQ 9H1SR JM75
+[LAB] auto SENDTX requested slot= 6 mode= FT8 message= CQ 9H1SR JM75
+[MAIN-TL] save_settings elapsed_ms=44 mode=FT8 cat=hamlib monitoring=1 tx=1 path=[/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-legacy-pair-ixvxv9ll/tx/Decodium/Decodium3.ini] async=1
+[Bridge] Impostazioni salvate
+[Bridge] Transmission finished
+QIODevice::seek (DecodiumAudioSink): Cannot call seek on a sequential device
+[PANDBG] Panadapter visual FFT GPU retry probe reason= force_gpu_first_reprobe fallback=FFTW_CPU_on_failure
+[PANDBG] Panadapter visual FFT GPU path disabled reason= PanadapterItem rejected GPU FFT I16 frame fallback=FFTW_CPU
+[2026-11-07 16:25:26.056307] [0x00000001722cf000] [info]    FT8 DSP rollout active: stage=4 downsample=cpp subtract=cpp saved_subtractions=cpp async_core=cpp (runtime baseline)
+[DECODEMETRIC] mode=FT8 serial=1 wait_ms=0 decode_ms=61 total_ms=64 threads_req=8 threads_active=24 audio=132000 nout=0 depth=2 nfa=200 nfb=4000 ap=0 low=0 subpass=0 cycles=1 requested_low=0 requested_subpass=0 requested_cycles=1 requested_depth=2 supplemental=0 max_ms=2200 constrained=0 hashprep_ms=0 hashreplay=0 candthin=30 thread=0x1722cf000 freqpart=0 pressure_limited=0 ap_storico=0 ap_voci=0 ap_ciclo=1 ap_msg=0 ap_msgmem=0 ap_msgok=0 ap_mycall=0
+[FT8DISPATCH] serial=2 effectiveDepth=3 baseDepth=3 deepSearch=0 avg=0 ft8ap=1 txPending=0 txAudio=0 deepInTx=0 runFollowup=0 signoffWatch=0 latestMs=1794065136800 nowMs=1794065130054 threads=6/8 cores=10
+[HASHMETRIC] initial_seed_batch collected= 1 collected_calls= 2894 collected_files= 10 collection_ms= 2275 applied= 64 elapsed_ms= 0 slowest_call_ms= 0 remaining= 2830
+[FT8DISPATCH] serial=4 effectiveDepth=3 baseDepth=3 deepSearch=0 avg=0 ft8ap=1 txPending=0 txAudio=0 deepInTx=0 runFollowup=0 signoffWatch=0 latestMs=1794065151800 nowMs=1794065145055 threads=6/8 cores=10
+[LEVE] sensibilita' ACCESE: decode_ms=43 budget=4500 pressione=0
+[PANDBG] Panadapter visual FFT GPU retry probe reason= force_gpu_first_reprobe fallback=FFTW_CPU_on_failure
+[PANDBG] Panadapter visual FFT GPU path disabled reason= PanadapterItem rejected GPU FFT I16 frame fallback=FFTW_CPU
+[LAB] quit requested
+Graphics cache session marked clean; staged caches will be promoted after window teardown
+app.exec() exited
+[PANDBG] Panadapter render suspended visibility= 0 backlog_dropped=1
+[PANDBG] Panadapter PCM frame feed unregistered targets= 0
+rx.shutdown {"active":false,"state":"shutdown"}
+[AMP] lettura amplificatore disattivata
+

@@ -82,8 +82,8 @@ bool compare_message (QString const& message, bool check_only)
                     "  fortran state: itype=%d nc1=%d nc2=%d ng=%d k1=%d k2=%d\n"
                     "  cxx state    : itype=%d nc1=%d nc2=%d ng=%d\n",
                     input.constData (),
-                    fortran_msgsent.size (), fortran_msgsent.constData (),
-                    cpp_msgsent.size (), cpp_msgsent.constData (),
+                    static_cast<int> (fortran_msgsent.size ()), fortran_msgsent.constData (),
+                    static_cast<int> (cpp_msgsent.size ()), cpp_msgsent.constData (),
                     __packjt_MOD_jt_itype, __packjt_MOD_jt_nc1, __packjt_MOD_jt_nc2,
                     __packjt_MOD_jt_ng, __packjt_MOD_jt_k1, __packjt_MOD_jt_k2,
                     packed.itype, packed.nc1, packed.nc2, packed.ng);
@@ -112,7 +112,7 @@ bool compare_message (QString const& message, bool check_only)
     {
       std::fprintf (stderr,
                     "tone count mismatch for '%s': expected 206 got %d\n",
-                    input.constData (), encoded.tones.size ());
+                    input.constData (), static_cast<int> (encoded.tones.size ()));
       return false;
     }
 
@@ -230,6 +230,7 @@ int main (int argc, char** argv)
       return 1;
     }
 
-  std::printf ("JT4 compare passed for %d messages\n", kMessages.size ());
+  std::printf ("JT4 compare passed for %d messages\n",
+               static_cast<int> (kMessages.size ()));
   return 0;
 }

@@ -1,0 +1,6 @@
+initial|1|Testland|20m|1|0|1
+duplicate|2|1
+filtered|4|1
+disabled|5|1
+bounded|300|0|1
+defer|600|1

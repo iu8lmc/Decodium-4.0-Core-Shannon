@@ -1,0 +1,2 @@
+before {"connected": false, "first": "tci", "second": "hamlib", "tx": false}
+after {"connected": false, "first": "tci", "second": "hamlib", "tx": false}

@@ -1,0 +1,5 @@
+complete|1|1|0|1|6|6
+queue|1|1|1|1
+other-active|1|K2XYZ|0
+other-fields|K2XYZ|1
+cq-reset|0|0|-1|1

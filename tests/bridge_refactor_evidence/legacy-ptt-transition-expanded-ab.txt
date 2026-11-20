@@ -1,0 +1,2 @@
+before {"audioFailure": true, "cancelled": true, "cat": false, "cleared": true, "confirmed": true, "feedback": true, "mismatch": true, "pending": true, "timedOut": true, "tx": false}
+after {"audioFailure": true, "cancelled": true, "cat": false, "cleared": true, "confirmed": true, "feedback": true, "mismatch": true, "pending": true, "timedOut": true, "tx": false}

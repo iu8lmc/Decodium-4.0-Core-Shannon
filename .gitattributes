@@ -4,3 +4,9 @@
 /lib/fsk4hf	export-ignore
 /robots		export-ignore
 /plots		export-ignore
+/tests/sstv/fixtures/*.bin binary
+/tests/sstv/fixtures/easypal-2014-live/*.bin binary
+/tests/sstv/fixtures/qsstv-rs2-unsigned-padding.patch whitespace=-trailing-space,-space-before-tab
+/tests/sstv/fixtures/trxamadrm-3.6-macos-lab.patch whitespace=-trailing-space,-space-before-tab
+/tests/sstv/fixtures/trxamadrm-3.6-macos-rx-lab.patch whitespace=-trailing-space,-space-before-tab
+/.github/workflows/build-windows-x64.yml whitespace=cr-at-eol

@@ -1,0 +1,1 @@
+{"call": "9H1SR", "display": "CQ 9H1SR JM75", "grid": "JM75", "tx": false}

@@ -1,0 +1,6 @@
+single|K1ABC|FN42|0|0
+double|1|1
+roster|1|1|1
+queued|1|0
+dispatch|0|1
+cancel|0

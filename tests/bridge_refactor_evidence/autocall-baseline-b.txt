@@ -1,0 +1,1 @@
+b: {"started":{"mode":"WSPR","enabled":false,"tx":false,"max":0,"priority":0},"stopped":true,"tx":false}

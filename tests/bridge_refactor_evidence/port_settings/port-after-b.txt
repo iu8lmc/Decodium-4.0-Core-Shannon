@@ -1,0 +1,1 @@
+{"autostart": false, "drift": true, "port": 65535, "tx": false}

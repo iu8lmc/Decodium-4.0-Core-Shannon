@@ -1,0 +1,6 @@
+#include <QtCore>
+void bridgeLog(const QString&){} bool isHamlibFamilyBackend(QString const& s){return s=="hamlib"||s=="tci";}
+struct Rig{bool active=true;QString mode;int calls=0;bool connected()const{return active;}void setRigMode(const QString& s){mode=s;++calls;}};
+class DecodiumBridge {public:QString m_mode="FT8",m_catBackend;Rig *m_cat4OmCat=nullptr,*m_hamlibCat=nullptr,*m_omniRigCat=nullptr;QVariantMap settings;int apply=0;void setSetting(const QString& k,const QVariant& v){settings[k]=v;}void applyRttyRigMode(const QString&){++apply;}void impostaModoRadioRtty(const QString&);};
+#include "bridge_refactor_under_test.inc"
+int main(){DecodiumBridge b;Rig x,h,o;b.m_cat4OmCat=&x;b.m_hamlibCat=&h;b.m_omniRigCat=&o;QTextStream out(stdout);b.impostaModoRadioRtty(" ");out<<"empty|"<<b.settings.size()<<'\n';b.m_mode="RTTY";b.impostaModoRadioRtty(" usb ");out<<"rtty|"<<b.settings.value("RttyRigMode").toString()<<'|'<<b.apply<<'|'<<h.calls<<'\n';b.m_mode="FT8";for(auto backend:{"cat4om","hamlib","tci","omnirig"}){b.m_catBackend=backend;b.impostaModoRadioRtty(" digi ");}out<<"cat|"<<x.calls<<'|'<<h.calls<<'|'<<o.calls<<'|'<<h.mode<<'\n';h.active=false;b.m_catBackend="hamlib";b.impostaModoRadioRtty(" lsb ");out<<"offline|"<<h.calls<<'|'<<b.settings.value("RttyRigMode").toString()<<'\n';}

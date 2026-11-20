@@ -1,0 +1,2 @@
+before {"cancelled": true, "cat": false, "coalesced": true, "pending": true, "tx": false}
+after {"cancelled": true, "cat": false, "coalesced": true, "pending": true, "tx": false}

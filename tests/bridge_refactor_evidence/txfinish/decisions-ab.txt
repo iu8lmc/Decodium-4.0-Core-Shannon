@@ -1,0 +1,1 @@
+TX finish A/B: error, signoff, retry cap, timer and generation guard passed

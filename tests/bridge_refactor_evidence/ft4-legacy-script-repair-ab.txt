@@ -1,0 +1,4 @@
+immediate before {"cat": false, "inserted": true, "legacy": true, "mirrored": true, "raw": ["120000 -10 0.1 1500 + CQ W1XYZ FN31"], "serialCleaned": true, "shown": false, "tx": false}
+immediate after {"cat": false, "inserted": true, "legacy": true, "mirrored": true, "raw": ["120000 -10 0.1 1500 + CQ W1XYZ FN31"], "serialCleaned": true, "shown": false, "tx": false}
+publish before {"cat": false, "inserted": true, "legacy": true, "mirrored": true, "raw": ["120000 -10 0.1 1500 + CQ W1XYZ FN31"], "serialCleaned": true, "shown": false, "tx": false}
+publish after {"cat": false, "inserted": true, "legacy": true, "mirrored": true, "raw": ["120000 -10 0.1 1500 + CQ W1XYZ FN31"], "serialCleaned": true, "shown": false, "tx": false}

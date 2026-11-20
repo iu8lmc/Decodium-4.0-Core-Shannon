@@ -1,0 +1,2 @@
+before {"bound": true, "cat": false, "clock": true, "prepared": true, "readback": "persisted", "requested": true, "shutdown": true, "source": true, "tx": false, "unbound": true, "wasShutdown": false}
+after {"bound": true, "cat": false, "clock": true, "prepared": true, "readback": "persisted", "requested": true, "shutdown": true, "source": true, "tx": false, "unbound": true, "wasShutdown": false}

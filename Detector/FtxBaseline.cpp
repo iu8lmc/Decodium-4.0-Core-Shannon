@@ -158,8 +158,8 @@ extern "C" void ftx_baseline_fit_c (float const* spectrum, int size, int ia, int
       double const cutoff = percentile_cutoff (segment, npct);
       for (int index = ja; index <= jb; ++index)
         {
-          double const value = std::max (static_cast<double> (spectrum[index - 1]), 1e-30);
-          double const db = 10.0 * std::log10 (value);
+          // percentile_cutoff sorts a copy; segment retains the original order.
+          double const db = segment[static_cast<size_t> (index - ja)];
           if (db <= cutoff && x.size () < 1000)
             {
               x.push_back (static_cast<double> (index - i0));

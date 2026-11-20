@@ -1,0 +1,2 @@
+before {"cancelled": true, "cat": false, "opened": true, "saved": true, "tx": false}
+after {"cancelled": true, "cat": false, "opened": true, "saved": true, "tx": false}

@@ -1,0 +1,2 @@
+before {"applied": true, "cat": false, "deferred": true, "detected": "FT8", "tx": false}
+after {"applied": true, "cat": false, "deferred": true, "detected": "FT8", "tx": false}

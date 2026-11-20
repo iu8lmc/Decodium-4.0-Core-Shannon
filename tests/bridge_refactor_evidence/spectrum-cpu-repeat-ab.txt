@@ -1,0 +1,2 @@
+before {"bins": 956, "busy": false, "cat": false, "monitor": true, "peakHz": 999.0233764648438, "tx": false}
+after {"bins": 956, "busy": false, "cat": false, "monitor": true, "peakHz": 999.0233764648438, "tx": false}

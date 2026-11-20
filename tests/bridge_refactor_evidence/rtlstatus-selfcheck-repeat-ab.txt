@@ -1,0 +1,4 @@
+rtlstatus before {"center": 0, "rate": 0, "running": false, "view": false}
+rtlstatus after {"center": 0, "rate": 0, "running": false, "view": false}
+selfcheck before {"array": true, "valid": true}
+selfcheck after {"array": true, "valid": true}

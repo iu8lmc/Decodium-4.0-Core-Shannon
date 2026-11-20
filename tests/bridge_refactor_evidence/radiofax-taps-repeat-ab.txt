@@ -1,0 +1,2 @@
+before tx= {"durationMs": 81612, "modeId": "hffax-experimental", "state": "Completed", "success": true} rxCoverage= 1 rxComplete= True endToEndPassed= True
+after tx= {"durationMs": 81600, "modeId": "hffax-experimental", "state": "Completed", "success": true} rxCoverage= 1 rxComplete= True endToEndPassed= True

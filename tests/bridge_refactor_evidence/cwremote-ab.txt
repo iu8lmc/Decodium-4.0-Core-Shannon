@@ -1,0 +1,9 @@
+local|0|0
+supported|1|150
+busy|0
+send|1|1|1
+failed|0|1
+ptt|1|1|1|0
+blocked-audio|0|0
+audio|1|1|2
+abort|1|2

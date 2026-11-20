@@ -1,0 +1,1 @@
+{"before": 2, "cat": false, "enabled": true, "slots": [{"ageSec": 0, "baseCall": "W1AW", "call": "W1AW", "freq": 2000, "grid": "", "logged": false, "msg": "", "progress": 1, "retry": 0, "rptRcvd": "", "rptSent": "", "snr": 127, "state": 0, "tx": 1}], "tx": false}

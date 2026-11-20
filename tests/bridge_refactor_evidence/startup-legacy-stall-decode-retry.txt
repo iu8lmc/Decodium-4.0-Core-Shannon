@@ -1,0 +1,9 @@
+previous-order {"found": true, "legacy": true, "main_first": false, "tx": false}
+Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_startup_legacy_decode_stall_ab.py", line 38, in <module>
+    raise RuntimeError(label + ': ' + run.stdout[-10000:] + run.stderr[-2000:])
+RuntimeError: current-order: Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_legacydelta_pair_stall_lab.py", line 46, in <module>
+    if first!=expected: raise RuntimeError('unexpected startup ordering: '+str((main_pos,legacy_pos,expected))+'; decoded='+repr(v));
+RuntimeError: unexpected startup ordering: (11271, 6781, True); decoded={'found': True, 'legacy': True, 'tx': False}
+

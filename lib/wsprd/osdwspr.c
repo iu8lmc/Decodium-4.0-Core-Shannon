@@ -81,20 +81,36 @@ static void indexx_c(const float *arr, int n, int *indx)
 }
 
 /* ------------------------------------------------------------------ */
-/* mrbencode: encode me[K] → codeword[N] using g2[N][K]               */
-/* g2[row][col] corresponds to Fortran g2(row+1, col+1)               */
+/* mrbencode: encode me[K] into codeword[N] using generator rows.     */
 /* ------------------------------------------------------------------ */
-static void mrbencode(const int8_t *me,
+/* Order zero encodes once; deeper searches reuse packed binary rows. */
+static void mrbencode_direct(const int8_t *me,
                       int8_t *codeword,
-                      const int8_t g2[N_WSPR][K_WSPR])
+                      const int8_t genmrb[K_WSPR][N_WSPR])
 {
     memset(codeword, 0, N_WSPR);
     for (int i = 0; i < K_WSPR; i++) {
         if (me[i] == 1) {
             for (int j = 0; j < N_WSPR; j++)
-                codeword[j] ^= g2[j][i];
+                codeword[j] ^= genmrb[i][j];
         }
     }
+}
+
+
+typedef uint64_t PackedWsprGenerator[K_WSPR][3];
+
+static void mrbencode(const int8_t *me, int8_t *codeword,
+                      const PackedWsprGenerator generator)
+{
+    uint64_t encoded[3] = {0, 0, 0};
+    for (int i = 0; i < K_WSPR; i++) {
+        if (me[i] == 1) {
+            for (int word = 0; word < 3; word++) encoded[word] ^= generator[i][word];
+        }
+    }
+    for (int j = 0; j < N_WSPR; j++)
+        codeword[j] = (int8_t)((encoded[j / 64] >> (j % 64)) & 1u);
 }
 
 /* ------------------------------------------------------------------ */
@@ -298,6 +314,13 @@ void wsprd_osd_decode(float ss[], unsigned char apmask[],
         }
     }
 
+    /* Gaussian elimination is complete; pack the generator once per search. */
+    PackedWsprGenerator packed = {{0}};
+    if (ndeep > 0)
+        for (int k = 0; k < K_WSPR; k++)
+            for (int n = 0; n < N_WSPR; n++)
+                if (genmrb[k][n] != 0) packed[k][n / 64] |= UINT64_C(1) << (n % 64);
+
     /* g2 = transpose(genmrb): g2[n][k] = genmrb[k][n] */
     for (int k = 0; k < K_WSPR; k++)
         for (int n = 0; n < N_WSPR; n++)
@@ -325,7 +348,8 @@ void wsprd_osd_decode(float ss[], unsigned char apmask[],
     memcpy(m0, hdec, K_WSPR);
 
     /* Order-0 codeword */
-    mrbencode(m0, c0, g2);
+    if (ndeep > 0) mrbencode(m0, c0, packed);
+    else mrbencode_direct(m0, c0, genmrb);
 
     int   nhardmin_l = 0;
     float dmin_l     = 0.0f;
@@ -384,7 +408,7 @@ void wsprd_osd_decode(float ss[], unsigned char apmask[],
 
                 int nd1Kpt;
                 if (n1 == iflag) {
-                    mrbencode(me, ce, g2);
+                    mrbencode(me, ce, packed);
                     for (int j = 0; j < NK_WSPR; j++)
                         e2sub[j] = ce[K_WSPR + j] ^ hdec[K_WSPR + j];
                     memcpy(e2, e2sub, NK_WSPR);
@@ -405,7 +429,8 @@ void wsprd_osd_decode(float ss[], unsigned char apmask[],
                 }
 
                 if (nd1Kpt <= ntheta) {
-                    mrbencode(me, ce, g2);
+                    /* The first pattern was already encoded above. */
+                    if (n1 != iflag) mrbencode(me, ce, packed);
                     for (int i = 0; i < N_WSPR; i++) nxor[i] = (ce[i] ^ hdec[i]) & 1;
 
                     float dd;
@@ -461,7 +486,7 @@ void wsprd_osd_decode(float ss[], unsigned char apmask[],
         while (iflag >= 0) {
 
             for (int j = 0; j < K_WSPR; j++) me[j] = m0[j] ^ misub[j];
-            mrbencode(me, ce, g2);
+            mrbencode(me, ce, packed);
             for (int j = 0; j < NK_WSPR; j++)
                 e2sub[j] = ce[K_WSPR + j] ^ hdec[K_WSPR + j];
 
@@ -491,7 +516,7 @@ void wsprd_osd_decode(float ss[], unsigned char apmask[],
                     if (skip) continue;
 
                     for (int j = 0; j < K_WSPR; j++) me[j] = m0[j] ^ mi[j];
-                    mrbencode(me, ce, g2);
+                    mrbencode(me, ce, packed);
 
                     float dd = 0.0f;
                     for (int i = 0; i < N_WSPR; i++) {

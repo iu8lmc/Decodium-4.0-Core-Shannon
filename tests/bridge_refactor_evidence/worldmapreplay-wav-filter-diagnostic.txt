@@ -1,0 +1,4 @@
+[MAP-WAV-CALLBACK] 1 085715   4 -1.0 1500 ~  CQ K1ABC FN42                            early false mode FT8 FT8 session 0 0 sstv false
+[MAP-WAV-SUMMARY] accepted 0 parse 0 guardrail 0 semantic 0 user 1 ui 0 cq 0 mycall 0 duplicates 0
+[MAP-DIAG] {"contacts":0,"requested":false,"decodeList":[],"rxList":[]}
+probe_exit 1

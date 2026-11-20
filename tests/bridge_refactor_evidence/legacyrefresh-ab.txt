@@ -1,0 +1,7 @@
+blocked|0|0
+fallback|1
+unavailable|0
+started|1|1
+burst|4
+queued|1|4
+resumed|0|8

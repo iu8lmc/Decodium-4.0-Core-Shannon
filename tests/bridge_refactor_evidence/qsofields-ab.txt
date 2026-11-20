@@ -1,0 +1,1 @@
+QSO fields A/B: 31 states match with real normalization and simulated legacy backend

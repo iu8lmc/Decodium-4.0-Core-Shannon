@@ -1,0 +1,1 @@
+{"accepted": false, "mode": "CW", "tx": false, "unchanged": true}

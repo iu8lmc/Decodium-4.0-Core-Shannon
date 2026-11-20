@@ -1,0 +1,11 @@
+--- a/src/wefax/wefax.cxx
++++ b/src/wefax/wefax.cxx
+@@ -1316,7 +1316,7 @@
+ 	m_i_fir_old = m_q_fir_old = 0;
+ 	m_corr_calls_nb = 0;
+ 
+-	deviation_ratio = (m_sample_rate / progdefaults.WEFAX_Shift) / TWOPI;
++	deviation_ratio = (static_cast<double>(m_sample_rate) / progdefaults.WEFAX_Shift) / TWOPI;
+ 
+ 	lpm_set();
+ }

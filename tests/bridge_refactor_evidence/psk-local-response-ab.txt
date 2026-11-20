@@ -1,0 +1,2 @@
+before {"cat": false, "count": 2, "fetching": false, "rows": [{"call": "K1ABC", "freq": 14074000, "grid": "FN42", "snr": -12}, {"call": "W1AW", "freq": 7074000, "grid": "", "snr": 5}], "tx": false}
+after {"cat": false, "count": 2, "fetching": false, "rows": [{"call": "K1ABC", "freq": 14074000, "grid": "FN42", "snr": -12}, {"call": "W1AW", "freq": 7074000, "grid": "", "snr": 5}], "tx": false}

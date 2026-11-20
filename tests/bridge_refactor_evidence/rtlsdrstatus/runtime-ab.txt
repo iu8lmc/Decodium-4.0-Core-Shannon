@@ -1,0 +1,2 @@
+before {"center": 0, "rate": 0, "running": false, "view": false}
+after {"center": 0, "rate": 0, "running": false, "view": false}

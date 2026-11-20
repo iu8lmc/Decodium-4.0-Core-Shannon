@@ -1,0 +1,13 @@
+#include <QCoreApplication>
+#include <QSettings>
+#include <QTemporaryDir>
+#include <iostream>
+namespace decodium {void beginActiveSettingsProfile(QSettings&) {}}
+static void bridgeLog(const QString&){}
+class DecodiumBridge {public:
+ QString m_mode="FT8",m_dxCall,m_autoCallCurrentCandidate;bool m_autoCallEnabled=false,m_targetCallActive=false,m_transmitting=false,m_tuning=false,m_autoCqRepeat=false,m_multiAnswerMode=false,m_autoSeq=false,m_autoCallStartingCandidate=false,m_txEnabled=true,swrOk=true,reset=false;int m_qsoProgress=0,m_autoCallQsoCount=0,m_autoCallMaxQsos=0,m_autoCallPriority=0;
+ void statusMessage(const QString&){}void autoSeqChanged(){}void autoCallQsoCountChanged(){}void autoCallEnabledChanged(){}void autoCallMaxQsosChanged(){}void autoCallPriorityChanged(){}bool checkSwrAllowsTransmission(const QString&)const{return swrOk;}void setAutoCqRepeat(bool v){m_autoCqRepeat=v;}void setMultiAnswerMode(bool v){m_multiAnswerMode=v;}void setTxEnabled(bool v){m_txEnabled=v;}void resetQsoStateForNextSequence(bool){reset=true;}
+ bool autoCallModeSupported()const;void setAutoCallEnabled(bool);void abortAutoCallAfterSwrStop(const QString&);void setAutoCallMaxQsos(int);void setAutoCallPriority(int);void resetAutoCallQsoCount();
+};
+#include "bridge_refactor_autocall.inc"
+int main(int argc,char**argv){QCoreApplication app(argc,argv);QTemporaryDir dir;QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,dir.path());auto check=[](bool ok,const char*name){if(!ok){std::cerr<<name<<" failed\n";std::exit(1);}std::cout<<name<<'\n';};DecodiumBridge b;b.m_mode="SSB";b.setAutoCallEnabled(true);check(!b.m_autoCallEnabled,"mode-blocked");b.m_mode=" FT8 ";b.swrOk=false;b.setAutoCallEnabled(true);check(!b.m_autoCallEnabled,"swr-blocked");b.swrOk=true;b.m_targetCallActive=true;b.setAutoCallEnabled(true);check(!b.m_autoCallEnabled,"target-blocked");b.m_targetCallActive=false;b.m_dxCall="K1ABC";b.setAutoCallEnabled(true);check(!b.m_autoCallEnabled,"qso-blocked");b.m_dxCall.clear();b.m_autoCqRepeat=true;b.m_multiAnswerMode=true;b.setAutoCallEnabled(true);check(b.m_autoCallEnabled&&!b.m_autoCqRepeat&&!b.m_multiAnswerMode&&b.m_autoSeq&&!b.m_txEnabled,"enable");b.m_autoCallCurrentCandidate="K1ABC";b.abortAutoCallAfterSwrStop("test");check(!b.m_autoCallEnabled&&b.reset,"abort-swr");b.setAutoCallMaxQsos(1200);b.setAutoCallPriority(5);QSettings s(QSettings::IniFormat,QSettings::UserScope,"Decodium","Decodium3");check(b.m_autoCallMaxQsos==999&&b.m_autoCallPriority==2&&s.value("CallFeature/AutoCallMaxQsos").toInt()==999&&s.value("CallFeature/AutoCallPriority").toInt()==2,"limits-persist");b.m_autoCallQsoCount=5;b.resetAutoCallQsoCount();check(b.m_autoCallQsoCount==0,"counter-reset");}

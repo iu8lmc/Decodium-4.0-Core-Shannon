@@ -1,0 +1,1 @@
+a: history queries and empty export passed in isolated session; CAT disabled

@@ -1,0 +1,12 @@
+{
+  "role": "aligned",
+  "txcode": 0,
+  "rxcode": 0,
+  "peak": 0.4019775390625,
+  "active_windows": 127,
+  "first_active_mod15": 0.4709959030151367,
+  "matching_messages": [
+    "CQ 9H1SR JM75"
+  ],
+  "artifacts": "/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ft8-aligned-76_yrng5"
+}

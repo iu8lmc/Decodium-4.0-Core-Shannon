@@ -1,0 +1,2 @@
+before {"cat": false, "idempotent": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "idempotent": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}

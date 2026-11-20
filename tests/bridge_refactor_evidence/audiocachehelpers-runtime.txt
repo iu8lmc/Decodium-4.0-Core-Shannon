@@ -1,0 +1,1 @@
+{"auto": true, "ft4": true, "gain_reduced": true, "legacy": true, "mode": "FT8", "monitor": true, "tx": false}

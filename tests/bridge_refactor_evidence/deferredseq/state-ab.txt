@@ -1,0 +1,1 @@
+deferred AutoSeq A/B: stale state, FT2 slot guard, TX5 and legacy one-shot passed

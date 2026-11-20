@@ -22,6 +22,8 @@
 
 extern "C"
 {
+  void ftx_ft8_stage4_seed_hash_call_c (char const* call);
+  void ftx_ft8_stage4_apply_hash_seed_cache_c ();
   void ftx_ft4_decode_c (short const* iwave, int* nqsoprogress, int* nfqso, int* nfa, int* nfb,
                          int* ndepth, int* lapcqonly, int* ncontest,
                          char const* mycall, char const* hiscall,
@@ -134,6 +136,24 @@ namespace
         fail (QStringLiteral ("no FT4 stages selected"));
       }
     return stages;
+  }
+
+  void seed_hash_call_entry (QString const& raw)
+  {
+    QString call = raw.simplified ().toUpper ();
+    if (call.startsWith (QLatin1Char ('<')) && call.endsWith (QLatin1Char ('>')) && call.size () > 2)
+      {
+        call = call.mid (1, call.size () - 2);
+      }
+    if (call.isEmpty () || call.contains (QLatin1Char (' ')))
+      {
+        fail (QStringLiteral ("invalid --seed-hash-call value \"%1\"; expected one CALL")
+                  .arg (raw));
+      }
+
+    QByteArray const call13 = to_fortran_field (call.toLatin1 (), 13);
+    ftx_ft8_stage4_seed_hash_call_c (call13.constData ());
+    ftx_ft8_stage4_apply_hash_seed_cache_c ();
   }
 
   WavData read_wav_file (QString const& file_name)
@@ -413,6 +433,12 @@ int main (int argc, char * argv[])
           QStringLiteral ("call"),
           QString {}
       };
+      QCommandLineOption const seed_hash_call_option {
+          QStringLiteral ("seed-hash-call"),
+          QStringLiteral ("Seed the pack77 hash call context with one callsign."),
+          QStringLiteral ("call"),
+          QString {}
+      };
 
       parser.addOption (stages_option);
       parser.addOption (nfqso_option);
@@ -421,6 +447,7 @@ int main (int argc, char * argv[])
       parser.addOption (depth_option);
       parser.addOption (mycall_option);
       parser.addOption (hiscall_option);
+      parser.addOption (seed_hash_call_option);
       parser.addPositionalArgument (QStringLiteral ("wav-file"),
                                     QStringLiteral ("Path to a 12000 Hz mono 16-bit FT4 WAV file."));
       parser.process (app);
@@ -479,6 +506,12 @@ int main (int argc, char * argv[])
           << " nfb=" << nfb
           << " depth=" << depth
           << '\n';
+      QStringList const hashSeeds = parser.values (seed_hash_call_option);
+      for (QString const& seed : hashSeeds)
+        {
+          seed_hash_call_entry (seed);
+          out << "seeded hash call: " << seed << '\n';
+        }
 
       std::vector<DecodeResult> results;
       results.reserve (static_cast<size_t> (stages.size ()));

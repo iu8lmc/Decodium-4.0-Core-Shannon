@@ -1,0 +1,10 @@
+empty|No QSO to log|0
+tx|Finish TX before logging the QSO|0
+reject|1|1|0|K1ABC|4|1|0
+fallback|1|1
+accept|1|1|0
+native|1|0
+direct|1|0
+pending|K4ABC|1
+late|K5ABC|1
+already|0|0

@@ -1,0 +1,7 @@
+TCI constructor A/B: both scripts exit 0; isolated simulated signals, CAT and TX disabled.
+bridge_tci_signals_ab.py
+before {"activeGuard": true, "cat": false, "completed": true, "pcm": true, "pcmGuard": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+after {"activeGuard": true, "cat": false, "completed": true, "pcm": true, "pcmGuard": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+bridge_tci_complete_ab.py
+before {"activeGuard": true, "cat": false, "completed": true, "pcm": true, "pcmGuard": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+after {"activeGuard": true, "cat": false, "completed": true, "pcm": true, "pcmGuard": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}

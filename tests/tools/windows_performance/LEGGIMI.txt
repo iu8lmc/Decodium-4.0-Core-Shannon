@@ -1,0 +1,71 @@
+DECODIUM4 - CONFRONTO WINDOWS PRIMA/DOPO
+Eseguibile su qualsiasi PC Windows disponibile: il report registra CPU e RAM.
+Riferimento progettuale: Windows 11, Intel i5 terza generazione, 8 GB RAM;
+non e' necessario disporre di questo hardware.
+
+STATO: il kit di laboratorio e' pronto per essere completato con le due build
+Windows portatili. Se manifest.json contiene sha256=null, NON e' ancora un
+pacchetto eseguibile: AVVIA_TEST si ferma senza lanciare Decodium.
+Non sostituire gli eseguibili con versioni casuali.
+
+Quando le due build verificate sono incluse:
+1. Estrai tutto in una cartella locale scrivibile (non dentro Program Files).
+2. Chiudi Decodium e gli altri programmi radio; lascia almeno 3 GB liberi.
+   Alimenta il PC dalla rete elettrica e mantieni lo stesso profilo energetico.
+3. Per rendere le prove ripetibili, scollega Internet durante il test.
+4. Doppio clic su AVVIA_TEST.cmd. Non servono privilegi amministrativi.
+5. Non usare le finestre Decodium durante i quattro passaggi A-B-B-A.
+   Durata tipica 6-10 minuti, piu' lunga se il decoder impiega molto tempo.
+6. Doppio clic su CREA_REPORT.cmd: crea results/<data>/report.zip dall'ultima
+   prova, includendo solo machine.json, comparison.json, result.json e console.log.
+   Invia questo ZIP. Le copie app e i backup personali sono esclusi.
+
+PROVA STANDARD: due thread, Low CPU spento, profondita' 3, DEEP e media spenti.
+Grafica D3D11 uguale per le due versioni. Il test avvia direttamente il processo
+dell'interfaccia, escludendo il supervisore e i suoi tentativi automatici di
+recupero: CPU/RAM si riferiscono al processo che esegue realmente il programma.
+Se il driver D3D11 non funziona, il test e' invalido. Puoi ripetere ENTRAMBE le
+versioni con -GraphicsBackend software; non confrontare backend diversi.
+Gli stessi parametri valgono per entrambe le versioni; non sono un consiglio
+per cambiare la tua configurazione quotidiana.
+Per confrontare anche la modalita' Low CPU, esegui separatamente:
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Run-Test.ps1 -LowCpu
+Non confrontare un risultato Low CPU con un risultato senza Low CPU.
+
+COSA MISURA
+Avvio e consumo del processo (tempo CPU cumulativo, memoria residente e privata),
+prima risposta e completamento dei file FT8/FT4/WSPR, cambi modo e identita' di tutti
+i messaggi mostrati. Il confronto conserva anche le duplicazioni dei messaggi.
+Un test incompleto, un timeout, una trasmissione o un errore UDP invalida la prova.
+I campioni FT8/FT4 e la registrazione WSPR di riferimento WSJT sono identici
+per le due build e controllati con SHA-256. La fonte WSPR e' nel manifest.
+Una differenza non viene presentata automaticamente come miglioramento.
+elapsedMs include la finestra di attesa (minimo 15 secondi per campione): non
+e' il tempo puro del decoder. firstRowMs indica la prima riga osservata (100 ms
+di risoluzione); i tempi CPU sono del processo completo.
+
+LIMITI
+Non misura RF, driver audio/CAT o ricezione live sotto scadenza di slot.
+Una parita' sui campioni non garantisce parita' su tutti i segnali possibili.
+La verifica del runner e del pacchetto su Windows resta da eseguire.
+
+ISOLAMENTO
+Il programma usa profili test nuovi, CAT e monitor disattivati, nessuna richiesta
+TX. Modifica solo copie private dei programmi. Le porte UDP 2237/2239 devono
+essere libere. I file legacy dell'area Qt di TEST vengono salvati e ripristinati;
+le installazioni e i profili operativi non vengono modificati dal runner.
+TEMP/TMP sono privati per ogni prova. Entrambe le build isolano le impostazioni
+prima dell'avvio e saltano la migrazione dei profili normali in modalita' test.
+Non spegnere forzatamente PowerShell. In caso di arresto del PC, i backup di
+ripristino sono in results/<data>/restore-private: non inviarli ad altri.
+Il normale logger dell'applicazione puo' aggiungere righe al log diagnostico.
+
+PROVENIENZA BUILD
+Prima: codice di 3529dae3e218ef978b77347795572d96a39e9a55 con la sola
+strumentazione comune di isolamento dei test. Il commit esatto e' nel manifest.
+Dopo: stessa strumentazione, piu' le ottimizzazioni della patch nel manifest.
+Le due build vanno prodotte con lo stesso workflow Windows/Qt/toolchain.
+Non occorre pubblicare una release: bastano artefatti di laboratorio.
+
+Nota tecnica percorsi Qt Windows:
+https://raw.githubusercontent.com/qt/qtbase/6.11/src/corelib/io/qstandardpaths_win.cpp

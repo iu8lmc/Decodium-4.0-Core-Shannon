@@ -1,0 +1,2 @@
+before {"cat": false, "localBlocked": true, "tx": false, "txBlocked": true}
+after {"cat": false, "localBlocked": true, "tx": false, "txBlocked": true}

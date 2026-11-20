@@ -1,0 +1,1 @@
+eight worker modes, shared JT worker, duplicate guard and shutdown: OK

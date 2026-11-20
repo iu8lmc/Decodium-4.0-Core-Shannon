@@ -1,0 +1,4 @@
+before a a: compatibility import and progress reached 100; synthetic ADIF imported twice and exported with one matching QSO; CAT disabled
+before b b: compatibility import and progress reached 100; synthetic ADIF imported twice and exported with one matching QSO; CAT disabled
+after a a: compatibility import and progress reached 100; synthetic ADIF imported twice and exported with one matching QSO; CAT disabled
+after b b: compatibility import and progress reached 100; synthetic ADIF imported twice and exported with one matching QSO; CAT disabled

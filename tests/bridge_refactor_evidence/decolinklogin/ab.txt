@@ -1,0 +1,1 @@
+DecoLink A/B: defaults, missing credentials, profile bounds, password reuse and removal passed

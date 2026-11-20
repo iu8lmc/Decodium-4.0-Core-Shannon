@@ -1,0 +1,2 @@
+before {"archived": true, "cat": false, "draft": true, "duplicate": true, "generated": true, "readback": "persisted", "requested": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"archived": true, "cat": false, "draft": true, "duplicate": true, "generated": true, "readback": "persisted", "requested": true, "shutdown": true, "tx": false, "wasShutdown": false}

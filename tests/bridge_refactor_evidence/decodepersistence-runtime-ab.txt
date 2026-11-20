@@ -1,0 +1,2 @@
+{"persisted": true, "sessionClosed": true, "tx": false}
+{"persisted": true, "sessionClosed": true, "tx": false}

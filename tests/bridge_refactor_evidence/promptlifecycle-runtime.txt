@@ -1,0 +1,1 @@
+{"adif_clean": true, "call": "K1ABC", "committed": false, "grid": "FN42", "mode": "FT8", "preserved": true, "received": "-08", "started": true}

@@ -1,0 +1,1 @@
+{"call": "W1AW", "connected": false, "enabledAfter": false, "grid": "", "output": "BlackHole 2ch", "tx1": "W1AW IU8LMC JM75", "txAfter": false}

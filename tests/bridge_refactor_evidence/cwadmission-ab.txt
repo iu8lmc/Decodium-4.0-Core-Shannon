@@ -1,0 +1,5 @@
+local-cw|0|1
+busy|0
+audio|0|1
+remote|1|0|0
+remote-disabled|0

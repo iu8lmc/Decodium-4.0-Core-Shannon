@@ -1,0 +1,4 @@
+Focused A/B: auto RX clipping, cooldown, hold, silence, low-signal rise and limits: OK (level setter substituted).
+Two-app BlackHole virtual-audio test, original: sender TX observed; receiver auto=true, gain_reduced=true, tx=false.
+Two-app BlackHole virtual-audio test, refactored: sender TX observed; receiver auto=true, gain_reduced=true, tx=false.
+CAT disabled for both sessions. No physical RF or hardware-gain verification.

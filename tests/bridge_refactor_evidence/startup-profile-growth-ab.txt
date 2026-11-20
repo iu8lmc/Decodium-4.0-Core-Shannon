@@ -1,0 +1,2 @@
+baseline: global|17|35, copied-other-profile|1, first-intact|99
+current: global|17|35, copied-other-profile|0, first-intact|99

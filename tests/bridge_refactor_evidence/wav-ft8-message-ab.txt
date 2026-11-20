@@ -1,0 +1,10 @@
+WAV FT8 message comparison, macOS, CAT and monitoring disabled.
+Stimulus A: ft8-k1abc-1500.wav sha256 722b39e71473f09f935a9f27c64e9253e9013f4d339c7f51ac11772aa2aba8b9
+Independent stage-0 decoder: CQ K1ABC FN42, 1500 Hz, nout=1.
+Original app: legacy TX active, 180000 samples opened; no matching decode within 24 seconds.
+Refactored app: legacy TX active, 180000 samples opened; no matching decode within 24 seconds.
+Stimulus B: ft8-9h1sr-1300.wav sha256 a336a8ceff204cbb0a15e5835dcb0029b1899312617494501d3ab092fd9b3616
+Independent stage-0 decoder: CQ 9H1SR JM75, 1300 Hz, nout=1.
+Original app: legacy TX active, 180000 samples opened; no matching decode within 24 seconds.
+Refactored app: legacy TX active, 180000 samples opened; no matching decode within 24 seconds.
+The independent decoder verifies the stimuli, not the application's offline dispatch. The cause of the application failure is not established.

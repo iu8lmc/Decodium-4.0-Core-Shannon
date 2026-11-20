@@ -1,0 +1,2 @@
+before {"email": "", "monitor": false, "password": false, "profile": -1, "tx": false}
+after {"email": "", "monitor": false, "password": false, "profile": -1, "tx": false}

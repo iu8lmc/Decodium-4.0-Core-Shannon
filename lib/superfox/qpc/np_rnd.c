@@ -33,6 +33,8 @@
   #error "No good quality PRNG found"
 #endif
 
+#define K_RAND_MAX_F ((float)(K_RAND_MAX))
+
 
 void np_normrnd_real(float *dst, int nitems, float mean, float stdev)
 {
@@ -41,8 +43,8 @@ void np_normrnd_real(float *dst, int nitems, float mean, float stdev)
 	unsigned int r;
 	float phi=0, u=0;
 	int set = 0;
-	float scalephi = (M_2PI / (1.0f + K_RAND_MAX));
-	float scaleu = (1.0f / (1.0f + K_RAND_MAX));
+	float scalephi = (M_2PI / (1.0f + K_RAND_MAX_F));
+	float scaleu = (1.0f / (1.0f + K_RAND_MAX_F));
 
 
 	while (nitems--) 
@@ -73,8 +75,8 @@ void np_normrnd_cpx(float* dst, int nitems, float mean, float stdev)
 	unsigned int r;
 	float phi = 0, u = 0;
 	// JHT	int set = 0;
-	float scalephi = (M_2PI / (1.0f + K_RAND_MAX));
-	float scaleu   = (1.0f / (1.0f + K_RAND_MAX));
+	float scalephi = (M_2PI / (1.0f + K_RAND_MAX_F));
+	float scaleu   = (1.0f / (1.0f + K_RAND_MAX_F));
 
 	while (nitems--) {
 		// generate a uniform distributed phase phi in the range [0,2*PI)
@@ -96,7 +98,7 @@ void np_unidrnd(unsigned int* dst, int nitems, unsigned int nsetsize)
 
 	unsigned int r;
 	float u;
-	float scaleu = (1.0f / (1.0f + K_RAND_MAX));
+	float scaleu = (1.0f / (1.0f + K_RAND_MAX_F));
 
 	while (nitems--) {
 		rand_s((unsigned int*)&r); u = scaleu * nsetsize * r;
@@ -110,7 +112,7 @@ void np_unidrnd_uc(unsigned char* dst, int nitems, unsigned char nsetsize)
 
 	unsigned int r;
 	float u;
-	float scaleu = (1.0f / (1.0f + K_RAND_MAX));
+	float scaleu = (1.0f / (1.0f + K_RAND_MAX_F));
 
 	while (nitems--) {
 		rand_s((unsigned int*)&r); u = scaleu * nsetsize * r;
@@ -125,7 +127,7 @@ void np_unifrnd(float* dst, int nitems, float fmax)
 
 	unsigned int r;
 	float u;
-	float scaleu = (1.0f / (1.0f + K_RAND_MAX));
+	float scaleu = (1.0f / (1.0f + K_RAND_MAX_F));
 
 	while (nitems--) {
 		rand_s((unsigned int*)&r); u = scaleu * fmax * r;

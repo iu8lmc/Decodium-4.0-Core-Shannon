@@ -1,0 +1,2 @@
+{"role": "aligned", "txcode": -6, "rxcode": -6, "peak": 0.0, "active_windows": 0, "first_active_mod15": null, "matching_messages": [], "artifacts": "/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ft8-aligned-gi1vz_ar"}
+loopback did not complete successfully

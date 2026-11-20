@@ -1,0 +1,1 @@
+TX boundary A/B: slot stop, timer guards, buffer drain and deadlines passed

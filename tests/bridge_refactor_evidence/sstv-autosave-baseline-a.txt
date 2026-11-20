@@ -1,0 +1,3 @@
+{"first_column_maximum_error": 3, "first_column_mean_absolute_error": 0.06666666666666667, "first_column_p95_error": 0, "height": 120, "last_column_maximum_error": 255, "last_column_mean_absolute_error": 66.6138888888889, "last_column_p95_error": 255, "max_mae": 255.0, "max_p95": 255, "maximum_error": 255, "mean_absolute_error": 8.88265625, "median_error": 1, "p95_error": 65, "width": 160}
+PASS two Decodium apps: robot-c12 edge limits {'first': None, 'last': None} coverage 1 rx_discontinuities 0 artifacts /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-avt-two-app-robot-c12-tde3_pr4
+gallery verification: 1 record(s), 1 received PNG(s)

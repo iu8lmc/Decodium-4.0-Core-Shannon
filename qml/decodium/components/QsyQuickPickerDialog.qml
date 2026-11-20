@@ -13,7 +13,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 
-Window {
+GlassWindow {
     id: qsyPickerDialog
     title: qsTr("QSY Quick Picker")
     width: 580
@@ -21,7 +21,7 @@ Window {
     minimumWidth: 420
     minimumHeight: 360
     flags: Qt.Dialog | Qt.WindowCloseButtonHint
-    color: "#1a1a2e"
+    color: transparentCorners ? "transparent" : glassSurfaceColor
 
     property var allRows: []
     property bool preferredOnly: true
@@ -67,7 +67,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: "#1a1a2e"
+        color: qsyPickerDialog.glassTheme && qsyPickerDialog.glassTransparencySupported
+               ? qsyPickerDialog.glassSurfaceColor : "#1a1a2e"
 
         ColumnLayout {
             anchors.fill: parent
@@ -79,14 +80,14 @@ Window {
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
-                    text: qsTr("QSY a preset Working Frequencies")
+                    text: qsTr("QSY to Working Frequencies preset")
                     color: "#ff7814"
                     font.pixelSize: 16
                     font.bold: true
                     Layout.fillWidth: true
                 }
                 Text {
-                    text: qsTr("%1 preset · %2 visibili")
+                    text: qsTr("%1 presets · %2 visible")
                         .arg(qsyPickerDialog.allRows.length)
                         .arg(qsyPickerDialog.filteredRows().length)
                     color: "#aaaacc"
@@ -99,22 +100,22 @@ Window {
                 Layout.fillWidth: true
                 spacing: 8
                 CheckBox {
-                    text: qsTr("Solo Preferred")
+                    text: qsTr("Preferred only")
                     checked: qsyPickerDialog.preferredOnly
                     onCheckedChanged: qsyPickerDialog.preferredOnly = checked
                     contentItem: Text { text: parent.text; color: "#cccccc"; leftPadding: 22; verticalAlignment: Text.AlignVCenter }
                     indicator: Rectangle { width: 16; height: 16; radius: 3; color: parent.checked ? "#ff7814" : "#2a2a3e"; border.color: "#505070"; y: parent.height/2 - height/2 }
                 }
                 Text { text: qsTr("Modo:"); color: "#aaaacc"; font.pixelSize: 12 }
-                ComboBox {
+                DecoComboBox {
                     id: modeCombo
                     model: qsyPickerDialog.uniqueModes()
                     currentIndex: 0
                     onActivated: qsyPickerDialog.modeFilter = currentText
                     implicitWidth: 100
                 }
-                Text { text: qsTr("Banda:"); color: "#aaaacc"; font.pixelSize: 12 }
-                ComboBox {
+                Text { text: qsTr("Band:"); color: "#aaaacc"; font.pixelSize: 12 }
+                DecoComboBox {
                     id: bandCombo
                     model: qsyPickerDialog.uniqueBands()
                     currentIndex: 0
@@ -169,7 +170,7 @@ Window {
                             Text {
                                 text: modelData.frequencyMHz + " MHz"
                                 color: "#ffffff"
-                                font.family: Qt.platform.os === "osx" ? "Menlo" : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
+                                font.family: decodiumMonoFontFamily
                                 font.pixelSize: 13
                                 Layout.preferredWidth: 130
                             }
@@ -210,14 +211,14 @@ Window {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: qsTr("Click su un preset per fare QSY · F2 per riaprire")
+                    text: qsTr("Click a preset to QSY · F2 to reopen")
                     color: "#666688"
                     font.pixelSize: 10
                     font.italic: true
                     Layout.fillWidth: true
                 }
                 Button {
-                    text: qsTr("Chiudi")
+                    text: qsTr("Close")
                     onClicked: qsyPickerDialog.close()
                     contentItem: Text { text: parent.text; color: "#ffffff"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle { color: "#2a2a3e"; border.color: "#505070"; radius: 4 }

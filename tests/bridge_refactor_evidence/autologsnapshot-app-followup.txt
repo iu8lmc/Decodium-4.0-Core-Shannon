@@ -1,0 +1,2 @@
+Original and refactored macOS apps: synthetic FT8 TX5 started on BlackHole with CAT disabled, QSO prompt received, snapshot call=K1ABC grid=FN42 received=-08 mode=FT8, snapshot survived current-call change; confirmation rejected, no commit signal and no synthetic call in isolated ADIF.
+No physical RF or complete two-way QSO verification.

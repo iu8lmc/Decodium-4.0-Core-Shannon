@@ -1,0 +1,1 @@
+QSO reset A/B: TX preservation, stale state cleanup and notifications passed

@@ -1,0 +1,86 @@
+diff --git a/src/appglobal.cpp b/src/appglobal.cpp
+index 8af21d7..12250f7 100644
+--- a/src/appglobal.cpp
++++ b/src/appglobal.cpp
+@@ -16,10 +16,10 @@ const QString MINORVERSION  = "";
+ // saved editor files; it no longer names the QSettings storage location.
+ const QString LOGVERSION = ("qsstv."+MAJORVERSION+MINORVERSION+".log");
+ // QSettings location: ~/.config/qsstv-experimental/qsstv-experimental.conf on Linux
+-const QString ORGANIZATION = "qsstv-experimental";
+-const QString APPLICATION  = "qsstv-experimental";
++const QString ORGANIZATION = "decodium-isolated-bsr-lab";
++const QString APPLICATION  = "decodium-isolated-bsr-lab";
+ const QString qsstvVersion=QString("QSSTV-Experimental " + MAJORVERSION+MINORVERSION);
+-const QString APPNAME=QString("QSSTV-Experimental");
++const QString APPNAME=QString("Decodium-QSSTV-BSR-Lab");
+ 
+ 
+ QSplashScreen *splashPtr;
+diff --git a/src/config/directoriesconfig.cpp b/src/config/directoriesconfig.cpp
+index 422502f..1d257f5 100644
+--- a/src/config/directoriesconfig.cpp
++++ b/src/config/directoriesconfig.cpp
+@@ -64,7 +64,7 @@ void directoriesConfig::readSettings()
+   // GenericDataLocation + APPNAME is used instead of AppDataLocation because the latter embeds
+   // the QSettings organization/application names, which would nest the data directory
+   // under a doubled qsstv-experimental/qsstv-experimental path.
+-  QString appDataPath=QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)+"/"+APPNAME;
++  QString appDataPath=qEnvironmentVariable("QSSTV_BSR_LAB_ROOT")+"/data";
+   qSettings.beginGroup("DIRECTORIES");
+   rxSSTVImagesPath=qSettings.value("rxSSTVImagesPath",appDataPath+"/rx_sstv/").toString();
+   rxDRMImagesPath=qSettings.value("rxDRMImagesPath",appDataPath+"/rx_drm/").toString();
+diff --git a/src/dispatch/filedecoder.cpp b/src/dispatch/filedecoder.cpp
+index ec24920..9e331b5 100644
+--- a/src/dispatch/filedecoder.cpp
++++ b/src/dispatch/filedecoder.cpp
+@@ -10,6 +10,8 @@
+ #include "imageviewer.h"
+ #include "mainwindow.h"
+ #include "drmrx.h"
++#include "drm.h"
++#include "sourcedecoder.h"
+ #include "rxfunctions.h"
+ #include "rxwidget.h"
+ #include "soundbase.h"
+@@ -182,6 +184,20 @@ void fileDecoder::poll()
+ 
+ void fileDecoder::finishFile()
+ {
++  if(batch && transmissionModeIndex==TRXDRM && srcDecoder)
++    {
++      auto *blocks=srcDecoder->getBSR();
++      for(const auto &entry : *blocks)
++        {
++          auto *tb=entry.tbPtr;
++          fprintf(stderr,"LAB block id=%u header=%d size=%u segment=%u total=%d last=%d received=%u name=%s\n",
++                  tb->transportID,int(tb->headerReceived),tb->bodySize,tb->defaultSegmentSize,
++                  tb->totalSegments,int(tb->lastSegmentReceived),tb->segmentsReceived,qPrintable(tb->fileName));
++          for(bool compat : {false,true})
++            if(srcDecoder->storeBSR(tb,compat))
++              fprintf(stderr,"LAB BSR %s BEGIN\n%s\nLAB BSR END\n",compat ? "compact" : "extended",tb->baBSR.constData());
++        }
++    }
+   filesDone++;
+   imagesTotal+=imagesInFile;
+   if(imagesInFile==0)
+diff --git a/src/main.cpp b/src/main.cpp
+index fd23433..008874c 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -51,6 +51,7 @@
+ #include "mainwidgets/rxwidget.h"
+ #include "mainwidgets/txwidget.h"
+ #include "sound/soundbase.h"
++#include <QSettings>
+ #include "sstv/sstvparam.h"
+ #include <QImageReader>
+ #include <QRegularExpression>
+@@ -190,6 +191,8 @@ int main( int argc, char ** argv )
+ #endif
+   chooseHeadlessPlatform(argc,argv);
+   preferPortalTheme();
++  QSettings::setDefaultFormat(QSettings::IniFormat);
++  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, qEnvironmentVariable("QSSTV_BSR_LAB_ROOT"));
+   QCoreApplication::setOrganizationName(ORGANIZATION);
+   QCoreApplication::setApplicationName(APPLICATION);
+   // Wayland app id / taskbar-icon match; under Flatpak the desktop file is named after the app ID

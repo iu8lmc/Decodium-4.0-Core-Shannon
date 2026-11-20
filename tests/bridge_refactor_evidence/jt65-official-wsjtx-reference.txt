@@ -1,0 +1,15 @@
+Official WSJT-X 3.0.2 Apple Silicon, extracted from official GitHub release package without installation.
+Package SHA-256: 1b7eff83de7ded13c75b8e65f1eab75a6143d6ecb94c140e4764933b210b23bb
+WAV: 130610_2343.wav, SHA-256 5f1ac56197afc3373746edea12869ea35e2e6f3798980825c3af8103996bbea4
+Command: jt9 -6 -d 3 -L 200 -H 3000 -f 975 -a <isolated-dir> -t <isolated-dir> <WAV>
+Exit: 0
+2343 -20  0.3  718 #  VE6WQ SQ2NIJ -14
+2343  -7  0.3  815 #  KK4DSD W7VP -16
+2343 -10  0.4  975 #  CQ DL7ACA JO40
+2343  -9  0.7 1089 #  N2SU W0JMW R-14
+2343 -10  0.7 1259 #  YV6BFE F6GUU R-08
+2343 -10  1.6 1471 #  VA3UG F1HMR 73
+2343  -1  0.6 1718 #  BG THX JOE 73
+2343 -15  1.3 1951 #  RA3Y VE3NLS 73
+2343 -21  0.3 2064 #  K2OI AJ4UU R-20
+<DecodeFinished>   0   9        0

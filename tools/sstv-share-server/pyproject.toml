@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decodium-sstv-share-server"
+version = "0.1.0.dev0"
+description = "Experimental Decodium SSTV sharing service"
+requires-python = ">=3.10"
+license = {text = "GPL-3.0-or-later"}
+
+[project.scripts]
+decodium-sstv-share-server = "decodium_share_server:main"
+
+[tool.setuptools]
+py-modules = ["decodium_share_server", "decodium_share_store"]

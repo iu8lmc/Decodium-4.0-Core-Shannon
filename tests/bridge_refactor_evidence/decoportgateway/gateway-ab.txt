@@ -1,0 +1,1 @@
+DecoPort gateway A/B: missing/closed/open rig, start failure/success and stop passed

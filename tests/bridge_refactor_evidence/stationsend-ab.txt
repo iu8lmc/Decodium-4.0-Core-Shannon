@@ -1,0 +1,8 @@
+tune|0|0
+expired|0|0
+defer|1|0
+late|1|1
+grid|0
+send|1|1|1|1|19|22|100
+failed|1|0|1|1
+weather-off|1|0
