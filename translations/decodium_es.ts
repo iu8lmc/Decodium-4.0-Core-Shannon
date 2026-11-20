@@ -28870,6 +28870,14 @@ Predeterminado DESACTIVADO = comportamiento 1.0.445 (solo una instantánea difer
         <translation>Escala interfaz:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Ampliar la interfaz (accesibilidad)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Desactivado por defecto. Cuando se activa, los iconos, el texto y el diseño se amplían con la escala elegida tras reiniciar. Cuando se desactiva, la interfaz se muestra en su tamaño normal.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ reiniciar para aplicar</translation>

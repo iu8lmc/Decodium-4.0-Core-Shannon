@@ -28520,6 +28520,14 @@ Default OFF = 1.0.445 behavior (only a deferred snapshot, recovered only if the 
         <translation>UI Scale:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>インターフェースを拡大する（アクセシビリティ）</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>既定ではオフです。有効にすると、再起動後にアイコン、文字、レイアウトが選択した倍率で拡大されます。無効にすると、インターフェースは通常の大きさで表示されます。</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ 適用するには再起動</translation>

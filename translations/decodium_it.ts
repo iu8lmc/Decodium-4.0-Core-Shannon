@@ -28639,6 +28639,14 @@ Predefinito OFF = comportamento 1.0.445 (solo uno snapshot differito, recuperato
         <translation>Scala interfaccia:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Ingrandisci l&apos;interfaccia (accessibilità)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Spenta di default. Quando è attiva, icone, testo e disposizione vengono ingranditi con la scala scelta dopo un riavvio. Quando è spenta, l&apos;interfaccia è mostrata a dimensione normale.</translation>
+    </message>
+    <message>
         <location line="+32"/>
         <source>↻ restart to apply</source>
         <translation>↻ riavvia per applicare</translation>

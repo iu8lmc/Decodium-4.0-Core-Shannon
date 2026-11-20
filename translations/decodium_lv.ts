@@ -28551,6 +28551,14 @@ Pēc noklusējuma IZSLĒGTS = 1.0.445 uzvedība (tikai atliktais momentuzņēmum
         <translation>UI mērogs:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Palielināt saskarni (pieejamība)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Pēc noklusējuma izslēgts. Kad ieslēgts, ikonas, teksts un izkārtojums pēc restartēšanas tiek palielināti atbilstoši izvēlētajam mērogam. Kad izslēgts, saskarne tiek rādīta parastajā izmērā.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ restartēt, lai lietotu</translation>

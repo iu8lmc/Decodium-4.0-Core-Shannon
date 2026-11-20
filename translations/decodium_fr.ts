@@ -28531,6 +28531,14 @@ Par défaut DÉSACTIVÉ = comportement 1.0.445 (seulement un instantané différ
         <translation>Échelle UI :</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Agrandir l&apos;interface (accessibilité)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Désactivé par défaut. Une fois activé, les icônes, le texte et la mise en page sont agrandis selon l&apos;échelle choisie après un redémarrage. Une fois désactivé, l&apos;interface s&apos;affiche à sa taille normale.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ redémarrer pour appliquer</translation>

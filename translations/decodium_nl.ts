@@ -28541,6 +28541,14 @@ Standaard UIT = 1.0.445-gedrag (alleen een uitgestelde momentopname, alleen hers
         <translation>UI-schaal:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Interface vergroten (toegankelijkheid)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Standaard uit. Indien ingeschakeld worden pictogrammen, tekst en indeling na een herstart vergroot met de gekozen schaal. Indien uitgeschakeld wordt de interface op normale grootte getoond.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ herstart om toe te passen</translation>

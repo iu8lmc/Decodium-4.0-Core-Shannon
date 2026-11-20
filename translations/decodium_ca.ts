@@ -28532,6 +28532,14 @@ Per defecte DESACTIVAT = comportament 1.0.445 (només una instantània diferida,
         <translation>Escala d&apos;UI:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Amplia la interfície (accessibilitat)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Desactivat per defecte. Quan s&apos;activa, les icones, el text i la disposició s&apos;amplien amb l&apos;escala triada després de reiniciar. Quan es desactiva, la interfície es mostra a la mida normal.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ reinicieu per aplicar</translation>

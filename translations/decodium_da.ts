@@ -28529,6 +28529,14 @@ Standard FRA = 1.0.445-adfærd (kun et udskudt øjebliksbillede, som kun gendann
         <translation>UI-skala:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Forstør brugerfladen (tilgængelighed)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Slået fra som standard. Når den er slået til, forstørres ikoner, tekst og layout med den valgte skala efter en genstart. Når den er slået fra, vises brugerfladen i normal størrelse.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ genstart for at anvende</translation>

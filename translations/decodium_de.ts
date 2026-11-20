@@ -28531,6 +28531,14 @@ Standard AUS = Verhalten von 1.0.445 (nur ein aufgeschobener Schnappschuss, nur 
         <translation>UI-Skalierung:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Oberfläche vergrößern (Barrierefreiheit)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Standardmäßig aus. Wenn aktiviert, werden Symbole, Text und Layout nach einem Neustart mit der gewählten Skalierung vergrößert. Wenn deaktiviert, wird die Oberfläche in normaler Größe angezeigt.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ Neustart zum Anwenden</translation>

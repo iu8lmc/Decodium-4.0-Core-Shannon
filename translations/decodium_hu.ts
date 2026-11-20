@@ -28392,6 +28392,14 @@ Alapértelmezetten KI = 1.0.445 viselkedés (csak halasztott pillanatkép, csak 
         <translation>UI méret:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Felület nagyítása (akadálymentesítés)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Alapértelmezés szerint kikapcsolva. Bekapcsolva az ikonok, a szöveg és az elrendezés újraindítás után a kiválasztott mértékben nagyobbak lesznek. Kikapcsolva a felület normál méretben jelenik meg.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ újraindítás az alkalmazáshoz</translation>

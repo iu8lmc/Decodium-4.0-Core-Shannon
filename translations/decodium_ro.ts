@@ -28522,6 +28522,14 @@ Implicit oprit = comportamentul din 1.0.445 (doar o copie amânată, recuperată
         <translation>Scara interfeței:</translation>
     </message>
     <message>
+        <source>Enlarge the interface (accessibility)</source>
+        <translation>Mărește interfața (accesibilitate)</translation>
+    </message>
+    <message>
+        <source>Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.</source>
+        <translation>Dezactivat implicit. Când este activat, pictogramele, textul și aranjarea sunt mărite cu scara aleasă după o repornire. Când este dezactivat, interfața este afișată la dimensiunea normală.</translation>
+    </message>
+    <message>
         <location filename="../qml/decodium/components/SettingsTab4.qml" line="229"/>
         <source>↻ restart to apply</source>
         <translation>↻ repornește pentru a aplica</translation>
