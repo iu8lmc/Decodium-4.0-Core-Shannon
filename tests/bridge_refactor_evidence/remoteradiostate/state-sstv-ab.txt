@@ -1,0 +1,1 @@
+Remote state A/B: connection, telemetry, frequency and SSTV stream selection with SSTV off/on passed

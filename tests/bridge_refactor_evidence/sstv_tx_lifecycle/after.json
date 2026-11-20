@@ -1,0 +1,13 @@
+{
+  "tx": {
+    "durationMs": 81610,
+    "modeId": "hffax-experimental",
+    "state": "Completed",
+    "success": true
+  },
+  "coverage": 1.0,
+  "complete": true,
+  "end_to_end": true,
+  "playback_tracked": true,
+  "ownership_released": true
+}

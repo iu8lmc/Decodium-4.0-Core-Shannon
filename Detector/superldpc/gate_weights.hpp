@@ -1,0 +1,82 @@
+// gate_weights.hpp — pesi del gate appreso (strato 2, SUPERLDPC-AI-SPEC-001 §2).
+//
+// 9 settembre 2026: GATE_NF passa da 10 a 12 (rango e passaggi CRC, vedi
+// gate.hpp). Le due colonne nuove hanno qui peso 0, media 0 e deviazione 1:
+// il logit e' IDENTICO a prima, bit per bit, finche' non si riaddestra.
+// Tabelle separate per FT2 e FT8: stesso decoder (Ft2Decoder), canali e tipi
+// di messaggio diversi -- vedi gate.hpp per come vengono scelte.
+//
+// --- FT2: riaddestrati il 5 settembre 2026 su LLR REALI del decoder di
+// produzione (alpha 0,578, ntau 13, span2 64, pair_span 64 — la
+// configurazione attuale, non quella del pacchetto di ricerca originale),
+// raccolti con tests/ft2_gate_dump.cpp: WAV FT2 con messaggio noto attraverso
+// la catena di decodifica vera (sync, demod, LDPC), non il canale AWGN
+// sintetico di train/ft2chan.py. Dataset: 8 messaggi (CQ, rapporto,
+// R-report, RR73, 73, due nominativi diversi), SNR da -24 a -8 dB, 7350
+// prove, 317 202 candidati OSD esaminati, di cui 1 717 genuinamente veri
+// (il resto rumore che supera comunque la CRC-14 — e' il problema per cui il
+// gate esiste). Split 80/20, soglia scelta per <=0,5 falsi per mille sul
+// training.
+//
+// Risultato misurato sul 20% tenuto da parte (mai visto in training):
+//   solo nd<=0,065 (oggi, senza gate): 92,60% veri accettati, 57,89 per mille falsi
+//   con questo gate:                   90,00% veri accettati,  0,65 per mille falsi
+// Cioe' ~89 volte meno candidati fantasma per un costo di 2,6 punti di
+// sensibilita'. Train e held-out sono coerenti (90,88%/0,50 per mille contro
+// 90,00%/0,65 per mille). Confermato su ~13 minuti di confronto controllato
+// in aria (Decodium/decodifiche per ciclo invariato spegnendo/accendendo il
+// gate, 5 settembre 2026 sera) -- ma quel confronto era su traffico FT8, non
+// FT2 (vedi sotto perche' questo file adesso separa i due modi).
+// Per riaddestrare: Detector/superldpc/lab/neural/gate/train_gate.py.
+static const float GATE_W_FT2[12] = {-0.419673f, -0.581239f, -0.205885f, -0.043541f, 0.299545f, 0.000000f, -0.332447f, -0.486771f, 0.178712f, 0.000000f, 0.000000f, 0.000000f};
+static const float GATE_B_FT2 = -7.146039f;
+static const float GATE_MU_FT2[12] = {0.102884f, 0.230003f, 0.025739f, 0.017413f, 1.949061f, 1.000000f, 0.264674f, 0.067119f, 0.970600f, 1.000000f, 0.000000f, 0.000000f};
+static const float GATE_SD_FT2[12] = {0.028520f, 0.028952f, 0.010620f, 0.026249f, 0.494642f, 0.000001f, 0.066366f, 0.031916f, 0.063212f, 0.000001f, 1.000000f, 1.000000f};
+static const float GATE_THRESHOLD_FT2 = -4.125135f;
+
+// --- FT8: riaddestrati il 5 settembre 2026 su LLR REALI, stesso metodo di
+// FT2 ma con tests/ft8_gate_dump.cpp: FT8 non scrambla il messaggio prima
+// dell'LDPC, quindi la verita' viene direttamente da
+// ftx_encode_ft8_candidate_c (niente vettore di scrambling da replicare).
+// Dataset: stessi 8 messaggi di FT2, SNR da -22 a -8 dB, 3000 prove,
+// 952 582 candidati OSD esaminati, di cui 4 395 genuinamente veri. Split
+// 80/20, soglia scelta per <=0,5 falsi per mille sul training.
+//
+// Risultato misurato sul 20% tenuto da parte (mai visto in training):
+//   solo nd<=0,065 (oggi, senza gate): 88,23% veri accettati,  7,57 per mille falsi
+//   con questo gate:                   91,04% veri accettati,  0,46 per mille falsi
+// Qui il gate non e' solo un compromesso: alza la sensibilita' (88,23% ->
+// 91,04%) E abbassa i falsi di ~16x insieme, a differenza di FT2 dove il
+// guadagno sui falsi costava un po' di sensibilita'. Train ed eval coerenti
+// (92,55%/0,50 per mille contro 91,04%/0,46 per mille).
+// Per riaddestrare: Detector/superldpc/lab/neural/gate/train_gate.py.
+static const float GATE_W_FT8[12] = {-0.346551f, -0.081185f, -0.079960f, 0.053433f, 0.493541f, 0.000000f, -0.332220f, -0.650949f, 0.000000f, 0.000000f, 0.000000f, 0.000000f};
+static const float GATE_B_FT8 = -7.126093f;
+static const float GATE_MU_FT8[12] = {0.108834f, 0.226586f, 0.028659f, 0.027788f, 2.227563f, 1.000000f, 0.257168f, 0.086401f, 1.000000f, 1.000000f, 0.000000f, 0.000000f};
+static const float GATE_SD_FT8[12] = {0.022140f, 0.027959f, 0.011783f, 0.037801f, 0.184993f, 0.000001f, 0.061984f, 0.017733f, 0.000001f, 0.000001f, 1.000000f, 1.000000f};
+static const float GATE_THRESHOLD_FT8 = -4.168874f;
+
+// --- Gate a margine (gate.hpp, margin_accept): parametri per modo, nell'ordine
+// {c_gap, gap_cap, c_cnt, w_logit, thr, ap_pow}. Valgono solo con la ricerca
+// sul codice concatenato (174,77), DECODIUM_LDPC_K77=1.
+// Tarati con tests/tools/superldpc_k77_bench.cpp (dump=) sui semi 1, 2, 3 e
+// riportati sui semi 21, 22, 23: vedi README, "Ricerca su (174,77) e gate a
+// margine". FT8: soglia scelta per stare a meta' dei falsi sul rumore della
+// regola di prima (10 contro 22 su 1,2 milioni di parole), ap_pow perche' con
+// 32 e 61 bit noti le parole giuste siano piu' di prima e i falsi meno. FT2:
+// soglia a 2 falsi su 6 milioni di parole di rumore (la regola di prima: 4).
+//
+// Sui semi mai visti (falsi sul rumore, gate a margine contro regola di prima):
+//   FT8 senza AP  13 contro 21 su 1,2 milioni (semi 21-23); 13 contro 17
+//                 (semi 201-203)
+//   FT8 32 bit AP 1824 contro 10602 su 1,2 milioni; 442 contro 2611 su 300 000
+//   FT8 61 bit AP 6 contro 52 su 1,2 milioni; 4 contro 32 su 600 000
+//   FT2 senza AP  5 contro 3 su 6 milioni (semi 21-23); 1 contro 2 su 2,1
+//                 milioni (semi 201-203)
+//   FT2 32 bit AP 1 contro 0 su 900 000 (semi 201-203)
+// MARGIN_GATE_FT8 regge. MARGIN_GATE_FT2 NON e' validato: i conteggi sono
+// troppo piccoli e in due casi su tre i falsi sono piu' di prima, quindi non
+// rispetta "pari o meno false decodifiche". L'opzione e' spenta di default in
+// entrambi i modi; in FT2 e' solo per misurare.
+static const MarginGate MARGIN_GATE_FT8 = {0.75f, 0.07f, 0.0f, 0.04f, 0.2000f, 0.65f};
+static const MarginGate MARGIN_GATE_FT2 = {0.75f, 0.07f, 0.0f, 0.0f, 0.040f, 1.0f};

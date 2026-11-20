@@ -1,0 +1,2 @@
+before {"afterDisconnect": {"autospot": false, "connected": false}, "connected": {"autospot": true, "connected": true, "host": "127.0.0.1", "port": "local"}, "tcpAccepted": true}
+after {"afterDisconnect": {"autospot": false, "connected": false}, "connected": {"autospot": true, "connected": true, "host": "127.0.0.1", "port": "local"}, "tcpAccepted": true}

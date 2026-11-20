@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdlib>
 #include <vector>
 
 #include <fftw3.h>
@@ -44,6 +45,17 @@ float gfsk_pulse (float bt, float t)
 
 float wrap_phase (float phase)
 {
+  // Caso di gran lunga piu' frequente: la fase e' avanzata di meno di un giro.
+  // In [2pi, 4pi) la sottrazione e' esatta e coincide con fmod, che qui costava
+  // una chiamata di libreria per ogni campione della forma d'onda di riferimento.
+  if (phase >= 0.0f && phase < kTwoPi)
+    {
+      return phase;
+    }
+  if (phase >= kTwoPi && phase < 2.0f * kTwoPi)
+    {
+      return phase - kTwoPi;
+    }
   phase = std::fmod (phase, kTwoPi);
   if (phase < 0.0f)
     {
@@ -256,10 +268,18 @@ struct Ft8SubtractWorkspace
   std::vector<float> dd = std::vector<float> (static_cast<size_t> (kFt8NMax));
 };
 
+// Su Linux lo spazio viene rilasciato con il thread; sulle altre piattaforme
+// resta la durata precedente per i problemi di teardown descritti in
+// FtxDownsample.cpp.
 Ft8SubtractWorkspace& workspace ()
 {
+#if defined(__linux__)
   thread_local Ft8SubtractWorkspace state;
   return state;
+#else
+  thread_local Ft8SubtractWorkspace* state = new Ft8SubtractWorkspace;
+  return *state;
+#endif
 }
 
 struct Ft2SubtractWorkspace
@@ -363,8 +383,32 @@ Ft8SubtractFilter& subtract_filter ()
 struct Ft2SubtractFilter
 {
   std::array<Complex, kFt2NMax> spectrum {};
+  std::vector<float> endcorrection;   // vuoto = nessuna correzione ai bordi
+  int nfilt {kFt2NFilt};
   bool ready {false};
 };
+
+// FT2 asincrono F4: lunghezza del filtro che stima ampiezza e fase del
+// segnale da sottrarre. I 700 campioni classici (58 ms, ~17 Hz di banda) si
+// portano via anche un debole vicino: sottraendo un forte 10 dB sopra, il
+// debole a 5-50 Hz resta sporco a -8,7 dB della sua energia; con 2000
+// campioni (167 ms, come FT8 in proporzione) a -12,9 dB. Al banco genpair (149
+// deboli accanto a un forte) il decode asincrono passa da 78 a 95 deboli
+// presi (da soli 111), soglia -12,9 -> -13,8 dB; scena L1 e rumore invariati.
+// Il prezzo e' la tolleranza alla deriva del forte: residuo -28,6 -> -27,9 dB
+// a 1 Hz/s, -28,3 -> -23,1 dB a 2 Hz/s. DECODIUM_FT2_SUB_NFILT=700 torna al
+// filtro classico (senza correzione ai bordi).
+constexpr int kFt2NFiltDefault = 2000;
+
+int ft2_subtract_nfilt ()
+{
+  static int const value = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_SUB_NFILT");
+    int const v = e ? std::atoi (e) : kFt2NFiltDefault;
+    return v >= 100 && v <= 8000 ? (v / 2) * 2 : kFt2NFiltDefault;
+  }();
+  return value;
+}
 
 Ft2SubtractFilter& ft2_subtract_filter ()
 {
@@ -377,23 +421,38 @@ Ft2SubtractFilter& ft2_subtract_filter ()
           return filter;
         }
 
-      std::array<float, kFt2NFilt + 1> window {};
+      int const nfilt = ft2_subtract_nfilt ();
+      filter.nfilt = nfilt;
+      std::vector<float> window (static_cast<size_t> (nfilt + 1));
       float sumw = 0.0f;
-      for (int j = -kFt2NFilt / 2; j <= kFt2NFilt / 2; ++j)
+      for (int j = -nfilt / 2; j <= nfilt / 2; ++j)
         {
           float const value = std::pow (std::cos (kPi * static_cast<float> (j)
-                                                  / static_cast<float> (kFt2NFilt)), 2.0f);
-          window[static_cast<size_t> (j + kFt2NFilt / 2)] = value;
+                                                  / static_cast<float> (nfilt)), 2.0f);
+          window[static_cast<size_t> (j + nfilt / 2)] = value;
           sumw += value;
         }
 
       Complex* cw = fft.values ();
       std::fill (cw, cw + kFt2NMax, Complex {});
-      for (int i = 0; i <= kFt2NFilt; ++i)
+      for (int i = 0; i <= nfilt; ++i)
         {
           cw[i] = Complex (window[static_cast<size_t> (i)] / sumw, 0.0f);
         }
-      std::rotate (cw, cw + (kFt2NFilt / 2 + 1), cw + kFt2NMax);
+      std::rotate (cw, cw + (nfilt / 2 + 1), cw + kFt2NMax);
+
+      // Correzione ai bordi del frame (come in FT8), solo con un filtro diverso
+      // dal classico: vicino ai bordi la media vede zeri e sottostima.
+      if (nfilt != kFt2NFilt)
+        {
+          std::vector<float> suffix (static_cast<size_t> (nfilt + 2), 0.0f);
+          for (int i = nfilt; i >= 0; --i)
+            suffix[static_cast<size_t> (i)] = suffix[static_cast<size_t> (i + 1)] + window[static_cast<size_t> (i)];
+          filter.endcorrection.assign (static_cast<size_t> (nfilt / 2 + 1), 1.0f);
+          for (int j = 0; j <= nfilt / 2; ++j)
+            filter.endcorrection[static_cast<size_t> (j)] =
+                1.0f / (1.0f - suffix[static_cast<size_t> (nfilt / 2 + j)] / sumw);
+        }
       fftwf_execute (fft.forward);
 
       float const fac = 1.0f / static_cast<float> (kFt2NMax);
@@ -461,14 +520,19 @@ void generate_ft8_reference (int const* itone, float f0, Complex* out)
       return;
     }
 
-  std::array<float, 3 * kNsps> pulse {};
+  // L'impulso GFSK non dipende dal segnale: si calcola una volta sola invece di
+  // 11520 erff a ogni sottrazione.
+  static std::array<float, 3 * kNsps> const pulse = [] {
+    std::array<float, 3 * kNsps> values {};
+    for (int i = 0; i < 3 * kNsps; ++i)
+      {
+        float const tt = (static_cast<float> (i + 1) - 1.5f * static_cast<float> (kNsps))
+          / static_cast<float> (kNsps);
+        values[static_cast<size_t> (i)] = gfsk_pulse (kBt, tt);
+      }
+    return values;
+  }();
   std::vector<float> dphi (static_cast<size_t> ((kNtone + 2) * kNsps), 0.0f);
-  for (int i = 0; i < 3 * kNsps; ++i)
-    {
-      float const tt = (static_cast<float> (i + 1) - 1.5f * static_cast<float> (kNsps))
-        / static_cast<float> (kNsps);
-      pulse[static_cast<size_t> (i)] = gfsk_pulse (kBt, tt);
-    }
 
   float const dphi_peak = kTwoPi / static_cast<float> (kNsps);
   for (int j = 0; j < kNtone; ++j)
@@ -867,6 +931,15 @@ extern "C" void ftx_subtract_ft2_c (float* dd0, int const* itone, float f0, floa
       cfilt[i] *= filter.spectrum[static_cast<size_t> (i)];
     }
   fftwf_execute (fft.inverse);
+  if (!filter.endcorrection.empty ())
+    {
+      int const nc = std::min (static_cast<int> (filter.endcorrection.size ()), kFt2NFrame / 2);
+      for (int i = 0; i < nc; ++i)
+        {
+          cfilt[i] *= filter.endcorrection[static_cast<size_t> (i)];
+          cfilt[kFt2NFrame - 1 - i] *= filter.endcorrection[static_cast<size_t> (i)];
+        }
+    }
 
   for (int i = 0; i < kFt2NFrame; ++i)
     {

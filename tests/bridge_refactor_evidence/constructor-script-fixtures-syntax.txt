@@ -1,0 +1,26 @@
+25 corrected A/B scripts: actual generated before-constructor fixture checked with the current macOS compiler and -fsyntax-only; no runtime test, CAT or radio.
+bridge_callsign_confirmed_adif_ab.py OK 
+bridge_callsign_init_ab.py OK 
+bridge_callsign_url_ab.py OK 
+bridge_decolog_init_ab.py OK 
+bridge_decolog_local_ab.py OK 
+bridge_decolog_tune_ab.py OK 
+bridge_diagnostic_connections_ab.py OK 
+bridge_map_init_ab.py OK 
+bridge_map_init_abort_ab.py OK 
+bridge_map_init_moon_ab.py OK 
+bridge_psk_cloudlog_adif_ab.py OK 
+bridge_psk_cloudlog_http_ab.py OK 
+bridge_psk_cloudlog_init_ab.py OK 
+bridge_qrz_wspr_init_ab.py OK 
+bridge_remote_web_commands_ab.py OK 
+bridge_remote_web_http_ab.py OK 
+bridge_remote_web_init_ab.py OK 
+bridge_remote_web_ws_auth_ab.py OK 
+bridge_rtl_init_ab.py OK 
+bridge_rtl_init_retune_ab.py OK 
+bridge_rtl_init_started_ab.py OK 
+bridge_timesync_init_ab.py OK 
+bridge_timesync_init_rearm_ab.py OK 
+bridge_usstate_dxcc_refresh_ab.py OK 
+bridge_usstate_wspr_init_ab.py OK 

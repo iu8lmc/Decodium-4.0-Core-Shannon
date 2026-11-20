@@ -1,0 +1,2 @@
+before {"cat": false, "denied": true, "tx": false, "unchanged": true}
+after {"cat": false, "denied": true, "tx": false, "unchanged": true}

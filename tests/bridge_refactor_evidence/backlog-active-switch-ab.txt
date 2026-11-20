@@ -1,0 +1,2 @@
+{"active": true, "mode": "FT8", "recovered": true, "switchedClean": true}
+{"active": true, "mode": "FT8", "recovered": true, "switchedClean": true}

@@ -1,0 +1,1 @@
+{"band": 0, "before": true, "rebuilt": true, "rx": 0, "seen": true, "timestamp": true, "tx": false}

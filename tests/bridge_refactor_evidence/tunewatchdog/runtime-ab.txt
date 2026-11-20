@@ -1,0 +1,2 @@
+before {"armed": true, "cat": false, "stopped": true, "tx": false}
+after {"armed": true, "cat": false, "stopped": true, "tx": false}

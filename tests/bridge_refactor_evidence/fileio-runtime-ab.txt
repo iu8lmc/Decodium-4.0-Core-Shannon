@@ -1,0 +1,2 @@
+release {"bad": false, "bytes": 5, "cat": false, "data": "AAECA/8=", "read": true, "shortBytes": 2, "truncated": true, "tx": false, "write": true}
+current {"bad": false, "bytes": 5, "cat": false, "data": "AAECA/8=", "read": true, "shortBytes": 2, "truncated": true, "tx": false, "write": true}

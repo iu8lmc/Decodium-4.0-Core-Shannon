@@ -1,0 +1,6 @@
+guard|0|0
+normal|1|0|1|1|1|1
+dedicated|2|1|2|0
+txguard|0|2
+handoff|2|3|0|3
+tap|1|4|4

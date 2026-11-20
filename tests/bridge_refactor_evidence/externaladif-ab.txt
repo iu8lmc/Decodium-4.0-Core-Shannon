@@ -1,0 +1,1 @@
+External ADIF A/B: 16 result and callback cases match; destinations simulated

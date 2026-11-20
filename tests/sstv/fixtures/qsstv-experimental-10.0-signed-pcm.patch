@@ -1,0 +1,13 @@
+diff --git a/src/dsp/synthes.cpp b/src/dsp/synthes.cpp
+index ae2c0d0..b56adac 100644
+--- a/src/dsp/synthes.cpp
++++ b/src/dsp/synthes.cpp
+@@ -147,7 +147,7 @@ SOUNDFRAME synthesizer::filter(double sample)
+ {
+  quint32 tst;
+  quint32 ptt;
+- tst=(quint32) round(sample);
++ tst=(quint32)(qint32) round(sample);
+ // if(outputStereo)
+ //   {
+ //      tst+=tst<<16;

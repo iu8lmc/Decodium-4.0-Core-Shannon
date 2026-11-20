@@ -1,0 +1,1 @@
+Auto-seq rearm A/B: FT2 abort, idle-mode guard, stale rearm and preserved 73 passed

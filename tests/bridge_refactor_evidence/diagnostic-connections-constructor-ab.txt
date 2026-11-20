@@ -1,0 +1,5 @@
+Command: python3 tests/tools/bridge_diagnostic_connections_ab.py
+Exit code: 0
+CAT and transmit disabled; isolated test profile.
+before {"cat": false, "error": true, "journal": true, "readback": "persisted", "rig": true, "shutdown": true, "status": true, "tx": false, "warn": true, "wasShutdown": false}
+after {"cat": false, "error": true, "journal": true, "readback": "persisted", "rig": true, "shutdown": true, "status": true, "tx": false, "warn": true, "wasShutdown": false}

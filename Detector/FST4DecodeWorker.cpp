@@ -1,3 +1,4 @@
+#include "FST4DecodeCancellation.hpp"
 // -*- Mode: C++ -*-
 #include "wsjtx_config.h"
 #include "Detector/FST4DecodeWorker.hpp"
@@ -14,6 +15,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
+#include <QScopeGuard>
 #include <QTextStream>
 
 #include "commons.h"
@@ -173,6 +175,94 @@ namespace
   {
     value = fixed_field (std::move (value), kDecodedChars);
     return QString::fromLatin1 (value.constData (), value.size ());
+  }
+
+  bool is_grid_token (QString token)
+  {
+    token = token.trimmed ().toUpper ();
+    if (token.size () != 4 && token.size () != 6)
+      {
+        return false;
+      }
+    if (!token[0].isLetter () || !token[1].isLetter ()
+        || !token[2].isDigit () || !token[3].isDigit ())
+      {
+        return false;
+      }
+    if (token.size () == 6
+        && (!token[4].isLetter () || !token[5].isLetter ()))
+      {
+        return false;
+      }
+    return true;
+  }
+
+  bool is_report_token (QString token)
+  {
+    token = token.trimmed ().toUpper ();
+    if (token == QStringLiteral ("73")
+        || token == QStringLiteral ("RRR")
+        || token == QStringLiteral ("RR73"))
+      {
+        return true;
+      }
+    if (token.size () == 3
+        && (token[0] == QLatin1Char ('+') || token[0] == QLatin1Char ('-'))
+        && token[1].isDigit () && token[2].isDigit ())
+      {
+        return true;
+      }
+    if (token.size () == 4
+        && token[0] == QLatin1Char ('R')
+        && (token[1] == QLatin1Char ('+') || token[1] == QLatin1Char ('-'))
+        && token[2].isDigit () && token[3].isDigit ())
+      {
+        return true;
+      }
+    return false;
+  }
+
+  bool is_actionable_fst4_text (QByteArray const& decoded)
+  {
+    QString text = QString::fromLatin1 (trimmed_field (decoded)).trimmed ();
+    if (text.isEmpty ())
+      {
+        return false;
+      }
+    if (text.contains (QStringLiteral ("<...>"))
+        || text.contains (QLatin1Char (';'))
+        || text.contains (QLatin1Char ('?')))
+      {
+        return false;
+      }
+
+    QStringList tokens = text.toUpper ().split (QLatin1Char (' '), Qt::SkipEmptyParts);
+    if (tokens.isEmpty ())
+      {
+        return false;
+      }
+    if (tokens.first () == QStringLiteral ("CQ"))
+      {
+        return tokens.size () >= 2
+            && (tokens.size () == 2 || is_grid_token (tokens.last ()));
+      }
+    if (tokens.first () == QStringLiteral ("QRZ")
+        || tokens.first () == QStringLiteral ("DE"))
+      {
+        return tokens.size () >= 2;
+      }
+    if (tokens.contains (QStringLiteral ("RR73"))
+        || tokens.contains (QStringLiteral ("RRR"))
+        || tokens.contains (QStringLiteral ("73")))
+      {
+        return tokens.size () >= 2;
+      }
+    if (tokens.size () >= 3
+        && (is_grid_token (tokens.last ()) || is_report_token (tokens.last ())))
+      {
+        return true;
+      }
+    return false;
   }
 
   QString build_row (QString const& utcPrefix, DecodedLine const& line, int ntrperiod)
@@ -1137,6 +1227,34 @@ namespace
         lines.push_back (std::move (line));
       }
   }
+
+  void suppress_strong_fst4_artifacts (std::vector<DecodedLine>& lines)
+  {
+    if (lines.size () < 2)
+      {
+        return;
+      }
+
+    auto const best = std::max_element (lines.begin (), lines.end (),
+                                        [] (DecodedLine const& a, DecodedLine const& b) {
+                                          return a.snr < b.snr;
+                                        });
+    if (best == lines.end () || best->snr < 30)
+      {
+        return;
+      }
+
+    int const bestSnr = best->snr;
+    lines.erase (std::remove_if (lines.begin (), lines.end (),
+                                 [bestSnr] (DecodedLine const& line) {
+                                   if (line.snr >= bestSnr - 20)
+                                     {
+                                       return false;
+                                     }
+                                   return true;
+                                 }),
+                 lines.end ());
+  }
 }
 
 namespace decodium
@@ -1146,7 +1264,14 @@ namespace fst4
 
 std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 {
-  QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  if (decodeCancelled ()) return {};
+  auto& runtime_mutex = decodium::fortran::runtime_mutex ();
+  while (!runtime_mutex.tryLock (50))
+    {
+      if (decodeCancelled ()) return {};
+    }
+  auto const runtime_unlock = qScopeGuard ([&runtime_mutex] { runtime_mutex.unlock (); });
+  if (decodeCancelled ()) return {};
 
   RuntimeConfig const cfg = config_for_period (qBound (15, request.ntrperiod, 1800),
                                                qBound (1, request.ndepth, 3));
@@ -1227,6 +1352,10 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
   std::vector<DecodedLine> rows;
   std::vector<QByteArray> seen;
   bool newCallsign = false;
+  auto const save_calls = qScopeGuard ([&] {
+    if (newCallsign && cfg.doK50Decode && request.iwspr != 0)
+      save_wcalls (state, dataDir);
+  });
   float const minsync = request.ntrperiod == 15 ? 1.15f : 1.20f;
 
   std::vector<Complex> bigfft (static_cast<size_t> (cfg.nfft1 / 2 + 1));
@@ -1235,6 +1364,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 
   for (int inb = 0; inb <= inb1; inb += inb2)
     {
+      if (decodeCancelled ()) return {};
       if (nb < 0)
         {
           npct = inb;
@@ -1252,6 +1382,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
       auto candidates = get_candidates_fst4_cpp (bigfft, cfg, hmod, fa, fb, nfa, nfb, minsync);
       for (auto& candidate : candidates)
         {
+      if (decodeCancelled ()) return {};
           if (request.iwspr == 0 && nb < 0 && npct != 0
               && std::abs (candidate.fc0 - (nfqso + 1.5f * cfg.baud)) > ntol)
             {
@@ -1321,6 +1452,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
 
       for (auto const& candidate : ordered)
         {
+          if (decodeCancelled ()) return {};
           bool candidateDone = false;
           fst4_downsample_cpp (bigfft, cfg, candidate.fcSynced, c2);
           for (int jitterIndex = 0; jitterIndex <= cfg.jittermax && !candidateDone; ++jitterIndex)
@@ -1516,7 +1648,10 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
                           line.bits77 = message77;
                           line.fmid = fmid;
                           line.w50 = w50;
-                          append_unique_line (rows, seen, std::move (line));
+                          if (is_actionable_fst4_text (line.decoded))
+                            {
+                              append_unique_line (rows, seen, std::move (line));
+                            }
                           candidateDone = true;
                         }
                     }
@@ -1623,9 +1758,9 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
         }
     }
 
-  if (newCallsign && cfg.doK50Decode && request.iwspr != 0)
+  if (request.iwspr == 0)
     {
-      save_wcalls (state, dataDir);
+      suppress_strong_fst4_artifacts (rows);
     }
 
   return rows;
@@ -1642,9 +1777,30 @@ FST4DecodeWorker::FST4DecodeWorker (QObject* parent)
 {
 }
 
+void FST4DecodeWorker::retireThrough (quint64 serial)
+{
+  auto previous = m_retiredSerial.load (std::memory_order_relaxed);
+  while (previous < serial && !m_retiredSerial.compare_exchange_weak (
+      previous, serial, std::memory_order_release, std::memory_order_relaxed)) {}
+}
+
+void FST4DecodeWorker::beginShutdown ()
+{
+  m_shutdown.store (true, std::memory_order_release);
+}
+
 void FST4DecodeWorker::decode (DecodeRequest const& request)
 {
-  Q_EMIT decodeReady (request.serial, decodeFst4Rows (request));
+  // FST4W continues through mode changes, but can stop during application shutdown.
+  ScopedDecodeCancellation cancellation (m_retiredSerial, request.serial, request.iwspr == 0, &m_shutdown);
+  if (decodeCancelled ()) {
+    Q_EMIT decodeReady (request.serial, {});
+    return;
+  }
+  auto rows = decodeFst4Rows (request);
+  if (request.serial && m_retiredSerial.load (std::memory_order_acquire) >= request.serial)
+    rows.clear ();
+  Q_EMIT decodeReady (request.serial, rows);
 }
 
 }

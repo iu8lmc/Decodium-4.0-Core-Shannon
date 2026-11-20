@@ -1,0 +1,7 @@
+call|1|IU8LMC|0|1
+unrelated|0
+partner|1
+ghost|0|1
+tx|1
+directed-ghost|0
+directed|1

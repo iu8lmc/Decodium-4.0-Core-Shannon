@@ -1,0 +1,5 @@
+mycall|MyCall,WantedCallsign
+cq|MyCall,WantedCallsign,CQ
+wanted|MyCall,WantedCallsign,CQ|K1ABC
+different|4|K1XYZ
+disabled|4

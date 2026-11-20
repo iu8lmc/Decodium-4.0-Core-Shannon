@@ -1,0 +1,1 @@
+FT4 early A/B: thresholds, TX guards, CPU/backlog and queued request passed

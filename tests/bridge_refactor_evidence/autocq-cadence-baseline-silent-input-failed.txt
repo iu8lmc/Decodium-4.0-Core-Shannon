@@ -1,0 +1,19 @@
+TX relevant log:
+[LAB] CAT auto-connect disabled by --lab-no-cat
+[MAPINT] online services= enabled settings= /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-autocq-pair-69ts80xq/tx-settings/Decodium/Decodium3.ini
+[LAB] runtime overrides initial callsign= 9H1SR grid= JM75 audioIn= BlackHole 16ch audioOut= BlackHole 2ch txOutputLevel= 70.0 mode= FT8 dialHz= <settings> dialReapply= 0 dxCall= <settings> dxGrid= <settings> txPeriod= 0 effectiveHz= 14074000 monitor= <settings> profile= W2300
+[LAB] runtime overrides pre-monitor callsign= 9H1SR grid= JM75 audioIn= BlackHole 16ch audioOut= BlackHole 2ch txOutputLevel= 70.0 mode= FT8 dialHz= <settings> dialReapply= 0 dxCall= <settings> dxGrid= <settings> txPeriod= 0 effectiveHz= 14074000 monitor= <settings> profile= W2300
+[LAB] monitor requested active= true
+[MAIN-TL] save_settings elapsed_ms=55 mode=FT8 cat=hamlib monitoring=1 tx=0 path=[/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-autocq-pair-69ts80xq/tx-settings/Decodium/Decodium3.ini] async=1
+[AUTOCQ-LAB] cadence configured
+[LAB] runtime overrides delayed callsign= 9H1SR grid= JM75 audioIn= BlackHole 16ch audioOut= BlackHole 2ch txOutputLevel= 70.0 mode= FT8 dialHz= <settings> dialReapply= 0 dxCall= <settings> dxGrid= <settings> txPeriod= 0 effectiveHz= 14074000 monitor= <settings> profile= W2300
+[MAIN-TL] save_settings elapsed_ms=44 mode=FT8 cat=hamlib monitoring=1 tx=0 path=[/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-autocq-pair-69ts80xq/tx-settings/Decodium/Decodium3.ini] async=1
+[LAB] runtime overrides pre-standard-autocq callsign= 9H1SR grid= JM75 audioIn= BlackHole 16ch audioOut= BlackHole 2ch txOutputLevel= 70.0 mode= FT8 dialHz= <settings> dialReapply= 0 dxCall= <settings> dxGrid= <settings> txPeriod= 0 effectiveHz= 14074000 monitor= <settings> profile= W2300
+[LAB] standard AutoCQ enabled mode= FT8 message= CQ 9H1SR JM75
+RX matches: []
+Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_autocq_two_app_lab.py", line 59, in <module>
+    if __name__=='__main__':main()
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_autocq_two_app_lab.py", line 49, in main
+    raise RuntimeError('AutoCQ cadence or RX decode was not observed')
+RuntimeError: AutoCQ cadence or RX decode was not observed

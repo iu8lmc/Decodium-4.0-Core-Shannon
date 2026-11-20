@@ -1,0 +1,4 @@
+telemetry before {"cat": false, "expectedUs": 900000, "serialAfter": 0, "tx": false}
+telemetry after {"cat": false, "expectedUs": 900000, "serialAfter": 0, "tx": false}
+txfinish before {"audioPrepared": true, "cat": false, "finishObserved": true, "message": "CQ 9H1SR JM75", "tx": false}
+txfinish after {"audioPrepared": true, "cat": false, "finishObserved": true, "message": "CQ 9H1SR JM75", "tx": false}

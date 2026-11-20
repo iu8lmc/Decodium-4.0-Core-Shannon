@@ -1,0 +1,1 @@
+RTL-SDR discovery A/B: coalescing, empty, device and error results passed

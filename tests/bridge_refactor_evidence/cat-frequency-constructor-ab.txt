@@ -1,0 +1,2 @@
+before {"band": true, "cat": false, "readback": "persisted", "request": true, "shutdown": true, "small": true, "tx": false, "wasShutdown": false, "wrong": true}
+after {"band": true, "cat": false, "readback": "persisted", "request": true, "shutdown": true, "small": true, "tx": false, "wasShutdown": false, "wrong": true}

@@ -1,0 +1,4 @@
+The Decodium award definition catalog in resources/map/decodium-awards-catalog.json
+includes definitions derived from the GridTracker2 awards catalog.
+Copyright (c) GridTracker2 contributors. Distributed under the BSD 3-Clause License.
+See docs/third-party/decodium-awards-catalog-BSD-3-Clause.txt for the complete license text.

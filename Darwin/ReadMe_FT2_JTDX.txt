@@ -34,4 +34,4 @@ Guidance for current users
 - For current app installation, use the normal macOS release notes and, if
   needed, the quarantine command:
 
-  sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
+  sudo xattr -r -d com.apple.quarantine /Applications/Decodium4.app

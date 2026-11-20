@@ -1,0 +1,4 @@
+A write: 27 real bridge QML properties passed; CAT disabled
+A restart: 27 real bridge QML properties passed; CAT disabled
+B write: 27 real bridge QML properties passed; CAT disabled
+B restart: 27 real bridge QML properties passed; CAT disabled

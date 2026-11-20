@@ -1,0 +1,2 @@
+before {"cat": false, "errorCleared": true, "holdCapped": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "errorCleared": true, "holdCapped": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}

@@ -1,0 +1,1 @@
+DX Cluster commands A/B: null, defaults, host, port, callsign, connect, disconnect and autospot passed

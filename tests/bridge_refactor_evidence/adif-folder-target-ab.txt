@@ -1,0 +1,6 @@
+Command: python3 tests/tools/bridge_adifappend_ab.py
+Exit code 0; both baseline and extracted implementations delivered the expected local URLs for an existing and a newly created temporary directory. The desktop-service handler was substituted; actual Finder opening was not tested.
+write|1|1|1|1|1|1|1|1|1|1|1
+append|1|1|2|2
+failure|0|0
+folder|1

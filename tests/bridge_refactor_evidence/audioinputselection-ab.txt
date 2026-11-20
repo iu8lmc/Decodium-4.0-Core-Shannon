@@ -1,0 +1,16 @@
+normal
+two|1|name
+one|1|id
+default|0|not-found
+default|1|default
+one|0|not-found
+null-ok
+linux-simulated
+two|1|name
+one|1|id
+default|0|not-found
+default|1|default
+one|0|not-found
+pulse-default|1|linux-pulse-source
+one|0|not-found
+null-ok

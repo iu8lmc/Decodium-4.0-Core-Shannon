@@ -3,6 +3,12 @@
 #include <cmath>
 #include <complex>
 #include <numeric>
+#if defined(__linux__) && defined(__x86_64__) && defined(__SSE2__) \
+    && !defined(__FMA__) && !defined(__FAST_MATH__)
+#include <emmintrin.h>
+#define DECODIUM_FT2_SYNC_SSE2 1
+#define DECODIUM_FT8_SYNC_SSE2 1
+#endif
 
 namespace
 {
@@ -113,27 +119,55 @@ float sync4_power (Complex const* cd0, int np, int start, std::array<Complex, 64
   return std::abs (z) * fac;
 }
 
-float sync4_metric (Complex const* cd0, int np, int i0, Complex const* ctwk, bool itwk)
+// The four FT2/FT4 sync templates multiplied by the frequency tweak. Built once and reused for every
+// start offset of a scan: the old code redid these 4 x 64 complex products on every single call, which
+// is as much work as the correlation itself. Without a tweak the shared base templates are used as they
+// are (no copy). Arithmetic is the same as before, so the metric is bit-identical.
+struct Sync4Templates
 {
-  std::array<Complex, 64> const s1 = apply_tweak (sync4a (), ctwk, itwk);
-  std::array<Complex, 64> const s2 = apply_tweak (sync4b (), ctwk, itwk);
-  std::array<Complex, 64> const s3 = apply_tweak (sync4c (), ctwk, itwk);
-  std::array<Complex, 64> const s4 = apply_tweak (sync4d (), ctwk, itwk);
+  std::array<Complex, 64> storage[4];
+  std::array<Complex, 64> const* ref[4];
 
+  Sync4Templates (Complex const* ctwk, bool itwk)
+  {
+    std::array<Complex, 64> const* const base[4] = {&sync4a (), &sync4b (), &sync4c (), &sync4d ()};
+    for (int k = 0; k < 4; ++k)
+      {
+        if (!itwk)
+          {
+            ref[k] = base[k];
+            continue;
+          }
+        for (size_t n = 0; n < 64; ++n)
+          {
+            storage[k][n] = ctwk[n] * (*base[k])[n];
+          }
+        ref[k] = &storage[k];
+      }
+  }
+};
+
+float sync4_metric_templates (Complex const* cd0, int np, int i0, Sync4Templates const& tpl)
+{
   int const i1 = i0;
   int const i2 = i0 + 33 * 32;
   int const i3 = i0 + 66 * 32;
   int const i4 = i0 + 99 * 32;
 
-  float const p1 = sync4_power (cd0, np, i1, s1, true, false);
-  float const p2 = sync4_power (cd0, np, i2, s2, false, false);
-  float const p3 = sync4_power (cd0, np, i3, s3, false, false);
-  float const p4 = sync4_power (cd0, np, i4, s4, false, true);
+  float const p1 = sync4_power (cd0, np, i1, *tpl.ref[0], true, false);
+  float const p2 = sync4_power (cd0, np, i2, *tpl.ref[1], false, false);
+  float const p3 = sync4_power (cd0, np, i3, *tpl.ref[2], false, false);
+  float const p4 = sync4_power (cd0, np, i4, *tpl.ref[3], false, true);
   float const pmin = std::min (std::min (p1, p2), std::min (p3, p4));
 
   return p1 + p2 + p3 + p4 - pmin;
 }
 
+float sync4_metric (Complex const* cd0, int np, int i0, Complex const* ctwk, bool itwk)
+{
+  Sync4Templates const tpl (ctwk, itwk);
+  return sync4_metric_templates (cd0, np, i0, tpl);
+}
 std::array<std::array<Complex, 32>, 7> const& sync8_patterns ()
 {
   static std::array<std::array<Complex, 32>, 7> value = [] {
@@ -398,12 +432,175 @@ float sync8var_scan_metric (float const* s, int nh1, int i, int j, int ipass,
   return std::max (std::max (syncf, syncs), std::max (sync_ab, sync_ac));
 }
 
+
+#if defined(DECODIUM_FT8_SYNC_SSE2)
+// Four adjacent frequency bins share the same rows. Each SIMD lane retains
+// the scalar accumulation order; the final selection remains scalar.
+void sync8var_four (float const* s,int nh1,int i,int j,float* scores,signed char* flags)
+{
+  constexpr int icos7[7]={3,1,4,0,6,5,2};
+  __m128 ta=_mm_setzero_ps(),tb=ta,tc=ta,tcq=ta;
+  __m128 t0a=ta,t0b=ta,t0c=ta,t0cq=ta;
+  auto load=[&](int offset,int row){return _mm_loadu_ps(s+(i-1)+offset+nh1*(row-1));};
+  auto accum=[&](__m128& sum,int row) {for(int off=0;off<=16;++off)sum=_mm_add_ps(sum,load(off,row));};
+  for(int n=0;n<=6;++n) {
+    int const k=j+12+4*n, off=2*icos7[n];
+    if(k>0){ta=_mm_add_ps(ta,load(off,k));accum(t0a,k);t0a=_mm_sub_ps(t0a,load(off+1,k));}
+    int const k36=k+144;
+    if(k36>0 && k36<=372){tb=_mm_add_ps(tb,load(off,k36));accum(t0b,k36);t0b=_mm_sub_ps(t0b,load(off+1,k36));}
+    int const k72=k+288;
+    if(k72<=372){tc=_mm_add_ps(tc,load(off,k72));accum(t0c,k72);t0c=_mm_sub_ps(t0c,load(off+1,k72));}
+  }
+  for(int n=7;n<=15;++n) {
+    int const k=j+12+4*n;
+    if(k>=1) {
+      accum(t0cq,k);
+      if(n<15){tcq=_mm_add_ps(tcq,load(0,k));t0cq=_mm_sub_ps(t0cq,load(0,k+1));}
+      else {tcq=_mm_add_ps(tcq,load(2,k));t0cq=_mm_sub_ps(t0cq,load(0,k+3));}
+    }
+  }
+  alignas(16) float va[4],vb[4],vc[4],vcq[4],v0a[4],v0b[4],v0c[4],v0cq[4];
+  _mm_store_ps(va,ta);_mm_store_ps(vb,tb);_mm_store_ps(vc,tc);_mm_store_ps(vcq,tcq);
+  _mm_store_ps(v0a,t0a);_mm_store_ps(v0b,t0b);_mm_store_ps(v0c,t0c);_mm_store_ps(v0cq,t0cq);
+  for(int lane=0;lane<4;++lane) {
+    float ta=va[lane],tb=vb[lane],tc=vc[lane],tcq=vcq[lane];
+    float t0a=v0a[lane],t0b=v0b[lane],t0c=v0c[lane],t0cq=v0cq[lane];
+    bool lcq_out=false;
+    auto finish=[&]() -> float {
+  float t1 = ta + tb + tc;
+  float t01 = t0a + t0b + t0c;
+  float t2 = t1 + tcq;
+  float t02 = t01 + t0cq;
+  t01 = (t01 - t1 * 2.0f) / 42.0f;
+  if (t01 < 1.0e-8f) t01 = 1.0f;
+  t02 = (t02 - t2 * 2.0f) / 60.0f;
+  if (t02 < 1.0e-8f) t02 = 1.0f;
+  float const syncf = std::max (t1 / (7.0f * t01), (t1 / 7.0f + tcq / 9.0f) / t02);
+  bool lcq = ((t1 / 7.0f + tcq / 9.0f) / t02) > (t1 / (7.0f * t01));
+
+  t1 = tb + tc;
+  t01 = t0b + t0c;
+  t2 = t1 + tcq;
+  t02 = t01 + t0cq;
+  t01 = (t01 - t1 * 2.0f) / 28.0f;
+  if (t01 < 1.0e-8f) t01 = 1.0f;
+  t02 = (t02 - t2 * 2.0f) / 46.0f;
+  if (t02 < 1.0e-8f) t02 = 1.0f;
+  float const syncs = std::max (t1 / (7.0f * t01), (t1 / 7.0f + tcq / 9.0f) / t02);
+  bool const lcq2 = ((t1 / 7.0f + tcq / 9.0f) / t02) > (t1 / (7.0f * t01));
+
+  t1 = ta + tb;
+  t01 = t0a + t0b;
+  t01 = (t01 - t1 * 2.0f) / 28.0f;
+  if (t01 < 1.0e-8f) t01 = 1.0f;
+  float const sync_ab = t1 / (7.0f * t01);
+
+  t1 = ta + tc;
+  t01 = t0a + t0c;
+  t01 = (t01 - t1 * 2.0f) / 28.0f;
+  if (t01 < 1.0e-8f) t01 = 1.0f;
+  float const sync_ac = t1 / (7.0f * t01);
+
+  lcq_out = (syncf > syncs) ? lcq : lcq2;
+  return std::max (std::max (syncf, syncs), std::max (sync_ab, sync_ac));
+    };
+    scores[lane]=finish();flags[lane]=lcq_out ? 1 : 0;
+  }
+}
+#endif
+
 }
 
 extern "C" void ftx_sync2d_c (Complex const* cd0, int np, int i0,
                                Complex const* ctwk, int itwk, float* sync)
 {
   *sync = sync4_metric (cd0, np, i0, ctwk, itwk != 0);
+}
+
+// Best FT2 sync over a range of start offsets for one frequency tweak: same result as calling
+// ftx_sync2d_c for every offset and keeping the first strict maximum, with the tweaked templates built
+// once. Start offsets can be negative, so "nothing found" is signalled by *sync_best staying at -1e30
+// (below any real metric), never by *ibest.
+extern "C" void ftx_sync2d_scan_c (Complex const* cd0, int np, int ibmin, int ibmax, int ibstp,
+                                    Complex const* ctwk, int itwk, float* sync_best, int* ibest)
+{
+  Sync4Templates const tpl (ctwk, itwk != 0);
+  float best = -1.0e30f;
+  int best_i = -1;
+  int i0 = ibmin;
+#if defined(DECODIUM_FT2_SYNC_SSE2)
+  // Four independent start offsets share each template. Each SIMD lane keeps
+  // the original accumulation order; unusual/nonfinite values use scalar.
+  auto fourPowers = [&] (int start, std::array<Complex, 64> const& pattern, float* output) {
+    __m128 re = _mm_setzero_ps ();
+    __m128 im = _mm_setzero_ps ();
+    for (int i = 0; i < 64; ++i)
+      {
+        int const p = start + 2 * i;
+        __m128 const ar = _mm_set_ps (cd0[p + 3 * ibstp].real (), cd0[p + 2 * ibstp].real (),
+                                      cd0[p + ibstp].real (), cd0[p].real ());
+        __m128 const ai = _mm_set_ps (cd0[p + 3 * ibstp].imag (), cd0[p + 2 * ibstp].imag (),
+                                      cd0[p + ibstp].imag (), cd0[p].imag ());
+        __m128 const br = _mm_set1_ps (pattern[i].real ());
+        __m128 const bi = _mm_set1_ps (-pattern[i].imag ());
+        re = _mm_add_ps (re, _mm_sub_ps (_mm_mul_ps (ar, br), _mm_mul_ps (ai, bi)));
+        im = _mm_add_ps (im, _mm_add_ps (_mm_mul_ps (ar, bi), _mm_mul_ps (ai, br)));
+      }
+    alignas(16) float rr[4], ii[4];
+    _mm_store_ps (rr, re);
+    _mm_store_ps (ii, im);
+    for (int j = 0; j < 4; ++j)
+      {
+        if (!std::isfinite (rr[j]) || !std::isfinite (ii[j])) return false;
+        output[j] = std::abs (Complex (rr[j], ii[j])) * (1.0f / 64.0f);
+      }
+    return true;
+  };
+  // FT2's real bounds are small and the step is 1 or 4. The conservative
+  // guard keeps integer arithmetic and all four loads in range.
+  if (ibstp > 0 && ibstp <= 1024 && np >= 3296 && np <= 10000000
+      && ibmin >= -10000 && ibmax <= 10000000)
+    {
+      for (; i0 <= ibmax && i0 < 0; i0 += ibstp)
+        {
+          float const sync = sync4_metric_templates (cd0, np, i0, tpl);
+          if (sync > best) { best = sync; best_i = i0; }
+        }
+      for (; i0 + 3 * ibstp <= ibmax && i0 >= 0
+             && i0 + 3 * ibstp + 99 * 32 + 127 <= np - 1;
+           i0 += 4 * ibstp)
+        {
+          float powers[4][4];
+          bool finite = true;
+          for (int k = 0; k < 4 && finite; ++k)
+            finite = fourPowers (i0 + k * 33 * 32, *tpl.ref[k], powers[k]);
+          for (int j = 0; j < 4; ++j)
+            {
+              float sync;
+              if (finite)
+                {
+                  float const pmin = std::min (std::min (powers[0][j], powers[1][j]),
+                                               std::min (powers[2][j], powers[3][j]));
+                  sync = powers[0][j] + powers[1][j] + powers[2][j] + powers[3][j] - pmin;
+                }
+              else
+                sync = sync4_metric_templates (cd0, np, i0 + j * ibstp, tpl);
+              if (sync > best) { best = sync; best_i = i0 + j * ibstp; }
+            }
+        }
+    }
+#endif
+  for (; i0 <= ibmax; i0 += ibstp)
+    {
+      float const sync = sync4_metric_templates (cd0, np, i0, tpl);
+      if (sync > best)
+        {
+          best = sync;
+          best_i = i0;
+        }
+    }
+  *sync_best = best;
+  *ibest = best_i;
 }
 
 extern "C" void ftx_sync4d_c (Complex const* cd0, int np, int i0,
@@ -444,7 +641,20 @@ extern "C" void ftx_sync8var_scan_c (float const* s, int nh1, int nhsym, int iaw
 
   for (int j = jzb; j <= jzt; ++j)
     {
-      for (int i = iaw; i <= ibw; ++i)
+      int i=iaw;
+#if defined(DECODIUM_FT8_SYNC_SSE2)
+      if ((!lagcc || lagccbail) && iaw >= 1 && ibw >= iaw && ibw <= nh1
+          && j >= -62 && j <= 62 && nh1 >= 20 && nh1 <= 100000 && nhsym >= 372)
+        for (; i + 3 <= ibw && i + 19 <= nh1; i += 4) {
+          float vals[4];signed char flags[4];
+          sync8var_four(s,nh1,i,j,vals,flags);
+          for(int k=0;k<4;++k) {
+            size_t idx=static_cast<size_t>((i+k-1)+nh1*(j-jzb));
+            sync2d[idx]=vals[k];syncq[idx]=flags[k];
+          }
+        }
+#endif
+      for (; i <= ibw; ++i)
         {
           bool lcq = false;
           float const value = sync8var_scan_metric (s, nh1, i, j, ipass, lagcc != 0, lagccbail != 0, lcq);

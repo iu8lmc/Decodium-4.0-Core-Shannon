@@ -1,0 +1,1 @@
+Remote objects A/B: lazy reuse, correct disconnect ownership and SSTV stream guards passed

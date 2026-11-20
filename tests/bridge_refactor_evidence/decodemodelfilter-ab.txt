@@ -1,0 +1,6 @@
+band|A,SEP:120015,B,TX,SEP:120030,C
+reverse|C,SEP:120015,TX,B,SEP:120000,A
+rx|A,SEP:120030,C
+nosep|A,B,TX,C
+timestamp|X,SEP:,Y
+empty|0

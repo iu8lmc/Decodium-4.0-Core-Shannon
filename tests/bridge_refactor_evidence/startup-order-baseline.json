@@ -1,0 +1,1 @@
+{"case": "baseline", "events": {"Configuration Settings": 4.877, "Main.qml created as top-level": 7.309, "WorkedBefore::reload": 5.156, "bridge OK": 0.702, "bridge constructing": 0.322, "live map visual stage ready": 15.797, "starting Main.qml load at": 5.821, "waterfall visual stage ready": 12.481, "window visible at": 4.77}, "exit": 0, "main_before_legacy": false}

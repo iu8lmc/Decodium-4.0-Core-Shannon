@@ -1,0 +1,1 @@
+{"b4": false, "bgcolor": "#2600ff88", "call": "K1ABC", "continent": "NA", "country": "United States", "cq": true, "display": "CQ K1ABC FN42", "dxcall": "K1ABC", "grid": "FN42", "highlight": true, "itu": 8, "newgrid": true, "prefix": "K", "provenance": "Local decoder", "snrcolor": "#00ff88", "source": "Local decoder", "tx": false, "zone": 5}

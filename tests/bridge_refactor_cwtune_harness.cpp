@@ -1,0 +1,11 @@
+#include <QCoreApplication>
+#include <QDateTime>
+#include <cmath>
+#include <limits>
+#include <iostream>
+struct Remote{bool linked=true,activePtt=false;bool isLinked()const{return linked;}bool ptt()const{return activePtt;}};struct Doppler{bool enabled=true;void setEnabled(bool b){enabled=b;}};static int catCalls=0;static double catHz=0;static void activeCatSetFreq(QObject const*,void*,const QString&,double hz,void*,void*){++catCalls;catHz=hz;}
+class DecodiumBridge:public QObject {public:bool m_ssbTxActive=false,m_catConnected=false,m_transmitting=false,m_tuning=false,m_cwRemoteKeying=false,m_cwTxActive=false,m_rttyTxActive=false,m_decoPortUseRemote=false,sstv=false;double m_frequency=7000000,m_localCatFrequencyPreviousHz=0,m_localCatFrequencyTargetHz=0,calibration=10;qint64 m_localCatFrequencyGuardUntilMs=0,m_localCatFrequencyGuardMaxMs=0;QString m_catBackend="hamlib";void*m_hamlibCat=nullptr,*m_omniRigCat=nullptr,*m_legacyBackend=nullptr;Doppler*m_q65Doppler=nullptr;Remote*remote=nullptr;
+ bool sstvTxActive()const{return sstv;}Remote*remoteLinkIfAny(){return remote;}void setFrequency(double hz){m_frequency=hz;}double applyFrequencyCalibration(double hz){return hz+calibration;}bool cwTuneFrequency(double);
+};
+#include "bridge_refactor_under_test.inc"
+int main(int argc,char**argv){QCoreApplication app(argc,argv);DecodiumBridge b;std::cout<<"disconnected|"<<b.cwTuneFrequency(14074000)<<'\n';b.m_catConnected=true;std::cout<<"invalid|"<<b.cwTuneFrequency(std::numeric_limits<double>::quiet_NaN())<<"|"<<b.cwTuneFrequency(999)<<'\n';b.m_transmitting=true;std::cout<<"busy|"<<b.cwTuneFrequency(14074000)<<'\n';b.m_transmitting=false;Doppler d;b.m_q65Doppler=&d;std::cout<<"local|"<<b.cwTuneFrequency(14074000)<<"|"<<catCalls<<"|"<<(catHz==14074010)<<"|"<<(b.m_localCatFrequencyPreviousHz==7000000)<<"|"<<(b.m_localCatFrequencyTargetHz==14074000)<<"|"<<d.enabled<<"|"<<(b.m_localCatFrequencyGuardMaxMs>b.m_localCatFrequencyGuardUntilMs)<<'\n';b.m_decoPortUseRemote=true;Remote r;b.remote=&r;r.activePtt=true;std::cout<<"remote-busy|"<<b.cwTuneFrequency(7100000)<<'\n';r.activePtt=false;std::cout<<"remote|"<<b.cwTuneFrequency(7100000)<<"|"<<(b.m_frequency==7100000)<<"|"<<catCalls<<'\n';}

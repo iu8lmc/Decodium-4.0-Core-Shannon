@@ -1,0 +1,2 @@
+before {"cleared": true, "empty": false, "found": true, "set": true}
+after {"cleared": true, "empty": false, "found": true, "set": true}

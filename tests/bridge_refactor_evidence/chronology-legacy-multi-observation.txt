@@ -1,0 +1,1 @@
+{"model": "CAB", "raw": [1, 2, 0], "seen": true, "tx": false}

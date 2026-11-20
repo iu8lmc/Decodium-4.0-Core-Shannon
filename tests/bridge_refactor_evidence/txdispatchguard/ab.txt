@@ -1,0 +1,1 @@
+TX dispatch A/B: manual and stale requests, TX6 authorization, startup/hold guards and generation invalidation passed

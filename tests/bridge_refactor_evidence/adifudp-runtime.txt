@@ -1,0 +1,1 @@
+{"clear": true, "count": 1, "tx": false}; synthetic ADIF received on private loopback

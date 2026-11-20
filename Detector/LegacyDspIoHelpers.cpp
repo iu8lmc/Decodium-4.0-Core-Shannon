@@ -1650,7 +1650,8 @@ void filbig_compute (float const* dd, int npts, float f0, int newdat, std::compl
     }
   *sq0_out = percentile_value (power.data (), kFilbigNz2, 30);
 
-  transform_complex (c4a, kFilbigNfft2, 1);
+  // Match filbig's FFTW_FORWARD transform; the inverse reverses the JT65 signal.
+  transform_complex (c4a, kFilbigNfft2, -1);
   *n4_out = std::min (npts / 8, kFilbigNfft2);
 }
 

@@ -1,0 +1,2 @@
+before {"cat": false, "consumer": false, "delivered": 0, "frameReset": true, "serialUnchanged": true, "tx": false}
+after {"cat": false, "consumer": false, "delivered": 0, "frameReset": true, "serialUnchanged": true, "tx": false}

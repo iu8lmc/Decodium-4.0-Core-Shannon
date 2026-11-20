@@ -1,0 +1,11 @@
+empty=0 other=0
+weak-first=1
+weak-repeat=0
+weak-cached=0
+active=0
+late=0
+invalid-dxcc=1
+active-dxcc=0
+grid-mismatch=1
+trusted-grid=0
+tx=0

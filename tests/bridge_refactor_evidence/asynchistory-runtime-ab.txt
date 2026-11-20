@@ -1,0 +1,2 @@
+{"qsos": 0, "rows": 346, "tx": false, "worked": 6711}
+{"qsos": 0, "rows": 346, "tx": false, "worked": 6711}

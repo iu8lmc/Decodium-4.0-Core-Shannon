@@ -1,0 +1,8 @@
+from pathlib import Path
+import subprocess, tempfile
+r=Path(__file__).resolve().parents[2]; a=(r/'tests/bridge_refactor_fixtures/display_frequency_before.inc').read_text(); b=(r/'src/bridge/DecodiumBridgeDisplayFrequency.cpp').read_text().split('\n\n',1)[1]; assert a==b
+h='''#include <cassert>\nclass DecodiumBridge { public: bool m_transmitting=false,m_tuning=false,sat=false; long long m_ft2LinkSatelliteHalfDuplexTxDialHz=0; double m_frequency=14074000,split=0; bool ft2LinkSatelliteHalfDuplexOperationActive() const { return sat; } double catSplitTxDialFrequencyHz() const { return split; } double frequency() const; double displayFrequency() const; };\n'''
+t='''\nint main(){ DecodiumBridge b; assert(b.frequency()==14074000); assert(b.displayFrequency()==14074000); b.split=7074000; assert(b.displayFrequency()==14074000); b.m_tuning=true; assert(b.displayFrequency()==7074000); b.split=0; assert(b.displayFrequency()==14074000); b.m_tuning=false; b.m_transmitting=true; b.sat=true; b.split=7074000; b.m_ft2LinkSatelliteHalfDuplexTxDialHz=435000000; assert(b.displayFrequency()==435000000); b.m_ft2LinkSatelliteHalfDuplexTxDialHz=0; assert(b.displayFrequency()==7074000); b.m_transmitting=false; b.m_tuning=true; b.m_ft2LinkSatelliteHalfDuplexTxDialHz=435000000; assert(b.displayFrequency()==7074000); }\n'''
+with tempfile.TemporaryDirectory(prefix='decodium-display-ab-') as d:
+ for n,src in [('A',a),('B',b)]:
+  p=Path(d)/f'{n}.cpp'; p.write_text(h+src+t); exe=Path(d)/n; subprocess.run(['c++','-std=c++17',str(p),'-o',str(exe)],check=True); subprocess.run([str(exe)],check=True); print(n,'OK')

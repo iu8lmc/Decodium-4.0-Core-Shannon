@@ -1,0 +1,2 @@
+before {"cat": false, "delivered": 1, "nfa": 200, "nfb": 3000, "sample": 2000, "tx": false, "usable": 4096}
+after {"cat": false, "delivered": 1, "nfa": 200, "nfb": 3000, "sample": 2000, "tx": false, "usable": 4096}

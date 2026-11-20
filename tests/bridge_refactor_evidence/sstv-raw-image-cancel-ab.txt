@@ -1,0 +1,2 @@
+before {"cancelled": true, "cat": false, "encoded": true, "fed": true, "imageLinked": true, "matched": true, "readback": "persisted", "removed": true, "requested": true, "saved": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false, "wav": true}
+after {"cancelled": true, "cat": false, "encoded": true, "fed": true, "imageLinked": true, "matched": true, "readback": "persisted", "removed": true, "requested": true, "saved": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false, "wav": true}

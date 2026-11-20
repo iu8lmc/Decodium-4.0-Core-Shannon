@@ -1,0 +1,1 @@
+DecoPort remote A/B: link refusal, legacy handoff, modes and local CAT restoration passed

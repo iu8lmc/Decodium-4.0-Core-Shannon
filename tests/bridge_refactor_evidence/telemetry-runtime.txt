@@ -1,0 +1,1 @@
+{"tx": false, "valid": true}; diagnostic confirms FT2 telemetry rejection

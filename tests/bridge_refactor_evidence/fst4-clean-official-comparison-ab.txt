@@ -1,0 +1,5 @@
+before raw ['[FST4-RAW-AB] 1001 022815 -11  2.3 1533 `  9W1JOI 6J2RKM/R R AK66                  |022815 -11  2.3 1533 `  9I9WHQ 6I2PEO/P OJ52                    |022815 -12  2.3 1533 `  8R0EJM 6S2OTX/R KB52                    |022815 -12  2.3 1533 `  9X6JGW FI7GBB/R R AK64                  |022815 -12  2.3 1533 `  9C3CTA/R GK1YMN R BA32                  '] callbacks []
+before {"displayedExpected": false, "expectedMessage": false}
+after raw ['[FST4-RAW-AB] 1001 022900 -11  2.3 1533 `  9W1JOI 6J2RKM/R R AK66                  |022900 -11  2.3 1533 `  9I9WHQ 6I2PEO/P OJ52                    |022900 -12  2.3 1533 `  8R0EJM 6S2OTX/R KB52                    |022900 -12  2.3 1533 `  9X6JGW FI7GBB/R R AK64                  |022900 -12  2.3 1533 `  9C3CTA/R GK1YMN R BA32                  '] callbacks []
+after {"displayedExpected": false, "expectedMessage": false}
+RuntimeError: FST4 expected message was not decoded and displayed

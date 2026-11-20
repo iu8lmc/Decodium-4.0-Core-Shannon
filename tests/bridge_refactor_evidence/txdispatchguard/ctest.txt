@@ -1,0 +1,7 @@
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+    Start 30: test_tx_dispatch_guard
+1/1 Test #30: test_tx_dispatch_guard ...........   Passed    0.25 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.27 sec

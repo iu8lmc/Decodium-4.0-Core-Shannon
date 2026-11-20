@@ -1,0 +1,2 @@
+before {"cat": false, "ok": true, "okAgain": true, "pttCleared": true, "reused": true, "rigEnabled": false, "setups": 1, "tx": false, "warnings": 1}
+after {"cat": false, "ok": true, "okAgain": true, "pttCleared": true, "reused": true, "rigEnabled": false, "setups": 1, "tx": false, "warnings": 1}

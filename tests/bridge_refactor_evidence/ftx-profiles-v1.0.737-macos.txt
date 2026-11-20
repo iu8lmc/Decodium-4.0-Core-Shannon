@@ -1,0 +1,2 @@
+write: ready profiles and AutoCQ values passed; CAT disabled
+restart: ready profiles and AutoCQ values passed; CAT disabled

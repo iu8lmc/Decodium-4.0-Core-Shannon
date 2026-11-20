@@ -1,0 +1,8 @@
+all|first,second,third,fourth
+last2|third,fourth
+offset|second,third,fourth
+end|
+tail|third,fourth
+tail1|fourth
+missing|
+invalid|

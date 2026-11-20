@@ -1,0 +1,26 @@
+{
+  "on": {
+    "anchor_offset_samples": [
+      0,
+      7,
+      8,
+      8,
+      7,
+      7
+    ],
+    "last_column_mean_error": 155.25,
+    "middle_column_mean_error": 0.333333
+  },
+  "off": {
+    "anchor_offset_samples": [
+      0,
+      3,
+      3,
+      4,
+      3,
+      2
+    ],
+    "last_column_mean_error": 95.6056,
+    "middle_column_mean_error": 0.333333
+  }
+}

@@ -1,0 +1,30 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -526,7 +526,7 @@
+           QFile file(output); if(!file.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {app.exit(8);return;}
+           if(file.write(tb->baBSR)!=tb->baBSR.size()) {app.exit(8);return;}
+           fprintf(stderr,"LAB live RX BSR id=%u total=%d received=%u bytes=%lld\n",tb->transportID,tb->totalSegments,tb->segmentsReceived,static_cast<long long>(tb->baBSR.size()));
+-          file.close(); timer->stop(); mainWindowPtr->shutdown(false); app.exit(0); return;
++          file.close(); timer->stop(); if(qEnvironmentVariableIntValue("QSSTV_BSR_RX_KEEP")!=1) {mainWindowPtr->shutdown(false); app.exit(0);} return;
+         }
+       });
+       timer->start(250);
+--- a/src/drmrx/sourcedecoder.cpp
++++ b/src/drmrx/sourcedecoder.cpp
+@@ -754,6 +754,16 @@
+           return false;
+         }
+       baFilePtr=&ba;
++      const QString labOutput=qEnvironmentVariable("QSSTV_BSR_RX_IMAGE");
++      if(!labOutput.isEmpty() && tbPtr->fileName!="bsr.bin" && !tbPtr->alreadyReceived)
++        {
++          QFile labFile(labOutput);
++          if(labFile.open(QIODevice::WriteOnly | QIODevice::NewOnly))
++            {
++              const auto written=labFile.write(ba);
++              fprintf(stderr,"LAB live RX completed id=%u bytes=%lld written=%lld\n",tbPtr->transportID,static_cast<long long>(ba.size()),static_cast<long long>(written));
++            }
++        }
+     }
+   if(!tbPtr->alreadyReceived)
+     {

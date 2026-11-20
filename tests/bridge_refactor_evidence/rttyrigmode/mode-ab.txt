@@ -1,0 +1,1 @@
+RTTY rig mode A/B: context, CAT routing, no-op and QSY deferral passed

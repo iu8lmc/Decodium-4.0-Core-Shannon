@@ -1,0 +1,6 @@
+[FT8-WAV-MESSAGE] legacyTX=false
+[FT8-WAV-MESSAGE] PASS
+CQ K1ABC FN42: WAV decoded in app; CAT and monitoring disabled
+[FT8-WAV-MESSAGE] legacyTX=false
+[FT8-WAV-MESSAGE] PASS
+CQ K1ABC FN42: WAV decoded in app; CAT and monitoring disabled

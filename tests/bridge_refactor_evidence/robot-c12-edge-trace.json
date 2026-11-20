@@ -1,0 +1,39 @@
+{
+  "setup": "current refactor, two isolated Decodium sessions, BlackHole 2ch, CAT off, no additional capture",
+  "rx_complete": true,
+  "coverage": 1.0,
+  "global_mae": 8.794496527777778,
+  "global_p95": 64.04999999999563,
+  "edge_column_mae_rgb": {
+    "0": [
+      0.008,
+      0.092,
+      0.008
+    ],
+    "156": [
+      0.0,
+      19.817,
+      0.0
+    ],
+    "157": [
+      0.0,
+      19.825,
+      0.0
+    ],
+    "158": [
+      0.0,
+      146.175,
+      0.0
+    ],
+    "159": [
+      5.5,
+      194.317,
+      1.05
+    ]
+  },
+  "frame_trace": [
+    "[SSTV][FRAME] robot terminal state= 1 lines= 120 coverage= 1 image_start_sample= 195930 image_end_sample= 339930 tail_first_incomplete= 120 first_incomplete_from_top= 120 incomplete_rows= 0 tail_prev_complete= true terminal_row_recovery= true",
+    "[SSTV][FRAME] resume boundary= 339930 tone_start= 339941 tone_end= 340181"
+  ],
+  "note": "One diagnostic run; does not compare baseline or establish cause."
+}

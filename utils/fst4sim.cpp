@@ -340,7 +340,7 @@ int main (int argc, char* argv[])
         {
           kshift = static_cast<int> (std::lround ((xdt + 0.5f) / dt));
         }
-      c0 = circular_shift (c0, -kshift);
+      c0 = circular_shift (c0, kshift);
       if (kshift > 0)
         {
           std::fill (c0.begin (), c0.begin () + std::min (kshift, nwave), std::complex<float> {});

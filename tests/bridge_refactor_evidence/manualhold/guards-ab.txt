@@ -1,0 +1,1 @@
+manual hold A/B: resume eligibility, queue and deferred TX state passed

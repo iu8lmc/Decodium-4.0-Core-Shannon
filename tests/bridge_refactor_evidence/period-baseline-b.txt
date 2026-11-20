@@ -1,0 +1,1 @@
+b: mode period and legacy MSK period passed; CAT disabled

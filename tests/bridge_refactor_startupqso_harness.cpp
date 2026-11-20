@@ -1,0 +1,9 @@
+#include <QtCore>
+namespace decodium { void beginActiveSettingsProfile(QSettings& s){s.beginGroup("test");} }
+class DecodiumBridge { public:
+ bool m_txEnabled=true,m_manualTxHold=true,m_reportReceivedReal=true;int m_qsoProgress=7,m_txRetryCount=4,m_lastNtx=5,m_nTx73=1,m_activeTxNumber=5,m_currentTx=4,clears=0;
+ QString m_dxCall="K1ABC",m_dxGrid="FN42",m_tx1="a",m_tx2="b",m_tx3="c",m_tx4="d",m_tx5="e",m_tx6="CQ TEST",m_reportSent="-07",m_reportReceived="-03",m_autoSeqRogerReportBase="x",m_lastTransmittedMessage="x",m_activeTxMessage="x";QMap<QString,int> m_qsoCooldown,m_worldMapClosedQsoCallKeys;
+ void clearPendingAutoLogSnapshot(){++clears;}void clearLateAutoLogSnapshot(){++clears;}void clearAutoCqPartnerLock(){++clears;}void regenerateTxMessages(){++clears;}
+ void resetStartupTransientQsoState();void purgePersistentTransientQsoState(); };
+#include "bridge_refactor_under_test.inc"
+int main(int argc,char**argv){QCoreApplication app(argc,argv);QTemporaryDir d;QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,d.path());QSettings s(QSettings::IniFormat,QSettings::UserScope,"Decodium","Decodium3");s.beginGroup("test");for(auto k:{"dxCall","dxGrid","tx1","tx2","tx3","tx4","tx5","reportReceived"})s.setValue(k,"stale");s.setValue("keep","safe");s.sync();DecodiumBridge b;b.resetStartupTransientQsoState();b.purgePersistentTransientQsoState();s.sync();QTextStream o(stdout);o<<"reset|"<<!b.m_txEnabled<<'|'<<!b.m_manualTxHold<<'|'<<b.m_dxCall.isEmpty()<<'|'<<b.m_dxGrid.isEmpty()<<'|'<<b.m_tx1.isEmpty()<<'|'<<(b.m_reportReceived=="-10")<<'|'<<!b.m_reportReceivedReal<<'|'<<(b.m_lastNtx==-1)<<'|'<<(b.m_currentTx==6)<<'|'<<b.clears<<'\n';o<<"settings|"<<!s.contains("dxCall")<<'|'<<!s.contains("reportReceived")<<'|'<<(s.value("keep").toString()=="safe")<<'\n';b.m_tx6=" ";b.resetStartupTransientQsoState();o<<"empty-cq|"<<(b.m_currentTx==1)<<'\n';}

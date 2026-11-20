@@ -1,0 +1,2 @@
+before {"cat": false, "coalesced": true, "completed": true, "endings": 1, "pending": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "coalesced": true, "completed": true, "endings": 1, "pending": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}

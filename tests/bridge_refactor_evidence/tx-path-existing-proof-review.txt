@@ -1,0 +1,5 @@
+Existing evidence review, no rerun.
+startTx calls startTxPreflight and prepareStartTxSelection; saved FT8 before/after app pairs both reach startTx and decode CQ 9H1SR JM75, with matching peak and 127 active windows.
+The separate modulator-finish app pairs both reach finish and decode the same CQ, with matching peak and 128 active windows.
+The 20 guard cases and six notices are documented in tests/BRIDGE_REFACTOR_AB.md and start-tx-preflight-notices-ab.txt.
+First-active timings differ and are not claimed identical; CAT is disabled in the virtual-audio tests and this does not prove physical relay or RF.

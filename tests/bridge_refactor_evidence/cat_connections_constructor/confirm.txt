@@ -1,0 +1,2 @@
+before {"cat": false, "confirmed": true, "inactive": true, "once": true, "ran": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false, "wrong": true}
+after {"cat": false, "confirmed": true, "inactive": true, "once": true, "ran": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false, "wrong": true}

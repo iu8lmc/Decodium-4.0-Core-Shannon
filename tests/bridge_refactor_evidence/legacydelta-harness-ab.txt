@@ -1,0 +1,1 @@
+legacy model delta ordering, period separators, snapshot guard, timer and invalidation: OK

@@ -1,0 +1,1 @@
+sync scheduler A/B identical: 140 mode/backend/slot cases plus guard and rendezvous

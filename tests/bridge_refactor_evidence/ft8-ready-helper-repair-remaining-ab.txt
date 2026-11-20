@@ -1,0 +1,16 @@
+audio before {"decoded": true, "tx": false}
+audio after {"decoded": true, "tx": false}
+fst4_reference before {"displayedExpected": true, "expectedMessage": true}
+fst4_reference after {"displayedExpected": true, "expectedMessage": true}
+ft2_audio before {"displayed": true, "workerDecoded": true}
+ft2_audio after {"displayed": true, "workerDecoded": true}
+jt4_audio before {"displayedExpected": true, "expectedMessage": true}
+jt4_audio after {"displayedExpected": true, "expectedMessage": true}
+jt9_reference before {"displayedExpected": true, "expectedMessage": true}
+jt9_reference after {"displayedExpected": true, "expectedMessage": true}
+legacy_mirror before {"cat": false, "legacy": true, "serialCleaned": true, "shown": false, "tx": false}
+legacy_mirror after {"cat": false, "legacy": true, "serialCleaned": true, "shown": false, "tx": false}
+msk144_audio before {"displayed": true, "workerDecoded": true}
+msk144_audio after {"displayed": true, "workerDecoded": true}
+q65_audio before {"displayed": true, "workerDecoded": true}
+q65_audio after {"displayed": true, "workerDecoded": true}

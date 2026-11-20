@@ -6,8 +6,10 @@ extern "C" {
 #endif
 
 typedef void (*wsprd_output_callback_t) (void * context, char const * text, int is_error);
+typedef int (*wsprd_cancel_callback_t) (void * context);
 
 void wsprd_set_output_callback (wsprd_output_callback_t callback, void * context);
+void wsprd_set_cancel_callback (wsprd_cancel_callback_t callback, void * context);
 int wsprd_run (int argc, char * argv[]);
 
 #ifdef __cplusplus

@@ -1,0 +1,1 @@
+a: {"started":{"mode":"FT8","enabled":true,"tx":false,"max":999,"priority":2},"stopped":true,"tx":false}

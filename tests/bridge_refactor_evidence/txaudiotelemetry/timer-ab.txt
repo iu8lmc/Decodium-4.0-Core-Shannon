@@ -1,0 +1,1 @@
+telemetry timer A/B: stall/underrun warning and tuning, serial, TX guards passed

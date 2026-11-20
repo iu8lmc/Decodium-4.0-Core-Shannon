@@ -1,0 +1,1 @@
+{"bypass": true, "off": true, "on": true, "restored": true, "tx": false}

@@ -1,0 +1,1 @@
+a: SSTV mode choices and control snapshots passed; CAT disabled

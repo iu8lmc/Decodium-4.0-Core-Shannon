@@ -1,0 +1,2 @@
+before [{"cat": false, "clicked": true, "closed": true, "spotDisabled": true, "tx": false}, {"call": "K1ABC", "comment": "synthetic dialog note", "count": 1}]
+after [{"cat": false, "clicked": true, "closed": true, "spotDisabled": true, "tx": false}, {"call": "K1ABC", "comment": "synthetic dialog note", "count": 1}]

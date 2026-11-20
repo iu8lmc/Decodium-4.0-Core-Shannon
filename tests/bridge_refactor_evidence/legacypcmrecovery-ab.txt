@@ -1,0 +1,6 @@
+guard|0
+sstv|0
+rearm|1|1|1|1
+tx|1|1
+dual|1|0
+retry|2|2

@@ -1,0 +1,2 @@
+before {"cat": false, "invalidated": true, "noTx": true, "scheduled": true, "tx": false}
+after {"cat": false, "invalidated": true, "noTx": true, "scheduled": true, "tx": false}

@@ -1,0 +1,1 @@
+RTL-SDR status A/B: device, running, RF view gates and frequencies passed

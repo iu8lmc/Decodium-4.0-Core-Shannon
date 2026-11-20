@@ -1,0 +1,1 @@
+decode/TX wait A/B: guards, pending serials, CPU grace, deadlines and cancellation passed

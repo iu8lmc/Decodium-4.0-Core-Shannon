@@ -1,0 +1,20 @@
+Review of 15 retained two-app virtual-audio before/after JSON pairs; no test was rerun.
+All retained pairs show successful app exits, nonempty matching decoded messages and at most one 100 ms active-window difference.
+The detector uses 100 ms RMS windows over BlackHole input; the count is thresholded and cannot determine exact RF or relay duration.
+The FT8 matched-lab checks first activity by 1.5 seconds for runs using that harness; first_active_mod15 depends on scheduling and measurement.
+
+audio_channel_loopback: windows 127/128; first-active 0.462/0.367 s
+audio_device_init: windows 127/127; first-active 0.426/0.455 s
+legacy_bridge_audio: windows 129/128; first-active 0.457/0.485 s
+legacy_preflight: windows 129/128; first-active 0.486/0.448 s
+modulator_finish: windows 128/128; first-active 0.395/0.379 s
+periodic_tx: windows 127/127; first-active 0.451/0.482 s
+periodic_tx_direct: windows 128/127; first-active 0.399/0.437 s
+periodic_tx_late_audio: windows 127/127; first-active 0.449/0.432 s
+sendtx: windows 128/127; first-active 0.379/0.459 s
+start_tx: windows 127/127; first-active 0.467/0.479 s
+tx_audio_startup: windows 127/128; first-active 0.447/0.382 s
+tx_audio_startup_constructor: windows 127/127; first-active 0.410/0.477 s
+tx_output_device: windows 128/127; first-active 0.401/0.415 s
+tx_partner_guard: windows 127/128; first-active 0.458/0.406 s
+tx_pcm_offset: windows 127/127; first-active 0.447/0.498 s

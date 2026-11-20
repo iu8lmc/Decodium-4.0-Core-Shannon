@@ -1,0 +1,2 @@
+before {"active": true, "cat": false, "disconnected": true, "guard": true, "inactive": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false, "wrong": true}
+after {"active": true, "cat": false, "disconnected": true, "guard": true, "inactive": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false, "wrong": true}

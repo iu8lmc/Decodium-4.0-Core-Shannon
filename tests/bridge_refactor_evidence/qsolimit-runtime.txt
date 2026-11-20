@@ -1,0 +1,1 @@
+{"high": true, "low": true, "normal": true, "tx": false}; isolated settings persisted

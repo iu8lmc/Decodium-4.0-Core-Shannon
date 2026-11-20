@@ -1,0 +1,139 @@
+s()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+[SPECIALOP-TIMING] FT8 reconfigure ms=13 activity=0 superfox=0
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+[STARTUP-TIMING] legacy_backend_ms= 47283 bootstrap_ms= 6 settings_ms= 0 window_ms= 46078 available= true
+Embedded legacy station identity synced: call=IU8LMC grid=JM75
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+UDP MessageClient[legacy primary]::start server= 127.0.0.1 port= 2237 listen= 2238 ttl= 1
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+UDP MessageClient[legacy primary]: bound local= :0 requested= 2238 mode= ephemeral interface= any-ipv4
+UDP MessageClient[legacy primary]: sending initial heartbeat target= 127.0.0.1:2237
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy UDP reporting refreshed: primary=127.0.0.1:2237 listen=2238 clientId=Decodium secondary=enabled tertiary=disabled
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+UDP MessageClient[legacy primary]::start server= 127.0.0.1 port= 2237 listen= 2238 ttl= 1
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+UDP MessageClient[legacy primary]: bound local= :0 requested= 2238 mode= ephemeral interface= any-ipv4
+UDP MessageClient[legacy primary]: sending initial heartbeat target= 127.0.0.1:2237
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy UDP reporting refreshed: primary=127.0.0.1:2237 listen=2238 clientId=Decodium secondary=enabled tertiary=disabled
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+[SPECIALOP-TIMING] FT8 reconfigure ms=8 activity=0 superfox=0
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+[STARTUP-TIMING] legacy_backend_ms= 49486 bootstrap_ms= 10 settings_ms= 0 window_ms= 48872 available= true
+Embedded legacy station identity synced: call=IU8LMC grid=JM75
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy secondary UDP MessageClient error: UDP socket error
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+Legacy secondary UDP MessageClient error: UDP socket error
+UDP MessageClient[legacy primary]::start server= 127.0.0.1 port= 2237 listen= 2238 ttl= 1
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+UDP MessageClient[legacy primary]: bound local= :0 requested= 2238 mode= ephemeral interface= any-ipv4
+UDP MessageClient[legacy primary]: sending initial heartbeat target= 127.0.0.1:2237
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Legacy UDP reporting refreshed: primary=127.0.0.1:2237 listen=2238 clientId=Decodium secondary=enabled tertiary=disabled
+This plugin does not support propagateSizeHints()
+QNativeSocketEngine::writeDatagram() was called not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState
+This plugin does not support propagateSizeHints()
+Graphics cache session marked clean; staged caches will be promoted after window teardown
+app.exec() exited
+[PANDBG] Panadapter render suspended visibility= 0 backlog_dropped=1
+[PANDBG] Panadapter PCM frame feed unregistered targets= 0
+rx.shutdown {"active":false,"state":"shutdown"}
+[AMP] lettura amplificatore disattivata
+
+Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_legacyaugment_runtime_lab.py", line 25, in <module>
+    print(result.stdout[-10000:]);raise RuntimeError('ALL.TXT probe failed')
+RuntimeError: ALL.TXT probe failed

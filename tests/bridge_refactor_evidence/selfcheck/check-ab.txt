@@ -1,0 +1,1 @@
+Bridge self-check A/B: normal, outdated, unsynchronised and offset states passed

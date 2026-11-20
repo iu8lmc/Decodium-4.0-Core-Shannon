@@ -1,0 +1,6 @@
+inactive|0
+stale|1|1
+target|0|0
+manual|0|0
+rx|1|0|0
+expired|0|0

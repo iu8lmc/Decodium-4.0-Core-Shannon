@@ -1,0 +1,6 @@
+before FAILED Traceback (most recent call last):
+RuntimeError: TX active after completion: {'seen': True, 'accepted': True, 'cat': False, 'stopped': False, 'tx': True, 'enabled': False, 'tailPeak': 0.0, 'audioPeak': 0.89996337890625, 'completeSeen': False, 'modulatorSeen': True, 'audioPrepared': True}
+after {"accepted": true, "audioPeak": 0.89996337890625, "audioPrepared": true, "cat": false, "completeSeen": false, "enabled": false, "modulatorSeen": true, "seen": true, "stopped": true, "tailPeak": 0.0, "tx": false}
+CW fix comparison: baseline failed, corrected passed
+before {"accepted": true, "audioPeak": 0.2249755859375, "audioPrepared": true, "cat": false, "completeSeen": false, "enabled": false, "modulatorSeen": true, "seen": true, "stopped": true, "tailPeak": 0.0, "tx": false}
+after {"accepted": true, "audioPeak": 0.2249755859375, "audioPrepared": true, "cat": false, "completeSeen": false, "enabled": false, "modulatorSeen": true, "seen": true, "stopped": true, "tailPeak": 0.0, "tx": false}

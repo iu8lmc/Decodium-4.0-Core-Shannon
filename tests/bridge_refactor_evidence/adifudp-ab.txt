@@ -1,0 +1,6 @@
+invalid=0,0,0
+raw=1
+payload=<CALL:5>K1ABC <BAND:3>20m <eor>
+disabled=0
+n1mm=<CALL:5>K1ABC <BAND:3>20m <eor> notices=1
+ports=2237,0,2237,1234

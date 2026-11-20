@@ -1,0 +1,5 @@
+notready|1|0
+deferred|1|1
+queued|3|0|1
+complete|A900,B900,C900|1|0
+interrupted|0|1|2

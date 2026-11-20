@@ -1,0 +1,2 @@
+before {"applied": true, "async": true, "auto": true, "awaiting": 2, "cat": false, "current": 2, "dx": "K1ABC", "enabled": true, "mode": "FT2", "multi": false, "pending": 0, "tx": false}
+after {"applied": true, "async": true, "auto": true, "awaiting": 2, "cat": false, "current": 2, "dx": "K1ABC", "enabled": true, "mode": "FT2", "multi": false, "pending": 0, "tx": false}

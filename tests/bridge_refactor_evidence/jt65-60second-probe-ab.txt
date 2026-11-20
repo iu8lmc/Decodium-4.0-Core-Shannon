@@ -1,0 +1,6 @@
+before raw ['[JT65-REF-RAW] 1001 '] callbacks []
+before {"displayedExpected": false, "expectedMessage": false}
+after raw ['[JT65-REF-RAW] 1001 '] callbacks []
+after {"displayedExpected": false, "expectedMessage": false}
+RuntimeError: JT65 reference expected message was not decoded and displayed
+probe_exit 1

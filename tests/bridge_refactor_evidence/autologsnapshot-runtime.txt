@@ -1,0 +1,4 @@
+Focused A/B: autolog partner inference, reports, grid, snapshots and late grace: OK (callsign/report collaborators substituted).
+test_mam_tx_payload_policy: passed after source-location assertion update.
+Original and refactored isolated macOS applications: live QSO preview has expected call, grid, mode, comments and valid time; receiver TX false, CAT disabled.
+Application probe does not exercise pending/late snapshot capture or a real QSO commit; no physical RF.

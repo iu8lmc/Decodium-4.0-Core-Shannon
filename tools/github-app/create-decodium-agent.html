@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Crea la GitHub App decodium-agent</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; background:#0d1117; color:#e6edf3;
+         max-width: 780px; margin: 0 auto; padding: 40px 24px; line-height: 1.6; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color:#8b949e; font-size: 14px; margin-bottom: 28px; }
+  .card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:18px 20px; margin-bottom:18px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color:#8b949e; margin:0 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td { padding: 4px 0; vertical-align: top; }
+  td.k { color:#8b949e; width: 170px; }
+  code { background:#0d1117; border:1px solid #30363d; border-radius:4px; padding:1px 5px; font-size:13px; }
+  button { background:#238636; color:#fff; border:1px solid #2ea043; border-radius:6px;
+           padding:12px 22px; font-size:15px; font-weight:600; cursor:pointer; }
+  button:hover { background:#2ea043; }
+  .warn { border-left:3px solid #d29922; padding-left:14px; color:#d1d5da; font-size:14px; }
+  .owner { font-size:14px; }
+  input[type=text] { background:#0d1117; border:1px solid #30363d; color:#e6edf3;
+                     border-radius:6px; padding:7px 10px; font-size:14px; width:220px; }
+</style>
+</head>
+<body>
+
+<h1>decodium-agent</h1>
+<div class="sub">Registrazione della GitHub App per il progetto Decodium 4</div>
+
+<div class="card">
+  <h2>Cosa verrà creato</h2>
+  <table>
+    <tr><td class="k">Nome</td><td><code>decodium-agent</code></td></tr>
+    <tr><td class="k">Visibilità</td><td>pubblica — elencata su github.com/apps/decodium-agent</td></tr>
+    <tr><td class="k">Webhook</td><td>disattivato (si accende quando esiste un ricevitore)</td></tr>
+    <tr><td class="k">Permessi</td><td>
+      segnalazioni: scrittura · pull request: scrittura · contenuti: scrittura ·<br>
+      controlli: lettura · azioni: lettura · metadati: lettura
+    </td></tr>
+    <tr><td class="k">Non può</td><td>modificare i flussi di lavoro CI (<code>workflows</code> non concesso)</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Dove crearla</h2>
+  <p class="owner">
+    Account personale <strong>iu8lmc</strong>, oppure un'organizzazione:
+    <input type="text" id="org" placeholder="nome organizzazione (vuoto = personale)">
+  </p>
+</div>
+
+<div class="card" style="border-color:#3d2b16">
+  <h2>Se il pulsante non funziona</h2>
+  <p style="font-size:14px;margin:0 0 8px">
+    Prima cosa: <strong>ricarica questa pagina con Ctrl+F5</strong>. Il browser
+    tiene in cache la versione precedente, e quella veniva rifiutata da GitHub
+    perche' priva di <code>redirect_url</code>.
+  </p>
+  <p style="font-size:14px;margin:0">
+    Se il rifiuto persiste, registra l'app a mano da
+    <a href="https://github.com/settings/apps/new" target="_blank">github.com/settings/apps/new</a>:
+    i valori esatti da inserire sono nel <code>README.md</code> accanto a questo file.
+  </p>
+</div>
+
+<div class="card warn">
+  Premendo il pulsante si apre GitHub con il modulo <strong>già compilato</strong>.
+  Nulla viene creato finché non premi tu «Create GitHub App» su GitHub.
+  Dopo la creazione GitHub ti riporta all'elenco delle tue app: apri
+  <code>decodium-agent</code>, genera una <em>private key</em>, annota
+  l'<em>App ID</em> e installala sul repository desiderato.
+</div>
+
+<form id="f" method="post" target="_blank">
+  <input type="hidden" name="manifest" id="manifest">
+  <button type="submit">Apri GitHub e crea decodium-agent</button>
+</form>
+
+<script>
+const manifest = {
+  name: "decodium-agent",
+  description: "Automated assistant for the Decodium 4 project: triages issues, reviews code against the actual sources, and opens pull requests for human review. It cannot merge its own work, push to the upstream repository, or modify CI workflows.",
+  url: "https://github.com/iu8lmc/Decodium-4.0-Core-Shannon",
+  // obbligatorio nel manifest flow: GitHub ci rimanda dopo la creazione
+  redirect_url: "https://github.com/settings/apps",
+  public: true,
+  hook_attributes: { url: "https://groups.ft2.it/decodium-agent/webhook", active: false },
+  default_permissions: {
+    metadata: "read",
+    issues: "write",
+    pull_requests: "write",
+    contents: "write",
+    checks: "read",
+    actions: "read"
+  },
+  default_events: ["issues", "issue_comment", "pull_request",
+                   "pull_request_review", "pull_request_review_comment"]
+};
+
+document.getElementById('f').addEventListener('submit', function () {
+  const org = document.getElementById('org').value.trim();
+  this.action = org
+    ? 'https://github.com/organizations/' + encodeURIComponent(org) + '/settings/apps/new'
+    : 'https://github.com/settings/apps/new';
+  document.getElementById('manifest').value = JSON.stringify(manifest);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,3 @@
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM mean edge/interior RGB error: 155.25 0.333333
+PASS   : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 440ms

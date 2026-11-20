@@ -1,0 +1,5 @@
+unavailable|0
+ft8|identity=K1ABC:FN42,in=in,out=out,setAudioInputChannel=3,setAudioOutputChannel=0,setDecodeDepthBits=3,setCqOnly=0,setRxInputLevel=100,setTxOutputAttenuation=80,setFt2DecodeEnabled=0,setMode=FT8,setDialFrequency=14074000,setAutoSeq=1,setAlt12Enabled=1,setTxFirst=1,setRxFrequency=1200,setTxFrequency=1500,setHoldTxFreq=1,setDxCall=K2ABC,setDxGrid=FN31,msg1=1,msg2=2,msg3=3,msg4=4,msg5=5,msg6=6,selectTxMessage=6,setTxWatchdogMinutes=5|FT8|1|1
+ft2|1|1
+rtty|1|1|0
+hound|1|1|1

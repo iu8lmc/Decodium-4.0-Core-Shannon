@@ -1,0 +1,2 @@
+previous {"bridge": {"after": {"displayedExpected": false, "expectedMessage": false}, "before": {"displayedExpected": false, "expectedMessage": false}}, "exit": 1}
+corrected {"bridge": {"after": {"displayedExpected": true, "expectedMessage": true}, "before": {"displayedExpected": true, "expectedMessage": true}}, "exit": 0}

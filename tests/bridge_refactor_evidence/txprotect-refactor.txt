@@ -1,0 +1,1 @@
+a: {"dbm":37,"options":["0 dBm  1 mW","3 dBm  2 mW","7 dBm  5 mW","10 dBm  10 mW","13 dBm  20 mW","17 dBm  50 mW","20 dBm  100 mW","23 dBm  200 mW","27 dBm  500 mW","30 dBm  1 W","33 dBm  2 W","37 dBm  5 W","40 dBm  10 W","43 dBm  20 W","47 dBm  50 W","50 dBm  100 W","53 dBm  200 W","57 dBm  500 W","60 dBm  1 kW"],"tx":false}

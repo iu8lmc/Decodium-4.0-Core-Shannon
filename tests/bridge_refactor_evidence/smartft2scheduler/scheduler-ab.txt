@@ -1,0 +1,1 @@
+FT2 smart scheduler A/B: guards, timer, late slot, cancellation and coalescing passed

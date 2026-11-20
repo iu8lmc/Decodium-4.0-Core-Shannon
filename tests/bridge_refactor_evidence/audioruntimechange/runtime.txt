@@ -1,0 +1,4 @@
+before a {"input": "BlackHole 2ch", "inputId": "426c61636b486f6c653263685f554944", "monitor": false, "output": "BlackHole 16ch", "outputId": "426c61636b486f6c65313663685f554944", "tx": false}
+before b {"input": "BlackHole 16ch", "inputId": "426c61636b486f6c65313663685f554944", "monitor": false, "output": "BlackHole 2ch", "outputId": "426c61636b486f6c653263685f554944", "tx": false}
+after a {"input": "BlackHole 2ch", "inputId": "426c61636b486f6c653263685f554944", "monitor": false, "output": "BlackHole 16ch", "outputId": "426c61636b486f6c65313663685f554944", "tx": false}
+after b {"input": "BlackHole 16ch", "inputId": "426c61636b486f6c65313663685f554944", "monitor": false, "output": "BlackHole 2ch", "outputId": "426c61636b486f6c653263685f554944", "tx": false}

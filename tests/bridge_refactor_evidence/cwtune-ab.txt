@@ -1,0 +1,6 @@
+disconnected|0
+invalid|0|0
+busy|0
+local|1|1|1|1|1|0|1
+remote-busy|0
+remote|1|1|1

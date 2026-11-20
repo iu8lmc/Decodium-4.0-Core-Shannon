@@ -1,0 +1,1 @@
+DecoPort TX A/B: admission, PCM clamping/framing, pacing and PTT release passed

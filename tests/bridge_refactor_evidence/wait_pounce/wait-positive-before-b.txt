@@ -1,0 +1,1 @@
+{"call": "9H1SR", "connected": false, "enabledAfter": false, "grid": "JM75", "output": "BlackHole 2ch", "tx1": "9H1SR IU8LMC JM75", "tx2": "9H1SR IU8LMC +03", "txAfter": false}

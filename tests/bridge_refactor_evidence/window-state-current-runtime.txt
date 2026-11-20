@@ -1,0 +1,4 @@
+Isolated current application, --test-mode, CAT/monitor disabled, sandbox network denial; synchronous and async window-state save/read.
+[WINDOW-APP] sync=true
+[WINDOW-APP] async=true tx=false
+The existing full suite provides the before/after harness; this application probe tests current placement only, not native window rendering.

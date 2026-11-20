@@ -1,0 +1,4 @@
+before hamdrm=0 disabled=1 normal=1 regression=1 digital=1 held=1 stopped=1
+after hamdrm=0 disabled=1 normal=1 regression=1 digital=1 held=1 stopped=1
+before hamdrm=1 disabled=1 normal=1 regression=1 digital=1 held=1 stopped=1
+after hamdrm=1 disabled=1 normal=1 regression=1 digital=1 held=1 stopped=1

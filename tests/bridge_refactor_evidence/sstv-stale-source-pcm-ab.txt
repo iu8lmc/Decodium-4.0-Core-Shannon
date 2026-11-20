@@ -1,0 +1,2 @@
+before {"cat": false, "newAccepted": true, "oldRejected": true, "readback": "persisted", "resetAccepted": true, "resetRejected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "newAccepted": true, "oldRejected": true, "readback": "persisted", "resetAccepted": true, "resetRejected": true, "shutdown": true, "tx": false, "wasShutdown": false}

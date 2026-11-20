@@ -1,0 +1,4 @@
+before a {"call": "IU8LMC", "cat": false, "frequency": 1200, "hold": true, "tx": false}
+before b {"call": "IU8LMC", "cat": false, "frequency": 1750, "hold": false, "tx": false}
+after a {"call": "IU8LMC", "cat": false, "frequency": 1200, "hold": true, "tx": false}
+after b {"call": "IU8LMC", "cat": false, "frequency": 1750, "hold": false, "tx": false}

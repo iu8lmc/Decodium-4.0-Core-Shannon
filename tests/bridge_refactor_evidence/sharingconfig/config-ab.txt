@@ -1,0 +1,1 @@
+Sharing configuration A/B: ports, settings, permissions, routing, reconnect and virtual-port forwarding passed

@@ -1,0 +1,10 @@
+--- a/src/dispatch/dispatcher.cpp
++++ b/src/dispatch/dispatcher.cpp
+@@ -355,6 +355,7 @@
+ {
+   if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1) {
+     fprintf(stderr,"LAB reverse prepareFix busy=%d bytes=%lld\n",mainWindowPtr->busyMode(),static_cast<long long>(ba.size()));
++    fprintf(stderr,"LAB reverse busy flags tx=%d rx=%d\n",txWidgetPtr->functionsPtr()->txBusy(),rxWidgetPtr->rxBusy());
+     QFile f(qEnvironmentVariable("QSSTV_REVERSE_RECEIVED_BSR"));
+     if(f.open(QIODevice::WriteOnly | QIODevice::NewOnly)) f.write(ba);
+   }

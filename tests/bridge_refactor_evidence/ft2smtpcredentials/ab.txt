@@ -1,0 +1,1 @@
+FT2 SMTP credentials A/B: lookup, empty password, unavailable/failing/success backend and test configuration passed

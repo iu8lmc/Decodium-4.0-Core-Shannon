@@ -1,0 +1,4 @@
+before tx= {"durationMs": 14277, "modeId": "robot-c12", "state": "Completed", "success": true} rxCoverage= 0.9991666666666666 rxComplete= False endToEndPassed= False
+after tx= {"durationMs": 14272, "modeId": "robot-c12", "state": "Completed", "success": true} rxCoverage= 1 rxComplete= True endToEndPassed= True
+RuntimeError: End-to-end image check failed: before
+AVT test profiles before: 352; after: 352

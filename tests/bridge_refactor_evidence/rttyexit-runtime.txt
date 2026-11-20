@@ -1,0 +1,4 @@
+Focused A/B: RTTY exit local and legacy recovery; remote and RTTY cancellation: OK. Real recovery controller and timers; audio/radio collaborators substituted.
+test_rtty_rx_recovery: passed.
+Original and refactored macOS apps: RTTY -> FT8, legacy=true, monitor=true, receiver gain reduced after virtual sender TX, receiver tx=false.
+CAT disabled, virtual audio only; individual controller callbacks and physical RF not independently observed in the app.

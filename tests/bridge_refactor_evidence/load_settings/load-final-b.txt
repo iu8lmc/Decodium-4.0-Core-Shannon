@@ -1,0 +1,1 @@
+{"call": "IU8LMC", "hold": false, "rx": 1750, "tx": false, "txfreq": 1800}

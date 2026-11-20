@@ -1,0 +1,1 @@
+Frequency update A/B: legacy, large/small QSY, RTL follow and remote echo suppression passed

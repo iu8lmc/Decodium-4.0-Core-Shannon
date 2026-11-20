@@ -1,0 +1,12 @@
+{
+  "role": "immediate",
+  "txcode": 0,
+  "rxcode": 0,
+  "peak": 0.4019775390625,
+  "active_windows": 129,
+  "first_active_mod15": 0.45683789253234863,
+  "matching_messages": [
+    "CQ 9H1SR JM75"
+  ],
+  "legacy_audio_start_seen": true
+}

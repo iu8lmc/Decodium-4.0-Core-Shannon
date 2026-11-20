@@ -1,0 +1,5 @@
+Baseline attempt 1: timeout; legacy=true; model rows=0. Cause not established.
+Baseline attempt 2:
+{"found": true, "legacy": true, "tx": false}
+Refactored:
+{"found": true, "legacy": true, "tx": false}
