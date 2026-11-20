@@ -194,25 +194,58 @@ SettingsPageScroll {
             DecoTemplates.ToolTip.text: qsTr("Alternative single-panel operator view optimized for DX pile-ups: a tactical 3-column dashboard (Cluster / Waterfall / TX) instead of the classic workspace. Opt-in, default OFF: the standard layout is unchanged when disabled.")
         }
 
-        // 1.0.307 (#2) — Scala interfaccia globale (icone+font+layout). Applica al riavvio.
-        Text { text: qsTr("UI Scale:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+        // Scala interfaccia globale (icone+font+layout), funzione di accessibilita'.
+        // Opt-in: spenta di default. Spenta = "uiScaleFactor" 1.0, cioe' nessuna scala;
+        // accesa = il fattore scelto qui sotto. Si applica al riavvio.
+        CheckBox {
+            id: uiScaleEnableCheck
+            Layout.columnSpan: pageColumns
+            Layout.fillWidth: true
+            text: qsTr("Enlarge the interface (accessibility)")
+            checked: Math.abs((bridge ? Number(bridge.getSetting("uiScaleFactor", 1.0)) : 1.0) - 1.0) > 0.001
+            onToggled: {
+                if (bridge)
+                    bridge.setSetting("uiScaleFactor", checked ? uiScaleCombo.scaleValues[uiScaleCombo.currentIndex] : 1.0)
+                uiScaleRestartNote.visible = true
+            }
+            contentItem: Text {
+                text: uiScaleEnableCheck.text
+                color: textPrimary
+                font.pixelSize: 12
+                leftPadding: uiScaleEnableCheck.indicator.width + 8
+                verticalAlignment: Text.AlignVCenter
+            }
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 600
+            DecoTemplates.ToolTip.text: qsTr("Off by default. When enabled, icons, text and layout are enlarged by the chosen scale after a restart. When disabled the interface is shown at its normal size.")
+        }
+        Text { text: qsTr("UI Scale:"); color: uiScaleEnableCheck.checked ? textSecondary : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.45); font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
         DecoComboBox {
             id: uiScaleCombo
             Layout.fillWidth: true
             implicitHeight: controlHeight
-            readonly property var scaleValues: [1.0, 1.1, 1.25, 1.5, 1.75]
-            model: ["100%", "110%", "125%", "150%", "175%"]
-            currentIndex: {
+            enabled: uiScaleEnableCheck.checked
+            opacity: enabled ? 1.0 : 0.45
+            // The mouse wheel must not change the scale while the page is scrolled.
+            wheelEnabled: false
+            readonly property var scaleValues: [1.1, 1.25, 1.5, 1.75, 2.0]
+            model: ["110%", "125%", "150%", "175%", "200%"]
+            // Evaluated once: the stored factor when scaling is on, 125% otherwise.
+            Component.onCompleted: {
                 var f = bridge ? Number(bridge.getSetting("uiScaleFactor", 1.0)) : 1.0
-                var best = 0; var bestd = 99
-                for (var i = 0; i < scaleValues.length; ++i) {
-                    var d = Math.abs(scaleValues[i] - f)
-                    if (d < bestd) { bestd = d; best = i }
+                var best = 1
+                if (Math.abs(f - 1.0) > 0.001) {
+                    var bestd = 99
+                    for (var i = 0; i < scaleValues.length; ++i) {
+                        var d = Math.abs(scaleValues[i] - f)
+                        if (d < bestd) { bestd = d; best = i }
+                    }
                 }
-                return best
+                currentIndex = best
             }
             onActivated: {
-                if (bridge) bridge.setSetting("uiScaleFactor", scaleValues[currentIndex])
+                if (bridge && uiScaleEnableCheck.checked)
+                    bridge.setSetting("uiScaleFactor", scaleValues[currentIndex])
                 uiScaleRestartNote.visible = true
             }
             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
