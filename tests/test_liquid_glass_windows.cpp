@@ -422,7 +422,15 @@ void TestLiquidGlassWindows::closedCwAndSsbPopoutsReleaseTheirSceneGraphs()
     QVERIFY(cw.contains(QStringLiteral("onClosing: function(close)")));
     QVERIFY(ssb.contains(QStringLiteral("signal releaseRequested()")));
     QVERIFY(ssb.contains(QStringLiteral("onClosing: function(close)")));
-    QCOMPARE(main.count(QStringLiteral("mainWindow.releaseLoadedWindow(")), 2);
+    // The SSTV workspace is released through the same path.
+    const QString sstv = readSource(QStringLiteral("qml/decodium/components/sstv/SstvWorkspace.qml"));
+    QVERIFY(!sstv.isEmpty());
+    QVERIFY(sstv.contains(QStringLiteral("signal releaseRequested()")));
+    QVERIFY(sstv.contains(QStringLiteral("onClosing: function(close)")));
+    QCOMPARE(main.count(QStringLiteral("mainWindow.releaseLoadedWindow(")), 3);
+    QVERIFY(main.contains(QStringLiteral("mainWindow.releaseLoadedWindow(cwWindowLoader)")));
+    QVERIFY(main.contains(QStringLiteral("mainWindow.releaseLoadedWindow(ssbWindowLoader)")));
+    QVERIFY(main.contains(QStringLiteral("mainWindow.releaseLoadedWindow(sstvWorkspaceLoader)")));
 
     const int shutdownStart = main.indexOf(QStringLiteral("function shutdownAsyncLoaders()"));
     const int shutdownEnd = main.indexOf(QStringLiteral("function openSstvWorkspace()"), shutdownStart);
