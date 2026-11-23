@@ -223,42 +223,56 @@ void DecodiumBridge::setDecodeColorBgEnabled(const QString& prop, bool enabled)
 
 // 1.0.416 — sfondo riga SCELTO dall'utente per la categoria che matcha l'entry.
 // Stessa priorita' di decodeHighlightBg, piu' B4 / DX Entity / 73 (signoff).
-// Ritorna "" se per quella categoria lo sfondo non e' abilitato. opt-in, default OFF.
+// Una riga puo' rientrare in piu' categorie (es. CQ + nominativo nuovo + LoTW):
+// vince la PRIMA, in ordine di priorita', che ha uno sfondo acceso e un colore.
+// Prima vinceva la prima categoria in assoluto anche senza sfondo, cosi' uno
+// sfondo acceso solo per LoTW non compariva quasi mai (le stazioni in CQ o mai
+// lavorate si fermavano prima). Ritorna "" se nessuna categoria ha lo sfondo.
 QString DecodiumBridge::decodeHighlightUserBg(const QVariantMap& entry) const
 {
     auto bg = [this](const QString& prop) -> QString {
         return m_decodeColorBgEnabled.value(prop, false) ? m_decodeColorBg.value(prop, QString()) : QString();
     };
-    if (entry.value(QStringLiteral("isTx")).toBool())                 return bg(QStringLiteral("colorTxMessage"));
-    if (entry.value(QStringLiteral("isMyCall")).toBool())             return bg(QStringLiteral("colorMyCall"));
+    auto flag = [&entry](const char* key) -> bool {
+        return entry.value(QString::fromLatin1(key)).toBool();
+    };
+    QString picked;
+    auto pick = [&](bool matches, const char* prop) -> bool {
+        if (matches && picked.isEmpty())
+            picked = bg(QString::fromLatin1(prop));
+        return !picked.isEmpty();
+    };
+
+    if (pick(flag("isTx"), "colorTxMessage")) return picked;
+    if (pick(flag("isMyCall"), "colorMyCall")) return picked;
     {
         const QString msg = entry.value(QStringLiteral("message")).toString().toUpper();
-        if (msg.endsWith(QStringLiteral(" 73")) || msg.contains(QStringLiteral("RR73")) || msg.endsWith(QStringLiteral("RRR"))) {
-            const QString c73 = bg(QStringLiteral("color73"));
-            if (!c73.isEmpty()) return c73;
-        }
+        const bool signoff = msg.endsWith(QStringLiteral(" 73"))
+            || msg.contains(QStringLiteral("RR73"))
+            || msg.endsWith(QStringLiteral("RRR"));
+        if (pick(signoff, "color73")) return picked;
     }
-    if (entry.value(QStringLiteral("isCQ")).toBool())                 return bg(QStringLiteral("colorCQ"));
+    if (pick(flag("isCQ"), "colorCQ")) return picked;
 
-    if (entry.value(QStringLiteral("dxIsNewDxccBand")).toBool())      return bg(QStringLiteral("colorNewDxccBand"));
-    if (entry.value(QStringLiteral("dxIsNewDxcc")).toBool())          return bg(QStringLiteral("colorNewDxcc"));
-    if (entry.value(QStringLiteral("dxIsNewContinentBand")).toBool()) return bg(QStringLiteral("colorNewContinentBand"));
-    if (entry.value(QStringLiteral("dxIsNewContinent")).toBool())     return bg(QStringLiteral("colorNewContinent"));
-    if (entry.value(QStringLiteral("dxIsNewCqZoneBand")).toBool())    return bg(QStringLiteral("colorNewCqZoneBand"));
-    if (entry.value(QStringLiteral("dxIsNewCqZone")).toBool())        return bg(QStringLiteral("colorNewCqZone"));
-    if (entry.value(QStringLiteral("dxIsNewItuZoneBand")).toBool())   return bg(QStringLiteral("colorNewItuZoneBand"));
-    if (entry.value(QStringLiteral("dxIsNewItuZone")).toBool())       return bg(QStringLiteral("colorNewItuZone"));
-    if (entry.value(QStringLiteral("dxIsNewGridBand")).toBool())      return bg(QStringLiteral("colorNewGridBand"));
-    if (entry.value(QStringLiteral("dxIsNewGrid")).toBool())          return bg(QStringLiteral("colorNewGrid"));
-    if (entry.value(QStringLiteral("dxIsNewCallBand")).toBool())      return bg(QStringLiteral("colorNewCallBand"));
-    if (entry.value(QStringLiteral("dxIsNewCall")).toBool())          return bg(QStringLiteral("colorNewCall"));
-    if (entry.value(QStringLiteral("isB4")).toBool() || entry.value(QStringLiteral("dxIsWorked")).toBool())
-                                                                      return bg(QStringLiteral("colorB4"));
-    if (entry.value(QStringLiteral("isLotw")).toBool())              return bg(QStringLiteral("colorLotwUser"));
-    if (entry.value(QStringLiteral("dxCountry")).toString().size() > 0
-        || entry.value(QStringLiteral("dxIsMostWanted")).toBool()
-        || entry.value(QStringLiteral("dxIsNewCountry")).toBool()
-        || entry.value(QStringLiteral("dxIsNewBand")).toBool())      return bg(QStringLiteral("colorDXEntity"));
+    if (pick(flag("dxIsNewDxccBand"), "colorNewDxccBand")) return picked;
+    if (pick(flag("dxIsNewDxcc"), "colorNewDxcc")) return picked;
+    if (pick(flag("dxIsNewContinentBand"), "colorNewContinentBand")) return picked;
+    if (pick(flag("dxIsNewContinent"), "colorNewContinent")) return picked;
+    if (pick(flag("dxIsNewCqZoneBand"), "colorNewCqZoneBand")) return picked;
+    if (pick(flag("dxIsNewCqZone"), "colorNewCqZone")) return picked;
+    if (pick(flag("dxIsNewItuZoneBand"), "colorNewItuZoneBand")) return picked;
+    if (pick(flag("dxIsNewItuZone"), "colorNewItuZone")) return picked;
+    if (pick(flag("dxIsNewGridBand"), "colorNewGridBand")) return picked;
+    if (pick(flag("dxIsNewGrid"), "colorNewGrid")) return picked;
+    if (pick(flag("dxIsNewCallBand"), "colorNewCallBand")) return picked;
+    if (pick(flag("dxIsNewCall"), "colorNewCall")) return picked;
+    if (pick(flag("isB4") || flag("dxIsWorked"), "colorB4")) return picked;
+    if (pick(flag("isLotw"), "colorLotwUser")) return picked;
+    const bool dxEntity = entry.value(QStringLiteral("dxCountry")).toString().size() > 0
+        || flag("dxIsMostWanted")
+        || flag("dxIsNewCountry")
+        || flag("dxIsNewBand");
+    if (pick(dxEntity, "colorDXEntity")) return picked;
     return QString();
 }
 

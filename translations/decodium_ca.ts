@@ -30065,6 +30065,18 @@ Costa CPU extra durant els QSO. Per defecte: OFF.</translation>
         <source>Contrast:</source>
         <translation>Contrast:</translation>
     </message>
+    <message>
+        <source>Mark LoTW users in the decode lists (LoTW tag, colour and background)</source>
+        <translation>Marca els usuaris de LoTW a les llistes de descodificació (etiqueta LoTW, color i fons)</translation>
+    </message>
+    <message>
+        <source>Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The &quot;LoTW marker&quot; colour below sets the colour of the tag, of the text and of the background. Off by default.</source>
+        <translation>Descarrega la llista d&apos;activitat dels usuaris de LoTW i mostra una petita etiqueta LoTW al costat de les estacions que fan servir LoTW. El color «Marcador LoTW» de sota defineix el color de l&apos;etiqueta, del text i del fons. Desactivat per defecte.</translation>
+    </message>
+    <message>
+        <source>Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.</source>
+        <translation>Fons: quan una descodificació encaixa en diverses categories, s&apos;utilitza la primera d&apos;aquesta llista que tingui el fons activat.</translation>
+    </message>
 </context>
 <context>
     <name>SettingsTab9</name>
@@ -36287,6 +36299,13 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
         <location filename="../src/ui/wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Fes doble clic sobre un color per editar-lo.&lt;/p&gt;&lt;p&gt;Fes clic amb el botó dret per inserir o eliminar els colors.&lt;/p&gt;&lt;p&gt;Els colors a la part superior representen senyals febles,&lt;/p&gt;&lt;p&gt;i els colors a la part inferior representen senyals fortes.&lt;/p&gt;&lt;p&gt;Pot tenir fins a 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+</context>
+<context>
+    <name>LotwBadge</name>
+    <message>
+        <source>LoTW user</source>
+        <translation>Usuari de LoTW</translation>
     </message>
 </context>
 </TS>

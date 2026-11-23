@@ -30053,6 +30053,18 @@ QSO 中に余分な CPU を消費します。デフォルト: OFF。</translatio
         <source>Contrast:</source>
         <translation>コントラスト:</translation>
     </message>
+    <message>
+        <source>Mark LoTW users in the decode lists (LoTW tag, colour and background)</source>
+        <translation>デコード一覧で LoTW ユーザーを表示する（LoTW タグ、色、背景）</translation>
+    </message>
+    <message>
+        <source>Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The &quot;LoTW marker&quot; colour below sets the colour of the tag, of the text and of the background. Off by default.</source>
+        <translation>LoTW ユーザー活動リストをダウンロードし、LoTW を使用している局の横に小さな LoTW タグを表示します。下の「LoTW マーカー」の色が、タグ、文字、背景の色になります。既定ではオフです。</translation>
+    </message>
+    <message>
+        <source>Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.</source>
+        <translation>背景：デコードが複数のカテゴリーに該当する場合、この一覧で背景がオンになっている最初のカテゴリーが使われます。</translation>
+    </message>
 </context>
 <context>
     <name>SettingsTab9</name>
@@ -36274,6 +36286,13 @@ Right click for insert and delete options.</source>
         <location filename="../src/ui/wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ダブルクリックで色変更.&lt;/p&gt;&lt;p&gt;右クリックで色の追加または削除.&lt;/p&gt;&lt;p&gt;上の方の色は弱い信号を表します&lt;/p&gt;&lt;p&gt;そして下の方の色は強い信号を表します&lt;/p&gt;&lt;p&gt;信号. 256色まで使用可能.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+</context>
+<context>
+    <name>LotwBadge</name>
+    <message>
+        <source>LoTW user</source>
+        <translation>LoTW ユーザー</translation>
     </message>
 </context>
 </TS>

@@ -474,7 +474,7 @@ Item {
                     Layout.fillHeight: true
                     Text {
                         anchors.fill: parent
-                        anchors.rightMargin: del.entry.isLotw === true ? 11 : 0
+                        anchors.rightMargin: del.entry.isLotw === true ? dxccLotwBadge.width + 3 : 0
                         text: !modelData ? "" : root.dxccDisplayText(del.entry)
                         color: root.decodeEntityTextColor(del.entry)
                         font.pixelSize: root.fSize; font.family: decodiumMonoFontFamily
@@ -482,16 +482,12 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                     }
-                    Rectangle {
+                    LotwBadge {
+                        id: dxccLotwBadge
                         visible: !!modelData && del.entry.isLotw === true
-                        width: 6
-                        height: 6
-                        radius: 3
+                        accent: root.cLotw
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        color: root.cLotw
-                        border.color: root.cTextDim
-                        border.width: 1
                     }
                 }
             }

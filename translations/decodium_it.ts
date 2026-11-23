@@ -30172,6 +30172,18 @@ Costa CPU extra durante i QSO. Default: OFF.</translation>
         <source>Contrast:</source>
         <translation>Contrasto:</translation>
     </message>
+    <message>
+        <source>Mark LoTW users in the decode lists (LoTW tag, colour and background)</source>
+        <translation>Segnala gli utenti LoTW nelle liste di decodifica (etichetta LoTW, colore e sfondo)</translation>
+    </message>
+    <message>
+        <source>Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The &quot;LoTW marker&quot; colour below sets the colour of the tag, of the text and of the background. Off by default.</source>
+        <translation>Scarica l&apos;elenco di attività degli utenti LoTW e mostra una piccola etichetta LoTW accanto alle stazioni che usano LoTW. Il colore &quot;Marker LoTW&quot; qui sotto imposta il colore dell&apos;etichetta, del testo e dello sfondo. Spento di default.</translation>
+    </message>
+    <message>
+        <source>Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.</source>
+        <translation>Sfondi: quando una decodifica rientra in più categorie, si usa la prima di questo elenco che ha lo sfondo acceso.</translation>
+    </message>
 </context>
 <context>
     <name>SettingsTab9</name>
@@ -41146,5 +41158,12 @@ Fare clic con il tasto destro per inserire ed eliminare le opzioni.</translation
     <message><source>Open NG3K source</source><translation>Apri la fonte NG3K</translation></message>
     <message><source>Open DXCAL feed</source><translation>Apri il feed DXCAL</translation></message>
     <message><source>Calendar updated, but the offline copy could not be saved.</source><translation>Calendario aggiornato, ma non è stato possibile salvare la copia offline.</translation></message>
+</context>
+<context>
+    <name>LotwBadge</name>
+    <message>
+        <source>LoTW user</source>
+        <translation>Utente LoTW</translation>
+    </message>
 </context>
 </TS>

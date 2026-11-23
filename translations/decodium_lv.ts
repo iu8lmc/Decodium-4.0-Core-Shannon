@@ -30084,6 +30084,18 @@ QSO laikā tērē papildu CPU. Noklusējums: IZSL.</translation>
         <source>Contrast:</source>
         <translation>Contrast:</translation>
     </message>
+    <message>
+        <source>Mark LoTW users in the decode lists (LoTW tag, colour and background)</source>
+        <translation>Atzīmēt LoTW lietotājus dekodēšanas sarakstos (LoTW birka, krāsa un fons)</translation>
+    </message>
+    <message>
+        <source>Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The &quot;LoTW marker&quot; colour below sets the colour of the tag, of the text and of the background. Off by default.</source>
+        <translation>Lejupielādē LoTW lietotāju aktivitātes sarakstu un parāda nelielu LoTW birku blakus stacijām, kas izmanto LoTW. Zemāk esošā krāsa “LoTW marķieris” nosaka birkas, teksta un fona krāsu. Pēc noklusējuma izslēgts.</translation>
+    </message>
+    <message>
+        <source>Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.</source>
+        <translation>Foni: ja dekodējums atbilst vairākām kategorijām, tiek izmantota pirmā šajā sarakstā, kurai fons ir ieslēgts.</translation>
+    </message>
 </context>
 <context>
     <name>SettingsTab9</name>
@@ -36307,6 +36319,13 @@ Right click for insert and delete options.</translation>
         <location filename="../src/ui/wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+</context>
+<context>
+    <name>LotwBadge</name>
+    <message>
+        <source>LoTW user</source>
+        <translation>LoTW lietotājs</translation>
     </message>
 </context>
 </TS>

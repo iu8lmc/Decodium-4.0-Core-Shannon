@@ -30051,6 +30051,18 @@ QSO 期間耗用額外 CPU。預設：OFF。</translation>
         <source>Contrast:</source>
         <translation>對比：</translation>
     </message>
+    <message>
+        <source>Mark LoTW users in the decode lists (LoTW tag, colour and background)</source>
+        <translation>在解碼列表中標示 LoTW 使用者（LoTW 標籤、顏色與背景）</translation>
+    </message>
+    <message>
+        <source>Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The &quot;LoTW marker&quot; colour below sets the colour of the tag, of the text and of the background. Off by default.</source>
+        <translation>下載 LoTW 使用者活動清單，並在使用 LoTW 的電台旁顯示一個小的 LoTW 標籤。下方的「LoTW 標記」顏色決定標籤、文字與背景的顏色。預設關閉。</translation>
+    </message>
+    <message>
+        <source>Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.</source>
+        <translation>背景：當一筆解碼屬於多個類別時，使用此清單中第一個開啟背景的類別。</translation>
+    </message>
 </context>
 <context>
     <name>SettingsTab9</name>
@@ -36271,6 +36283,13 @@ Right click for insert and delete options.</source>
         <location filename="../src/ui/wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;雙擊一種顏色進行編輯.&lt;/p&gt;&lt;p&gt;右鍵單擊可插入或刪除顏色.&lt;/p&gt;&lt;p&gt;頂部的顏色代表微弱的信號&lt;/p&gt;&lt;p&gt;底部的顏色代表強烈&lt;/p&gt;&lt;p&gt;信號. 您最多可以有256種顏色.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+</context>
+<context>
+    <name>LotwBadge</name>
+    <message>
+        <source>LoTW user</source>
+        <translation>LoTW 使用者</translation>
     </message>
 </context>
 </TS>

@@ -10582,7 +10582,7 @@ NumberAnimation {
                                                             anchors.fill: parent
                                                             Text {
                                                                 anchors.fill: parent
-                                                                anchors.rightMargin: fsRowEmbedded.entry.isLotw === true ? Math.max(9, Math.round(11 * fs)) : 0
+                                                                anchors.rightMargin: fsRowEmbedded.entry.isLotw === true ? fsRowEmbeddedLotwBadge.width + Math.max(2, Math.round(3 * fs)) : 0
                                                                 text: mainWindow.fsCellText(fsRowEmbedded.entry, fsCellE.col.id)
                                                                 color: mainWindow.fsCellColor(fsRowEmbedded.entry, fsCellE.col.id)
                                                                 font.family: mainWindow.decodedTextFontFamily
@@ -10594,16 +10594,13 @@ NumberAnimation {
                                                                 fontSizeMode: Text.HorizontalFit
                                                                 minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65))
                                                             }
-                                                            Rectangle {
+                                                            LotwBadge {
+                                                                id: fsRowEmbeddedLotwBadge
                                                                 visible: fsRowEmbedded.entry.isLotw === true
-                                                                width: Math.max(5, Math.round(6 * fs))
-                                                                height: width
-                                                                radius: width / 2
+                                                                sizeScale: fs
+                                                                accent: mainWindow.lotwMarkerColor()
                                                                 anchors.right: parent.right
                                                                 anchors.verticalCenter: parent.verticalCenter
-                                                                color: mainWindow.lotwMarkerColor()
-                                                                border.color: mainWindow.boostedDecodeTextColor(textSecondary)
-                                                                border.width: 1
                                                             }
                                                         }
                                                     }
@@ -11234,7 +11231,7 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
 	                                                Item { visible: rxFreqPanel.freqColumnWidth > 0; Layout.preferredWidth: rxFreqPanel.dtFreqGapWidth }
 		                                                Text { visible: rxFreqPanel.freqColumnWidth > 0; text: rxFrequencyDelegate.entry.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(rxFrequencyDelegate.entry.isTx ? "#f1c40f" : secondaryCyan); font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Rectangle { property int dotSize: Math.max(5, Math.round(6 * fs)); visible: rxFrequencyDelegate.entry.isLotw === true; width: dotSize; height: dotSize; Layout.preferredWidth: dotSize; Layout.preferredHeight: dotSize; Layout.alignment: Qt.AlignVCenter; radius: dotSize / 2; color: mainWindow.lotwMarkerColor(); border.color: mainWindow.boostedDecodeTextColor(textSecondary); border.width: 1 }
+                                                LotwBadge { visible: rxFrequencyDelegate.entry.isLotw === true; sizeScale: fs; accent: mainWindow.lotwMarkerColor(); Layout.preferredWidth: implicitWidth; Layout.preferredHeight: implicitHeight; Layout.alignment: Qt.AlignVCenter }
 		                                                Text { text: rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(rxFrequencyDelegate.entry); font.strikeout: decodePanel.decodeEntryStrikeout(rxFrequencyDelegate.entry); color: getDxccColor(rxFrequencyDelegate.entry); Layout.fillHeight: true; Layout.fillWidth: true; Layout.minimumWidth: 0; verticalAlignment: Text.AlignVCenter; elide: messageElideMode(rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message) }
 		                                                Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(rxFrequencyDelegate.entry); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(textSecondary); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
 		                                                Text { visible: rxFreqPanel.azColumnWidth > 0; text: formatBearingDegrees(rxFrequencyDelegate.entry.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(secondaryCyan); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.azColumnWidth }
@@ -16502,7 +16499,7 @@ NumberAnimation {
                                             anchors.fill: parent
                                             Text {
                                                 anchors.fill: parent
-                                                anchors.rightMargin: fsRowFloating.entry.isLotw === true ? Math.max(9, Math.round(11 * fs)) : 0
+                                                anchors.rightMargin: fsRowFloating.entry.isLotw === true ? fsRowFloatingLotwBadge.width + Math.max(2, Math.round(3 * fs)) : 0
                                                 text: mainWindow.fsCellText(fsRowFloating.entry, fsCellF.col.id)
                                                 color: mainWindow.fsCellColor(fsRowFloating.entry, fsCellF.col.id)
                                                 font.family: mainWindow.decodedTextFontFamily
@@ -16514,16 +16511,13 @@ NumberAnimation {
                                                 fontSizeMode: Text.HorizontalFit
                                                 minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65))
                                             }
-                                            Rectangle {
+                                            LotwBadge {
+                                                id: fsRowFloatingLotwBadge
                                                 visible: fsRowFloating.entry.isLotw === true
-                                                width: Math.max(5, Math.round(6 * fs))
-                                                height: width
-                                                radius: width / 2
+                                                sizeScale: fs
+                                                accent: mainWindow.lotwMarkerColor()
                                                 anchors.right: parent.right
                                                 anchors.verticalCenter: parent.verticalCenter
-                                                color: mainWindow.lotwMarkerColor()
-                                                border.color: mainWindow.boostedDecodeTextColor(textSecondary)
-                                                border.width: 1
                                             }
                                         }
                                     }
@@ -17115,7 +17109,7 @@ NumberAnimation {
 	                                Item { visible: rxFreqFloatingWindow.freqColumnWidth > 0; Layout.preferredWidth: rxFreqFloatingWindow.dtFreqGapWidth }
 			                                Text { visible: rxFreqFloatingWindow.freqColumnWidth > 0; text: entry.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(entry.isTx ? "#f1c40f" : secondaryCyan); font.bold: entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.freqColumnWidth }
                                 Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
-                                Rectangle { property int dotSize: Math.max(5, Math.round(6 * fs)); visible: entry.isLotw === true; width: dotSize; height: dotSize; Layout.preferredWidth: dotSize; Layout.preferredHeight: dotSize; Layout.alignment: Qt.AlignVCenter; radius: dotSize / 2; color: mainWindow.lotwMarkerColor(); border.color: mainWindow.boostedDecodeTextColor(textSecondary); border.width: 1 }
+                                LotwBadge { visible: entry.isLotw === true; sizeScale: fs; accent: mainWindow.lotwMarkerColor(); Layout.preferredWidth: implicitWidth; Layout.preferredHeight: implicitHeight; Layout.alignment: Qt.AlignVCenter }
                                 Text { text: entry.displayMessage || entry.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(entry); font.strikeout: decodePanel.decodeEntryStrikeout(entry); color: getDxccColor(entry); Layout.fillWidth: true; Layout.minimumWidth: 0; elide: messageElideMode(entry.displayMessage || entry.message) }
 		                                Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(entry); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(textSecondary); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
 		                                Text { visible: rxFreqFloatingWindow.azColumnWidth > 0; text: formatBearingDegrees(entry.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: mainWindow.boostedDecodeTextColor(secondaryCyan); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.azColumnWidth }

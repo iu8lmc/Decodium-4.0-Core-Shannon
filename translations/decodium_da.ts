@@ -30062,6 +30062,18 @@ Koster ekstra CPU under QSO&apos;er. Standard: OFF.</translation>
         <source>Contrast:</source>
         <translation>Kontrast:</translation>
     </message>
+    <message>
+        <source>Mark LoTW users in the decode lists (LoTW tag, colour and background)</source>
+        <translation>Markér LoTW-brugere i dekodelisterne (LoTW-mærke, farve og baggrund)</translation>
+    </message>
+    <message>
+        <source>Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The &quot;LoTW marker&quot; colour below sets the colour of the tag, of the text and of the background. Off by default.</source>
+        <translation>Henter LoTW-brugeraktivitetslisten og viser et lille LoTW-mærke ved stationer, der bruger LoTW. Farven &quot;LoTW-markør&quot; nedenfor bestemmer farven på mærket, teksten og baggrunden. Slået fra som standard.</translation>
+    </message>
+    <message>
+        <source>Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.</source>
+        <translation>Baggrunde: når en dekodning passer i flere kategorier, bruges den første i denne liste, hvor baggrunden er slået til.</translation>
+    </message>
 </context>
 <context>
     <name>SettingsTab9</name>
@@ -36285,6 +36297,13 @@ Højre klik for at indsætte eller slette elementer.</translation>
         <location filename="../src/ui/wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt; &lt;p&gt; Dobbeltklik på en farve for at redigere den. &lt;/p&gt; &lt;p&gt; Højreklik for at indsætte eller slette farver. &lt;/p&gt; &lt;p&gt; Farver øverst repræsenterer svage signaler &lt;/p&gt; &lt;p&gt; og farver i bunden repræsenterer stærke &lt;/p&gt; &lt;p&gt; signaler. Du kan have op til 256 farver. &lt;/p&gt; &lt;/body&gt; &lt;/html&gt;</translation>
+    </message>
+</context>
+<context>
+    <name>LotwBadge</name>
+    <message>
+        <source>LoTW user</source>
+        <translation>LoTW-bruger</translation>
     </message>
 </context>
 </TS>

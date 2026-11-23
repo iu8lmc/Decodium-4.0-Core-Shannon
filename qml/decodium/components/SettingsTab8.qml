@@ -70,6 +70,42 @@ SettingsPageScroll {
         Text { text: qsTr("DECODE COLORS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: pageColumns; Layout.topMargin: 4 }
         Rectangle { Layout.fillWidth: true; Layout.columnSpan: pageColumns; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
+        // The LoTW tag, colour and background only appear when the LoTW user
+        // list is loaded. Same switch as "LotW Enabled" in the LoTW section,
+        // repeated here so it can be found next to the LoTW colour.
+        CheckBox {
+            id: lotwUsersCheck
+            Layout.columnSpan: pageColumns
+            Layout.fillWidth: true
+            text: qsTr("Mark LoTW users in the decode lists (LoTW tag, colour and background)")
+            checked: bridge ? bridge.lotwEnabled : false
+            onToggled: {
+                if (!bridge)
+                    return
+                bridge.lotwEnabled = checked
+                dialog.scheduleSettingsPersist()
+            }
+            contentItem: Text {
+                text: lotwUsersCheck.text
+                color: textPrimary
+                font.pixelSize: 12
+                leftPadding: lotwUsersCheck.indicator.width + 8
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.Wrap
+            }
+            DecoTemplates.ToolTip.visible: hovered
+            DecoTemplates.ToolTip.delay: 600
+            DecoTemplates.ToolTip.text: qsTr("Downloads the LoTW user activity list and shows a small LoTW tag next to stations that use LoTW. The \"LoTW marker\" colour below sets the colour of the tag, of the text and of the background. Off by default.")
+        }
+        Text {
+            Layout.columnSpan: pageColumns
+            Layout.fillWidth: true
+            text: qsTr("Backgrounds: when a decode fits several categories, the first one in this list with its background switched on is used.")
+            color: textSecondary
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
+
         Repeater {
             model: dialog.decodeColorModel
             delegate: RowLayout {

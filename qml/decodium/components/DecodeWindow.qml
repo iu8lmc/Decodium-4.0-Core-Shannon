@@ -1509,15 +1509,12 @@ Component.onCompleted: {
                                     Item { Layout.preferredWidth: decodeWindow.bandGapWidth }
 
                                     // Messaggio con coloring Shannon-compatible
-                                    Rectangle {
+                                    LotwBadge {
                                         visible: modelData.isLotw === true
-                                        Layout.preferredWidth: 6
-                                        Layout.preferredHeight: 6
+                                        accent: decodeWindow.lotwMarkerColor()
+                                        Layout.preferredWidth: implicitWidth
+                                        Layout.preferredHeight: implicitHeight
                                         Layout.alignment: Qt.AlignVCenter
-                                        radius: 3
-                                        color: decodeWindow.lotwMarkerColor()
-                                        border.color: decodeWindow.boostedDecodeTextColor(textSecondary)
-                                        border.width: 1
                                     }
                                     Text {
                                         id: bandMsgText
@@ -1542,7 +1539,7 @@ Component.onCompleted: {
                                         Layout.fillHeight: true
                                         Text {
                                             anchors.fill: parent
-                                            anchors.rightMargin: modelData.isLotw === true ? 11 : 0
+                                            anchors.rightMargin: modelData.isLotw === true ? bandDxccLotwBadge.width + 3 : 0
                                             text: decodeWindow.dxccDisplayText(modelData)
                                             font.family: decodiumMonoFontFamily
                                             font.pixelSize: 11
@@ -1560,16 +1557,12 @@ Component.onCompleted: {
                                             minimumPixelSize: 8
                                             maximumLineCount: 1
                                         }
-                                        Rectangle {
+                                        LotwBadge {
+                                            id: bandDxccLotwBadge
                                             visible: modelData.isLotw === true
-                                            width: 6
-                                            height: 6
-                                            radius: 3
+                                            accent: decodeWindow.lotwMarkerColor()
                                             anchors.right: parent.right
                                             anchors.verticalCenter: parent.verticalCenter
-                                            color: decodeWindow.lotwMarkerColor()
-                                            border.color: decodeWindow.boostedDecodeTextColor(textSecondary)
-                                            border.width: 1
                                         }
                                     }
 
@@ -2035,15 +2028,12 @@ Component.onCompleted: {
                                     Item { Layout.preferredWidth: decodeWindow.rxGapWidth }
 
                                     // Messaggio RX con coloring + strikethrough B4
-                                    Rectangle {
+                                    LotwBadge {
                                         visible: modelData.isLotw === true
-                                        Layout.preferredWidth: 6
-                                        Layout.preferredHeight: 6
+                                        accent: decodeWindow.lotwMarkerColor()
+                                        Layout.preferredWidth: implicitWidth
+                                        Layout.preferredHeight: implicitHeight
                                         Layout.alignment: Qt.AlignVCenter
-                                        radius: 3
-                                        color: decodeWindow.lotwMarkerColor()
-                                        border.color: decodeWindow.boostedDecodeTextColor(textSecondary)
-                                        border.width: 1
                                     }
                                     Rectangle {
                                         visible: decodeWindow.usStateLabel(modelData).length > 0
