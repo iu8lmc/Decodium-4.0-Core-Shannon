@@ -32,6 +32,11 @@ Push-Location $root
 & (Join-Path $MsysBin 'windeployqt6.exe') --qmldir qml --release --no-translations --no-ffmpeg (Join-Path $out 'decodium.exe')
 Pop-Location
 Remove-Item (Join-Path $out 'multimedia\ffmpegmediaplugin.dll') -ErrorAction SilentlyContinue
+# Decodium uses only QSQLITE. These drivers need client libraries that are not
+# shipped (fbclient.dll, libmariadb.dll, libpq.dll), so they could never load.
+foreach ($drv in @('qsqlibase.dll', 'qsqlmysql.dll', 'qsqlpsql.dll')) {
+    Remove-Item (Join-Path $out "sqldrivers\$drv") -ErrorAction SilentlyContinue
+}
 
 # 2) Cartelle "impl" di Qt Quick vuote dopo windeployqt6
 Get-ChildItem $QtQmlSrc -Directory -Recurse -Filter impl | ForEach-Object {
