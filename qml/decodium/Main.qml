@@ -974,6 +974,41 @@ GlassApplicationWindow {
         bridge.qsyTo(nextHz, bridge.mode || "")
     }
 
+    // Mouse wheel over a digit of the frequency display: one notch changes
+    // that digit by one step (wheel up = higher frequency). Fast scrolling is
+    // coalesced into a single QSY so the CAT link is not flooded and no notch
+    // is lost while the radio has not reported the previous frequency yet.
+    property real wheelTuneTargetHz: -1
+    property real wheelTuneAngleRemainder: 0
+    function wheelTuneDial(stepHz, angleDeltaY) {
+        if (!bridge || !(stepHz > 0) || bridge.transmitting || bridge.tuning)
+            return
+        wheelTuneAngleRemainder += angleDeltaY
+        var notches = (wheelTuneAngleRemainder > 0)
+                ? Math.floor(wheelTuneAngleRemainder / 120)
+                : Math.ceil(wheelTuneAngleRemainder / 120)
+        if (notches === 0)
+            return
+        wheelTuneAngleRemainder -= notches * 120
+        var baseHz = wheelTuneTargetHz >= 0 ? wheelTuneTargetHz
+                                            : Math.round(Number(bridge.frequency) || 0)
+        wheelTuneTargetHz = Math.max(0, baseHz + Math.round(stepHz) * notches)
+        wheelTuneCommitTimer.restart()
+    }
+    Timer {
+        id: wheelTuneCommitTimer
+        interval: 120
+        repeat: false
+        onTriggered: {
+            var targetHz = Math.round(mainWindow.wheelTuneTargetHz)
+            mainWindow.wheelTuneTargetHz = -1
+            if (!bridge || targetHz < 0 || bridge.transmitting || bridge.tuning)
+                return
+            if (targetHz !== Math.round(Number(bridge.frequency) || 0))
+                bridge.qsyTo(targetHz, bridge.mode || "")
+        }
+    }
+
     function persistSettingsDialogIfOpen() {
         var settings = settingsDialogLoader.item
         if (settings && settings.visible && settings.persistSettingsNow)
@@ -5412,6 +5447,17 @@ GlassApplicationWindow {
                                             hoverEnabled: true
                                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                             onClicked: mainWindow.tuneDialByStep(frequencyDigitCell.stepHz, -1)
+                                        }
+
+                                        // Scroll over a digit to tune that digit.
+                                        WheelHandler {
+                                            target: null
+                                            enabled: frequencyDigitCell.digitCell && !bridge.transmitting && !bridge.tuning
+                                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                            onWheel: function(event) {
+                                                mainWindow.wheelTuneDial(frequencyDigitCell.stepHz, event.angleDelta.y)
+                                                event.accepted = true
+                                            }
                                         }
                                     }
                                 }
