@@ -759,10 +759,22 @@ indipendenti. Il programma usa una `Ft2Config` sua per il profilo di esercizio
 (vedi "Cosa gira davvero in Decodium") e i preset `conservativo` e `sensibile`
 solo per i profili profondi.
 
-In Decodium il dispatcher seleziona AVX2/FMA su x86, NEON su ARM64 e usa il
-decoder originale generico quando il backend richiesto non è disponibile. Il
-fallback resta compilato per la CPU minima, quindi l'assenza di una estensione
-SIMD non impedisce l'avvio. `bits.hpp` copre anche MSVC.
+In Decodium il dispatcher sceglie, in quest'ordine: AVX2/FMA su x86 (NEON su
+ARM64), poi SSE2 sulle CPU x86-64 senza AVX2 o senza stato YMM salvato dal
+sistema, poi il decoder originale generico. Il livello SSE2
+(`decodium_bridge_sse2.cpp`) è lo stesso sorgente del bridge, compilato per la
+CPU x86-64 minima con il kernel `minsum_sse2.hpp` e il blocco CRC a 16
+candidati dell'OSD fatto con due registri XMM: risultati identici bit per bit
+all'AVX2 (`tests/test_superldpc_tiers.cpp`) a circa il 7-10% di tempo in più
+per parola sul banco. Ogni copia vive in un namespace suo
+(`SUPERLDPC_BACKEND_NS`) ed esporta entry point suoi (`SUPERLDPC_EXPORT`): il
+linker non può fondere codice di un livello in un altro. Una variante con
+`-mavx` per Sandy/Ivy Bridge è stata provata e scartata: senza operazioni
+intere a 256 bit era alla pari o più lenta della SSE2.
+`DECODIUM_SUPERLDPC_MAX_TIER=sse2|generic` limita il livello per provare su una
+CPU moderna i percorsi delle CPU vecchie. Il fallback resta compilato per la
+CPU minima, quindi l'assenza di una estensione SIMD non impedisce l'avvio.
+`bits.hpp` copre anche MSVC.
 
 I comandi `make` qui sotto e i file `cpp/*.cpp`, `tools/` e `data/` citati in
 questo README appartengono al pacchetto autonomo da cui la libreria proviene e
@@ -801,6 +813,7 @@ In questo albero (`Detector/superldpc/`):
     ft2_decoder.hpp       API pubblica: Ft2Decoder + preset. E' l'unico da includere.
     minsum_avx2.hpp       selezione MinSumV3 e stadio 1 con intrinsics AVX2
     minsum_neon.hpp       stadio 1 MinSumV3 con intrinsics ARM NEON
+    minsum_sse2.hpp       stadio 1 MinSumV3 con intrinsics SSE2 (CPU x86-64 senza AVX2)
     osd_fast.hpp          OsdFast, stadio 2: CRC incrementale, Gauss branchless, pruning, ricerca (174,77)
     gate.hpp              gate appreso e gate a margine
     gate_weights.hpp      pesi del gate appreso e parametri del gate a margine, per modo
@@ -809,7 +822,8 @@ In questo albero (`Detector/superldpc/`):
     minsum.hpp            Code (lettura di H) + MinSumDecoder, prima versione
     bits.hpp              popcount/ctz portabili (gcc, clang, MSVC)
     decodium_bridge.cpp   innesto in Decodium: preset di esercizio, opzioni da ambiente
-    decodium_dispatch.cpp scelta del backend (AVX2, NEON, generico) all'avvio
+    decodium_bridge_sse2.cpp  lo stesso bridge compilato per SSE2, namespace ed export propri
+    decodium_dispatch.cpp scelta del backend (AVX2 o NEON, SSE2, generico) all'avvio
     tests/tools/superldpc_k77_bench.cpp   (radice di Decodium) banco e selftest: preset del bridge, catena FSK, (174,77), gate a margine
 
 Nel pacchetto autonomo, non in questo albero:

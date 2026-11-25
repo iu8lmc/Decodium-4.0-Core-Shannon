@@ -776,7 +776,7 @@ if (DECODIUM_SUPERLDPC_ARM64_TARGET OR DECODIUM_SUPERLDPC_X86_TARGET)
       PRIVATE DECODIUM_SUPERLDPC_NEON_BUILT=1)
   else ()
     target_compile_definitions (test_superldpc_dispatch
-      PRIVATE DECODIUM_SUPERLDPC_AVX2_BUILT=1)
+      PRIVATE DECODIUM_SUPERLDPC_AVX2_BUILT=1 DECODIUM_SUPERLDPC_SSE2_BUILT=1)
   endif ()
   add_test (NAME test_superldpc_dispatch
     COMMAND $<TARGET_FILE:test_superldpc_dispatch>)
@@ -787,9 +787,13 @@ if (DECODIUM_SUPERLDPC_ARM64_TARGET OR DECODIUM_SUPERLDPC_X86_TARGET)
     ../Detector/superldpc/decodium_dispatch.cpp)
   set_target_properties (test_superldpc_cpu_fallback PROPERTIES
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  # Emulated x86 tiers: AVX2/FMA, SSE2 (the CPUs without AVX2 or YMM state)
+  # and the original decoder; max-* exercise DECODIUM_SUPERLDPC_MAX_TIER.
   target_compile_definitions (test_superldpc_cpu_fallback PRIVATE
-    DECODIUM_SUPERLDPC_TESTING=1 DECODIUM_SUPERLDPC_AVX2_BUILT=1)
-  foreach (cpu_case environment ui-disabled ivybridge no-avx no-avx2 no-fma no-osxsave no-ymm-state supported)
+    DECODIUM_SUPERLDPC_TESTING=1 DECODIUM_SUPERLDPC_AVX2_BUILT=1
+    DECODIUM_SUPERLDPC_SSE2_BUILT=1)
+  foreach (cpu_case environment ui-disabled ivybridge no-avx no-avx2 no-fma no-osxsave no-ymm-state supported
+                    no-sse2 max-sse2 max-generic)
     add_test (NAME test_superldpc_cpu_${cpu_case}
       COMMAND $<TARGET_FILE:test_superldpc_cpu_fallback> ${cpu_case})
   endforeach ()
@@ -797,14 +801,34 @@ if (DECODIUM_SUPERLDPC_ARM64_TARGET OR DECODIUM_SUPERLDPC_X86_TARGET)
   add_executable (test_ft2_legacy_cpu
     test_ft2_legacy_cpu.cpp
     ../Detector/superldpc/decodium_dispatch.cpp)
+  # Ivy Bridge CPUID: on x86 builds the real FT2 decoder now runs the SSE2
+  # superldpc backend from wsjt_qt with LDPC on, the original decoder with it off.
   target_compile_definitions (test_ft2_legacy_cpu PRIVATE
     DECODIUM_SUPERLDPC_TESTING=1 DECODIUM_SUPERLDPC_AVX2_BUILT=1)
+  if (DECODIUM_SUPERLDPC_X86_TARGET)
+    target_compile_definitions (test_ft2_legacy_cpu PRIVATE DECODIUM_SUPERLDPC_SSE2_BUILT=1)
+  endif ()
   target_link_libraries (test_ft2_legacy_cpu wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
   if (MINGW)
     target_link_options (test_ft2_legacy_cpu PRIVATE -Wl,--stack,67108864)
   endif ()
   add_test (NAME test_ft2_legacy_cpu COMMAND $<TARGET_FILE:test_ft2_legacy_cpu>)
   set_tests_properties (test_ft2_legacy_cpu PROPERTIES TIMEOUT 45)
+endif ()
+
+# The AVX2/FMA and SSE2 superldpc backends (same source, two builds) must give
+# identical results word for word. Uses the backends compiled into wsjt_qt;
+# on a CPU without AVX2/FMA it runs only the SSE2 backend.
+if (DECODIUM_SUPERLDPC_X86_TARGET AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_executable (test_superldpc_tiers test_superldpc_tiers.cpp)
+  set_target_properties (test_superldpc_tiers PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  target_compile_definitions (test_superldpc_tiers PRIVATE SUPERLDPC_TIERS_LINK_APP=1)
+  target_link_libraries (test_superldpc_tiers wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+  if (MINGW)
+    target_link_options (test_superldpc_tiers PRIVATE -Wl,--stack,67108864)
+  endif ()
+  add_test (NAME test_superldpc_tiers COMMAND $<TARGET_FILE:test_superldpc_tiers> words=1200)
+  set_tests_properties (test_superldpc_tiers PROPERTIES TIMEOUT 120)
 endif ()
 
 add_executable (test_secure_settings test_secure_settings.cpp)

@@ -62,6 +62,9 @@
 #include <cstring>
 #if defined(__AVX2__)
 #include <immintrin.h>
+#elif defined(SUPERLDPC_SSE2_KERNEL) && (defined(__SSE2__) || defined(_M_X64))
+#include <emmintrin.h>
+#define SUPERLDPC_OSD_CRC_BLOCK16_SSE2 1
 #endif
 
 // Profilo delle fasi: -DOSD_PROFILE lo accende, altrimenti costo zero.
@@ -308,17 +311,35 @@ public:
                 }
                 if (order_ >= 2 && t < lim2) {
                     int u = t + 1, umax = prune_limit(t + 1, lim2, a_t);
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(SUPERLDPC_OSD_CRC_BLOCK16_SSE2)
                     // Il test CRC e' un confronto a zero su uint16: se ne fanno
                     // 16 per volta, e nella stragrande maggioranza dei blocchi
                     // non passa nessuno (la CRC accetta 1 su 16384).
+                    // Il backend SSE2 fa lo stesso blocco da 16 con due registri
+                    // XMM e compone la stessa maschera a 32 bit: il conteggio
+                    // OSD_C(16), e quindi il rango che il gate appreso legge
+                    // (feature 10 e 11), resta identico a quello AVX2.
+#if defined(__AVX2__)
                     const __m256i vs1 = _mm256_set1_epi16((short)s1);
                     const __m256i vz  = _mm256_setzero_si256();
+#else
+                    const __m128i vs1 = _mm_set1_epi16((short)s1);
+                    const __m128i vz  = _mm_setzero_si128();
+#endif
                     for (; u + 16 <= umax; u += 16) {
                         OSD_C(16);
+#if defined(__AVX2__)
                         const __m256i dv = _mm256_loadu_si256((const __m256i*)&dcrc_[u]);
                         unsigned mk = (unsigned)_mm256_movemask_epi8(
                                 _mm256_cmpeq_epi16(_mm256_xor_si256(dv, vs1), vz));
+#else
+                        const __m128i dlo = _mm_loadu_si128((const __m128i*)&dcrc_[u]);
+                        const __m128i dhi = _mm_loadu_si128((const __m128i*)&dcrc_[u + 8]);
+                        unsigned mk = (unsigned)_mm_movemask_epi8(
+                                _mm_cmpeq_epi16(_mm_xor_si128(dlo, vs1), vz))
+                            | ((unsigned)_mm_movemask_epi8(
+                                _mm_cmpeq_epi16(_mm_xor_si128(dhi, vs1), vz)) << 16);
+#endif
                         while (mk) {
                             const int k = fl_ctz64(mk) >> 1;    // 2 bit di maschera per lane
                             mk &= ~(3u << (2 * k));

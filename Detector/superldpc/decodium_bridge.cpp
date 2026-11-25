@@ -47,16 +47,53 @@
 #pragma GCC pop_options
 #endif
 
-#include "ft2_decoder.hpp"
+// Every standard and intrinsic header used by this file and by the superldpc
+// headers is included here, at global scope, BEFORE the backend namespace is
+// opened below: the headers' own #include lines then hit the include guards
+// and never declare the standard library inside the namespace.
+#include <algorithm>
+#include <array>
 #include <atomic>
+#include <cassert>
 #include <chrono>
+#include <climits>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <vector>
+#if defined(_MSC_VER)
+#  include <intrin.h>
+#endif
+#if defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(_M_ARM64)
+#  if defined(_MSC_VER) && defined(_M_ARM64)
+#    include <arm64_neon.h>
+#  else
+#    include <arm_neon.h>
+#  endif
+#elif defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
+#  include <immintrin.h>
+#endif
+
+// The same source is compiled once per x86 tier: AVX2/FMA (this file) and
+// SSE2 (decodium_bridge_sse2.cpp includes it with its own names).
+// Each copy lives in its own namespace and exports its own C entry points, so
+// the inline and template code of one tier (class members defined in the
+// headers, lambdas, local statics) can never be merged by the linker into a
+// tier compiled for a different instruction set: identical COMDAT names were
+// the cause of the illegal-instruction crashes on CPUs without AVX2.
+#ifndef SUPERLDPC_BACKEND_NS
+#  define SUPERLDPC_BACKEND_NS superldpc_backend_simd
+#endif
+#ifndef SUPERLDPC_EXPORT
+#  define SUPERLDPC_EXPORT(name) superldpc_simd_##name
+#endif
 
 extern "C" void ftx_ldpc174_91_tables_c (int* Mn_out, int* Nm_out, int* nrw_out, int* ncw_out);
 
@@ -64,6 +101,10 @@ extern "C" void ftx_ldpc174_91_tables_c (int* Mn_out, int* Nm_out, int* nrw_out,
 // processo. Serve al controllo di plausibilita' dentro l'OSD, che altrimenti
 // leggerebbe il payload mescolato.
 extern "C" void ftx_ft2_rvec_c (signed char* out77);
+
+namespace SUPERLDPC_BACKEND_NS {
+
+#include "ft2_decoder.hpp"
 
 static uint8_t const* rvec_ft2 () {
     static uint8_t const* const v = [] {
@@ -124,7 +165,7 @@ const Code& shared_code () {
 // ed e' il prezzo giusto: un filtro non deve rendere cieco il decoder.
 static thread_local bool g_modo_ft8 = false;
 
-extern "C" void superldpc_simd_set_ft8_mode_c (int on) { g_modo_ft8 = on != 0; }
+extern "C" void SUPERLDPC_EXPORT(set_ft8_mode_c) (int on) { g_modo_ft8 = on != 0; }
 
 // FT2 only: flipped-bit cap requested by the caller for the next words on
 // this thread, 0 = none (the mode default applies). FtxFt2Stage7 can raise
@@ -134,7 +175,7 @@ extern "C" void superldpc_simd_set_ft8_mode_c (int on) { g_modo_ft8 = on != 0; }
 // yields to DECODIUM_LDPC_MAX_HARD.
 static thread_local int g_ft2_max_hard = 0;
 
-extern "C" void superldpc_simd_set_ft2_max_hard_c (int n) {
+extern "C" void SUPERLDPC_EXPORT(set_ft2_max_hard_c) (int n) {
     g_ft2_max_hard = (n > 0 && n <= kN) ? n : 0;
 }
 
@@ -780,14 +821,14 @@ static int superldpc_max_hard_apmsg () {
 // del dataset; path vuoto o nullo chiude e basta. Va chiamata PRIMA del primo
 // decode del thread che decodifica, insieme a DECODIUM_LDPC_GATE=1 (altrimenti
 // gate_mode e' spento e nessuna feature viene calcolata).
-extern "C" void superldpc_simd_gate_dump_open_c (char const* path) {
+extern "C" void SUPERLDPC_EXPORT(gate_dump_open_c) (char const* path) {
     std::lock_guard<std::mutex> lock (gate_dump_mutex ());
     std::FILE*& f = gate_dump_file ();
     if (f) { std::fclose (f); f = nullptr; }
     if (path && path[0]) f = std::fopen (path, "a");
 }
 
-extern "C" void superldpc_simd_gate_dump_close_c () {
+extern "C" void SUPERLDPC_EXPORT(gate_dump_close_c) () {
     std::lock_guard<std::mutex> lock (gate_dump_mutex ());
     std::FILE*& f = gate_dump_file ();
     if (f) { std::fclose (f); f = nullptr; }
@@ -798,12 +839,12 @@ extern "C" void superldpc_simd_gate_dump_close_c () {
 // candidati passano da gate_dump_callback ma vengono scartati (nessuna
 // etichetta nota): serve per non scrivere righe non etichettabili quando il
 // banco genera anche slot di solo rumore.
-extern "C" void superldpc_simd_gate_truth_set_c (signed char const* cw174) {
+extern "C" void SUPERLDPC_EXPORT(gate_truth_set_c) (signed char const* cw174) {
     g_gate_truth_cw174.assign (cw174, cw174 + kN);
     ++g_gate_trial;
 }
 
-extern "C" void superldpc_simd_gate_truth_clear_c () {
+extern "C" void SUPERLDPC_EXPORT(gate_truth_clear_c) () {
     g_gate_truth_cw174.clear ();
 }
 
@@ -814,7 +855,7 @@ static int superldpc_max_hard_per (signed char const* apmask_word) {
     return n_ap >= 77 ? superldpc_max_hard_apmsg () : superldpc_max_hard ();
 }
 
-extern "C" void superldpc_simd_decode174_91_c (float const* llr_in, int Keff,
+extern "C" void SUPERLDPC_EXPORT(decode174_91_c) (float const* llr_in, int Keff,
                                               int maxosd, int norder,
                                               signed char const* apmask_in,
                                               signed char* message91_out,
@@ -918,7 +959,7 @@ extern "C" void superldpc_simd_decode174_91_c (float const* llr_in, int Keff,
 //
 // Misure: lab/misure/20260910_bicm_id_ft8.md (+21,3% di decodifiche, ~0,3 dB,
 // zero falsi su 2236 cornici di rumore e 960 prove con segnale).
-extern "C" int superldpc_simd_extrinsic174_91_c (float const* llr_in, int norder,
+extern "C" int SUPERLDPC_EXPORT(extrinsic174_91_c) (float const* llr_in, int norder,
                                            float clamp, float* est_out)
 {
     if (!llr_in || !est_out) return 0;
@@ -968,7 +1009,7 @@ extern "C" int superldpc_simd_extrinsic174_91_c (float const* llr_in, int norder
 // llr_in: [174], the input of that word, Decodium convention.
 // Returns 1 if the decode accepted a word (word < 0 only), 0 otherwise,
 // -1 if the posteriors of `word` are not available (est_out zeroed).
-extern "C" int superldpc_simd_extrinsic174_91_v2_c (float const* llr_in, int norder,
+extern "C" int SUPERLDPC_EXPORT(extrinsic174_91_v2_c) (float const* llr_in, int norder,
                                                   int word, int flags, float clamp,
                                                   float* est_out)
 {
@@ -1029,7 +1070,7 @@ extern "C" int superldpc_simd_extrinsic174_91_v2_c (float const* llr_in, int nor
 // llr_in, apmask_in: [n][174] contigui. Le uscite sono [n] o [n][...].
 // Il chiamante scorre poi i risultati nell'ordine originale e prende il primo
 // valido: la semantica resta quella del ciclo sequenziale.
-extern "C" void superldpc_simd_decode174_91_batch_c (int n, float const* llr_in,
+extern "C" void SUPERLDPC_EXPORT(decode174_91_batch_c) (int n, float const* llr_in,
                                                     signed char const* apmask_in,
                                                     int Keff, int maxosd, int norder,
                                                     signed char* message91_out,
@@ -1165,3 +1206,5 @@ extern "C" void superldpc_simd_decode174_91_batch_c (int n, float const* llr_in,
         if (dmin_out) dmin_out[w] = dmin;
     }
 }
+
+}  // namespace SUPERLDPC_BACKEND_NS

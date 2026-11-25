@@ -3,9 +3,19 @@
 // Questo file DEVE essere compilato per la CPU minima supportata. Non deve
 // ricevere -mavx2, -mfma o /arch:AVX2: contiene il rilevamento delle capacita'
 // della CPU, il controllo dello stato SIMD del sistema operativo e il fallback
-// al decoder LDPC originale. Il solo backend in decodium_bridge.cpp viene
-// compilato con AVX2/FMA su x86 o NEON su ARM64 e viene chiamato esclusivamente
-// dopo che tutti i controlli hanno avuto esito positivo.
+// al decoder LDPC originale.
+//
+// Livelli, dal piu' veloce, scelti a runtime:
+//   1. superldpc AVX2/FMA (decodium_bridge.cpp) su x86, NEON su ARM64;
+//   2. superldpc SSE2 (decodium_bridge_sse2.cpp) sulle CPU x86-64 senza AVX2
+//      o senza stato YMM salvato dal sistema: stesso algoritmo, stessi
+//      risultati bit per bit (tests/test_superldpc_tiers.cpp);
+//   3. il decoder LDPC originale (ftx_decode174_91_c).
+// Ogni backend vive nella sua translation unit e nel suo namespace e viene
+// chiamato solo dopo che i controlli del suo livello hanno avuto esito positivo.
+// DECODIUM_SUPERLDPC_MAX_TIER=sse2|generic limita il livello (prove e
+// confronti su una CPU moderna); DECODIUM_FT2_DISABLE_SUPERLDPC=1 resta
+// l'interruttore di emergenza che porta sempre al decoder originale.
 
 #include <array>
 #include <atomic>
@@ -59,6 +69,25 @@ extern "C" int superldpc_simd_extrinsic174_91_v2_c (float const*, int, int, int,
                                                   float*);
 #endif
 
+#if defined(DECODIUM_SUPERLDPC_SSE2_BUILT)
+extern "C" void superldpc_sse2_set_ft8_mode_c (int);
+extern "C" void superldpc_sse2_set_ft2_max_hard_c (int);
+extern "C" void superldpc_sse2_decode174_91_c (float const*, int, int, int,
+                                              signed char const*, signed char*,
+                                              signed char*, int*, int*, float*);
+extern "C" void superldpc_sse2_decode174_91_batch_c (int, float const*,
+                                                    signed char const*, int, int, int,
+                                                    signed char*, signed char*, int*,
+                                                    int*, float*);
+extern "C" void superldpc_sse2_gate_dump_open_c (char const*);
+extern "C" void superldpc_sse2_gate_dump_close_c ();
+extern "C" void superldpc_sse2_gate_truth_set_c (signed char const*);
+extern "C" void superldpc_sse2_gate_truth_clear_c ();
+extern "C" int superldpc_sse2_extrinsic174_91_c (float const*, int, float, float*);
+extern "C" int superldpc_sse2_extrinsic174_91_v2_c (float const*, int, int, int, float,
+                                                  float*);
+#endif
+
 #if defined(DECODIUM_SUPERLDPC_TESTING)
 // Test-only CPUID snapshot injection. Never enabled in the application.
 extern "C" unsigned superldpc_test_x86_features_c ();
@@ -84,6 +113,7 @@ struct CpuCapabilities {
     std::string model;
     bool x86 = false;
     bool arm64 = false;
+    bool sse2 = false;
     bool avx = false;
     bool avx2 = false;
     bool fma = false;
@@ -92,14 +122,23 @@ struct CpuCapabilities {
     bool neon = false;
     bool avx2BackendBuilt = false;
     bool neonBackendBuilt = false;
+    bool sse2BackendBuilt = false;
 
-    bool superLdpcUsable () const
+    // Livello 1: AVX2/FMA su x86, NEON su ARM64.
+    bool topTierUsable () const
     {
         if (x86)
             return avx2BackendBuilt && avx && avx2 && fma && osxsave && osAvxState;
         if (arm64)
             return neonBackendBuilt && neon;
         return false;
+    }
+
+    // Livello 2: SSE2, presente su ogni CPU x86-64; lo stato XMM e' sempre
+    // salvato dal sistema operativo a 64 bit.
+    bool sse2TierUsable () const
+    {
+        return x86 && sse2BackendBuilt && sse2;
     }
 };
 
@@ -245,6 +284,9 @@ CpuCapabilities detectCpuCapabilities ()
 #if defined(DECODIUM_SUPERLDPC_NEON_BUILT)
     result.neonBackendBuilt = true;
 #endif
+#if defined(DECODIUM_SUPERLDPC_SSE2_BUILT)
+    result.sse2BackendBuilt = true;
+#endif
 
 #if defined(DECODIUM_SUPERLDPC_TESTING)
     unsigned const features = superldpc_test_x86_features_c ();
@@ -255,6 +297,7 @@ CpuCapabilities detectCpuCapabilities ()
     result.fma = (features & 4u) != 0;
     result.osxsave = (features & 8u) != 0;
     result.osAvxState = (features & 16u) != 0;
+    result.sse2 = (features & 32u) == 0;       // bit 32 = CPU senza SSE2
     return result;
 #endif
 
@@ -274,6 +317,7 @@ CpuCapabilities detectCpuCapabilities ()
 
     CpuidRegisters leaf1;
     if (maxBasicLeaf >= 1 && cpuid (1, 0, leaf1)) {
+        result.sse2 = (leaf1.edx & (1u << 26)) != 0;
         result.fma = (leaf1.ecx & (1u << 12)) != 0;
         result.osxsave = (leaf1.ecx & (1u << 27)) != 0;
         result.avx = (leaf1.ecx & (1u << 28)) != 0;
@@ -329,15 +373,96 @@ bool superLdpcRequested ()
     return ui >= 0 ? ui != 0 : true;
 }
 
-bool useSuperLdpc ()
+enum class Tier { Generic = 0, Sse2 = 1, Top = 2 };
+
+// DECODIUM_SUPERLDPC_MAX_TIER: livello massimo ammesso. Serve a provare su una
+// CPU moderna i percorsi delle CPU vecchie, con lo stesso eseguibile.
+Tier maxTier ()
 {
-    return superLdpcRequested () && cpuCapabilities ().superLdpcUsable ();
+    static Tier const tier = [] {
+        char const* raw = std::getenv ("DECODIUM_SUPERLDPC_MAX_TIER");
+        if (!raw || !*raw) return Tier::Top;
+        std::string value;
+        for (char const* p = raw; *p; ++p)
+            value.push_back (static_cast<char> (std::tolower (static_cast<unsigned char> (*p))));
+        if (value == "generic" || value == "original" || value == "0") return Tier::Generic;
+        if (value == "sse2" || value == "1") return Tier::Sse2;
+        return Tier::Top;
+    }();
+    return tier;
 }
 
-char const* fallbackReason ()
+struct Backend {
+    Tier tier;
+    char const* decoder;
+    void (*setFt8Mode) (int);
+    void (*setFt2MaxHard) (int);
+    void (*decode) (float const*, int, int, int, signed char const*, signed char*,
+                    signed char*, int*, int*, float*);
+    void (*decodeBatch) (int, float const*, signed char const*, int, int, int,
+                         signed char*, signed char*, int*, int*, float*);
+    int (*extrinsic) (float const*, int, float, float*);
+    int (*extrinsicV2) (float const*, int, int, int, float, float*);
+    void (*gateDumpOpen) (char const*);
+    void (*gateDumpClose) ();
+    void (*gateTruthSet) (signed char const*);
+    void (*gateTruthClear) ();
+};
+
+#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
+Backend const kTopBackend {
+    Tier::Top,
+    DECODIUM_SUPERLDPC_ARM64 ? "superldpc-neon" : "superldpc-avx2-fma",
+    superldpc_simd_set_ft8_mode_c, superldpc_simd_set_ft2_max_hard_c,
+    superldpc_simd_decode174_91_c, superldpc_simd_decode174_91_batch_c,
+    superldpc_simd_extrinsic174_91_c, superldpc_simd_extrinsic174_91_v2_c,
+    superldpc_simd_gate_dump_open_c, superldpc_simd_gate_dump_close_c,
+    superldpc_simd_gate_truth_set_c, superldpc_simd_gate_truth_clear_c
+};
+#endif
+
+#if defined(DECODIUM_SUPERLDPC_SSE2_BUILT)
+Backend const kSse2Backend {
+    Tier::Sse2,
+    "superldpc-sse2",
+    superldpc_sse2_set_ft8_mode_c, superldpc_sse2_set_ft2_max_hard_c,
+    superldpc_sse2_decode174_91_c, superldpc_sse2_decode174_91_batch_c,
+    superldpc_sse2_extrinsic174_91_c, superldpc_sse2_extrinsic174_91_v2_c,
+    superldpc_sse2_gate_dump_open_c, superldpc_sse2_gate_dump_close_c,
+    superldpc_sse2_gate_truth_set_c, superldpc_sse2_gate_truth_clear_c
+};
+#endif
+
+// Il backend che questa CPU e questo sistema possono eseguire, a prescindere
+// dal pulsante LDPC e dall'interruttore di emergenza. nullptr = generico.
+Backend const* hardwareBackend ()
 {
     CpuCapabilities const& cpu = cpuCapabilities ();
-    if (!superLdpcRequested ()) return "disabled by settings/environment";
+    Tier const limit = maxTier ();
+#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
+    if (limit >= Tier::Top && cpu.topTierUsable ()) return &kTopBackend;
+#endif
+#if defined(DECODIUM_SUPERLDPC_SSE2_BUILT)
+    if (limit >= Tier::Sse2 && cpu.sse2TierUsable ()) return &kSse2Backend;
+#endif
+    (void) cpu; (void) limit;
+    return nullptr;
+}
+
+Backend const* activeBackend ()
+{
+    return superLdpcRequested () ? hardwareBackend () : nullptr;
+}
+
+bool useSuperLdpc ()
+{
+    return activeBackend () != nullptr;
+}
+
+// Perche' non si usa il livello 1 (AVX2/FMA o NEON).
+char const* topTierReason ()
+{
+    CpuCapabilities const& cpu = cpuCapabilities ();
     if (cpu.x86) {
         if (!cpu.avx2BackendBuilt) return "AVX2 backend not built";
         if (!cpu.avx) return "CPU has no AVX";
@@ -351,20 +476,36 @@ char const* fallbackReason ()
     } else {
         return "unsupported CPU architecture";
     }
+    if (maxTier () < Tier::Top) return "limited by DECODIUM_SUPERLDPC_MAX_TIER";
     return "none";
+}
+
+char const* fallbackReason ()
+{
+    if (!superLdpcRequested ()) return "disabled by settings/environment";
+    return topTierReason ();
 }
 
 char const* backendDescription (CpuCapabilities const& cpu)
 {
+    if (cpu.x86 && cpu.avx2BackendBuilt && cpu.sse2BackendBuilt) return "avx2-fma+sse2-compiled";
     if (cpu.x86 && cpu.avx2BackendBuilt) return "avx2-fma-compiled";
+    if (cpu.x86 && cpu.sse2BackendBuilt) return "sse2-compiled";
     if (cpu.arm64 && cpu.neonBackendBuilt) return "neon-compiled";
     return "not-built";
 }
 
-char const* selectedDecoder (CpuCapabilities const& cpu, bool selected)
+char const* selectedDecoder (Backend const* backend)
 {
-    if (!selected) return "original-generic";
-    return cpu.arm64 ? "superldpc-neon" : "superldpc-avx2-fma";
+    return backend ? backend->decoder : "original-generic";
+}
+
+// Motivo riportato nel log: "none" quando gira il livello 1, altrimenti
+// perche' non gira (anche quando al suo posto lavora il livello SSE2).
+char const* selectionReason (Backend const* backend)
+{
+    if (backend && backend->tier == Tier::Top) return "none";
+    return fallbackReason ();
 }
 
 void logDecoderSelection (char const* trigger, bool force)
@@ -379,17 +520,17 @@ void logDecoderSelection (char const* trigger, bool force)
     }
 
     CpuCapabilities const& cpu = cpuCapabilities ();
-    bool const selected = useSuperLdpc ();
+    Backend const* const backend = activeBackend ();
     std::fprintf (stderr,
-                  "[superldpc] CPU=\"%s\" x86=%d ARM64=%d AVX=%d AVX2=%d FMA=%d "
+                  "[superldpc] CPU=\"%s\" x86=%d ARM64=%d SSE2=%d AVX=%d AVX2=%d FMA=%d "
                   "OSXSAVE=%d OS_AVX_STATE=%d NEON=%d backend=%s decoder=%s "
                   "trigger=%s reason=\"%s\"\n",
                   cpu.model.c_str (), cpu.x86 ? 1 : 0, cpu.arm64 ? 1 : 0,
-                  cpu.avx ? 1 : 0,
+                  cpu.sse2 ? 1 : 0, cpu.avx ? 1 : 0,
                   cpu.avx2 ? 1 : 0, cpu.fma ? 1 : 0, cpu.osxsave ? 1 : 0,
                   cpu.osAvxState ? 1 : 0, cpu.neon ? 1 : 0,
-                  backendDescription (cpu), selectedDecoder (cpu, selected),
-                  trigger ? trigger : "runtime", selected ? "none" : fallbackReason ());
+                  backendDescription (cpu), selectedDecoder (backend),
+                  trigger ? trigger : "runtime", selectionReason (backend));
 }
 
 void initialiseOutputs (signed char* message91, signed char* cw, int* ntype,
@@ -418,15 +559,15 @@ extern "C" void superldpc_descrivi_c (char* out, int n)
 {
     if (!out || n <= 0) return;
     CpuCapabilities const& cpu = cpuCapabilities ();
-    bool const selected = useSuperLdpc ();
+    Backend const* const backend = activeBackend ();
     std::snprintf (out, static_cast<std::size_t> (n),
-                   "CPU=\"%s\" x86=%d ARM64=%d AVX=%d AVX2=%d FMA=%d OSXSAVE=%d "
+                   "CPU=\"%s\" x86=%d ARM64=%d SSE2=%d AVX=%d AVX2=%d FMA=%d OSXSAVE=%d "
                    "OS_AVX_STATE=%d NEON=%d backend=%s decoder=%s reason=\"%s\"",
                    cpu.model.c_str (), cpu.x86 ? 1 : 0, cpu.arm64 ? 1 : 0,
-                   cpu.avx ? 1 : 0, cpu.avx2 ? 1 : 0, cpu.fma ? 1 : 0,
+                   cpu.sse2 ? 1 : 0, cpu.avx ? 1 : 0, cpu.avx2 ? 1 : 0, cpu.fma ? 1 : 0,
                    cpu.osxsave ? 1 : 0, cpu.osAvxState ? 1 : 0, cpu.neon ? 1 : 0,
-                   backendDescription (cpu), selectedDecoder (cpu, selected),
-                   selected ? "none" : fallbackReason ());
+                   backendDescription (cpu), selectedDecoder (backend),
+                   selectionReason (backend));
 }
 
 extern "C" int superldpc_is_enabled_c ()
@@ -435,12 +576,23 @@ extern "C" int superldpc_is_enabled_c ()
     return useSuperLdpc () ? 1 : 0;
 }
 
-// Hardware/OS availability, independent of the LDPC button and emergency
-// override. FT2 compatibility limits must never affect a SIMD-capable CPU
-// merely because the user has chosen the original decoder.
+// Hardware/OS availability of the TOP tier (AVX2/FMA or NEON), independent of
+// the LDPC button and emergency override. FT2 compatibility limits must never
+// affect such a CPU merely because the user has chosen the original decoder.
+// A CPU that only reaches the SSE2 tier keeps them: its 2 s safety deadline
+// still applies, and maxosd (0 there) does not change the superldpc OSD,
+// which only distinguishes maxosd < 0 (off) from >= 0.
 extern "C" int superldpc_is_available_c ()
 {
-    return cpuCapabilities ().superLdpcUsable () ? 1 : 0;
+    return (maxTier () >= Tier::Top && cpuCapabilities ().topTierUsable ()) ? 1 : 0;
+}
+
+// 0 = original generic decoder, 1 = superldpc SSE2, 2 = superldpc AVX2/FMA
+// or NEON: the decoder the next call will use (button and override included).
+extern "C" int superldpc_active_tier_c ()
+{
+    Backend const* const backend = activeBackend ();
+    return backend ? static_cast<int> (backend->tier) : 0;
 }
 
 extern "C" void superldpc_set_ft8_mode_c (int on)
@@ -464,16 +616,14 @@ extern "C" void superldpc_decode174_91_c (float const* llrIn, int Keff, int maxo
     if (!llrIn || !apmaskIn) return;
 
     logDecoderSelection ("decode", false);
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (Keff == 91 && useSuperLdpc ()) {
-        superldpc_simd_set_ft8_mode_c (g_ft8Mode ? 1 : 0);
-        if (!g_ft8Mode) superldpc_simd_set_ft2_max_hard_c (g_ft2MaxHard);
-        superldpc_simd_decode174_91_c (llrIn, Keff, maxosd, norder, apmaskIn,
-                                    message91Out, cwOut, ntypeOut,
-                                    nharderrorOut, dminOut);
+    Backend const* const backend = Keff == 91 ? activeBackend () : nullptr;
+    if (backend) {
+        backend->setFt8Mode (g_ft8Mode ? 1 : 0);
+        if (!g_ft8Mode) backend->setFt2MaxHard (g_ft2MaxHard);
+        backend->decode (llrIn, Keff, maxosd, norder, apmaskIn, message91Out, cwOut,
+                         ntypeOut, nharderrorOut, dminOut);
         return;
     }
-#endif
     ftx_decode174_91_c (llrIn, Keff, maxosd, norder, apmaskIn, message91Out,
                         cwOut, ntypeOut, nharderrorOut, dminOut);
 }
@@ -488,16 +638,14 @@ extern "C" void superldpc_decode174_91_batch_c (int n, float const* llrIn,
     if (n <= 0 || !llrIn || !apmaskIn) return;
 
     logDecoderSelection ("batch-decode", false);
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (Keff == 91 && useSuperLdpc ()) {
-        superldpc_simd_set_ft8_mode_c (g_ft8Mode ? 1 : 0);
-        if (!g_ft8Mode) superldpc_simd_set_ft2_max_hard_c (g_ft2MaxHard);
-        superldpc_simd_decode174_91_batch_c (n, llrIn, apmaskIn, Keff, maxosd,
-                                          norder, message91Out, cwOut, ntypeOut,
-                                          nharderrorOut, dminOut);
+    Backend const* const backend = Keff == 91 ? activeBackend () : nullptr;
+    if (backend) {
+        backend->setFt8Mode (g_ft8Mode ? 1 : 0);
+        if (!g_ft8Mode) backend->setFt2MaxHard (g_ft2MaxHard);
+        backend->decodeBatch (n, llrIn, apmaskIn, Keff, maxosd, norder, message91Out,
+                              cwOut, ntypeOut, nharderrorOut, dminOut);
         return;
     }
-#endif
 
     for (int word = 0; word < n; ++word) {
         superldpc_decode174_91_c (llrIn + static_cast<std::size_t> (word) * kN,
@@ -522,12 +670,10 @@ extern "C" int superldpc_extrinsic174_91_c (float const* llrIn, int norder,
     if (extrinsicOut) std::memset (extrinsicOut, 0, kN * sizeof (float));
     if (!llrIn || !extrinsicOut) return 0;
     logDecoderSelection ("extrinsic", false);
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (useSuperLdpc ()) {
-        superldpc_simd_set_ft8_mode_c (g_ft8Mode ? 1 : 0);
-        return superldpc_simd_extrinsic174_91_c (llrIn, norder, clamp, extrinsicOut);
+    if (Backend const* const backend = activeBackend ()) {
+        backend->setFt8Mode (g_ft8Mode ? 1 : 0);
+        return backend->extrinsic (llrIn, norder, clamp, extrinsicOut);
     }
-#endif
     return 0;
 }
 
@@ -539,49 +685,32 @@ extern "C" int superldpc_extrinsic174_91_v2_c (float const* llrIn, int norder, i
 {
     if (extrinsicOut) std::memset (extrinsicOut, 0, kN * sizeof (float));
     if (!llrIn || !extrinsicOut) return -1;
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (useSuperLdpc ()) {
-        superldpc_simd_set_ft8_mode_c (g_ft8Mode ? 1 : 0);
-        return superldpc_simd_extrinsic174_91_v2_c (llrIn, norder, word, flags, clamp,
-                                                    extrinsicOut);
+    if (Backend const* const backend = activeBackend ()) {
+        backend->setFt8Mode (g_ft8Mode ? 1 : 0);
+        return backend->extrinsicV2 (llrIn, norder, word, flags, clamp, extrinsicOut);
     }
-#else
-    (void) norder; (void) word; (void) flags; (void) clamp;
-#endif
     return -1;
 }
 
 // Raccolta dati per il riaddestramento del gate (tests/ft2_gate_dump.cpp):
-// niente da fare senza il backend SIMD, non esiste un gate nel decoder
-// originale a cui agganciarsi.
+// niente da fare senza un backend superldpc, non esiste un gate nel decoder
+// originale a cui agganciarsi. Va al backend che la CPU puo' eseguire.
 extern "C" void superldpc_gate_dump_open_c (char const* path)
 {
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (cpuCapabilities ().superLdpcUsable ()) superldpc_simd_gate_dump_open_c (path);
-#else
-    (void) path;
-#endif
+    if (Backend const* const backend = hardwareBackend ()) backend->gateDumpOpen (path);
 }
 
 extern "C" void superldpc_gate_dump_close_c ()
 {
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (cpuCapabilities ().superLdpcUsable ()) superldpc_simd_gate_dump_close_c ();
-#endif
+    if (Backend const* const backend = hardwareBackend ()) backend->gateDumpClose ();
 }
 
 extern "C" void superldpc_gate_truth_set_c (signed char const* cw174)
 {
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (cpuCapabilities ().superLdpcUsable ()) superldpc_simd_gate_truth_set_c (cw174);
-#else
-    (void) cw174;
-#endif
+    if (Backend const* const backend = hardwareBackend ()) backend->gateTruthSet (cw174);
 }
 
 extern "C" void superldpc_gate_truth_clear_c ()
 {
-#if defined(DECODIUM_SUPERLDPC_AVX2_BUILT) || defined(DECODIUM_SUPERLDPC_NEON_BUILT)
-    if (cpuCapabilities ().superLdpcUsable ()) superldpc_simd_gate_truth_clear_c ();
-#endif
+    if (Backend const* const backend = hardwareBackend ()) backend->gateTruthClear ();
 }

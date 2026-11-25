@@ -212,6 +212,12 @@ private:
     uint16_t alpha_w_ = 49152;      // 3/4 in 1/65536
 };
 
-#else   // niente AVX2: si ricade sulla versione portabile
+#elif defined(SUPERLDPC_SSE2_KERNEL) && (defined(__SSE2__) || defined(_M_X64))
+
+// Backend x86 senza AVX2 (decodium_bridge_sse2.cpp): stesso kernel a 8
+// corsie XMM, bit-identico a quello AVX2.
+#include "minsum_sse2.hpp"
+
+#else   // niente SIMD: si ricade sulla versione portabile
 using MinSumV3 = MinSumV2;
 #endif

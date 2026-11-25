@@ -503,18 +503,30 @@ if (DECODIUM_SUPERLDPC_ARM64_TARGET)
       PROPERTIES COMPILE_OPTIONS "/O2")
   endif ()
 elseif (DECODIUM_SUPERLDPC_X86_TARGET)
-  list (APPEND wsjt_qt_CXXSRCS Detector/superldpc/decodium_bridge.cpp)
+  # Due livelli su x86: AVX2/FMA (decodium_bridge.cpp) e, per le CPU senza
+  # AVX2 o senza stato YMM, SSE2 (decodium_bridge_sse2.cpp: stesso sorgente,
+  # namespace ed entry point propri, nessuna opzione -m oltre la CPU minima).
+  # Sotto c'e' sempre il decoder originale.
+  list (APPEND wsjt_qt_CXXSRCS
+    Detector/superldpc/decodium_bridge.cpp
+    Detector/superldpc/decodium_bridge_sse2.cpp)
   set_source_files_properties (Detector/superldpc/decodium_dispatch.cpp
-    PROPERTIES COMPILE_DEFINITIONS "DECODIUM_SUPERLDPC_AVX2_BUILT=1")
+    PROPERTIES COMPILE_DEFINITIONS
+    "DECODIUM_SUPERLDPC_AVX2_BUILT=1;DECODIUM_SUPERLDPC_SSE2_BUILT=1")
   # SUPERLDPC_HAVE_GATE_WEIGHTS: vedi il commento nel ramo ARM64 sopra.
   set_source_files_properties (Detector/superldpc/decodium_bridge.cpp
+    Detector/superldpc/decodium_bridge_sse2.cpp
     PROPERTIES COMPILE_DEFINITIONS "SUPERLDPC_HAVE_GATE_WEIGHTS=1")
   if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set_source_files_properties (Detector/superldpc/decodium_bridge.cpp
       PROPERTIES COMPILE_OPTIONS "-O3;-mavx2;-mfma")
+    set_source_files_properties (Detector/superldpc/decodium_bridge_sse2.cpp
+      PROPERTIES COMPILE_OPTIONS "-O3")
   elseif (MSVC)
     set_source_files_properties (Detector/superldpc/decodium_bridge.cpp
       PROPERTIES COMPILE_OPTIONS "/O2;/arch:AVX2")
+    set_source_files_properties (Detector/superldpc/decodium_bridge_sse2.cpp
+      PROPERTIES COMPILE_OPTIONS "/O2")
   endif ()
 endif ()
 

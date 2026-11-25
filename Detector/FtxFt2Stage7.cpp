@@ -258,6 +258,9 @@ extern "C"
   // (0 = the mode default, 22). See ft2_max_hard_sync().
   void superldpc_set_ft2_max_hard_c (int n);
   int superldpc_is_available_c ();
+  // 0 = decoder originale, 1 = superldpc SSE2 (CPU x86-64 senza AVX2),
+  // 2 = superldpc AVX2/FMA o NEON: quello che usera' la prossima chiamata.
+  int superldpc_active_tier_c ();
   // superldpc (Detector/superldpc/): stessa firma, backend AVX2/FMA su x86 o
   // NEON su ARM64. Ricade da solo su ftx_decode174_91_c se il backend SIMD
   // richiesto non e' disponibile o se Keff != 91.
@@ -3066,10 +3069,14 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
       return atteso.ok ? atteso : result;
     }
 
-  bool const compatibility = !superldpc_is_available_c ();
   // The scalar decoder's deep OSD dominates runtime on pre-AVX2 CPUs.
   // Keep BP and all AP passes/validation, but use one order-1 OSD search
   // on the channel LLRs instead of four order-3 searches per pass.
+  // A pre-AVX2 x86-64 CPU running the superldpc SSE2 backend does not need
+  // this: it decodes the batch like the AVX2 build (about 10% slower), and
+  // the 2 s compatibility deadline above still guards the whole decode.
+  bool const compatibility = !superldpc_is_available_c ()
+                             && superldpc_active_tier_c () == 0;
   int maxosd = compatibility ? 0 : 3;
   if (!doosd)
     {
