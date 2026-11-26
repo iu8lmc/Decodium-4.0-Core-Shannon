@@ -203,6 +203,20 @@ target_link_libraries (test_qt_helpers wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
 add_test (NAME test_qt_helpers COMMAND $<TARGET_FILE:test_qt_helpers>)
 set_tests_properties (test_qt_helpers PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# Righe recenti di ALL.TXT in RAM per risolvere i nominativi <...> nel bridge.
+add_executable (test_recent_alltxt_hash_index
+  test_recent_alltxt_hash_index.cpp
+  ../src/bridge/LegacyHashResolve.cpp
+  ../src/bridge/DecodeUtcTime.cpp
+  ../src/bridge/DecodeMessageNormalization.cpp
+  ../Sequencer/MessageTokenRules.cpp)
+target_include_directories (test_recent_alltxt_hash_index PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/bridge ${PROJECT_BINARY_DIR})
+# DecodeUtcTime.cpp usa ancora QDateTime con Qt::TimeSpec (deprecato in Qt 6.9).
+target_compile_options (test_recent_alltxt_hash_index PRIVATE
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-Wno-error=deprecated-declarations>)
+target_link_libraries (test_recent_alltxt_hash_index wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
+add_test (NAME test_recent_alltxt_hash_index COMMAND $<TARGET_FILE:test_recent_alltxt_hash_index>)
+
 # H04: TransceiverBase::set() must send the TX/split command when only the
 # TX frequency changes and the RX frequency is already on target.
 add_executable (test_transceiver_base_split test_transceiver_base_split.cpp)

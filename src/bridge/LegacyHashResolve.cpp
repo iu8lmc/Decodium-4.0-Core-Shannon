@@ -3,10 +3,13 @@
 #include "Sequencer/MessageTokenRules.hpp"
 #include <QDate>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
+#include <QTimeZone>
 #include <utility>
 using decodium::decode_message::canonicalDecodeMessage;
 using decodium::decode_message::stripDecodeApAnnotation;
@@ -16,6 +19,134 @@ using decodium::seq::isPlausibleDecodedCallsignToken;
 QString decodiumBridgeNormalizeRemoteActivityTime(QString);
 int decodiumBridgeSecondsFromUtcDisplayToken(QString);
 int decodiumBridgeSignedUtcSecondDelta(int, int);
+
+// Data e ora UTC scritte all'inizio di una riga di ALL.TXT: yyMMdd_hhmmss
+// (Decodium, WSJT-X) oppure yyyyMMdd_hhmmss (JTDX). Non valida se mancano.
+static QDateTime allTxtLineUtc(QString const& line)
+{
+    static const QRegularExpression stampPattern {R"(^\s*(\d{6}|\d{8})_(\d{2})(\d{2})(\d{2})\b)"};
+    QRegularExpressionMatch const match = stampPattern.match(line);
+    if (!match.hasMatch()) {
+        return {};
+    }
+    QString const day = match.captured(1);
+    int const year = day.size() == 8 ? day.left(4).toInt() : 2000 + day.left(2).toInt();
+    QDate const date(year, day.right(4).left(2).toInt(), day.right(2).toInt());
+    QTime const time(match.captured(2).toInt(), match.captured(3).toInt(), match.captured(4).toInt());
+    return QDateTime(date, time, QTimeZone::UTC);
+}
+
+static QByteArray recentAllTxtFingerprint(QFile& file, qint64 end)
+{
+    qint64 const length = qMin<qint64>(64, end);
+    if (length <= 0 || !file.seek(end - length)) {
+        return {};
+    }
+    return file.read(length);
+}
+
+QVector<HashResolveAllTxtCandidate> RecentAllTxtHashIndex::refresh(QStringList const& paths,
+                                                                   QDateTime const& nowUtc,
+                                                                   Stats* stats)
+{
+    QMutexLocker locker(&mutex_);
+    Stats local;
+    QDateTime const oldest = nowUtc.addSecs(-kKeepSeconds);
+    QDateTime const newest = nowUtc.addSecs(kFutureToleranceSeconds);
+    auto isRecent = [&](QDateTime const& when) {
+        return when.isValid() && when >= oldest && when <= newest;
+    };
+
+    QSet<QString> wanted;
+    for (QString const& path : paths) {
+        wanted.insert(path);
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            files_.remove(path);
+            continue;
+        }
+        ++local.files;
+        qint64 const size = file.size();
+        File& state = files_[path];
+        bool const appended = state.valid && size >= state.committed
+                              && size - state.committed <= kMaxAppendBytes
+                              && recentAllTxtFingerprint(file, state.committed) == state.fingerprint;
+        if (!appended) {
+            // Si riparte dalla coda: corta se il file non e' stato toccato di
+            // recente (le sue righe sarebbero comunque troppo vecchie).
+            state = File {};
+            state.valid = true;
+            ++local.restarts;
+            QDateTime const modified = QFileInfo(path).lastModified().toUTC();
+            qint64 const tail = isRecent(modified) || modified > newest
+                ? kInitialTailBytes : kOldFileTailBytes;
+            if (size > tail) {
+                qint64 const start = size - tail;
+                if (!file.seek(start)) {
+                    files_.remove(path);
+                    continue;
+                }
+                state.committed = start + file.readLine().size();
+            }
+        }
+        if (!file.seek(state.committed)) {
+            files_.remove(path);
+            continue;
+        }
+        QByteArray const fresh = file.read(qMax<qint64>(0, size - state.committed));
+        local.readBytes += fresh.size();
+        qsizetype const lastNewline = fresh.lastIndexOf('\n');
+        if (lastNewline >= 0) {
+            QString const source = QFileInfo(path).fileName();
+            QByteArray const complete = fresh.left(lastNewline + 1);
+            for (QByteArray const& raw : complete.split('\n')) {
+                QString const line = QString::fromUtf8(raw).trimmed();
+                if (line.isEmpty()) {
+                    continue;
+                }
+                QDateTime const when = allTxtLineUtc(line);
+                if (!isRecent(when)) {
+                    continue;
+                }
+                Entry entry;
+                entry.when = when;
+                if (!parseHashResolveAllTxtLine(line, &entry.candidate)
+                    || entry.candidate.message.contains(QStringLiteral("<...>"))) {
+                    continue;
+                }
+                entry.candidate.source = source;
+                state.entries.append(entry);
+            }
+            state.committed += lastNewline + 1;
+        }
+        state.fingerprint = recentAllTxtFingerprint(file, state.committed);
+        state.entries.removeIf([&](Entry const& entry) { return entry.when < oldest; });
+    }
+
+    for (auto it = files_.begin(); it != files_.end();) {
+        if (wanted.contains(it.key())) {
+            ++it;
+        } else {
+            it = files_.erase(it);
+        }
+    }
+
+    QVector<HashResolveAllTxtCandidate> candidates;
+    for (QString const& path : paths) {
+        auto const it = files_.constFind(path);
+        if (it == files_.constEnd()) {
+            continue;
+        }
+        for (Entry const& entry : it->entries) {
+            candidates.append(entry.candidate);
+        }
+    }
+    local.candidates = candidates.size();
+    if (stats) {
+        *stats = local;
+    }
+    return candidates;
+}
 
 static QString cleanHashResolveMessage(QString message)
 {
@@ -269,4 +400,3 @@ QString resolveHashMessageFromCandidates(QString const& timeToken,
     }
     return hashedMessage;
 }
-

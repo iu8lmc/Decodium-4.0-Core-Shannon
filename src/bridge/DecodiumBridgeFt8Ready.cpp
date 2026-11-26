@@ -539,53 +539,21 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         ft8HashResolveCandidatesLoaded = true;
         QElapsedTimer loadTimer;
         loadTimer.start();
-        static constexpr qint64 kHashResolveTailBytes = 8 * 1024 * 1024;
-        static constexpr int kHashResolveMaxLinesPerFile = 50000;
-        QStringList const paths = hashResolveLogCandidatePaths(legacyAllTxtPath());
-        qint64 estimatedReadBytes = 0;
-        for (QString const& path : paths) {
-            QFileInfo const info(path);
-            if (info.exists() && info.isFile()) {
-                estimatedReadBytes += qMin(info.size(), kHashResolveTailBytes);
-            }
-        }
-        bool const deferHashResolve =
-            rows.size() > 8
-            || cpuPressureActive()
-            || estimatedReadBytes > 512 * 1024;
-        if (deferHashResolve) {
-            rowHashResolveLoadMs = 0;
-            bridgeLog(QStringLiteral("[FT8-HASH] live resolve deferred rows=%1 pressure=%2 estimated_kb=%3 paths=%4")
-                          .arg(rows.size())
-                          .arg(cpuPressureActive() ? 1 : 0)
-                          .arg(estimatedReadBytes / 1024)
-                          .arg(paths.size()));
-            return;
-        }
-        for (QString const& path : paths) {
-            QFileInfo const info(path);
-            if (!info.exists() || !info.isFile()) {
-                continue;
-            }
-
-            QStringList const lines = readTextTailLines(info.absoluteFilePath(),
-                                                        kHashResolveTailBytes,
-                                                        kHashResolveMaxLinesPerFile);
-            for (QString const& line : lines) {
-                HashResolveAllTxtCandidate candidate;
-                if (!parseHashResolveAllTxtLine(line, &candidate)
-                    || candidate.message.contains(QStringLiteral("<...>"))) {
-                    continue;
-                }
-                candidate.source = info.fileName();
-                ft8HashResolveCandidates.append(candidate);
-            }
-        }
+        // Righe recenti dei log in RAM, aggiornate leggendo solo i byte nuovi
+        // (vedi RecentAllTxtHashIndex). Prima si rileggevano gli ultimi 8 MB
+        // di ogni log a ogni lotto e, oltre 512 KB in tutto, la risoluzione
+        // veniva rinviata: con log di qualche giorno non partiva mai.
+        static RecentAllTxtHashIndex recentAllTxt;
+        RecentAllTxtHashIndex::Stats stats;
+        ft8HashResolveCandidates = recentAllTxt.refresh(hashResolveLogCandidatePaths(legacyAllTxtPath()),
+                                                        QDateTime::currentDateTimeUtc(), &stats);
         rowHashResolveLoadMs = loadTimer.elapsed();
-        if (rowHashResolveLoadMs >= 250) {
-            bridgeLog(QStringLiteral("[FT8-HASH] batch seed loaded candidates=%1 paths=%2 elapsed_ms=%3")
-                          .arg(ft8HashResolveCandidates.size())
-                          .arg(paths.size())
+        if (rowHashResolveLoadMs >= 50 || stats.restarts > 0) {
+            bridgeLog(QStringLiteral("[FT8-HASH] recent index candidates=%1 files=%2 read_kb=%3 restarts=%4 elapsed_ms=%5")
+                          .arg(stats.candidates)
+                          .arg(stats.files)
+                          .arg(stats.readBytes / 1024)
+                          .arg(stats.restarts)
                           .arg(rowHashResolveLoadMs));
         }
     };
