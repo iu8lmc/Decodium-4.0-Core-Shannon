@@ -1400,14 +1400,27 @@ namespace
   // DECODIUM_FT8_SEED_LOG_INDEX=0 torna alla lettura diretta;
   // DECODIUM_FT8_SEED_LOG_INDEX_VERIFY=1 le esegue entrambe e confronta;
   // DECODIUM_FT8_SEED_LOG_INDEX_TRACE=1 scrive il costo di ogni refresh.
-  struct SeedLogLine
+  struct SeedLogCaptures
   {
-    qint64 start {0};
-    int tokenCount {0};
     std::unique_ptr<LoggedSeedLine> knownCqCall;
     std::unique_ptr<LoggedSeedLine> knownCq;
     std::unique_ptr<LoggedSeedLine> a7;
   };
+
+  struct SeedLogLine
+  {
+    qint64 start {0};
+    int tokenCount {0};
+    // Allocate solo finche' la riga ha una cattura che puo' ancora passare
+    // il filtro: le righe vecchie restano 24 byte piu' i loro nominativi.
+    std::unique_ptr<SeedLogCaptures> captures;
+  };
+
+  // L'accumulatore dei nominativi tiene gli ultimi kHashSeedMaxCalls * 4
+  // inseriti: di ogni file contano solo gli ultimi altrettanti, che bastano da
+  // soli a riempirlo. Quelli prima non arriverebbero mai all'uscita.
+  constexpr std::size_t kSeedLogMaxTokensPerFile =
+      static_cast<std::size_t> (kHashSeedMaxCalls) * 4;
 
   struct SeedLogCollectTargets
   {
@@ -1481,7 +1494,7 @@ namespace
             }
           SeedLogLine line;
           line.start = committed_ + pos;
-          parse_line (fresh.mid (pos, newline - pos + 1), line, tokens_);
+          parse_line (fresh.mid (pos, newline - pos + 1), line, tokens_, &pool_);
           lines_.push_back (std::move (line));
           pos = newline + 1;
         }
@@ -1490,7 +1503,15 @@ namespace
       partial_ = fresh.mid (pos);
       fingerprint_ = fingerprint (file, committed_);
       trim ();
+      drop_unreachable_tokens ();
       prune_expired_captures (nowUtc);
+      // Le righe piu' vecchie rimaste senza nominativi e senza catture non
+      // danno piu' nulla a collect (): fuori anche loro.
+      while (!lines_.empty () && lines_.front ().tokenCount == 0 && !lines_.front ().captures)
+        {
+          lines_.pop_front ();
+        }
+      compact_pool ();
       return true;
     }
 
@@ -1514,7 +1535,7 @@ namespace
         {
           std::deque<QString> partialTokens;
           SeedLogLine line;
-          parse_line (partial_, line, partialTokens);
+          parse_line (partial_, line, partialTokens, nullptr);
           apply_line (line, partialTokens.cbegin (), targets, nowUtc, currentNutc);
         }
     }
@@ -1525,8 +1546,9 @@ namespace
     qint64 lineCount () const { return static_cast<qint64> (lines_.size ()); }
 
   private:
+    // Con `pool` i nominativi uguali condividono la stessa stringa.
     static void parse_line (QByteArray const& raw, SeedLogLine& line,
-                            std::deque<QString>& tokens)
+                            std::deque<QString>& tokens, QSet<QString>* pool)
     {
       QByteArray textBytes = raw;
       textBytes.replace ("\r", "");
@@ -1536,26 +1558,40 @@ namespace
       while (it.hasNext ())
         {
           QString const call = normalized_hash_seed_call (it.next ().captured (0));
-          if (!call.isEmpty ())
+          if (call.isEmpty ())
+            {
+              continue;
+            }
+          if (pool)
+            {
+              auto const known = pool->constFind (call);
+              tokens.push_back (known != pool->cend () ? *known : *pool->insert (call));
+            }
+          else
             {
               tokens.push_back (call);
-              ++line.tokenCount;
             }
+          ++line.tokenCount;
         }
 
       QString const upperLine = QString::fromLatin1 (raw).trimmed ().toUpper ();
       LoggedSeedLine parsed;
+      auto captures = std::make_unique<SeedLogCaptures> ();
       if (match_logged_seed_line (SeedLineKind::KnownCqCall, upperLine, parsed))
         {
-          line.knownCqCall = std::make_unique<LoggedSeedLine> (parsed);
+          captures->knownCqCall = std::make_unique<LoggedSeedLine> (parsed);
         }
       if (match_logged_seed_line (SeedLineKind::KnownCq, upperLine, parsed))
         {
-          line.knownCq = std::make_unique<LoggedSeedLine> (parsed);
+          captures->knownCq = std::make_unique<LoggedSeedLine> (parsed);
         }
       if (match_logged_seed_line (SeedLineKind::A7, upperLine, parsed))
         {
-          line.a7 = std::make_unique<LoggedSeedLine> (parsed);
+          captures->a7 = std::make_unique<LoggedSeedLine> (parsed);
+        }
+      if (captures->knownCqCall || captures->knownCq || captures->a7)
+        {
+          line.captures = std::move (captures);
         }
     }
 
@@ -1571,17 +1607,22 @@ namespace
               push_normalized_hash_seed_call (*targets.calls, *token);
             }
         }
-      if (targets.knownCqCalls && line.knownCqCall)
+      SeedLogCaptures const* captures = line.captures.get ();
+      if (!captures)
         {
-          apply_known_cq_call_line (*line.knownCqCall, *targets.knownCqCalls, nowUtc, currentNutc);
+          return;
         }
-      if (targets.knownCqs && line.knownCq)
+      if (targets.knownCqCalls && captures->knownCqCall)
         {
-          apply_known_cq_line (*line.knownCq, *targets.knownCqs, nowUtc, currentNutc);
+          apply_known_cq_call_line (*captures->knownCqCall, *targets.knownCqCalls, nowUtc, currentNutc);
         }
-      if (targets.a7 && line.a7)
+      if (targets.knownCqs && captures->knownCq)
         {
-          apply_a7_line (*line.a7, *targets.a7, nowUtc, currentNutc);
+          apply_known_cq_line (*captures->knownCq, *targets.knownCqs, nowUtc, currentNutc);
+        }
+      if (targets.a7 && captures->a7)
+        {
+          apply_a7_line (*captures->a7, *targets.a7, nowUtc, currentNutc);
         }
     }
 
@@ -1599,19 +1640,66 @@ namespace
     {
       for (SeedLogLine& line : lines_)
         {
-          if (expired (line.knownCqCall, SeedLineKind::KnownCqCall, nowUtc))
+          SeedLogCaptures* captures = line.captures.get ();
+          if (!captures)
             {
-              line.knownCqCall.reset ();
+              continue;
             }
-          if (expired (line.knownCq, SeedLineKind::KnownCq, nowUtc))
+          if (expired (captures->knownCqCall, SeedLineKind::KnownCqCall, nowUtc))
             {
-              line.knownCq.reset ();
+              captures->knownCqCall.reset ();
             }
-          if (expired (line.a7, SeedLineKind::A7, nowUtc))
+          if (expired (captures->knownCq, SeedLineKind::KnownCq, nowUtc))
             {
-              line.a7.reset ();
+              captures->knownCq.reset ();
+            }
+          if (expired (captures->a7, SeedLineKind::A7, nowUtc))
+            {
+              captures->a7.reset ();
+            }
+          if (!captures->knownCqCall && !captures->knownCq && !captures->a7)
+            {
+              line.captures.reset ();
             }
         }
+    }
+
+    // Toglie i nominativi delle righe piu' vecchie finche' ne restano almeno
+    // kSeedLogMaxTokensPerFile (righe intere: mai meno di quelli che servono).
+    void drop_unreachable_tokens ()
+    {
+      for (auto line = lines_.begin ();
+           line != lines_.end () && tokens_.size () > kSeedLogMaxTokensPerFile; ++line)
+        {
+          std::size_t const count = static_cast<std::size_t> (line->tokenCount);
+          if (count == 0)
+            {
+              continue;
+            }
+          if (tokens_.size () - count < kSeedLogMaxTokensPerFile)
+            {
+              break;
+            }
+          tokens_.erase (tokens_.begin (), tokens_.begin () + static_cast<std::ptrdiff_t> (count));
+          line->tokenCount = 0;
+        }
+    }
+
+    // Il pool cresce con ogni nominativo mai visto: quando ha molte piu' voci
+    // di quelle ancora usate si ricostruisce dai nominativi rimasti.
+    void compact_pool ()
+    {
+      if (static_cast<std::size_t> (pool_.size ()) <= 2 * tokens_.size () + 1024)
+        {
+          return;
+        }
+      QSet<QString> fresh;
+      fresh.reserve (static_cast<qsizetype> (tokens_.size ()));
+      for (QString const& token : tokens_)
+        {
+          fresh.insert (token);
+        }
+      pool_ = std::move (fresh);
     }
 
     void trim ()
@@ -1645,6 +1733,7 @@ namespace
     {
       lines_.clear ();
       tokens_.clear ();
+      pool_.clear ();
       partial_.clear ();
       fingerprint_.clear ();
       committed_ = 0;
@@ -1656,6 +1745,7 @@ namespace
     qint64 window_;
     std::deque<SeedLogLine> lines_;
     std::deque<QString> tokens_;
+    QSet<QString> pool_;
     QByteArray partial_;
     QByteArray fingerprint_;
     qint64 committed_ {0};
