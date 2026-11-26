@@ -31,6 +31,17 @@ kept in memory instead of being read again and again.
   now found and get their intended priority.
 - Two pattern checks used for every CQ and message line are now prepared once
   instead of on every line.
+- **Live map database:** the map reopened its database for every group of
+  decodes and every refresh, repeated the database upgrade on all rows each
+  time and re-read the same pages in 4 KB pieces: on the development PC
+  Decodium read over 300 MB per second from the Windows file cache and kept
+  about one CPU core busy, even with the map hidden. The upgrade now touches
+  only new rows, the file is read through memory mapping, the station list
+  uses indexes for its per-station checks and the size limits are applied
+  once a minute. With the same database and decodes: reads from about
+  207 MB/s to 0.2 MB/s, map CPU from 0.68 to 0.04 cores, a map refresh from
+  1.6 s to 0.17 s. The map shows the same data: 384 different map queries
+  were compared row by row.
 - The decoder itself is unchanged; what changes is which logs feed it, so
   decoding of hashed calls and a priori hints may differ slightly. Reports are
   welcome.
@@ -68,6 +79,18 @@ ALL.TXT tenuti in memoria invece di essere riletti di continuo.
   Ora vengono trovati entrambi, con la priorità prevista.
 - Due controlli usati per ogni riga di CQ e di messaggio ora vengono preparati
   una volta sola invece che a ogni riga.
+- **Database della mappa live:** la mappa riapriva il suo database a ogni
+  gruppo di decodifiche e a ogni aggiornamento, ripeteva ogni volta
+  l'aggiornamento del database su tutte le righe e rileggeva le stesse pagine
+  a pezzi di 4 KB: sul PC di sviluppo Decodium leggeva oltre 300 MB al
+  secondo dalla cache dei file di Windows e teneva occupato circa un core,
+  anche con la mappa nascosta. Ora l'aggiornamento tocca solo le righe nuove,
+  il file si legge mappato in memoria, l'elenco delle stazioni usa indici per
+  i controlli su ogni stazione e i limiti di dimensione si applicano una volta
+  al minuto. Con lo stesso database e le stesse decodifiche: letture da circa
+  207 MB/s a 0,2 MB/s, CPU della mappa da 0,68 a 0,04 core, un aggiornamento
+  della mappa da 1,6 s a 0,17 s. La mappa mostra gli stessi dati: 384
+  interrogazioni diverse confrontate riga per riga.
 - Il decoder in sé non cambia; cambia quali log lo alimentano, quindi la
   decodifica dei nominativi in hash e i suggerimenti a priori possono
   differire leggermente. Le segnalazioni sono benvenute.
