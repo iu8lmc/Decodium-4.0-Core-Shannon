@@ -87,11 +87,19 @@ extern "C" int ftx_ft8_leve_adattive_attive_c ();
 // sugli ultimi ~4 slot) invece di mediare i moduli, e il combinatore in
 // FtxBitmetrics somma le energie invece dei moduli. E' il combinatore che
 // l'accumulo FT2 ha misurato entro 0,05 dB dalla verosimiglianza esatta
-// (lab/tools/slot_accumulo.py). La concessione e' adattiva dalla 1.0.627.
+// (lab/tools/slot_accumulo.py).
+// Dalla 1.0.627 la concedeva il governatore adattivo. Misurato su CQ ripetuti
+// in 4 slot (doc/FT8_REPEATED_CQ_ACCUMULATION.md): l'accumulo a energie nello
+// storico toglie quasi tutto il guadagno della ripetizione rispetto alla media
+// dei moduli (a -23 dB 101 CQ su 240 contro 150). Ora si accende solo con
+// DECODIUM_FT8_STORICO_ENERGIA=1 esplicito; il governatore non la concede piu'.
 inline bool ft8_storico_energia ()
 {
-  // 1.0.627: la decide il governatore adattivo; la variabile scavalca.
-  return ftx_ft8_leva_concessa_c ("DECODIUM_FT8_STORICO_ENERGIA") != 0;
+  static bool const v = [] {
+    char const* raw = std::getenv ("DECODIUM_FT8_STORICO_ENERGIA");
+    return raw && raw[0] == '1';
+  }();
+  return v;
 }
 constexpr int kFt8CallGridMemory {96};
 constexpr int kFt8CallGridMaxAge {4};
