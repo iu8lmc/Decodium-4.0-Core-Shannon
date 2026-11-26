@@ -146,7 +146,7 @@ jobs:
           # Qt 6.11 marks the legacy Q_ENUMS/Q_FLAGS macros used by the
           # bundled qcustomplot headers as deprecated.  They are third-party
           # compatibility warnings, not release-build errors.
-          CXXFLAGS: -Wno-error=deprecated-pragma
+          CXXFLAGS: -Wno-error=deprecated-pragma -Wno-error=deprecated-declarations
         run: |
           scripts/release-macos.sh "${VERSION}" \
             --compat-macos "${{ matrix.compat_macos }}" \
