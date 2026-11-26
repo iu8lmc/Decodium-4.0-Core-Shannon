@@ -261,6 +261,12 @@ add_executable (test_ft8_mycall_ap
 target_include_directories (test_ft8_mycall_ap PRIVATE ${PROJECT_BINARY_DIR})
 target_compile_options (test_ft8_mycall_ap PRIVATE -include wsjtx_config.h)
 target_link_libraries (test_ft8_mycall_ap wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
+if (MINGW)
+  # Il test decodifica sul thread principale: il decoder FT8 vuole lo stesso
+  # stack grande dei thread di decodifica dell'app (con quello di default va
+  # in overflow, 0xc00000fd, in workerApSnapshot).
+  target_link_options (test_ft8_mycall_ap PRIVATE -Wl,--stack,67108864)
+endif ()
 add_test (NAME test_ft8_mycall_ap COMMAND $<TARGET_FILE:test_ft8_mycall_ap>)
 
 add_executable (test_qso_sequencer_rules
