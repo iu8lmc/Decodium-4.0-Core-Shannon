@@ -11,10 +11,11 @@ kept in memory instead of being read again and again.
   last 2 MB four times, even when nothing had changed: about 400 ms per log
   on a fast PC, so only one log fitted in the time allowed. Now each log is
   parsed once and kept in memory; on each refresh only the lines added since
-  the previous one are read. All ten logs are now included, in 90–290 ms
-  instead of one log in about 465 ms. The result is the same as reading the
-  files: checked line by line in 620 comparisons while the logs were growing,
-  being erased and being rewritten.
+  the previous one are read. All ten logs are now included, usually in about
+  80 ms (up to 300 ms with two busy logs), instead of one log in about 465 ms,
+  for about 30 MB of memory with ten large logs. The result is the same as
+  reading the files: checked in 1,279 comparisons while the logs were
+  growing, being erased and being rewritten.
 - **Hashed calls `<...>`:** Decodium can fill in a hashed call from the line
   that another decoder wrote for the same slot in its ALL.TXT. Until now it
   read the last 8 MB of up to 20 logs for each decode batch, and skipped the
@@ -48,9 +49,10 @@ ALL.TXT tenuti in memoria invece di essere riletti di continuo.
   log su un PC veloce, così nel tempo concesso ne entrava uno solo. Ora ogni
   log viene analizzato una volta e tenuto in memoria; a ogni aggiornamento si
   leggono solo le righe aggiunte dalla volta precedente. Entrano tutti e dieci
-  i log, in 90–290 ms, invece di un log in circa 465 ms. Il risultato è lo
-  stesso della lettura dei file: verificato riga per riga in 620 confronti
-  mentre i log crescevano, venivano azzerati e riscritti.
+  i log, di solito in circa 80 ms (fino a 300 ms con due log molto attivi),
+  invece di un log in circa 465 ms, con circa 30 MB di memoria per dieci log
+  grandi. Il risultato è lo stesso della lettura dei file: verificato in
+  1.279 confronti mentre i log crescevano, venivano azzerati e riscritti.
 - **Nominativi in hash `<...>`:** Decodium può completare un nominativo in
   hash dalla riga che un altro decoder ha scritto per lo stesso slot nel suo
   ALL.TXT. Finora leggeva gli ultimi 8 MB di fino a 20 log a ogni gruppo di
