@@ -664,6 +664,48 @@ add_custom_command (TARGET test_map_layer_service POST_BUILD
     "$<TARGET_FILE_DIR:test_map_layer_service>/cty.dat"
   COMMENT "Copying cty.dat beside test_map_layer_service")
 
+# Migrazioni incrementali del database della mappa: stesso risultato delle
+# istruzioni originali su tutte le righe. Include il sorgente del servizio per
+# raggiungere openMapDatabase, che e' interna.
+add_executable (test_map_db_migrations
+  test_map_db_migrations.cpp
+  ../src/services/MapIntelligenceService.h
+  ../src/services/MapBaseMapService.cpp
+  ../src/services/MapPskFeedService.cpp
+  ../src/services/MapOperationsService.cpp
+  ../src/services/RotatorService.cpp
+  ../src/services/MapExternalOverlayService.cpp
+  ../src/services/DxccLookup.cpp
+  ../src/services/MapLayerModel.cpp)
+target_include_directories (test_map_db_migrations PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/services)
+target_link_libraries (test_map_db_migrations Qt6::Test Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::Concurrent)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties (test_map_db_migrations.cpp PROPERTIES
+    COMPILE_FLAGS "-Wno-error=stringop-overflow")
+endif ()
+add_test (NAME test_map_db_migrations COMMAND $<TARGET_FILE:test_map_db_migrations>)
+
+# Banco (non e' un test): I/O e CPU del database della mappa con decodifiche
+# FT8 vere su una copia di un database reale. Vedi bench_map_database.cpp.
+add_executable (bench_map_database EXCLUDE_FROM_ALL
+  bench_map_database.cpp
+  ../src/services/MapIntelligenceService.cpp
+  ../src/services/MapBaseMapService.cpp
+  ../src/services/MapPskFeedService.cpp
+  ../src/services/MapOperationsService.cpp
+  ../src/services/RotatorService.cpp
+  ../src/services/MapExternalOverlayService.cpp
+  ../src/services/DxccLookup.cpp
+  ../src/services/MapLayerModel.cpp)
+target_include_directories (bench_map_database PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (bench_map_database Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::Concurrent)
+qt_add_resources (bench_map_database bench_map_database_award_resources
+  PREFIX "/"
+  BASE "${CMAKE_SOURCE_DIR}/resources/map"
+  FILES
+    "${CMAKE_SOURCE_DIR}/resources/map/decodium-awards-catalog.json"
+  )
+
 add_executable (test_sgp4
   test_sgp4.cpp
   ../src/services/satellite/sgp4/SGP4.cpp

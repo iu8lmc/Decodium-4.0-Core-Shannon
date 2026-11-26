@@ -19,6 +19,7 @@
 #include <QMetaObject>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QScopeGuard>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -56,6 +57,16 @@ constexpr int kAdifImportFormatVersion = 4;
 constexpr int kMaxPendingLiveSpots = 512;
 constexpr int kQueryDebounceMs = 60;       // user-driven changes
 constexpr qint64 kPassiveQueryMinMs = 2500; // data-arrival refreshes (decodes, PSK)
+
+// [MAPDB] nel log per le operazioni sul database della mappa che superano
+// kMapDbSlowMs; con DECODIUM_MAP_DB_TRACE=1 per tutte.
+constexpr qint64 kMapDbSlowMs = 200;
+
+bool mapDbTraceEnabled()
+{
+    static bool const enabled = qEnvironmentVariableIntValue("DECODIUM_MAP_DB_TRACE") > 0;
+    return enabled;
+}
 constexpr int kRosterLimit = 100;
 constexpr int kRosterCandidateLimit = 500;
 constexpr qint64 kLiveRetentionMs = 30LL * 24LL * 60LL * 60LL * 1000LL;
@@ -1175,6 +1186,133 @@ QString transmittingCallFromMessage(const QString& message);
 QString targetCallFromMessage(const QString& message);
 bool repairDecoderSpotAttribution(QSqlDatabase& db, QString* error);
 
+// Migrazioni dei dati fatte da openMapDatabase.
+//
+// Ogni apertura del database (ogni svuotamento delle stazioni, fino a 4 volte al
+// secondo, e ogni interrogazione della mappa) le rieseguiva su tutte le righe:
+// sette scansioni complete, i 100000 eventi compresi, piu' circa 1500 righe
+// riscritte ogni volta con lo stesso valore. Ne hanno bisogno solo le righe
+// scritte da versioni vecchie o inserite dopo l'ultima migrazione: le tabelle
+// hanno id AUTOINCREMENT, quindi mai riusati, e nessun UPDATE riporta una riga
+// gia' migrata nello stato da migrare (gli inserimenti scrivono gia' le colonne
+// normalizzate; ON CONFLICT non le svuota). Per ogni tabella map_meta tiene l'id
+// piu' alto gia' migrato e si migrano solo le righe sopra, fino al massimo letto
+// prima di cominciare: quelle inserite intanto da altre connessioni restano per
+// la volta dopo. Le istruzioni sono le stesse di prima, con il solo limite sugli
+// id; un database senza segni (nuovo o di versioni precedenti) le esegue su
+// tutte le righe come prima.
+// Se si aggiunge o cambia una migrazione, aumentare kMapDataMigrationVersion:
+// alla prima apertura si ripassano tutte le righe.
+constexpr int kMapDataMigrationVersion = 1;
+
+static bool runMapDataMigrations(QSqlDatabase& db, QString* error)
+{
+    struct Table
+    {
+        QLatin1String name;
+        qint64 migrated {0};
+        qint64 upTo {0};
+    };
+    Table tables[] = {
+        {QLatin1String("map_spot")},
+        {QLatin1String("map_qso")},
+        {QLatin1String("map_spot_event")},
+    };
+    auto markKey = [](QLatin1String table) {
+        return QStringLiteral("data_migration_v%1_max_id_%2")
+            .arg(kMapDataMigrationVersion).arg(table);
+    };
+    for (Table& table : tables) {
+        QSqlQuery mark(db);
+        mark.prepare(QStringLiteral("SELECT value FROM map_meta WHERE key=:key"));
+        mark.bindValue(QStringLiteral(":key"), markKey(table.name));
+        if (!mark.exec()) {
+            if (error) *error = mark.lastError().text();
+            return false;
+        }
+        table.migrated = mark.next() ? mark.value(0).toLongLong() : 0;
+        QSqlQuery top(db);
+        if (!top.exec(QStringLiteral("SELECT COALESCE(MAX(id), 0) FROM %1").arg(table.name))) {
+            if (error) *error = top.lastError().text();
+            return false;
+        }
+        table.upTo = top.next() ? top.value(0).toLongLong() : 0;
+    }
+    Table const& spot = tables[0];
+    Table const& qso = tables[1];
+    Table const& event = tables[2];
+    auto pending = [](Table const& table, QString const& column) {
+        return QStringLiteral("%1>%2 AND %1<=%3").arg(column).arg(table.migrated).arg(table.upTo);
+    };
+
+    QStringList statements;
+    if (spot.upTo > spot.migrated) {
+        QString const rows = pending(spot, QStringLiteral("id"));
+        // Existing databases predate grid provenance.  Infer only the origin of
+        // their already stored locator; a decoded value is still never replaced
+        // by data of lower confidence.
+        statements << QStringLiteral(
+            "UPDATE map_spot SET grid_origin=CASE"
+            " WHEN lower(source)='decoder' AND grid<>'' THEN 'DECODED'"
+            " WHEN lower(source)='psk' AND grid<>'' THEN 'PSK'"
+            " WHEN lower(source)='oams' AND grid<>'' THEN 'OAMS'"
+            " ELSE 'UNKNOWN' END"
+            " WHERE %1 AND COALESCE(grid_origin, 'UNKNOWN')='UNKNOWN'").arg(rows)
+                   << QStringLiteral(
+            "UPDATE map_spot SET grid6=upper(substr(grid,1,6))"
+            " WHERE %1 AND (grid6 IS NULL OR grid6='') AND length(grid)>=6").arg(rows)
+                   << QStringLiteral(
+            "UPDATE map_spot SET first_observed_ms=observed_ms, last_observed_ms=observed_ms"
+            " WHERE %1 AND (first_observed_ms=0 OR last_observed_ms=0)").arg(rows)
+                   << QStringLiteral(
+            "UPDATE map_spot SET propagation_mode='UNKNOWN'"
+            " WHERE %1 AND (propagation_mode IS NULL OR trim(propagation_mode)='')").arg(rows);
+    }
+    if (qso.upTo > qso.migrated) {
+        statements << QStringLiteral(
+            "UPDATE map_qso SET grid6=upper(substr(grid,1,6))"
+            " WHERE %1 AND (grid6 IS NULL OR grid6='') AND length(grid)>=6")
+                          .arg(pending(qso, QStringLiteral("id")))
+                   << QStringLiteral(
+            "INSERT OR IGNORE INTO map_qso_grid(qso_id, grid, grid4, grid6, is_primary)"
+            " SELECT id, upper(grid), upper(grid4), nullif(upper(grid6), ''), 1"
+            " FROM map_qso WHERE %1 AND COALESCE(grid4, '')<>''"
+            " AND NOT EXISTS (SELECT 1 FROM map_qso_grid existing"
+            " WHERE existing.qso_id=map_qso.id AND existing.grid=upper(map_qso.grid))")
+                          .arg(pending(qso, QStringLiteral("map_qso.id")))
+                   << QStringLiteral(
+            "UPDATE map_qso SET propagation_mode='UNKNOWN'"
+            " WHERE %1 AND (propagation_mode IS NULL OR trim(propagation_mode)='')")
+                          .arg(pending(qso, QStringLiteral("id")));
+    }
+    if (event.upTo > event.migrated) {
+        statements << QStringLiteral(
+            "UPDATE map_spot_event SET propagation_mode='UNKNOWN'"
+            " WHERE %1 AND (propagation_mode IS NULL OR trim(propagation_mode)='')")
+                          .arg(pending(event, QStringLiteral("id")));
+    }
+    for (QString const& statement : std::as_const(statements)) {
+        if (!execSql(db, statement, error)) {
+            return false;
+        }
+    }
+    for (Table const& table : tables) {
+        if (table.upTo <= table.migrated) {
+            continue;
+        }
+        QSqlQuery store(db);
+        store.prepare(QStringLiteral(
+            "INSERT OR REPLACE INTO map_meta(key, value) VALUES (:key, :value)"));
+        store.bindValue(QStringLiteral(":key"), markKey(table.name));
+        store.bindValue(QStringLiteral(":value"), QString::number(table.upTo));
+        if (!store.exec()) {
+            if (error) *error = store.lastError().text();
+            return false;
+        }
+    }
+    return true;
+}
+
 bool openMapDatabase(const QString& path,
                      std::unique_ptr<ScopedSqliteConnection>* connection,
                      QString* error)
@@ -1200,6 +1338,13 @@ bool openMapDatabase(const QString& path,
     execSql(db, QStringLiteral("PRAGMA synchronous=NORMAL"), nullptr);
     execSql(db, QStringLiteral("PRAGMA busy_timeout=5000"), nullptr);
     execSql(db, QStringLiteral("PRAGMA temp_store=MEMORY"), nullptr);
+    // Ogni operazione apre una connessione nuova, con la cache di pagine di
+    // SQLite vuota (2 MB, piu' piccola del database): le circa 190 istruzioni
+    // di un'interrogazione rileggevano le stesse pagine dal file, 4 KB alla
+    // volta, centinaia di MB al secondo dalla cache di Windows. Con la lettura
+    // mappata in memoria le pagine si leggono direttamente da li', senza
+    // copie ne' chiamate al sistema e senza RAM privata in piu'.
+    execSql(db, QStringLiteral("PRAGMA mmap_size=268435456"), nullptr);
     execSql(db, QStringLiteral("PRAGMA foreign_keys=ON"), nullptr);
 
     static const QStringList schema {
@@ -1371,18 +1516,6 @@ bool openMapDatabase(const QString& path,
             return false;
         }
     }
-    // Existing databases predate grid provenance.  Infer only the origin of
-    // their already stored locator; a decoded value is still never replaced by
-    // data of lower confidence.
-    if (!execSql(db, QStringLiteral(
-            "UPDATE map_spot SET grid_origin=CASE"
-            " WHEN lower(source)='decoder' AND grid<>'' THEN 'DECODED'"
-            " WHEN lower(source)='psk' AND grid<>'' THEN 'PSK'"
-            " WHEN lower(source)='oams' AND grid<>'' THEN 'OAMS'"
-            " ELSE 'UNKNOWN' END"
-            " WHERE COALESCE(grid_origin, 'UNKNOWN')='UNKNOWN'"), error)) {
-        return false;
-    }
     static const QStringList extendedIndexes {
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_qso_period ON map_qso(qso_epoch DESC)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_qso_geo ON map_qso(continent, dxcc, cq_zone)"),
@@ -1414,51 +1547,27 @@ bool openMapDatabase(const QString& path,
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_spot_event_grid ON map_spot_event(grid, observed_ms DESC)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_spot_event_band_window ON map_spot_event(band, observed_ms DESC, source, direction)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_roster_ignore_type ON map_roster_ignore(ignore_type, ignore_value)"),
-        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_roster_rule_type ON map_roster_rule(rule_type, rule_value)")
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_roster_rule_type ON map_roster_rule(rule_type, rule_value)"),
+        // appendLiveSpots, per ogni stazione: conteggio delle correlazioni
+        // (upper(call)=upper(:call) ... AND last_observed_ms>=:cutoff) e "DXCC
+        // nuovo" (lower(dxcc)=lower(:dxcc)). Senza un indice sulla stessa
+        // espressione erano una scansione completa della tabella per stazione.
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_spot_upper_call_seen ON map_spot(upper(call), last_observed_ms)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_qso_lower_dxcc ON map_qso(lower(dxcc))"),
+        // Lista delle stazioni (queryDatabase): per ogni stazione due
+        // sottoquery sugli eventi con upper(e.call)=upper(s.call), senza
+        // indice una lettura completa dei 100000 eventi a stazione (1,6 s per
+        // interrogazione su un database vero). Solo l'espressione: a parita'
+        // di nominativo l'indice resta in ordine di rowid come la scansione
+        // completa, quindi anche il GROUP_CONCAT delle fonti non cambia.
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_map_spot_event_upper_call ON map_spot_event(upper(call))")
     };
     for (QString const& ddl : extendedIndexes) {
         if (!execSql(db, ddl, error)) {
             return false;
         }
     }
-    if (!execSql(db,
-                 QStringLiteral(
-                     "UPDATE map_qso SET grid6=upper(substr(grid,1,6))"
-                     " WHERE (grid6 IS NULL OR grid6='') AND length(grid)>=6"),
-                 error)
-        || !execSql(db,
-                    QStringLiteral(
-                        "UPDATE map_spot SET grid6=upper(substr(grid,1,6))"
-                        " WHERE (grid6 IS NULL OR grid6='') AND length(grid)>=6"),
-                    error)
-        || !execSql(db,
-                    QStringLiteral(
-                        "INSERT OR IGNORE INTO map_qso_grid(qso_id, grid, grid4, grid6, is_primary)"
-                        " SELECT id, upper(grid), upper(grid4), nullif(upper(grid6), ''), 1"
-                        " FROM map_qso WHERE COALESCE(grid4, '')<>''"
-                        " AND NOT EXISTS (SELECT 1 FROM map_qso_grid existing"
-                        " WHERE existing.qso_id=map_qso.id AND existing.grid=upper(map_qso.grid))"),
-                    error)
-        || !execSql(db,
-                    QStringLiteral(
-                        "UPDATE map_spot SET first_observed_ms=observed_ms, last_observed_ms=observed_ms"
-                        " WHERE first_observed_ms=0 OR last_observed_ms=0"),
-                    error)
-        || !execSql(db,
-                    QStringLiteral(
-                        "UPDATE map_qso SET propagation_mode='UNKNOWN'"
-                        " WHERE propagation_mode IS NULL OR trim(propagation_mode)=''"),
-                    error)
-        || !execSql(db,
-                    QStringLiteral(
-                        "UPDATE map_spot SET propagation_mode='UNKNOWN'"
-                        " WHERE propagation_mode IS NULL OR trim(propagation_mode)=''"),
-                    error)
-        || !execSql(db,
-                    QStringLiteral(
-                        "UPDATE map_spot_event SET propagation_mode='UNKNOWN'"
-                        " WHERE propagation_mode IS NULL OR trim(propagation_mode)=''"),
-                    error)) {
+    if (!runMapDataMigrations(db, error)) {
         return false;
     }
     if (!repairDecoderSpotAttribution(db, error)) {
@@ -4774,6 +4883,13 @@ MapIntelligenceService::queryDatabase(const QString& databasePath,
                                       const QueryOptions& options)
 {
     Snapshot snapshot;
+    QElapsedTimer elapsed;
+    elapsed.start();
+    auto const slowLog = qScopeGuard([&elapsed] {
+        if (elapsed.elapsed() >= kMapDbSlowMs || mapDbTraceEnabled()) {
+            qInfo().noquote() << "[MAPDB] query elapsed_ms=" << elapsed.elapsed();
+        }
+    });
     std::unique_ptr<ScopedSqliteConnection> connection;
     if (!openMapDatabase(databasePath, &connection, &snapshot.error)) {
         return snapshot;
@@ -7406,11 +7522,40 @@ bool MapIntelligenceService::appendQsoRecords(const QString& databasePath,
     return db.commit();
 }
 
+// Vedi la fine di appendLiveSpots.
+constexpr qint64 kLiveSpotCapIntervalMs = 60 * 1000;
+
+static bool liveSpotCapsDue(QString const& databasePath)
+{
+    static QMutex mutex;
+    static QElapsedTimer clock;
+    static QHash<QString, qint64> lastRun;
+    QMutexLocker locker(&mutex);
+    if (!clock.isValid()) {
+        clock.start();
+    }
+    qint64 const now = clock.elapsed();
+    auto const it = lastRun.constFind(databasePath);
+    if (it != lastRun.cend() && now - it.value() < kLiveSpotCapIntervalMs) {
+        return false;
+    }
+    lastRun.insert(databasePath, now);
+    return true;
+}
+
 bool MapIntelligenceService::appendLiveSpots(const QString& databasePath,
                                              const QList<LiveSpot>& spots,
                                              const AlertRules& rules,
                                              QString* error)
 {
+    QElapsedTimer elapsed;
+    elapsed.start();
+    auto const slowLog = qScopeGuard([&elapsed, count = spots.size()] {
+        if (elapsed.elapsed() >= kMapDbSlowMs || mapDbTraceEnabled()) {
+            qInfo().noquote() << "[MAPDB] live_spots count=" << count
+                              << "elapsed_ms=" << elapsed.elapsed();
+        }
+    });
     std::unique_ptr<ScopedSqliteConnection> connection;
     if (!openMapDatabase(databasePath, &connection, error)) {
         return false;
@@ -7641,15 +7786,22 @@ bool MapIntelligenceService::appendLiveSpots(const QString& databasePath,
     pruneEvents.bindValue(QStringLiteral(":cutoff"),
                           QDateTime::currentMSecsSinceEpoch() - kSpotEventRetentionMs);
     pruneEvents.exec();
-    execSql(db, QStringLiteral(
-        "DELETE FROM map_spot WHERE id NOT IN"
-        " (SELECT id FROM map_spot ORDER BY observed_ms DESC LIMIT 5000)"), nullptr);
-    execSql(db, QStringLiteral(
-        "DELETE FROM map_spot_event WHERE id NOT IN"
-        " (SELECT id FROM map_spot_event ORDER BY observed_ms DESC LIMIT 100000)"), nullptr);
-    execSql(db, QStringLiteral(
-        "DELETE FROM map_alert WHERE id NOT IN"
-        " (SELECT id FROM map_alert ORDER BY created_ms DESC LIMIT 500)"), nullptr);
+    // I tetti (5000 stazioni, 100000 eventi, 500 avvisi) leggono tutta la
+    // tabella: farlo a ogni gruppo di decodifiche era la lettura piu' pesante
+    // della mappa. Restano gli stessi, applicati al piu' una volta al minuto per
+    // database: nel frattempo una tabella puo' superarli di un minuto di
+    // stazioni, che il giro successivo toglie.
+    if (liveSpotCapsDue(databasePath)) {
+        execSql(db, QStringLiteral(
+            "DELETE FROM map_spot WHERE id NOT IN"
+            " (SELECT id FROM map_spot ORDER BY observed_ms DESC LIMIT 5000)"), nullptr);
+        execSql(db, QStringLiteral(
+            "DELETE FROM map_spot_event WHERE id NOT IN"
+            " (SELECT id FROM map_spot_event ORDER BY observed_ms DESC LIMIT 100000)"), nullptr);
+        execSql(db, QStringLiteral(
+            "DELETE FROM map_alert WHERE id NOT IN"
+            " (SELECT id FROM map_alert ORDER BY created_ms DESC LIMIT 500)"), nullptr);
+    }
     return db.commit();
 }
 
