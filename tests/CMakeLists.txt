@@ -217,6 +217,12 @@ target_compile_options (test_recent_alltxt_hash_index PRIVATE
 target_link_libraries (test_recent_alltxt_hash_index wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
 add_test (NAME test_recent_alltxt_hash_index COMMAND $<TARGET_FILE:test_recent_alltxt_hash_index>)
 
+# Cartelle dati di questa istanza per i semi hash FT8/FT4 (log vivo su Windows).
+add_executable (test_hash_seed_own_dirs test_hash_seed_own_dirs.cpp)
+target_include_directories (test_hash_seed_own_dirs PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries (test_hash_seed_own_dirs Qt6::Test)
+add_test (NAME test_hash_seed_own_dirs COMMAND $<TARGET_FILE:test_hash_seed_own_dirs>)
+
 # H04: TransceiverBase::set() must send the TX/split command when only the
 # TX frequency changes and the RX frequency is already on target.
 add_executable (test_transceiver_base_split test_transceiver_base_split.cpp)

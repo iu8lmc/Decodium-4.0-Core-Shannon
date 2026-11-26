@@ -31,6 +31,7 @@
 #include <QTimer>
 
 #include "Logger.hpp"
+#include "Detector/HashSeedOwnDirs.hpp"
 #include "commons.h"
 #include "Detector/DecodeMetricLogging.hpp"
 #include "Detector/FortranRuntimeGuard.hpp"
@@ -384,6 +385,13 @@ namespace
     };
 
     addLogDir (QStandardPaths::writableLocation (QStandardPaths::AppDataLocation));
+    // Cartelle dati di questa istanza: su Windows il log vivo del backend
+    // embedded sta qui e non sotto IU8LMC/Decodium (vedi HashSeedOwnDirs.hpp).
+    for (QString const& ownDir : decodium::hash_seed::own_data_dirs ())
+      {
+        addLogDir (ownDir);
+        addLogDir (QDir {ownDir}.filePath (QStringLiteral ("embedded-ft2")), true);
+      }
 
     QStringList dataRoots;
     auto addDataRoot = [&dataRoots] (QString const& root) {
@@ -616,11 +624,13 @@ namespace
         priority += 20;
       }
 
-    if (cleanPath.contains (QStringLiteral ("/IU8LMC/DECODIUM/EMBEDDED-FT2/")))
+    if (cleanPath.contains (QStringLiteral ("/IU8LMC/DECODIUM/EMBEDDED-FT2/"))
+        || decodium::hash_seed::path_in_own_data_dir (cleanPath, true))
       {
         priority += 20;
       }
-    else if (cleanPath.contains (QStringLiteral ("/IU8LMC/DECODIUM/")))
+    else if (cleanPath.contains (QStringLiteral ("/IU8LMC/DECODIUM/"))
+             || decodium::hash_seed::path_in_own_data_dir (cleanPath, false))
       {
         priority += 10;
       }
