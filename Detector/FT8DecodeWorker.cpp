@@ -7,6 +7,8 @@
 #include <cmath>
 #include <condition_variable>
 #include <deque>
+#include <map>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -286,7 +288,9 @@ namespace
     }
   };
 
-  void remember_hash_seed_call (HashSeedCallAccumulator& accumulator, QString call)
+  // Normalizza un token del log come nominativo per i semi hash; vuoto se non
+  // e' un nominativo plausibile. Applicata due volte da' lo stesso risultato.
+  QString normalized_hash_seed_call (QString call)
   {
     call = call.trimmed ().toUpper ();
     if (call.startsWith (QLatin1Char ('<')) && call.endsWith (QLatin1Char ('>')))
@@ -295,13 +299,38 @@ namespace
       }
     if (!plausible_hash_seed_token (call))
       {
-        return;
+        return {};
       }
+    return call;
+  }
+
+  // Aggiunge un nominativo gia' normalizzato (vedi normalized_hash_seed_call).
+  void push_normalized_hash_seed_call (HashSeedCallAccumulator& accumulator,
+                                       QString const& call)
+  {
     accumulator.calls.push_back (call);
     while (static_cast<int> (accumulator.calls.size ()) > kHashSeedMaxCalls * 4)
       {
         accumulator.calls.pop_front ();
       }
+  }
+
+  void remember_hash_seed_call (HashSeedCallAccumulator& accumulator, QString call)
+  {
+    call = normalized_hash_seed_call (call);
+    if (call.isEmpty ())
+      {
+        return;
+      }
+    push_normalized_hash_seed_call (accumulator, call);
+  }
+
+  QRegularExpression const& hash_seed_token_rx ()
+  {
+    static QRegularExpression const tokenRx {
+      QStringLiteral (R"((?:<[A-Z0-9/]{3,13}>|[A-Z0-9/]{3,13}))")
+    };
+    return tokenRx;
   }
 
   bool collect_hash_seed_calls_from_tail (QString const& path,
@@ -368,10 +397,7 @@ namespace
                             << int (hash_seed_shutdown_requested ())
                             << "tokens=" << scannedTokens << "elapsed_ms=" << scanTimer.elapsed ();
     });
-    static QRegularExpression const tokenRx {
-      QStringLiteral (R"((?:<[A-Z0-9/]{3,13}>|[A-Z0-9/]{3,13}))")
-    };
-    auto it = tokenRx.globalMatch (text);
+    auto it = hash_seed_token_rx ().globalMatch (text);
     while (it.hasNext ())
       {
         if ((++scannedTokens & 0x3ff) == 0 && hash_seed_shutdown_requested ())
@@ -502,22 +528,51 @@ namespace
     return delta;
   }
 
-  bool collect_known_cq_call_seeds_from_tail (QString const& path,
-                                              QHash<QString, KnownCqCallSeed>& seeds,
-                                              qint64 tailBytes,
-                                              int currentNutc)
+  // ---- Righe di log riconosciute dai raccoglitori dei semi ----
+  //
+  // Ogni raccoglitore riconosce una riga con due espressioni (formato JTDX e
+  // formato Decodium/WSJT-X) e poi la filtra con l'ora corrente. Riconoscimento
+  // e filtro sono separati: l'indice in RAM dei log (SeedLogFileIndex, piu'
+  // sotto) riconosce ogni riga una volta sola e a ogni refresh ripete solo il
+  // filtro, con lo stesso codice della lettura diretta dal file.
+  enum class SeedLineKind
   {
-    QFile file {path};
-    if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
-      {
-        return false;
-      }
-    if (tailBytes > 0 && file.size () > tailBytes)
-      {
-        file.seek (file.size () - tailBytes);
-        file.readLine ();
-      }
+    KnownCqCall,
+    KnownCq,
+    A7
+  };
 
+  struct LoggedSeedLine
+  {
+    QDateTime when;
+    QString nutcText;  // cattura 2: hhmmss
+    QString dtText;    // cattura 3
+    QString freqText;  // cattura 4
+    QString text;      // cattura 5: nominativo (CQ) o messaggio (A7)
+    QString grid;      // cattura 6: solo KnownCq
+  };
+
+  // Eta' massima (in secondi) che il filtro di ogni raccoglitore accetta.
+  qint64 logged_seed_line_max_age_seconds (SeedLineKind kind)
+  {
+    return kind == SeedLineKind::KnownCq ? 3 * 3600 + 15 : 30 * 60 + 15;
+  }
+
+  QDate logged_seed_line_date (QString const& token)
+  {
+    if (token.size () == 8)
+      {
+        return QDate (token.left (4).toInt (), token.mid (4, 2).toInt (),
+                      token.mid (6, 2).toInt ());
+      }
+    return QDate (2000 + token.left (2).toInt (), token.mid (2, 2).toInt (),
+                  token.mid (4, 2).toInt ());
+  }
+
+  // `line` e' la riga come la danno readLine + trimmed + toUpper.
+  bool match_logged_seed_line (SeedLineKind kind, QString const& line,
+                               LoggedSeedLine& out)
+  {
     static QRegularExpression const jtdxCqCallRx {
       QStringLiteral (R"(^(\d{8})_(\d{6})\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+~\s+CQ\s+([A-Z0-9/]{3,12})(?:\s+[\^*?#]+)?\s*$)"),
       QRegularExpression::CaseInsensitiveOption
@@ -526,67 +581,61 @@ namespace
       QStringLiteral (R"(^(\d{6})_(\d{6})\s+\S+\s+Rx\s+FT8\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+CQ\s+([A-Z0-9/]{3,12})(?:\s+[\^*?#]+)?\s*$)"),
       QRegularExpression::CaseInsensitiveOption
     };
-
-    QDateTime const nowUtc = QDateTime::currentDateTimeUtc ();
-    constexpr qint64 kMaxAgeSeconds = 30 * 60 + 15;
-    auto lineDate = [] (QString const& token) {
-      if (token.size () == 8)
-        {
-          return QDate (token.left (4).toInt (), token.mid (4, 2).toInt (),
-                        token.mid (6, 2).toInt ());
-        }
-      return QDate (2000 + token.left (2).toInt (), token.mid (2, 2).toInt (),
-                    token.mid (4, 2).toInt ());
+    static QRegularExpression const jtdxCqRx {
+      QStringLiteral (R"(^(\d{8})_(\d{6})\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+~\s+CQ\s+([A-Z0-9/]{3,12})\s+([A-R]{2}\d{2})\b)"),
+      QRegularExpression::CaseInsensitiveOption
+    };
+    static QRegularExpression const decodiumCqRx {
+      QStringLiteral (R"(^(\d{6})_(\d{6})\s+\S+\s+Rx\s+FT8\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+CQ\s+([A-Z0-9/]{3,12})\s+([A-R]{2}\d{2})\b)"),
+      QRegularExpression::CaseInsensitiveOption
+    };
+    static QRegularExpression const jtdxA7Rx {
+      QStringLiteral (R"(^(\d{8})_(\d{6})\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+~\s+(.+?)\s*$)"),
+      QRegularExpression::CaseInsensitiveOption
+    };
+    static QRegularExpression const decodiumA7Rx {
+      QStringLiteral (R"(^(\d{6})_(\d{6})\s+\S+\s+Rx\s+FT8\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+(.+?)\s*$)"),
+      QRegularExpression::CaseInsensitiveOption
     };
 
-    while (!file.atEnd ())
+    QRegularExpression const* jtdx = &jtdxA7Rx;
+    QRegularExpression const* decodium = &decodiumA7Rx;
+    if (kind == SeedLineKind::KnownCqCall)
       {
-        QString const line = QString::fromLatin1 (file.readLine ()).trimmed ().toUpper ();
-        QRegularExpressionMatch match = jtdxCqCallRx.match (line);
-        if (!match.hasMatch ())
-          {
-            match = decodiumCqCallRx.match (line);
-          }
-        if (!match.hasMatch ())
-          {
-            continue;
-          }
-
-        QDate const date = lineDate (match.captured (1));
-        QTime const time = QTime::fromString (match.captured (2), QStringLiteral ("HHmmss"));
-        QDateTime const when {date, time, QTimeZone::UTC};
-        qint64 const age = when.isValid () ? when.secsTo (nowUtc) : -1;
-        if (age < 0 || age > kMaxAgeSeconds)
-          {
-            continue;
-          }
-
-        bool okDt = false;
-        bool okFreq = false;
-        bool okNutc = false;
-        float const dt = match.captured (3).toFloat (&okDt);
-        float const freq = match.captured (4).toFloat (&okFreq);
-        int const nutc = match.captured (2).toInt (&okNutc);
-        if (!okFreq || !okNutc)
-          {
-            continue;
-          }
-        if (currentNutc > 0 && ft8_nutc_delta_seconds (currentNutc, nutc) <= 0)
-          {
-            continue;
-          }
-        remember_known_cq_call_seed (seeds, match.captured (5),
-                                     freq, okDt ? dt : 0.0f, nutc);
+        jtdx = &jtdxCqCallRx;
+        decodium = &decodiumCqCallRx;
       }
+    else if (kind == SeedLineKind::KnownCq)
+      {
+        jtdx = &jtdxCqRx;
+        decodium = &decodiumCqRx;
+      }
+
+    QRegularExpressionMatch match = jtdx->match (line);
+    if (!match.hasMatch ())
+      {
+        match = decodium->match (line);
+      }
+    if (!match.hasMatch ())
+      {
+        return false;
+      }
+
+    QDate const date = logged_seed_line_date (match.captured (1));
+    QTime const time = QTime::fromString (match.captured (2), QStringLiteral ("HHmmss"));
+    out.when = QDateTime {date, time, QTimeZone::UTC};
+    out.nutcText = match.captured (2);
+    out.dtText = match.captured (3);
+    out.freqText = match.captured (4);
+    out.text = match.captured (5);
+    out.grid = kind == SeedLineKind::KnownCq ? match.captured (6) : QString {};
     return true;
   }
 
-  bool collect_known_cq_seeds_from_tail (QString const& path,
-                                         QHash<QString, KnownCqSeed>& seeds,
-                                         qint64 tailBytes,
-                                         int currentNutc)
+  // Apre il log e si porta all'inizio della coda come facevano i raccoglitori:
+  // seek a (dimensione - coda) e salto della riga a meta'.
+  bool open_seed_log_tail (QFile& file, qint64 tailBytes)
   {
-    QFile file {path};
     if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
       {
         return false;
@@ -596,66 +645,105 @@ namespace
         file.seek (file.size () - tailBytes);
         file.readLine ();
       }
+    return true;
+  }
 
-    static QRegularExpression const jtdxCqRx {
-      QStringLiteral (R"(^(\d{8})_(\d{6})\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+~\s+CQ\s+([A-Z0-9/]{3,12})\s+([A-R]{2}\d{2})\b)"),
-      QRegularExpression::CaseInsensitiveOption
-    };
-    static QRegularExpression const decodiumCqRx {
-      QStringLiteral (R"(^(\d{6})_(\d{6})\s+\S+\s+Rx\s+FT8\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+CQ\s+([A-Z0-9/]{3,12})\s+([A-R]{2}\d{2})\b)"),
-      QRegularExpression::CaseInsensitiveOption
-    };
+  void apply_known_cq_call_line (LoggedSeedLine const& line,
+                                 QHash<QString, KnownCqCallSeed>& seeds,
+                                 QDateTime const& nowUtc, int currentNutc)
+  {
+    qint64 const age = line.when.isValid () ? line.when.secsTo (nowUtc) : -1;
+    if (age < 0 || age > logged_seed_line_max_age_seconds (SeedLineKind::KnownCqCall))
+      {
+        return;
+      }
 
-    QDateTime const nowUtc = QDateTime::currentDateTimeUtc ();
-    constexpr qint64 kMaxAgeSeconds = 3 * 3600 + 15;
-    auto lineDate = [] (QString const& token) {
-      if (token.size () == 8)
-        {
-          return QDate (token.left (4).toInt (), token.mid (4, 2).toInt (),
-                        token.mid (6, 2).toInt ());
-        }
-      return QDate (2000 + token.left (2).toInt (), token.mid (2, 2).toInt (),
-                    token.mid (4, 2).toInt ());
-    };
+    bool okDt = false;
+    bool okFreq = false;
+    bool okNutc = false;
+    float const dt = line.dtText.toFloat (&okDt);
+    float const freq = line.freqText.toFloat (&okFreq);
+    int const nutc = line.nutcText.toInt (&okNutc);
+    if (!okFreq || !okNutc)
+      {
+        return;
+      }
+    if (currentNutc > 0 && ft8_nutc_delta_seconds (currentNutc, nutc) <= 0)
+      {
+        return;
+      }
+    remember_known_cq_call_seed (seeds, line.text, freq, okDt ? dt : 0.0f, nutc);
+  }
 
+  void apply_known_cq_line (LoggedSeedLine const& line,
+                            QHash<QString, KnownCqSeed>& seeds,
+                            QDateTime const& nowUtc, int currentNutc)
+  {
+    qint64 const age = line.when.isValid () ? line.when.secsTo (nowUtc) : -1;
+    if (age < 0 || age > logged_seed_line_max_age_seconds (SeedLineKind::KnownCq))
+      {
+        return;
+      }
+
+    bool okDt = false;
+    bool okFreq = false;
+    bool okNutc = false;
+    float const dt = line.dtText.toFloat (&okDt);
+    float const freq = line.freqText.toFloat (&okFreq);
+    int const nutc = line.nutcText.toInt (&okNutc);
+    if (!okFreq || !okNutc)
+      {
+        return;
+      }
+    if (currentNutc > 0 && ft8_nutc_delta_seconds (currentNutc, nutc) <= 0)
+      {
+        return;
+      }
+    remember_known_cq_seed (seeds, line.text, line.grid, freq, okDt ? dt : 0.0f, nutc);
+  }
+
+  bool collect_known_cq_call_seeds_from_tail (QString const& path,
+                                              QHash<QString, KnownCqCallSeed>& seeds,
+                                              qint64 tailBytes,
+                                              int currentNutc,
+                                              QDateTime const& nowUtc)
+  {
+    QFile file {path};
+    if (!open_seed_log_tail (file, tailBytes))
+      {
+        return false;
+      }
+    LoggedSeedLine parsed;
     while (!file.atEnd ())
       {
         QString const line = QString::fromLatin1 (file.readLine ()).trimmed ().toUpper ();
-        QRegularExpressionMatch match = jtdxCqRx.match (line);
-        if (!match.hasMatch ())
+        if (match_logged_seed_line (SeedLineKind::KnownCqCall, line, parsed))
           {
-            match = decodiumCqRx.match (line);
+            apply_known_cq_call_line (parsed, seeds, nowUtc, currentNutc);
           }
-        if (!match.hasMatch ())
-          {
-            continue;
-          }
+      }
+    return true;
+  }
 
-        QDate const date = lineDate (match.captured (1));
-        QTime const time = QTime::fromString (match.captured (2), QStringLiteral ("HHmmss"));
-        QDateTime const when {date, time, QTimeZone::UTC};
-        qint64 const age = when.isValid () ? when.secsTo (nowUtc) : -1;
-        if (age < 0 || age > kMaxAgeSeconds)
+  bool collect_known_cq_seeds_from_tail (QString const& path,
+                                         QHash<QString, KnownCqSeed>& seeds,
+                                         qint64 tailBytes,
+                                         int currentNutc,
+                                         QDateTime const& nowUtc)
+  {
+    QFile file {path};
+    if (!open_seed_log_tail (file, tailBytes))
+      {
+        return false;
+      }
+    LoggedSeedLine parsed;
+    while (!file.atEnd ())
+      {
+        QString const line = QString::fromLatin1 (file.readLine ()).trimmed ().toUpper ();
+        if (match_logged_seed_line (SeedLineKind::KnownCq, line, parsed))
           {
-            continue;
+            apply_known_cq_line (parsed, seeds, nowUtc, currentNutc);
           }
-
-        bool okDt = false;
-        bool okFreq = false;
-        bool okNutc = false;
-        float const dt = match.captured (3).toFloat (&okDt);
-        float const freq = match.captured (4).toFloat (&okFreq);
-        int const nutc = match.captured (2).toInt (&okNutc);
-        if (!okFreq || !okNutc)
-          {
-            continue;
-          }
-        if (currentNutc > 0 && ft8_nutc_delta_seconds (currentNutc, nutc) <= 0)
-          {
-            continue;
-          }
-        remember_known_cq_seed (seeds, match.captured (5), match.captured (6),
-                                freq, okDt ? dt : 0.0f, nutc);
       }
     return true;
   }
@@ -807,92 +895,64 @@ namespace
                               freq, dt, nutc, 4);
   }
 
+  void apply_a7_line (LoggedSeedLine const& line,
+                      QHash<QString, A7MessageSeed>& seeds,
+                      QDateTime const& nowUtc, int currentNutc)
+  {
+    constexpr int kMaxDecodeAgeSeconds = 75;
+    qint64 const wallAge = line.when.isValid () ? line.when.secsTo (nowUtc) : -1;
+    if (wallAge < 0 || wallAge > logged_seed_line_max_age_seconds (SeedLineKind::A7))
+      {
+        return;
+      }
+
+    bool okDt = false;
+    bool okFreq = false;
+    bool okNutc = false;
+    float const dt = line.dtText.toFloat (&okDt);
+    float const freq = line.freqText.toFloat (&okFreq);
+    int const nutc = line.nutcText.toInt (&okNutc);
+    if (!okFreq || !okNutc)
+      {
+        return;
+      }
+    if (currentNutc > 0)
+      {
+        int const decodeAge = ft8_nutc_delta_seconds (currentNutc, nutc);
+        if (decodeAge <= 0 || decodeAge > kMaxDecodeAgeSeconds)
+          {
+            return;
+          }
+      }
+    QString const normalizedMessage = normalize_a7_logged_message (line.text);
+    if (!normalizedMessage.startsWith (QStringLiteral ("CQ ")))
+      {
+        remember_a7_message_seed (seeds, normalizedMessage,
+                                  freq, okDt ? dt : 0.0f, nutc);
+      }
+    remember_a7_directed_pair_seeds (seeds, normalizedMessage,
+                                     freq, okDt ? dt : 0.0f, nutc);
+  }
+
   bool collect_a7_message_seeds_from_tail (QString const& path,
                                            QHash<QString, A7MessageSeed>& seeds,
                                            qint64 tailBytes,
-                                           int currentNutc)
+                                           int currentNutc,
+                                           QDateTime const& nowUtc)
   {
     QFile file {path};
-    if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
+    if (!open_seed_log_tail (file, tailBytes))
       {
         return false;
       }
-    if (tailBytes > 0 && file.size () > tailBytes)
-      {
-        file.seek (file.size () - tailBytes);
-        file.readLine ();
-      }
-
-    static QRegularExpression const jtdxRx {
-      QStringLiteral (R"(^(\d{8})_(\d{6})\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+~\s+(.+?)\s*$)"),
-      QRegularExpression::CaseInsensitiveOption
-    };
-    static QRegularExpression const decodiumRx {
-      QStringLiteral (R"(^(\d{6})_(\d{6})\s+\S+\s+Rx\s+FT8\s+-?\d+\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+(.+?)\s*$)"),
-      QRegularExpression::CaseInsensitiveOption
-    };
-
-    QDateTime const nowUtc = QDateTime::currentDateTimeUtc ();
-    constexpr qint64 kMaxWallAgeSeconds = 30 * 60 + 15;
-    constexpr int kMaxDecodeAgeSeconds = 75;
-    auto lineDate = [] (QString const& token) {
-      if (token.size () == 8)
-        {
-          return QDate (token.left (4).toInt (), token.mid (4, 2).toInt (),
-                        token.mid (6, 2).toInt ());
-        }
-      return QDate (2000 + token.left (2).toInt (), token.mid (2, 2).toInt (),
-                    token.mid (4, 2).toInt ());
-    };
-
+    LoggedSeedLine parsed;
     while (!file.atEnd ())
       {
         QString const line = QString::fromLatin1 (file.readLine ()).trimmed ().toUpper ();
-        QRegularExpressionMatch match = jtdxRx.match (line);
-        if (!match.hasMatch ())
+        if (match_logged_seed_line (SeedLineKind::A7, line, parsed))
           {
-            match = decodiumRx.match (line);
+            apply_a7_line (parsed, seeds, nowUtc, currentNutc);
           }
-        if (!match.hasMatch ())
-          {
-            continue;
-          }
-
-        QDate const date = lineDate (match.captured (1));
-        QTime const time = QTime::fromString (match.captured (2), QStringLiteral ("HHmmss"));
-        QDateTime const when {date, time, QTimeZone::UTC};
-        qint64 const wallAge = when.isValid () ? when.secsTo (nowUtc) : -1;
-        if (wallAge < 0 || wallAge > kMaxWallAgeSeconds)
-          {
-            continue;
-          }
-
-        bool okDt = false;
-        bool okFreq = false;
-        bool okNutc = false;
-        float const dt = match.captured (3).toFloat (&okDt);
-        float const freq = match.captured (4).toFloat (&okFreq);
-        int const nutc = match.captured (2).toInt (&okNutc);
-        if (!okFreq || !okNutc)
-          {
-            continue;
-          }
-        if (currentNutc > 0)
-          {
-            int const decodeAge = ft8_nutc_delta_seconds (currentNutc, nutc);
-            if (decodeAge <= 0 || decodeAge > kMaxDecodeAgeSeconds)
-              {
-                continue;
-              }
-          }
-        QString const normalizedMessage = normalize_a7_logged_message (match.captured (5));
-        if (!normalizedMessage.startsWith (QStringLiteral ("CQ ")))
-          {
-            remember_a7_message_seed (seeds, normalizedMessage,
-                                      freq, okDt ? dt : 0.0f, nutc);
-          }
-        remember_a7_directed_pair_seeds (seeds, normalizedMessage,
-                                         freq, okDt ? dt : 0.0f, nutc);
       }
     return true;
   }
@@ -1300,6 +1360,435 @@ namespace
     return snapshot;
   }
 
+  // ---- Indice in RAM dei log dei semi ----
+  //
+  // Il refresh dei semi (ogni 10 s) riapriva ogni log e rianalizzava l'intera
+  // coda di 2 MB quattro volte, anche quando il file non era cambiato: ~400 ms
+  // per file su un Ryzen 9 5950X, mentre leggere quei 2 MB dal disco costa
+  // ~1 ms. L'indice tiene in RAM le righe gia' analizzate con il loro offset,
+  // legge dal disco solo i byte aggiunti e analizza solo le righe nuove.
+  // L'uscita e' la stessa della lettura diretta dal file:
+  //  - una riga entra se inizia dopo (dimensione - coda), come dopo seek +
+  //    readLine;
+  //  - i nominativi sono quelli di readAll in modo testo (ogni '\r' sparisce);
+  //  - le espressioni vedono la riga come readLine + trimmed + toUpper;
+  //  - l'ultima riga senza '\n' (scrittura in corso) si rianalizza ogni volta.
+  // Le catture piu' vecchie dell'eta' massima del loro filtro si scartano: con
+  // l'ora che avanza non lo passerebbero piu'. Un file piu' corto, o con gli
+  // ultimi 64 byte gia' letti diversi, si ricostruisce da capo (Erase ALL.TXT,
+  // file sostituito).
+  // DECODIUM_FT8_SEED_LOG_INDEX=0 torna alla lettura diretta;
+  // DECODIUM_FT8_SEED_LOG_INDEX_VERIFY=1 le esegue entrambe e confronta;
+  // DECODIUM_FT8_SEED_LOG_INDEX_TRACE=1 scrive il costo di ogni refresh.
+  struct SeedLogLine
+  {
+    qint64 start {0};
+    int tokenCount {0};
+    std::unique_ptr<LoggedSeedLine> knownCqCall;
+    std::unique_ptr<LoggedSeedLine> knownCq;
+    std::unique_ptr<LoggedSeedLine> a7;
+  };
+
+  struct SeedLogCollectTargets
+  {
+    HashSeedCallAccumulator* calls {nullptr};
+    QHash<QString, KnownCqCallSeed>* knownCqCalls {nullptr};
+    QHash<QString, KnownCqSeed>* knownCqs {nullptr};
+    QHash<QString, A7MessageSeed>* a7 {nullptr};
+  };
+
+  class SeedLogFileIndex
+  {
+  public:
+    explicit SeedLogFileIndex (qint64 window)
+      : window_ {window}
+    {
+    }
+
+    // Allinea l'indice al file. false se il file non si apre (indice svuotato)
+    // o se e' stata chiesta la chiusura durante l'analisi.
+    bool sync (QString const& path, QDateTime const& nowUtc)
+    {
+      lastReadBytes_ = 0;
+      QFile file {path};
+      if (!file.open (QIODevice::ReadOnly))
+        {
+          reset ();
+          return false;
+        }
+      qint64 const size = file.size ();
+      bool const appended = valid_ && size >= committed_
+                            && size - committed_ <= window_
+                            && fingerprint (file, committed_) == fingerprint_;
+      if (!appended)
+        {
+          reset ();
+          ++rebuilds_;
+          if (size > window_)
+            {
+              qint64 const start = size - window_;
+              if (!file.seek (start))
+                {
+                  reset ();
+                  return false;
+                }
+              QByteArray const skipped = file.readLine ();
+              committed_ = start + skipped.size ();
+            }
+          valid_ = true;
+        }
+      if (!file.seek (committed_))
+        {
+          reset ();
+          return false;
+        }
+      QByteArray const fresh = file.read (std::max<qint64> (0, size - committed_));
+      lastReadBytes_ = fresh.size ();
+      size_ = committed_ + fresh.size ();
+      qint64 pos = 0;
+      int parsedLines = 0;
+      for (;;)
+        {
+          qint64 const newline = fresh.indexOf ('\n', pos);
+          if (newline < 0)
+            {
+              break;
+            }
+          if ((++parsedLines & 0x3ff) == 0 && hash_seed_shutdown_requested ())
+            {
+              reset ();
+              return false;
+            }
+          SeedLogLine line;
+          line.start = committed_ + pos;
+          parse_line (fresh.mid (pos, newline - pos + 1), line, tokens_);
+          lines_.push_back (std::move (line));
+          pos = newline + 1;
+        }
+      committed_ += pos;
+      partialStart_ = committed_;
+      partial_ = fresh.mid (pos);
+      fingerprint_ = fingerprint (file, committed_);
+      trim ();
+      prune_expired_captures (nowUtc);
+      return true;
+    }
+
+    // Applica ai destinatari le righe che la lettura diretta di una coda di
+    // `tailBytes` byte avrebbe visto (tailBytes <= finestra dell'indice).
+    void collect (qint64 tailBytes, SeedLogCollectTargets const& targets,
+                  QDateTime const& nowUtc, int currentNutc) const
+    {
+      bool const seeked = tailBytes > 0 && size_ > tailBytes;
+      qint64 const lastExcluded = size_ - tailBytes;
+      auto token = tokens_.cbegin ();
+      for (SeedLogLine const& line : lines_)
+        {
+          if (!seeked || line.start > lastExcluded)
+            {
+              apply_line (line, token, targets, nowUtc, currentNutc);
+            }
+          token += line.tokenCount;
+        }
+      if (!partial_.isEmpty () && (!seeked || partialStart_ > lastExcluded))
+        {
+          std::deque<QString> partialTokens;
+          SeedLogLine line;
+          parse_line (partial_, line, partialTokens);
+          apply_line (line, partialTokens.cbegin (), targets, nowUtc, currentNutc);
+        }
+    }
+
+    int rebuilds () const { return rebuilds_; }
+    qint64 size () const { return size_; }
+    qint64 lastReadBytes () const { return lastReadBytes_; }
+    qint64 lineCount () const { return static_cast<qint64> (lines_.size ()); }
+
+  private:
+    static void parse_line (QByteArray const& raw, SeedLogLine& line,
+                            std::deque<QString>& tokens)
+    {
+      QByteArray textBytes = raw;
+      textBytes.replace ("\r", "");
+      textBytes = textBytes.toUpper ();
+      QString const text = QString::fromLatin1 (textBytes.constData (), textBytes.size ());
+      auto it = hash_seed_token_rx ().globalMatch (text);
+      while (it.hasNext ())
+        {
+          QString const call = normalized_hash_seed_call (it.next ().captured (0));
+          if (!call.isEmpty ())
+            {
+              tokens.push_back (call);
+              ++line.tokenCount;
+            }
+        }
+
+      QString const upperLine = QString::fromLatin1 (raw).trimmed ().toUpper ();
+      LoggedSeedLine parsed;
+      if (match_logged_seed_line (SeedLineKind::KnownCqCall, upperLine, parsed))
+        {
+          line.knownCqCall = std::make_unique<LoggedSeedLine> (parsed);
+        }
+      if (match_logged_seed_line (SeedLineKind::KnownCq, upperLine, parsed))
+        {
+          line.knownCq = std::make_unique<LoggedSeedLine> (parsed);
+        }
+      if (match_logged_seed_line (SeedLineKind::A7, upperLine, parsed))
+        {
+          line.a7 = std::make_unique<LoggedSeedLine> (parsed);
+        }
+    }
+
+    static void apply_line (SeedLogLine const& line,
+                            std::deque<QString>::const_iterator token,
+                            SeedLogCollectTargets const& targets,
+                            QDateTime const& nowUtc, int currentNutc)
+    {
+      if (targets.calls)
+        {
+          for (int i = 0; i < line.tokenCount; ++i, ++token)
+            {
+              push_normalized_hash_seed_call (*targets.calls, *token);
+            }
+        }
+      if (targets.knownCqCalls && line.knownCqCall)
+        {
+          apply_known_cq_call_line (*line.knownCqCall, *targets.knownCqCalls, nowUtc, currentNutc);
+        }
+      if (targets.knownCqs && line.knownCq)
+        {
+          apply_known_cq_line (*line.knownCq, *targets.knownCqs, nowUtc, currentNutc);
+        }
+      if (targets.a7 && line.a7)
+        {
+          apply_a7_line (*line.a7, *targets.a7, nowUtc, currentNutc);
+        }
+    }
+
+    static bool expired (std::unique_ptr<LoggedSeedLine> const& capture, SeedLineKind kind,
+                         QDateTime const& nowUtc)
+    {
+      // Il filtro scarta eta' < 0 o > massima; con l'ora che avanza una cattura
+      // gia' oltre la massima (o senza data valida) non passera' piu'.
+      return capture
+             && (!capture->when.isValid ()
+                 || capture->when.secsTo (nowUtc) > logged_seed_line_max_age_seconds (kind));
+    }
+
+    void prune_expired_captures (QDateTime const& nowUtc)
+    {
+      for (SeedLogLine& line : lines_)
+        {
+          if (expired (line.knownCqCall, SeedLineKind::KnownCqCall, nowUtc))
+            {
+              line.knownCqCall.reset ();
+            }
+          if (expired (line.knownCq, SeedLineKind::KnownCq, nowUtc))
+            {
+              line.knownCq.reset ();
+            }
+          if (expired (line.a7, SeedLineKind::A7, nowUtc))
+            {
+              line.a7.reset ();
+            }
+        }
+    }
+
+    void trim ()
+    {
+      if (size_ <= window_)
+        {
+          return;
+        }
+      qint64 const lastExcluded = size_ - window_;
+      while (!lines_.empty () && lines_.front ().start <= lastExcluded)
+        {
+          for (int i = 0; i < lines_.front ().tokenCount; ++i)
+            {
+              tokens_.pop_front ();
+            }
+          lines_.pop_front ();
+        }
+    }
+
+    static QByteArray fingerprint (QFile& file, qint64 end)
+    {
+      qint64 const length = std::min<qint64> (64, end);
+      if (length <= 0 || !file.seek (end - length))
+        {
+          return {};
+        }
+      return file.read (length);
+    }
+
+    void reset ()
+    {
+      lines_.clear ();
+      tokens_.clear ();
+      partial_.clear ();
+      fingerprint_.clear ();
+      committed_ = 0;
+      size_ = 0;
+      partialStart_ = 0;
+      valid_ = false;
+    }
+
+    qint64 window_;
+    std::deque<SeedLogLine> lines_;
+    std::deque<QString> tokens_;
+    QByteArray partial_;
+    QByteArray fingerprint_;
+    qint64 committed_ {0};
+    qint64 size_ {0};
+    qint64 partialStart_ {0};
+    bool valid_ {false};
+    int rebuilds_ {0};
+    qint64 lastReadBytes_ {0};
+  };
+
+  struct SeedLogIndexState
+  {
+    std::mutex mutex;
+    std::map<QString, std::unique_ptr<SeedLogFileIndex>> files;
+  };
+
+  SeedLogIndexState& seed_log_index_state ()
+  {
+    // Lasciato allocato fino all'uscita, come lo stato del worker dei semi.
+    static SeedLogIndexState* state = new SeedLogIndexState;
+    return *state;
+  }
+
+  bool seed_log_index_enabled ()
+  {
+    static bool const enabled = [] {
+      QString const value =
+          qEnvironmentVariable ("DECODIUM_FT8_SEED_LOG_INDEX").trimmed ().toLower ();
+      return !(value == QStringLiteral ("0") || value == QStringLiteral ("false")
+               || value == QStringLiteral ("no") || value == QStringLiteral ("off"));
+    } ();
+    return enabled;
+  }
+
+  // Una riga [HASHMETRIC] refresh_log_index a ogni refresh, con o senza indice.
+  bool seed_log_index_trace_enabled ()
+  {
+    static bool const enabled =
+        qEnvironmentVariableIntValue ("DECODIUM_FT8_SEED_LOG_INDEX_TRACE") > 0;
+    return enabled;
+  }
+
+  bool seed_log_index_verify_enabled ()
+  {
+    static bool const enabled =
+        qEnvironmentVariableIntValue ("DECODIUM_FT8_SEED_LOG_INDEX_VERIFY") > 0;
+    return enabled;
+  }
+
+  template <typename Seed, typename Equal>
+  bool same_seed_hash (QHash<QString, Seed> const& lhs, QHash<QString, Seed> const& rhs,
+                       Equal equal)
+  {
+    if (lhs.size () != rhs.size ())
+      {
+        return false;
+      }
+    for (auto it = lhs.cbegin (); it != lhs.cend (); ++it)
+      {
+        auto const other = rhs.constFind (it.key ());
+        if (other == rhs.cend () || !equal (it.value (), other.value ()))
+          {
+            return false;
+          }
+      }
+    return true;
+  }
+
+  // Confronta, per un file, la lettura diretta con l'indice (stessa ora).
+  bool verify_seed_log_index (QString const& path, SeedLogFileIndex const& index,
+                              bool knownCq, bool a7, QDateTime const& nowUtc,
+                              int currentNutc)
+  {
+    HashSeedCallAccumulator directCalls;
+    HashSeedCallAccumulator indexCalls;
+    QHash<QString, KnownCqCallSeed> directCqCalls, indexCqCalls;
+    QHash<QString, KnownCqSeed> directCqs, indexCqs;
+    QHash<QString, A7MessageSeed> directA7, indexA7;
+
+    // La dimensione dall'handle aperto: quella della voce di directory puo'
+    // restare indietro mentre un altro programma scrive il file.
+    auto currentSize = [&path] {
+      QFile file {path};
+      return file.open (QIODevice::ReadOnly) ? file.size () : qint64 {-1};
+    };
+    qint64 const sizeBefore = currentSize ();
+
+    collect_hash_seed_calls_from_tail (path, directCalls, kHashSeedRefreshTailBytes);
+    if (knownCq)
+      {
+        collect_known_cq_call_seeds_from_tail (path, directCqCalls, kHashSeedRefreshTailBytes,
+                                               currentNutc, nowUtc);
+        collect_known_cq_seeds_from_tail (path, directCqs, kHashSeedRefreshTailBytes,
+                                          currentNutc, nowUtc);
+      }
+    if (a7)
+      {
+        collect_a7_message_seeds_from_tail (path, directA7, kHashSeedRefreshTailBytes,
+                                            currentNutc, nowUtc);
+      }
+    qint64 const sizeAfter = currentSize ();
+    if (sizeBefore != index.size () || sizeAfter != index.size ())
+      {
+        // Il file e' cambiato fra l'indice e la lettura diretta: le due
+        // letture hanno visto file diversi e il confronto non dice nulla.
+        qInfo ().noquote () << "[SEEDINDEX] verify skipped file=" << QFileInfo {path}.fileName ()
+                            << "index_size=" << index.size ()
+                            << "size_before=" << sizeBefore << "size_after=" << sizeAfter;
+        return true;
+      }
+
+    SeedLogCollectTargets targets;
+    targets.calls = &indexCalls;
+    if (knownCq)
+      {
+        targets.knownCqCalls = &indexCqCalls;
+        targets.knownCqs = &indexCqs;
+      }
+    if (a7)
+      {
+        targets.a7 = &indexA7;
+      }
+    index.collect (kHashSeedRefreshTailBytes, targets, nowUtc, currentNutc);
+
+    bool const sameCalls = directCalls.calls == indexCalls.calls;
+    bool const sameCqCalls = same_seed_hash (directCqCalls, indexCqCalls,
+        [] (KnownCqCallSeed const& a, KnownCqCallSeed const& b) {
+          return a.call == b.call && a.freq == b.freq && a.dt == b.dt
+                 && a.nutc == b.nutc && a.hits == b.hits;
+        });
+    bool const sameCqs = same_seed_hash (directCqs, indexCqs,
+        [] (KnownCqSeed const& a, KnownCqSeed const& b) {
+          return a.call == b.call && a.grid == b.grid && a.freq == b.freq
+                 && a.dt == b.dt && a.nutc == b.nutc && a.hits == b.hits;
+        });
+    bool const sameA7 = same_seed_hash (directA7, indexA7,
+        [] (A7MessageSeed const& a, A7MessageSeed const& b) {
+          return a.message == b.message && a.freq == b.freq && a.dt == b.dt
+                 && a.nutc == b.nutc && a.hits == b.hits && a.priority == b.priority;
+        });
+    bool const same = sameCalls && sameCqCalls && sameCqs && sameA7;
+    qInfo ().noquote () << "[SEEDINDEX] verify"
+                        << (same ? "same" : "DIFF")
+                        << "file=" << QFileInfo {path}.fileName ()
+                        << "calls=" << static_cast<qint64> (directCalls.calls.size ())
+                        << "/" << static_cast<qint64> (indexCalls.calls.size ())
+                        << "cq_calls=" << directCqCalls.size () << "/" << indexCqCalls.size ()
+                        << "cq=" << directCqs.size () << "/" << indexCqs.size ()
+                        << "a7=" << directA7.size () << "/" << indexA7.size ()
+                        << "lines=" << index.lineCount ();
+    return same;
+  }
+
   HashContextRefresh collect_hash_context_refresh_snapshot (int currentNutc)
   {
     QElapsedTimer timer;
@@ -1308,6 +1797,24 @@ namespace
     refresh.currentNutc = currentNutc;
     refresh.seedKnownCqReplay = external_known_cq_seed_enabled ();
     refresh.seedExternalA7 = external_a7_seed_enabled ();
+
+    bool const useIndex = seed_log_index_enabled ();
+    SeedLogIndexState& indexState = seed_log_index_state ();
+    std::unique_lock<std::mutex> indexLock {indexState.mutex, std::defer_lock};
+    if (useIndex)
+      {
+        indexLock.lock ();
+      }
+    qint64 indexReadBytes = 0;
+    qint64 indexLines = 0;
+    int indexRebuilds = 0;
+    int verifyFiles = 0;
+    int verifyDiffs = 0;
+    qint64 verifyMs = 0;
+    // Il confronto della modalita' verifica non conta nel budget: altrimenti
+    // il refresh si fermerebbe al primo file e gli altri non verrebbero
+    // mai confrontati.
+    auto budgetElapsed = [&timer, &verifyMs] { return timer.elapsed () - verifyMs; };
 
     HashSeedCallAccumulator accumulator;
     QStringList const seedPaths =
@@ -1319,7 +1826,7 @@ namespace
           {
             break;
           }
-        if (timer.elapsed () >= kHashSeedRefreshSoftBudgetMs
+        if (budgetElapsed () >= kHashSeedRefreshSoftBudgetMs
             && !hash_seed_path_is_required_under_budget (path))
           {
             if (hash_seed_remaining_required_under_budget (seedPaths, i + 1))
@@ -1328,33 +1835,110 @@ namespace
               }
             break;
           }
-        collect_hash_seed_calls_from_tail (path, accumulator, kHashSeedRefreshTailBytes);
-        if (refresh.seedKnownCqReplay && external_known_cq_source_allowed (path))
+        bool const wantKnownCq =
+            refresh.seedKnownCqReplay && external_known_cq_source_allowed (path);
+        QDateTime const nowUtc = QDateTime::currentDateTimeUtc ();
+        if (useIndex)
           {
-            collect_known_cq_call_seeds_from_tail (path, refresh.cqCallSeeds,
-                                                   kHashSeedRefreshTailBytes,
-                                                   currentNutc);
-            collect_known_cq_seeds_from_tail (path, refresh.cqSeeds,
-                                              kHashSeedRefreshTailBytes,
-                                              currentNutc);
+            std::unique_ptr<SeedLogFileIndex>& slot = indexState.files[path];
+            if (!slot)
+              {
+                slot = std::make_unique<SeedLogFileIndex> (kHashSeedRefreshTailBytes);
+              }
+            int const rebuildsBefore = slot->rebuilds ();
+            if (slot->sync (path, nowUtc))
+              {
+                SeedLogCollectTargets targets;
+                targets.calls = &accumulator;
+                if (wantKnownCq)
+                  {
+                    targets.knownCqCalls = &refresh.cqCallSeeds;
+                    targets.knownCqs = &refresh.cqSeeds;
+                  }
+                if (refresh.seedExternalA7)
+                  {
+                    targets.a7 = &refresh.a7Seeds;
+                  }
+                slot->collect (kHashSeedRefreshTailBytes, targets, nowUtc, currentNutc);
+                if (seed_log_index_verify_enabled ())
+                  {
+                    qint64 const verifyStart = timer.elapsed ();
+                    ++verifyFiles;
+                    if (!verify_seed_log_index (path, *slot, wantKnownCq,
+                                                refresh.seedExternalA7, nowUtc,
+                                                currentNutc))
+                      {
+                        ++verifyDiffs;
+                      }
+                    verifyMs += timer.elapsed () - verifyStart;
+                  }
+              }
+            indexReadBytes += slot->lastReadBytes ();
+            indexLines += slot->lineCount ();
+            indexRebuilds += slot->rebuilds () - rebuildsBefore;
           }
-        if (refresh.seedExternalA7)
+        else
           {
-            collect_a7_message_seeds_from_tail (path, refresh.a7Seeds,
-                                                kHashSeedRefreshTailBytes,
-                                                currentNutc);
+            collect_hash_seed_calls_from_tail (path, accumulator, kHashSeedRefreshTailBytes);
+            if (wantKnownCq)
+              {
+                collect_known_cq_call_seeds_from_tail (path, refresh.cqCallSeeds,
+                                                       kHashSeedRefreshTailBytes,
+                                                       currentNutc, nowUtc);
+                collect_known_cq_seeds_from_tail (path, refresh.cqSeeds,
+                                                  kHashSeedRefreshTailBytes,
+                                                  currentNutc, nowUtc);
+              }
+            if (refresh.seedExternalA7)
+              {
+                collect_a7_message_seeds_from_tail (path, refresh.a7Seeds,
+                                                    kHashSeedRefreshTailBytes,
+                                                    currentNutc, nowUtc);
+              }
           }
         ++refresh.filesRead;
         if (refresh.filesRead >= kHashSeedRefreshMaxFiles
-            || (timer.elapsed () >= kHashSeedRefreshSoftBudgetMs
+            || (budgetElapsed () >= kHashSeedRefreshSoftBudgetMs
                 && !hash_seed_remaining_required_under_budget (seedPaths, i + 1)))
           {
             break;
           }
       }
 
+    if (useIndex)
+      {
+        // I log che non sono piu' fra i candidati (cambio di mese, file
+        // spariti) lasciano la RAM.
+        for (auto it = indexState.files.begin (); it != indexState.files.end ();)
+          {
+            if (seedPaths.contains (it->first))
+              {
+                ++it;
+              }
+            else
+              {
+                it = indexState.files.erase (it);
+              }
+          }
+      }
+
     refresh.calls = accumulator.to_list ();
     refresh.elapsedMs = timer.elapsed ();
+    if (seed_log_index_trace_enabled ()
+        || (useIndex && (indexRebuilds > 0 || refresh.elapsedMs >= 100 || verifyFiles > 0)))
+      {
+        qInfo ().noquote () << "[HASHMETRIC] refresh_log_index"
+                            << "mode=" << (useIndex ? "index" : "direct")
+                            << "files=" << refresh.filesRead
+                            << "candidates=" << seedPaths.size ()
+                            << "read_bytes=" << indexReadBytes
+                            << "rebuilds=" << indexRebuilds
+                            << "lines=" << indexLines
+                            << "elapsed_ms=" << refresh.elapsedMs
+                            << "verify_ms=" << verifyMs
+                            << "verify_files=" << verifyFiles
+                            << "verify_diffs=" << verifyDiffs;
+      }
     return refresh;
   }
 
