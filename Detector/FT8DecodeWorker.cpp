@@ -459,13 +459,21 @@ namespace
     qint64 elapsedMs {0};
   };
 
+  // Locatore di 4 caratteri. Compilata una volta: costruirla a ogni seme
+  // (compilazione + JIT) costava piu' di tutto il resto del refresh.
+  QRegularExpression const& four_char_grid_rx ()
+  {
+    static QRegularExpression const gridRx {QStringLiteral (R"(^[A-R]{2}\d{2}$)")};
+    return gridRx;
+  }
+
   void remember_known_cq_seed (QHash<QString, KnownCqSeed>& seeds, QString call,
                                QString grid, float freq, float dt, int nutc)
   {
     call = call.trimmed ().toUpper ();
     grid = grid.trimmed ().toUpper ();
     if (!plausible_hash_seed_token (call)
-        || !QRegularExpression {QStringLiteral (R"(^[A-R]{2}\d{2}$)")}.match (grid).hasMatch ()
+        || !four_char_grid_rx ().match (grid).hasMatch ()
         || freq <= 0.0f || nutc <= 0)
       {
         return;
@@ -774,8 +782,9 @@ namespace
 
   QString normalize_a7_logged_message (QString message)
   {
+    static QRegularExpression const trailingMarksRx {QStringLiteral (R"(\s+[\^*?#]+$)")};
     message = message.trimmed ().toUpper ();
-    message.remove (QRegularExpression {QStringLiteral (R"(\s+[\^*?#]+$)")});
+    message.remove (trailingMarksRx);
     message = message.simplified ();
     if (message.isEmpty () || message.size () > kDecodedChars
         || message.contains (QLatin1Char ('<')) || message.contains (QLatin1Char ('/')))
@@ -795,7 +804,7 @@ namespace
             return {};
           }
         if (words.size () == 3
-            && !QRegularExpression {QStringLiteral (R"(^[A-R]{2}\d{2}$)")}.match (words.value (2)).hasMatch ())
+            && !four_char_grid_rx ().match (words.value (2)).hasMatch ())
           {
             return {};
           }
