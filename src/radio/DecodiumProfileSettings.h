@@ -8,6 +8,8 @@
 #include <QString>
 #include <QVariant>
 
+#include "DecodiumSettingsPool.h"
+
 namespace decodium
 {
 
@@ -25,9 +27,8 @@ inline QString activeSettingsProfileName()
     // starting Decodium with `-config`.  Treat that persisted selection as the
     // active profile too; otherwise QML can display a profile value while C++
     // services silently fall back to the stale [General] value.
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope,
-                       QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
-    return settings.value(QStringLiteral("CurrentMultiSettingsConfiguration")).toString().trimmed();
+    PooledSettings settings;
+    return settings->value(QStringLiteral("CurrentMultiSettingsConfiguration")).toString().trimmed();
 }
 
 inline void ensureSettingsProfileInitialized(const QString& profileName)
@@ -36,7 +37,8 @@ inline void ensureSettingsProfileInitialized(const QString& profileName)
         return;
     }
 
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    PooledSettings pooled;
+    QSettings& settings = *pooled;
     // Decodium's QML settings profiles are stored as top-level INI groups
     // (`CODEXPERF\\MaxCallerRetries`), whereas the old WSJT-X MultiSettings
     // profiles live below `MultiSettings/`.  Prefer the direct group so the
@@ -126,17 +128,21 @@ inline QVariant profiledSettingsValue(const QString& group,
                                       const QString& key,
                                       const QVariant& defaultValue = QVariant {})
 {
-    QSettings profiled(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
-    if (beginActiveSettingsProfile(profiled)) {
-        if (!group.isEmpty()) {
-            profiled.beginGroup(group);
-        }
-        if (profiled.contains(key)) {
-            return profiled.value(key, defaultValue);
+    {
+        PooledSettings pooled;
+        QSettings& profiled = *pooled;
+        if (beginActiveSettingsProfile(profiled)) {
+            if (!group.isEmpty()) {
+                profiled.beginGroup(group);
+            }
+            if (profiled.contains(key)) {
+                return profiled.value(key, defaultValue);
+            }
         }
     }
 
-    QSettings root(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    PooledSettings pooled;
+    QSettings& root = *pooled;
     if (!group.isEmpty()) {
         root.beginGroup(group);
     }

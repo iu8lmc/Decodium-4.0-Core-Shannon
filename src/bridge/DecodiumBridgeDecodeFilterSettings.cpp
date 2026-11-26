@@ -95,7 +95,8 @@ DecodeUserFilterConfig DecodiumBridge::readDecodeUserFilterConfig() const
     // store only once for the complete filter snapshot. Constructing two or
     // more QSettings objects per key was a visible decode-delivery spike on
     // Windows and also performed repeated filesystem/profile discovery.
-    QSettings legacySettings(legacyIniPath(), QSettings::IniFormat);
+    decodium::PooledSettings pooledLegacy(legacyIniPath());
+    QSettings& legacySettings = *pooledLegacy;
     legacySettings.beginGroup(QStringLiteral("MultiSettings"));
     QString legacyCurrentGroup = legacySettings.value(QStringLiteral("CurrentName")).toString();
     legacySettings.endGroup();
@@ -109,8 +110,8 @@ DecodeUserFilterConfig DecodiumBridge::readDecodeUserFilterConfig() const
     };
     legacyGroups.removeDuplicates();
 
-    QSettings profileSettings(QSettings::IniFormat, QSettings::UserScope,
-                              QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    decodium::PooledSettings pooledProfile;
+    QSettings& profileSettings = *pooledProfile;
     decodium::beginActiveSettingsProfile(profileSettings);
 
     auto readLegacySetting = [&legacySettings, &legacyGroups](QString const& key) {

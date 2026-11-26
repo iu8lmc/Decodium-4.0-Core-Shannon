@@ -46,7 +46,8 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
 {
     // Startup reads this before a configuration/profile can be selected.
     if (key == QStringLiteral("uiScaleFactor")) {
-        QSettings root(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        decodium::PooledSettings pooledRoot;
+        QSettings& root = *pooledRoot;
         return root.value(key, defaultValue);
     }
     QVariant effectiveDefault = defaultValue;
@@ -58,7 +59,8 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
     if (isProfileServiceCompatibilitySetting(key)) {
         QString const canonicalKey = canonicalProfileServiceSettingKey(key);
         QString const legacyKey = legacyProfileServiceSettingKey(canonicalKey);
-        QSettings s(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        decodium::PooledSettings pooledSettings;
+        QSettings& s = *pooledSettings;
         decodium::beginActiveSettingsProfile(s);
 
         QVariant storedValue = s.value(canonicalKey);
@@ -109,7 +111,8 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
     if (key == QStringLiteral("PSKReporterTCPIP") || key == QStringLiteral("PSKRtcpip")) {
         // This switch belongs to the D4 reporting page.  Prefer QSettings so a
         // stale decodium4.ini legacy value cannot re-enable TCP/IP at startup.
-        QSettings s(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        decodium::PooledSettings pooledSettings;
+        QSettings& s = *pooledSettings;
         decodium::beginActiveSettingsProfile(s);
         QVariant value = readBridgeSettingWithAlias(s, key);
         if (!value.isValid()) {
@@ -140,7 +143,8 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
                 }
             }
 
-            QSettings s(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+            decodium::PooledSettings pooledSettings;
+            QSettings& s = *pooledSettings;
             decodium::beginActiveSettingsProfile(s);
             QVariant v = s.value(settingKey);
             if (!v.isValid()) {
@@ -186,7 +190,8 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
         }
     }
 
-    QSettings s(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+    decodium::PooledSettings pooledSettings;
+    QSettings& s = *pooledSettings;
     decodium::beginActiveSettingsProfile(s);
     QVariant value = readBridgeSettingWithAlias(s, key);
     if (!value.isValid() && key == QStringLiteral("RemoteHttpPort")) {

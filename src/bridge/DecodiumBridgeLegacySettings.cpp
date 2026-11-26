@@ -24,7 +24,8 @@ QString DecodiumBridge::legacyConfigGroupName() const
 {
     // MultiSettings stores the active configuration name at
     // MultiSettings/CurrentName inside the INI file.
-    QSettings ini(legacyIniPath(), QSettings::IniFormat);
+    decodium::PooledSettings pooledIni(legacyIniPath());
+    QSettings& ini = *pooledIni;
     ini.beginGroup(QStringLiteral("MultiSettings"));
     QString name = ini.value(QStringLiteral("CurrentName")).toString();
     ini.endGroup();
@@ -267,7 +268,8 @@ QVariant DecodiumBridge::readSettingFromLegacyIni(const QString& key) const
     // value explicitly saved for this dashboard profile must not be shadowed
     // by another instance's legacy root value.
     if (!decodium::activeSettingsProfileName().isEmpty()) {
-        QSettings profile(QSettings::IniFormat, QSettings::UserScope, "Decodium", "Decodium3");
+        decodium::PooledSettings pooledProfile;
+        QSettings& profile = *pooledProfile;
         decodium::beginActiveSettingsProfile(profile);
         if (profile.contains(key)) return profile.value(key);
         const QString alias = decodiumBridgeAliasedSettingKey(key);
@@ -276,7 +278,8 @@ QVariant DecodiumBridge::readSettingFromLegacyIni(const QString& key) const
     QString const iniPath = legacyIniPath();
     if (iniPath.isEmpty()) return {};
 
-    QSettings ini(iniPath, QSettings::IniFormat);
+    decodium::PooledSettings pooledIni(iniPath);
+    QSettings& ini = *pooledIni;
     QVariant value = ini.value(key);
     if (value.isValid()) {
         return value;
