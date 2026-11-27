@@ -1,0 +1,1264 @@
+web server bridge: A/B source equivalence OK
+decode worker initialization: A/B source equivalence OK
+decode backlog: A/B source equivalence OK
+decode clear: A/B source equivalence OK
+asynchronous DXCC/history: A/B source equivalence OK
+CPU pressure: A/B source equivalence OK
+decode context reset: A/B source equivalence OK
+decode flow and shared trace scope: A/B source equivalence OK
+teleprinter: A/B source equivalence OK
+diagnostic overlay: A/B source equivalence OK
+known CQ seeding: A/B source equivalence OK
+audio levels: A/B source equivalence OK
+UI stall diagnostics: A/B source equivalence OK
+QSO log preview: A/B source equivalence OK
+automatic RX level: A/B source equivalence OK
+audio health: A/B source equivalence OK
+mode-change audio recovery: A/B source equivalence OK
+audio watchdog recovery: A/B source equivalence OK
+RTTY exit recovery: A/B source equivalence OK
+audio capture stop: A/B source equivalence OK
+audio buffer lifecycle: A/B source equivalence OK
+TX scheduling: A/B source equivalence OK
+TX timing: A/B source equivalence OK
+autolog snapshot lifecycle: A/B source equivalence OK
+prompt snapshot: A/B source equivalence OK
+prompt lifecycle: A/B source equivalence OK
+audio device cache access: A/B source equivalence OK
+audio input selection: A/B source equivalence OK
+audio device cache refresh: A/B source equivalence OK
+audio cache helpers: A/B source equivalence OK
+decode model filter: A/B source equivalence OK
+decode visibility: A/B source equivalence OK
+decode UI scheduling: A/B source equivalence OK
+full spectrum snapshot: A/B source equivalence OK
+decode UI notifications: A/B source equivalence OK
+decode UI snapshot: A/B source equivalence OK
+legacy ownership: A/B source equivalence OK
+legacy refresh: A/B source equivalence OK
+legacy dialog sync: A/B source equivalence OK
+legacy RX handoff: A/B source equivalence OK
+legacy PCM recovery: A/B source equivalence OK
+decode shutdown: A/B source equivalence OK
+QSY guard: A/B source equivalence OK
+visual feed scheduling: A/B source equivalence OK
+world map queue: A/B source equivalence OK
+world map reset: A/B source equivalence OK
+world map replay: A/B source equivalence OK
+world map QSO path: A/B source equivalence OK
+world map grid: A/B source equivalence OK
+world map entry: A/B source equivalence OK
+world map selection: A/B source equivalence OK
+legacy ADIF mirror: A/B source equivalence OK
+FT2 log bridge: A/B source equivalence OK
+decode alerts: A/B source equivalence OK
+station telemetry timer: A/B source equivalence OK
+RX terminal launcher: A/B source equivalence OK
+CW monitor settings: A/B source equivalence OK
+RX recording control: A/B source equivalence OK
+panadapter registration: A/B source equivalence OK
+secondary decode queues: A/B source equivalence OK
+legacy decode delta: A/B source equivalence OK
+legacy ALL.TXT path and append: A/B source equivalence OK
+worked history: A/B source equivalence OK
+PSK Reporter bridge: A/B source equivalence OK
+station identity and messages: A/B source equivalence OK
+decode persistence: A/B source equivalence OK
+metrics: A/B OK
+unmarked:4
+independent:4
+elapsed:4
+reset:1
+grid: A/B OK
+invalid-origin
+invalid-destination
+bearing-invalid-origin
+bearing-invalid-destination
+invalid-coordinates
+same-grid
+grid-latitude
+grid-longitude
+distance-symmetry
+bearing-range
+lowercase
+online_logbook: A/B OK
+cloud-missing-credentials
+cloud-missing-client
+cloud-unchanged-no-notify
+cloud-settings-propagated
+cloud-test-upper-bound
+cloud-test-lower-bound
+qrz-missing-key
+qrz-missing-client
+qrz-settings-propagated
+qrz-unchanged-no-notify
+qrz-test
+qrz-whitespace-key
+world_clock: A/B OK
+utc-zone
+utc-clock
+invalid-falls-back-utc
+blank-falls-back-utc
+rome-offset
+default-list
+minimum-limit
+missing-city
+rome-italian-alias
+rome-english-alias-case
+london-alias
+maximum-requested
+unique-default-zone
+unique-default-zone
+unique-default-zone
+unique-default-zone
+unique-default-zone
+unique-default-zone
+unique-default-zone
+unique-default-zone
+unique-default-zone
+fileio: A/B OK
+temp-dir
+text-empty-path
+text-write-nested-utf8
+text-read-url
+text-truncate
+text-min-limit
+text-missing
+text-write-empty
+bytes-write-url
+bytes-roundtrip
+bytes-truncate
+bytes-empty-path
+bytes-missing
+bytes-write-empty-path
+bytes-write-empty-data
+failed-write-preserves-data
+large-write
+text-max-limit
+bytes-max-limit
+text-overwrite-empty
+updates: A/B OK
+offline preserves state; disabled clears state once; repeated check: OK
+cpuprofile: A/B OK
+thread bounds/cycle/auto; low CPU/low-end restoration; graphics reset; weak-computer probe: OK
+partner: A/B OK
+partner gates, resume, TX guard, expiry/prune, one-shot resend and settings: OK
+received: A/B OK
+async text, binary, invalid base64, safe names, collision and directory: OK
+CAT profiles: A/B OK
+isolated-settings
+suggested-name
+reject-empty-name
+save-normalized
+save-all-managers
+startup-preserves-live-settings
+load-cancels-active-sstv
+load-missing
+load-existing
+load-restores-snapshot
+rename-active
+rename-case-noop
+rename-conflict
+delete-missing
+delete-active
+delete-final
+native-profile-save-and-apply
+unsupported-backend-normalized
+profile-name-length-limit
+reject-invalid-profile-operations
+decode normalization: A/B OK
+trim
+remove-tu
+nbsp-cut
+header-annotation
+short-header
+plain-preserved
+ap-captured
+ap-existing-preserved
+non-suffix-preserved
+canonical-annotation
+empty
+TX timing: A/B OK
+unaligned
+invalid-format
+empty-pcm
+invalid-period
+before-leadin
+short-delay-shift
+ft8-full-frame
+ft8-late-trim
+clamp-last-frame
+q65-safe-shift
+q65-late-trim
+null-elapsed-pointer
+ft4-late-trim
+jt4-safe-shift
+fst4-15-leadin
+fst4-30-leadin
+stereo-frame-alignment
+keyboard audio: A/B OK
+rtty-ready
+jtty-ready-case
+reject-slot-mode
+reject-transmitting
+reject-tuning
+reject-sstv
+reject-remote
+reject-other-key
+reject-missing-device
+reject-null-device
+ignore-unkeyed-audio
+key-on
+key-on-idempotent
+send-keyed-samples
+release-when-busy
+key-off-idempotent
+rtty-monitor-notifications
+cw-remote-monitor
+caller queue: A/B OK
+hold-keeps-queue
+skip-duplicate-and-start-next
+reset-qso-state
+empty-restarts-cq
+empty-no-restart
+manual-enqueue-pins
+move-clamps-and-pins-order
+invalid-and-noop-move
+dequeue
+clear-resets-metadata
+clear-empty
+clamp-report-and-abort-transition
+portable-pin-base-call
+portable-selection-base-call
+window state: A/B OK
+isolated-settings
+empty-and-missing
+sync-roundtrip
+ignore-empty-key
+async-finished
+async-partial-preserves-fields
+layout-and-empty-ignored
+empty-batch
+reset-removes-window-state
+reset-preserves-other-settings
+decode colors: A/B OK
+isolated
+all-properties
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+property-value
+invalid-property
+bold-defaults
+disable-color
+unchanged-no-signal
+set-bold
+strikethrough
+tx-precedence
+disabled-cq-precedence
+new-grid
+background-settings
+background-cq
+signoff-before-cq
+tx-before-signoff
+persisted
+decode dedup: A/B OK
+ignore-empty
+native-capacity
+native-duplicate
+ft2-capacity
+reset-session
+ft2-entry
+entry-duplicate
+skip-tx-old-empty
+session-reset-non-ft2
+rebuild-index
+mirror-rebuild
+FTX profiles: A/B OK
+isolated
+weak
+contest
+cpu
+fallback-balanced
+profile-guard
+manual-clear
+auto-max-and-legacy
+unchanged
+auto-min
+persist
+TX messages: A/B OK
+set-and-legacy
+set-and-legacy
+set-and-legacy
+set-and-legacy
+set-and-legacy
+notifications
+unchanged
+low-bound
+standard-cq
+custom-cq
+reset
+empty-rejected
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+validation-mode
+unhandled-mode
+no-legacy
+logbook settings: A/B OK
+isolated
+directory
+sanitize
+empty-stem
+stem-length
+empty-profile
+unique-names
+rename-existing
+save-reload
+ensure-default
+logbook profiles: A/B OK
+isolated
+backup-missing
+create
+created-state
+backup-existing
+create-collision
+switch-url
+add-missing
+add-empty
+invalid-delete
+delete-inactive
+remove-active-keep-file
+delete-last-replacement
+save-and-reload
+[ADIF] truncated field discarded at byte 27
+[ADIF] oversized field discarded at byte 29 length 65537
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/src/bridge/AdifDocumentInternal.cpp:230:9: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+  230 |     utc.setTimeSpec(Qt::UTC);
+      |         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+[ADIF] truncated field discarded at byte 27
+[ADIF] oversized field discarded at byte 29 length 65537
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_normalization_harness.cpp:5:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_adif_normalization.inc:49:9: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+   49 |     utc.setTimeSpec(Qt::UTC);
+      |         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/src/bridge/AdifDocumentInternal.cpp:230:9: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+  230 |     utc.setTimeSpec(Qt::UTC);
+      |         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_import_harness.cpp:26:316: warning: ignoring return value of function declared with 'nodiscard' attribute [-Wunused-result]
+   26 |  QString changingSource=d.filePath("changing-source.adi"),safeDest=d.filePath("safe-dest.adi");fixture(changingSource,header+second);fixture(safeDest,header+first);bool altered=false;result=importAdifDocumentInBackground(changingSource,safeDest,[&](int p,const QString&){if(p>=20&&!altered){QFile f(changingSource);f.open(QIODevice::Append);f.write("x");altered=true;}});check(!result.value("ok").toBool()&&bytes(safeDest)==header+first,"source-race");
+      |                                                                                                                                                                                                                                                                                                                            ^~~~~~ ~~~~~~~~~~~~~~~~~
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_import_harness.cpp:27:211: warning: ignoring return value of function declared with 'nodiscard' attribute [-Wunused-result]
+   27 |  fixture(changingSource,header+second);fixture(safeDest,header+first);altered=false;result=importAdifDocumentInBackground(changingSource,safeDest,[&](int p,const QString&){if(p>=35&&!altered){QFile f(safeDest);f.open(QIODevice::Append);f.write("x");altered=true;}});check(!result.value("ok").toBool()&&bytes(safeDest)==header+first+"x","destination-race");
+      |                                                                                                                                                                                                                   ^~~~~~ ~~~~~~~~~~~~~~~~~
+2 warnings generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/src/bridge/AdifDocumentInternal.cpp:230:9: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+  230 |     utc.setTimeSpec(Qt::UTC);
+      |         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_import_harness.cpp:26:316: warning: ignoring return value of function declared with 'nodiscard' attribute [-Wunused-result]
+   26 |  QString changingSource=d.filePath("changing-source.adi"),safeDest=d.filePath("safe-dest.adi");fixture(changingSource,header+second);fixture(safeDest,header+first);bool altered=false;result=importAdifDocumentInBackground(changingSource,safeDest,[&](int p,const QString&){if(p>=20&&!altered){QFile f(changingSource);f.open(QIODevice::Append);f.write("x");altered=true;}});check(!result.value("ok").toBool()&&bytes(safeDest)==header+first,"source-race");
+      |                                                                                                                                                                                                                                                                                                                            ^~~~~~ ~~~~~~~~~~~~~~~~~
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_import_harness.cpp:27:211: warning: ignoring return value of function declared with 'nodiscard' attribute [-Wunused-result]
+   27 |  fixture(changingSource,header+second);fixture(safeDest,header+first);altered=false;result=importAdifDocumentInBackground(changingSource,safeDest,[&](int p,const QString&){if(p>=35&&!altered){QFile f(safeDest);f.open(QIODevice::Append);f.write("x");altered=true;}});check(!result.value("ok").toBool()&&bytes(safeDest)==header+first+"x","destination-race");
+      |                                                                                                                                                                                                                   ^~~~~~ ~~~~~~~~~~~~~~~~~
+2 warnings generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/src/bridge/AdifDocumentInternal.cpp:230:9: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+  230 |     utc.setTimeSpec(Qt::UTC);
+      |         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_wav_decode_harness.cpp:17:117: warning: ignoring return value of function declared with 'nodiscard' attribute [-Wunused-result]
+   17 |  b.openWavForDecode(d.filePath("missing.wav"));check(b.errors.size()==1,"missing");QFile t(d.filePath("short.wav"));t.open(QIODevice::WriteOnly);t.write("RIFF");t.close();b.openWavForDecode(t.fileName());check(b.errors.size()==2,"short");
+      |                                                                                                                     ^~~~~~ ~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_wav_decode_harness.cpp:17:117: warning: ignoring return value of function declared with 'nodiscard' attribute [-Wunused-result]
+   17 |  b.openWavForDecode(d.filePath("missing.wav"));check(b.errors.size()==1,"missing");QFile t(d.filePath("short.wav"));t.open(QIODevice::WriteOnly);t.write("RIFF");t.close();b.openWavForDecode(t.fileName());check(b.errors.size()==2,"short");
+      |                                                                                                                     ^~~~~~ ~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_log_prompt_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_log_prompt.inc:56:20: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+   56 |             parsed.setTimeSpec(Qt::UTC);
+      |                    ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_log_prompt_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_log_prompt.inc:74:20: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+   74 |             return QDateTime(fallback.date(), parsed, Qt::UTC);
+      |                    ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_log_prompt_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_log_prompt.inc:74:20: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+   74 |             return QDateTime(fallback.date(), parsed, Qt::UTC);
+      |                    ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+3 warnings generated.
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_log_prompt_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_log_prompt.inc:56:20: warning: 'setTimeSpec' is deprecated: Use setTimeZone() instead [-Wdeprecated-declarations]
+   56 |             parsed.setTimeSpec(Qt::UTC);
+      |                    ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:435:5: note: 'setTimeSpec' has been explicitly marked deprecated here
+  435 |     QT_DEPRECATED_VERSION_X_6_9("Use setTimeZone() instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_log_prompt_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_log_prompt.inc:74:20: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+   74 |             return QDateTime(fallback.date(), parsed, Qt::UTC);
+      |                    ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_log_prompt_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_log_prompt.inc:74:20: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+   74 |             return QDateTime(fallback.date(), parsed, Qt::UTC);
+      |                    ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+3 warnings generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_record_harness.cpp:16:22: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+   16 | int main(){QDateTime on(QDate(2026,11,7),QTime(12,30,0),Qt::UTC),off=on.addSecs(60);
+      |                      ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_adif_record_harness.cpp:16:22: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+   16 | int main(){QDateTime on(QDate(2026,11,7),QTime(12,30,0),Qt::UTC),off=on.addSecs(60);
+      |                      ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_decode_history_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_decode_history.inc:287:41: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+  287 |         QDateTime const dt = QDateTime::fromMSecsSinceEpoch(ts, Qt::UTC);
+      |                                         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+In file included from /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/bridge_refactor_decode_history_harness.cpp:9:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-bridge-ab-qcx8bjga/bridge_refactor_decode_history.inc:287:41: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+  287 |         QDateTime const dt = QDateTime::fromMSecsSinceEpoch(ts, Qt::UTC);
+      |                                         ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+1 warning generated.
+time sync: A/B OK
+isolated
+default-ft8
+legacy-disable
+explicit-wins-ft2
+ft4
+other-mode
+missing-client
+global NTP offset shared across translation units
+ADIF export: A/B OK
+isolated
+empty-path
+open-source
+same-path
+copy
+copy-content
+remove-fixture
+open-text
+fallback-export
+open-export
+fallback-content
+import-delegation
+SSTV storage state enabled=0: A/B OK
+defaults
+sstv-disabled
+SSTV storage state enabled=1: A/B OK
+defaults
+unavailable
+not-ready
+enable
+unchanged
+disable
+job
+replay
+AutoCQ cadence: A/B OK
+eligible
+partner-blocks
+tx6-disabled
+legacy-sync
+ignore-failed
+first-call
+burst-pause
+pause-wakes
+generic-pause
+mode-reset
+limit-stops
+ADIF document: A/B OK
+isolated
+missing
+two-records
+truncated-field
+oversized-skipped
+field-cap
+write
+read-back-utf8-and-sanitize
+bom-file
+bom
+ADIF normalization: A/B OK
+dates
+time
+mode-and-datetime
+frequency-band
+normalize-record
+dedupe-normalized
+empty-call
+raw-fallback
+invalid-primary-not-fallback
+rx-frequency-fallback
+ADIF import: A/B OK
+isolated
+merge
+backup-original
+duplicate-no-backup
+same-path
+missing-source
+empty-source
+source-race
+destination-race
+confirmed-provider
+confirmed-provider
+confirmed-provider
+ADIF async bridge methods: A/B source equivalence OK
+ADIF editing bridge methods: A/B source equivalence OK
+ADIF editing shared helpers: A/B source equivalence OK
+Advanced decode methods: A/B source equivalence OK
+Panadapter FFT state methods: A/B source equivalence OK
+UI preferences: A/B source equivalence OK
+decode timing: A/B OK
+modes
+ft8-threshold
+ft4-threshold
+median
+smooth
+decay
+non-sync-cleanup
+reset
+decode sample windows: A/B OK
+ft8
+ft4
+q65-fst4
+wspr
+jt-unknown
+decode period: A/B OK
+standard
+msk-override
+msk-override
+msk-override
+msk-override
+invalid-override
+unavailable
+different-mode
+WAV decode: A/B OK
+isolated
+missing
+short
+pcm16
+dispatch16
+pcm8
+dispatch8
+unsupported
+missing-folder
+empty-folder
+batch
+Font settings: A/B source equivalence OK
+log prompt: A/B OK
+spot-enable
+spot-clear
+comment
+grid
+datetime
+clamp-reversed
+time-only
+utc-suffix-fallback
+fallback
+ADIF record serialization: A/B source equivalence OK
+ADIF record: A/B OK
+basic
+utf8-satellite
+metadata
+fallbacks
+decode history: A/B OK
+isolated
+open
+insert
+insert
+insert
+stats
+sessions
+distinct
+callsign
+band-mode
+limit-session
+parameterized
+export
+export-contents
+prune
+date-filter
+MAM frequency plan: A/B OK
+ft8-spacing
+ft2-spacing
+ft4-upper-bound
+lower-bound
+zero
+AutoCQ dedupe: A/B OK
+invalid
+abandoned-short
+abandoned-expired
+worked-long
+worked-expired
+touch
+logged
+mode-separation
+SSTV controls: A/B source equivalence OK
+SSTV configuration: A/B source equivalence OK
+Local data state and paths: A/B source equivalence OK
+network preferences: A/B OK
+isolated
+default-port
+http-fallback
+configured-port
+active-server
+interfaces-unique
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+interfaces-sorted
+legacy-fallback
+set
+clear
+world map consumers: A/B OK
+initial
+null
+add
+duplicate
+second
+remove-one
+destroy-last
+hidden
+decode row parsers: A/B OK
+ft8: 1234|-12|0.3|1300|CQ K1ABC FN42|1|100|1500
+ft8-invalid: 
+wspr: 2256|-21|-0.3|1290|DU1MGA PK04 37|0|100|1490
+wspr-invalid-call: 
+wspr-invalid-power: 
+wspr-finished: 
+wspr-fallback: 2256|-21|-0.3|1200|<K1ABC> FN42 20|0|100|1400
+jt65: 1234|-12|0.3|1300|CQ K1ABC FN42||100|1500
+jt65-short: 
+QSO cache: A/B OK
+count
+all
+filters
+filter-miss
+grid
+stats
+cache-hit
+invalidate
+warmup
+SSTV TX state enabled=0: A/B OK
+disabled-ready
+disabled-state
+disabled-reason
+SSTV TX state enabled=1: A/B OK
+studio-missing
+source-missing
+preview-missing
+busy
+preflight-missing
+ready-local
+multiple-blockers
+rejection
+diagnostics
+active
+state
+tci-blocked
+target call settings: A/B OK
+callsign
+upper-and-lower
+no-duplicate-notify
+persistence
+opposite-bounds
+target call lifecycle: A/B OK
+empty
+autocall-blocked
+armed-start
+simulated-calling
+rearm
+rearm-cap-stop
+simulated-immediate
+stop
+target call decode: A/B OK
+cq-target
+recipient-not-sender
+ghost-suppressed
+armed-trigger-simulated
+heard-resets
+heard-tick
+tx-edge
+retry-limit
+pause
+resume-simulated
+Auto Call: A/B OK
+mode-blocked
+swr-blocked
+target-blocked
+qso-blocked
+enable
+abort-swr
+limits-persist
+counter-reset
+frequency calibration: A/B OK
+zero-calibration
+clamp
+station-offset
+inferred-inverse
+active-inverse
+invalid-input
+ordinary-inverse
+TX protection: A/B OK
+swr-disabled
+swr-block
+swr-boundary
+swr-stop
+power-safe
+power-stop
+power-throttle
+swr-clamped
+legacy settings: A/B OK
+default-path-group
+key-membership
+active-group
+group-fallback
+write-groups
+profile-and-alias
+missing
+station frequencies: A/B OK
+invalid
+add-offset
+second
+sorted
+replace
+update
+write-failure
+delete
+bad-index
+satellite options: A/B OK
+fixture
+fallback-fixture
+parse-dedupe-first
+oversize-open
+oversize-fixture
+oversize-fallback
+modes
+TCI audio: A/B OK
+no-cat
+port-type
+offline
+capture-start
+monitor-gate
+pcm-ft8
+pcm-ft2
+tx-gate
+empty-wave
+wave-tx-simulated
+tune-simulated
+tx-stop-simulated
+capture-stop
+RTL-SDR samples: A/B OK
+monitor-gate
+demod-gate
+pcm-ft8
+pcm-ft2
+tx-gate
+short-iq
+iq-start
+iq-wrap
+invalid-rate
+RTL-SDR spectrum: A/B OK
+empty-gate
+busy-gate
+real-fft-publish
+frequency-span
+stale-view-suppressed
+RTL-SDR playback: A/B OK
+rate-gate
+missing-device
+disabled-gate
+weak-signal-gate
+fallback-and-enqueue
+tx-gate
+stop
+US state and LotW controls: A/B OK
+missing-manager
+enable-and-persist
+duplicate
+state-getters
+offline
+update
+callsign
+lotw-enable
+forced
+disable-refresh
+LotW cache loading: A/B OK
+parse-dedupe
+empty-csv
+offline-no-cache
+fixture
+async-offline-cache
+forced-offline
+legacy-fixture
+migration-and-load
+LotW network callbacks: A/B OK
+network-success
+network-error-retains-cache
+network-error-report
+network-empty-csv
+decode depth: A/B OK
+frequencies
+depth-clamp-legacy
+persist
+no-duplicate
+ft4-default
+deep-legacy
+latency-guard
+low-cpu
+legacy-hints
+MAM controls: A/B OK
+settings-no-tx
+slot-view
+stream-view
+experimental-mode
+log-simulated
+drop
+clear-payload
+clear-queue
+sequencer-active
+sequencer-hold
+external URL: A/B OK
+empty
+scheme-block
+https
+mailto
+local-file
+opener-failure
+status-count
+working frequencies: A/B source equivalence OK (real-model runtime: bridge_workingfreq_real_ab.py)
+audio spectrum: A/B OK
+fft-impulse
+insufficient-input
+fft-tone
+empty-band
+remote-quantize
+invalid-span
+stale-serial
+tx-gate
+smooth-and-publish
+panadapter FFT fallback: A/B OK
+short-input
+tone-peak
+levels
+invalid-band
+repeat-workspace
+panadapter FFT fftw: A/B OK
+short-input
+tone-peak
+levels
+invalid-band
+repeat-workspace
+Cabrillo export: A/B OK
+missing-input
+fixture
+export
+read
+content
+custom-export
+custom-contest
+parent-error
+sha256 ceab9f95f7379ddc97a095ee04a243a66c927e5cf47643d757b4ebbc06e0ef62
+FTX settings: A/B OK
+isolated-settings
+setFt2SignoffRetryCap-max
+setFt2SignoffRetryCap-unchanged
+setFt2SignoffRetryCap-min
+setFtxImmediateClickTx-enable
+setFtxImmediateClickTx-unchanged
+setFtxImmediateClickTx-disable
+setFt2LogRr73OnPartnerLeft-enable
+setFt2LogRr73OnPartnerLeft-unchanged
+setFt2LogRr73OnPartnerLeft-disable
+setFt4SignoffRetryCap-max
+setFt4SignoffRetryCap-unchanged
+setFt4SignoffRetryCap-min
+setFt8SignoffRetryCap-max
+setFt8SignoffRetryCap-unchanged
+setFt8SignoffRetryCap-min
+setFtxWeakSignoffBoost-enable
+setFtxWeakSignoffBoost-unchanged
+setFtxWeakSignoffBoost-disable
+setFtxWeakSnrThreshold-max
+setFtxWeakSnrThreshold-unchanged
+setFtxWeakSnrThreshold-min
+setFtxWeakSignoffBonus-max
+setFtxWeakSignoffBonus-unchanged
+setFtxWeakSignoffBonus-min
+setFt2PostLogReengageGuard-enable
+setFt2PostLogReengageGuard-unchanged
+setFt2PostLogReengageGuard-disable
+setFt2PostLogReengageMax-max
+setFt2PostLogReengageMax-unchanged
+setFt2PostLogReengageMax-min
+setTxWatchdogLogOnClose-enable
+setTxWatchdogLogOnClose-unchanged
+setTxWatchdogLogOnClose-disable
+setMaxCallerRetries-max
+setMaxCallerRetries-unchanged
+setMaxCallerRetries-min
+setCallerRetriesAlwaysHard-enable
+setCallerRetriesAlwaysHard-unchanged
+setCallerRetriesAlwaysHard-disable
+setFt2TransitionCensus-enable
+setFt2TransitionCensus-unchanged
+setFt2TransitionCensus-disable
+setFt2AdaptiveTxGates-enable
+setFt2AdaptiveTxGates-unchanged
+setFt2AdaptiveTxGates-disable
+setFt2ManualOneShotEnabled-enable
+setFt2ManualOneShotEnabled-unchanged
+setFt2ManualOneShotEnabled-disable
+setFt8FastSequence-enable
+setFt8FastSequence-unchanged
+setFt8FastSequence-disable
+setFt2ConservativeTiming-enable
+setFt2ConservativeTiming-unchanged
+setFt2ConservativeTiming-disable
+setFt2FullDecodeInAutoCq-enable
+setFt2FullDecodeInAutoCq-unchanged
+setFt2FullDecodeInAutoCq-disable
+setCallerScoring-enable
+setCallerScoring-unchanged
+setCallerScoring-disable
+setFt2QuickGiveUpStrong-enable
+setFt2QuickGiveUpStrong-unchanged
+setFt2QuickGiveUpStrong-disable
+setFt2AdaptiveDecode-enable
+setFt2AdaptiveDecode-unchanged
+setFt2AdaptiveDecode-disable
+setFt2NarrowAsyncDecode-enable
+setFt2NarrowAsyncDecode-unchanged
+setFt2NarrowAsyncDecode-disable
+setFt2ApHashCache-enable
+setFt2ApHashCache-unchanged
+setFt2ApHashCache-disable
+setFt2AsyncSkipRedundantSyncDecode-enable
+setFt2AsyncSkipRedundantSyncDecode-unchanged
+setFt2AsyncSkipRedundantSyncDecode-disable
+setFt8DeepDecodeInTx-enable
+setFt8DeepDecodeInTx-unchanged
+setFt8DeepDecodeInTx-disable
+setFt8SubpassHarvest-enable
+setFt8SubpassHarvest-unchanged
+setFt8SubpassHarvest-disable
+caller-scoring-ranks-on-enable-only
+TX watchdog: A/B OK
+isolated-settings
+disabled
+time-mode-syncs-legacy
+persist-time-mode
+change-resets-counters
+unchanged-still-persists
+count-mode-and-max-clamp
+count-min-clamp
+mode-and-time-max-clamp
+time-min-disables
+backend-unavailable
+SSTV timing enabled=0: A/B OK
+defaults
+legacy-delay-fallback
+bounds-all-setters
+unchanged-after-clamping
+active-tx-rejects-all
+sstv-disabled
+nan-fallback
+SSTV timing enabled=1: A/B OK
+defaults
+legacy-delay-fallback
+bounds-all-setters
+unchanged-after-clamping
+active-tx-rejects-all
+coordinator-updated
+rejected-rollback-all
+null-coordinator
+nan-fallback
+CAT modes: A/B OK
+defaults
+data-alias
+data-alias
+data-alias
+data-alias
+packet-only-alias
+packet-only-alias
+packet-only-alias
+none
+numeric-data
+numeric-none
+invalid-fallback
+rtty-none
+rtty-custom
+remote activity: A/B OK
+no-server
+stopped-server
+formatted-publish
+duplicate-suppressed
+mode-distinguishes
+empty-message
+batch-defaults
+clear-local-only
+clear-notifies
+clear-stopped-server
+bounded-cache
+oldest-evicted
+FT2 access default: A/B OK
+default-values
+pbkdf2-round-1
+pbkdf2-round-2
+pbkdf2-multiblock
+pbkdf2-utf8-binary-salt
+pbkdf2-zero-length
+equal
+different
+FT2 access synthetic: A/B OK
+configured-values
+pbkdf2-round-1
+pbkdf2-round-2
+pbkdf2-multiblock
+pbkdf2-utf8-binary-salt
+pbkdf2-zero-length
+equal
+different
+FT2 gate missing: A/B OK
+not-configured
+not-configured-rejects
+not-configured-lock
+FT2 gate valid: A/B OK
+configured
+wrong-password
+correct-password
+repeat-password
+wrong-after-unlock
+lock
+repeat-lock
+FT2 gate weak-iterations: A/B OK
+not-configured
+not-configured-rejects
+not-configured-lock
+FT2 gate short-salt: A/B OK
+not-configured
+not-configured-rejects
+not-configured-lock

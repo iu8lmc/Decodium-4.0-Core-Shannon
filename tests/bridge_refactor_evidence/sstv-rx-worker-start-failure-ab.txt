@@ -1,0 +1,4 @@
+before {"cat": false, "expectedError": true, "rejected": true, "rollback": true, "shutdown": true, "tx": false, "wasShutdown": false}
+before {"cat": false, "expectedError": true, "readback": "persisted", "rejected": true, "rollback": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "expectedError": true, "rejected": true, "rollback": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "expectedError": true, "readback": "persisted", "rejected": true, "rollback": true, "shutdown": true, "tx": false, "wasShutdown": false}

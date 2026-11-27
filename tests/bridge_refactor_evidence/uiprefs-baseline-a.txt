@@ -1,0 +1,1 @@
+a: quality, style, detach, frameless and FPS limits passed; CAT disabled

@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+import os,shlex,subprocess,tempfile
+from pathlib import Path
+R=Path(__file__).resolve().parents[2]
+a=(R/'tests/bridge_refactor_fixtures/sequence_options_before.inc').read_text();sig='void DecodiumBridge::setAutoSeq(bool v)'
+s=(R/'src/bridge/DecodiumBridgeSequenceOptions.cpp').read_text();b=sig+s.split(sig,1)[1];b=b.replace('decodiumBridgeDecodeFlowLog(', 'bridgeLog(')
+if a!=b:raise SystemExit('sequence options differ')
+flags=shlex.split(subprocess.check_output(['pkg-config','--cflags','--libs','Qt6Core'],text=True));outputs=[]
+with tempfile.TemporaryDirectory(prefix='decodium-seqoptions-ab-') as t:
+ d=Path(t);env=os.environ.copy();env['SEQ_LAB_SETTINGS']=t
+ for code in (a,b):
+  (d/'method.inc').write_text(code);exe=d/'test';subprocess.run([*shlex.split(os.environ.get('CXX','c++')),'-std=c++17','-I'+str(d),str(R/'tests/bridge_refactor_sequence_options_harness.cpp'),*flags,'-o',str(exe)],check=True);outputs.append(subprocess.check_output([str(exe)],text=True,env=env))
+if outputs[0]!=outputs[1]:raise SystemExit('sequence A/B mismatch')
+print('Sequence options A/B: '+outputs[0],end='')

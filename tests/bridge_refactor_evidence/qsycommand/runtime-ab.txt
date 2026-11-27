@@ -1,0 +1,2 @@
+before {"cat": false, "frequency": 7074000, "mode": "FT4", "tx": false}
+after {"cat": false, "frequency": 7074000, "mode": "FT4", "tx": false}

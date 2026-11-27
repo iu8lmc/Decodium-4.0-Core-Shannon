@@ -1,0 +1,33 @@
+UpdateCTestConfiguration  from :/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/DartConfiguration.tcl
+Parse Config file:/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/DartConfiguration.tcl
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 48
+    Start 48: test_bridge_txpcm_ab
+
+48: Test command: /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/tests/test_bridge_txpcm_ab
+48: Working Directory: /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/tests
+48: Test timeout computed to be: 1500
+48: TX PCM A/B OK: 192 cases sha256=d84bd14d2d0ee7c1a13229cb18ef524998dd963916508371c5cf8cfb9c642c6f
+1/2 Test #48: test_bridge_txpcm_ab .............   Passed    0.05 sec
+test 49
+    Start 49: test_bridge_txformat_ab
+
+49: Test command: /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/tests/test_bridge_txformat_ab
+49: Working Directory: /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/tests
+49: Test timeout computed to be: 1500
+49: TX format A/B OK: formats, audio outputs and empty-device fallback (5 devices)
+2/2 Test #49: test_bridge_txformat_ab ..........   Passed    0.38 sec
+
+The following tests passed:
+	test_bridge_txpcm_ab
+	test_bridge_txformat_ab
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.44 sec

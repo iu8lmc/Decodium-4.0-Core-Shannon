@@ -1,0 +1,7 @@
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+    Start 39: test_ft8_mycall_ap
+1/1 Test #39: test_ft8_mycall_ap ...............   Passed    0.26 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.27 sec

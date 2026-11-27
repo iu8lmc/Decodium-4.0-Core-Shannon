@@ -1,0 +1,2 @@
+before {"cachedAfter": 3, "cachedBefore": 3, "cachedFinal": 4, "cat": false, "inserted": true, "legacy": true, "mirrored": true, "raw": ["120000 -10 0.1 1500 + CQ W1XYZ FN31"], "revAfter": 4, "revBefore": 3, "serialCleaned": true, "shown": false, "tx": false}
+after {"cachedAfter": 3, "cachedBefore": 3, "cachedFinal": 4, "cat": false, "inserted": true, "legacy": true, "mirrored": true, "raw": ["120000 -10 0.1 1500 + CQ W1XYZ FN31"], "revAfter": 4, "revBefore": 3, "serialCleaned": true, "shown": false, "tx": false}

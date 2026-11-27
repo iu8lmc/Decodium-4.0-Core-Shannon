@@ -1,0 +1,1 @@
+Deferred auto-seq A/B: mode, partner, payload, deferred 73, FT2 CQ, clearing and memory passed

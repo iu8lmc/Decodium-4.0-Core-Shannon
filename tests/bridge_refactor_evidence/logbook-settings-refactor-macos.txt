@@ -1,0 +1,2 @@
+write: isolated logbook profiles and file operations passed; CAT disabled
+restart: isolated logbook profiles and file operations passed; CAT disabled

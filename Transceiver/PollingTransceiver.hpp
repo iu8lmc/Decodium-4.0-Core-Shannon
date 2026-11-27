@@ -55,11 +55,19 @@ protected:
 
 private:
   void start_timer ();
+  void set_fast_tx_polling (bool on);
   void stop_timer ();
 
   Q_SLOT void handle_timeout ();
 
   int interval_;    // polling interval in milliseconds
+  // Intervallo usato MENTRE SI TRASMETTE. Un misuratore di potenza e ROS
+  // che si aggiorna una volta al secondo non si guarda: l'ago fa un salto
+  // ogni tanto invece di seguire la modulazione. In ricezione resta
+  // l'intervallo pieno, che e' dove il polling fitto aveva dato problemi
+  // su seriali lente (il caso PWR/SWR risolto in 1.0.204).
+  int tx_interval_;
+  bool tx_fast_active_ {false};
   QTimer * poll_timer_;
   bool polling_stopped_ {true};
 

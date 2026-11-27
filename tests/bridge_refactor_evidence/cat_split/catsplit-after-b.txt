@@ -1,0 +1,1 @@
+{"connected": false, "freq": 1200, "tx": false}

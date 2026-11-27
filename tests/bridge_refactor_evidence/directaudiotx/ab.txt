@@ -1,0 +1,1 @@
+Direct audio TX A/B: CW validation/clamps and FT2-Link guards, satellite and start outcomes passed

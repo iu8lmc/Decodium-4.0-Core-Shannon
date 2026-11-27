@@ -1,0 +1,284 @@
+In file included from /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:2:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/bridge_refactor_under_test.inc:8:39: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+    8 |     QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+      |                                       ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+In file included from /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:2:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/bridge_refactor_under_test.inc:22:39: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+   22 |     QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+      |                                       ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:81: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:81: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:419: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                                                                                                                                                                                                                                                                                                                                                                   ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:419: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                                                                                                                                                                                                                                                                                                                                                                   ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+6 warnings generated.
+In file included from /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:2:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/bridge_refactor_under_test.inc:8:39: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+    8 |     QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+      |                                       ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+In file included from /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:2:
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/bridge_refactor_under_test.inc:22:39: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+   22 |     QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+      |                                       ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:81: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:81: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:419: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                                                                                                                                                                                                                                                                                                                                                                   ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:419: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                                                                                                                                                                                                                                                                                                                                                                   ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+6 warnings generated.
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:81: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:81: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:419: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                                                                                                                                                                                                                                                                                                                                                                   ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-utcslot-ab-j3m58xum/test.cpp:3:419: warning: 'QDateTime' is deprecated: Pass QTimeZone instead [-Wdeprecated-declarations]
+    3 | int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}
+      |                                                                                                                                                                                                                                                                                                                                                                                                                                   ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:390:5: note: 'QDateTime' has been explicitly marked deprecated here
+  390 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+4 warnings generated.
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/src/bridge/DecodeUtcTime.cpp:178:39: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+  178 |     QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+      |                                       ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/src/bridge/DecodeUtcTime.cpp:192:39: warning: 'fromMSecsSinceEpoch' is deprecated: Pass QTimeZone instead of time-spec, offset [-Wdeprecated-declarations]
+  192 |     QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+      |                                       ^
+/opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h:517:5: note: 'fromMSecsSinceEpoch' has been explicitly marked deprecated here
+  517 |     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead of time-spec, offset")
+      |     ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:215:44: note: expanded from macro 'QT_DEPRECATED_VERSION_X_6_9'
+  215 | # define QT_DEPRECATED_VERSION_X_6_9(text) QT_DEPRECATED_X(text)
+      |                                            ^
+/opt/homebrew/lib/QtCore.framework/Headers/qtdeprecationmarkers.h:31:33: note: expanded from macro 'QT_DEPRECATED_X'
+   31 | #  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
+      |                                 ^
+/opt/homebrew/lib/QtCore.framework/Headers/qcompilerdetection.h:1018:36: note: expanded from macro 'Q_DECL_DEPRECATED_X'
+ 1018 | #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
+      |                                    ^
+2 warnings generated.
+slot|15000|123400|123400
+slot|7500|123400|123400
+slot|3750|123400|123400
+slot|60000|1234|1234
+invalid|0|1|1
+midnight|235945|000000

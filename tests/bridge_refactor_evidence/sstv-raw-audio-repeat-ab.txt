@@ -1,0 +1,2 @@
+before {"cat": false, "completed": true, "empty": true, "readback": "persisted", "removed": true, "requested": true, "samples": true, "saved": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false, "wav": true}
+after {"cat": false, "completed": true, "empty": true, "readback": "persisted", "removed": true, "requested": true, "samples": true, "saved": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false, "wav": true}

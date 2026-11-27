@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/sstv/tools/run_avt_two_app_lab.py", line 152, in <module>
+    raise RuntimeError('applications exited before TX and RX completed; artifacts '+str(root))
+RuntimeError: applications exited before TX and RX completed; artifacts /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-avt-two-app-robot-c12-xnohsfce
+Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_sstv_autosave_two_app_lab.py", line 24, in <module>
+    if not match:raise RuntimeError('missing lab artifacts path')
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_sstv_autosave_two_app_lab.py", line 22, in main
+    if result.returncode:raise RuntimeError(f'autosave lab failed (exit {result.returncode})')
+RuntimeError: autosave lab failed (exit 1)

@@ -1,0 +1,43 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -60,6 +60,8 @@
+ #include <QImageReader>
+ #include <QRegularExpression>
+ #include "drmtx/drmparams.h"
++#include "drm.h"
++#include "sourcedecoder.h"
+ #include "supportfunctions.h"
+ #include "appimageintegration.h"
+ 
+@@ -504,7 +506,31 @@
+       mainWindowPtr->show();
+       splash.finish(mainWindowPtr);
+     }
++  const bool labLiveRx=qEnvironmentVariableIntValue("QSSTV_BSR_RX_LIVE")==1;
++  if(labLiveRx) mainWindowPtr->switchMode(TRXDRM);
+   mainWindowPtr->startRunning(files.isEmpty());   // decoding files replaces the sound card receiver until it is done
++  if(labLiveRx)
++    {
++      auto *timer=new QTimer(&app);
++      QObject::connect(timer,&QTimer::timeout,&app,[&app,timer]() {
++        const QString ready=qEnvironmentVariable("QSSTV_BSR_RX_READY");
++        const QString trigger=qEnvironmentVariable("QSSTV_BSR_RX_TRIGGER");
++        const QString output=qEnvironmentVariable("QSSTV_BSR_RX_OUTPUT");
++        if(ready.isEmpty() || trigger.isEmpty() || output.isEmpty()) {app.exit(8); return;}
++        if(!QFile::exists(ready)) {QFile f(ready); if(!f.open(QIODevice::WriteOnly)) {app.exit(8);return;} f.write("ready");}
++        if(!QFile::exists(trigger) || !srcDecoder) return;
++        auto *blocks=srcDecoder->getBSR();
++        for(const auto &entry : *blocks) {
++          auto *tb=entry.tbPtr;
++          if(!tb->headerReceived || !srcDecoder->storeBSR(tb,qEnvironmentVariableIntValue("QSSTV_BSR_RX_COMPACT")==1)) continue;
++          QFile file(output); if(!file.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {app.exit(8);return;}
++          if(file.write(tb->baBSR)!=tb->baBSR.size()) {app.exit(8);return;}
++          fprintf(stderr,"LAB live RX BSR id=%u total=%d received=%u bytes=%lld\n",tb->transportID,tb->totalSegments,tb->segmentsReceived,static_cast<long long>(tb->baBSR.size()));
++          file.close(); timer->stop(); mainWindowPtr->shutdown(false); app.exit(0); return;
++        }
++      });
++      timer->start(250);
++    }
+   if(!files.isEmpty()) fileDecoderPtr->decodeFiles(files);
+   result=app.exec();
+   globalEnd();

@@ -1,0 +1,1 @@
+SSTV storage state and autosave toggles passed; CAT/monitoring disabled

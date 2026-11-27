@@ -1,0 +1,1 @@
+UDP QSO A/B: 32 legacy, availability and destination combinations match

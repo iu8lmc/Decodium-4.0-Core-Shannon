@@ -1,0 +1,2 @@
+before {"baud": 9600, "enabled": false, "initial": "SPE", "manufacturer": "ACOM"}
+after {"baud": 9600, "enabled": false, "initial": "SPE", "manufacturer": "ACOM"}

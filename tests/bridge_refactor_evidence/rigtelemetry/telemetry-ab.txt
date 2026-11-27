@@ -1,0 +1,1 @@
+Rig telemetry A/B: state, deduplication and SWR/power safety hooks passed

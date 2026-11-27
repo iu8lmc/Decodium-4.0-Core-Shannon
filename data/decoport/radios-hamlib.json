@@ -1,0 +1,5537 @@
+{
+ "format": 1,
+ "source": "Hamlib 4.7.0",
+ "models": [
+  {
+   "model": 1,
+   "symbol": "DUMMY",
+   "mfg": "Hamlib",
+   "name": "Dummy",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 2,
+   "symbol": "NETRIGCTL",
+   "mfg": "Hamlib",
+   "name": "NET rigctl",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 4,
+   "symbol": "FLRIG",
+   "mfg": "FLRig",
+   "name": "FLRig",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 5,
+   "symbol": "TRXMANAGER_RIG",
+   "mfg": "TRXManager",
+   "name": "TRXManager 5.7.630+",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 6,
+   "symbol": "DUMMY_NOVFO",
+   "mfg": "Hamlib",
+   "name": "Dummy No VFO",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 7,
+   "symbol": "TCI1X",
+   "mfg": "Expert Elec",
+   "name": "TCI1.X",
+   "status": "Beta",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "serial"
+  },
+  {
+   "model": 8,
+   "symbol": "ACLOG",
+   "mfg": "N3FJP",
+   "name": "ACLog",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 9,
+   "symbol": "SDRSHARP",
+   "mfg": "Airspy",
+   "name": "SDR#/gpredict",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 10,
+   "symbol": "QUISK",
+   "mfg": "N2ADR James Ahlstrom",
+   "name": "Quisk",
+   "status": "Stable",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 11,
+   "symbol": "GQRX",
+   "mfg": "GQRX",
+   "name": "GQRX",
+   "status": "New",
+   "backend": "dummy",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 1001,
+   "symbol": "FT847",
+   "mfg": "Yaesu",
+   "name": "FT-847",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1002,
+   "symbol": "FT1000",
+   "mfg": "Yaesu",
+   "name": "FT-1000",
+   "status": "Beta",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1003,
+   "symbol": "FT1000D",
+   "mfg": "Yaesu",
+   "name": "FT-1000D",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1004,
+   "symbol": "FT1000MPMKV",
+   "mfg": "Yaesu",
+   "name": "FT-1000MP MARK-V",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1005,
+   "symbol": "FT747",
+   "mfg": "Yaesu",
+   "name": "FT-747GX",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1006,
+   "symbol": "FT757",
+   "mfg": "Yaesu",
+   "name": "FT-757GX",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1007,
+   "symbol": "FT757GXII",
+   "mfg": "Yaesu",
+   "name": "FT-757GXII",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1009,
+   "symbol": "FT767",
+   "mfg": "Yaesu",
+   "name": "FT-767GX",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1010,
+   "symbol": "FT736R",
+   "mfg": "Yaesu",
+   "name": "FT-736R",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1011,
+   "symbol": "FT840",
+   "mfg": "Yaesu",
+   "name": "FT-840",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1013,
+   "symbol": "FT900",
+   "mfg": "Yaesu",
+   "name": "FT-900",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1014,
+   "symbol": "FT920",
+   "mfg": "Yaesu",
+   "name": "FT-920",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1015,
+   "symbol": "FT890",
+   "mfg": "Yaesu",
+   "name": "FT-890",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1016,
+   "symbol": "FT990",
+   "mfg": "Yaesu",
+   "name": "FT-990",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1017,
+   "symbol": "FRG100",
+   "mfg": "Yaesu",
+   "name": "FRG-100",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1018,
+   "symbol": "FRG9600",
+   "mfg": "Yaesu",
+   "name": "FRG-9600",
+   "status": "Beta",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1019,
+   "symbol": "FRG8800",
+   "mfg": "Yaesu",
+   "name": "FRG-8800",
+   "status": "Beta",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1020,
+   "symbol": "FT817",
+   "mfg": "Yaesu",
+   "name": "FT-817",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1021,
+   "symbol": "FT100",
+   "mfg": "Yaesu",
+   "name": "FT-100",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1022,
+   "symbol": "FT857",
+   "mfg": "Yaesu",
+   "name": "FT-857",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1023,
+   "symbol": "FT897",
+   "mfg": "Yaesu",
+   "name": "FT-897",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1024,
+   "symbol": "FT1000MP",
+   "mfg": "Yaesu",
+   "name": "FT-1000MP",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1025,
+   "symbol": "FT1000MPMKVFLD",
+   "mfg": "Yaesu",
+   "name": "FT-1000MP MARK-V Field",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1026,
+   "symbol": "VR5000",
+   "mfg": "Yaesu",
+   "name": "VR-5000",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1027,
+   "symbol": "FT450",
+   "mfg": "Yaesu",
+   "name": "FT-450",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1028,
+   "symbol": "FT950",
+   "mfg": "Yaesu",
+   "name": "FT-950",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1029,
+   "symbol": "FT2000",
+   "mfg": "Yaesu",
+   "name": "FT-2000",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1030,
+   "symbol": "FT9000",
+   "mfg": "Yaesu",
+   "name": "FTDX-9000",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1032,
+   "symbol": "FTDX5000",
+   "mfg": "Yaesu",
+   "name": "FTDX-5000",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1033,
+   "symbol": "VX1700",
+   "mfg": "Vertex Standard",
+   "name": "VX-1700",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1034,
+   "symbol": "FTDX1200",
+   "mfg": "Yaesu",
+   "name": "FTDX-1200",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1035,
+   "symbol": "FT991",
+   "mfg": "Yaesu",
+   "name": "FT-991",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1036,
+   "symbol": "FT891",
+   "mfg": "Yaesu",
+   "name": "FT-891",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1037,
+   "symbol": "FTDX3000",
+   "mfg": "Yaesu",
+   "name": "FTDX-3000",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1038,
+   "symbol": "FT847UNI",
+   "mfg": "Yaesu",
+   "name": "FT-847UNI",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1039,
+   "symbol": "FT600",
+   "mfg": "Yaesu",
+   "name": "FT-600",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1040,
+   "symbol": "FTDX101D",
+   "mfg": "Yaesu",
+   "name": "FTDX-101D",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1041,
+   "symbol": "FT818",
+   "mfg": "Yaesu",
+   "name": "FT-818",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1042,
+   "symbol": "FTDX10",
+   "mfg": "Yaesu",
+   "name": "FTDX-10",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1043,
+   "symbol": "FT897D",
+   "mfg": "Yaesu",
+   "name": "FT-897D",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1044,
+   "symbol": "FTDX101MP",
+   "mfg": "Yaesu",
+   "name": "FTDX-101MP",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 1045,
+   "symbol": "MCHFQRP",
+   "mfg": "M0NKA",
+   "name": "mcHF QRP",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1047,
+   "symbol": "FT650",
+   "mfg": "Yaesu",
+   "name": "FT-650",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1048,
+   "symbol": "FT990UNI",
+   "mfg": "Yaesu",
+   "name": "FT-990 Old Rom",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "yaesu5",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1049,
+   "symbol": "FT710",
+   "mfg": "Yaesu",
+   "name": "FT-710",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 1050,
+   "symbol": "FT9000OLD",
+   "mfg": "Yaesu",
+   "name": "FTDX-9000 Old",
+   "status": "Stable",
+   "backend": "yaesu",
+   "protocol": "newcat",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2001,
+   "symbol": "TS50",
+   "mfg": "Kenwood",
+   "name": "TS-50S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2002,
+   "symbol": "TS440",
+   "mfg": "Kenwood",
+   "name": "TS-440S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2003,
+   "symbol": "TS450S",
+   "mfg": "Kenwood",
+   "name": "TS-450S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2004,
+   "symbol": "TS570D",
+   "mfg": "Kenwood",
+   "name": "TS-570D",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2005,
+   "symbol": "TS690S",
+   "mfg": "Kenwood",
+   "name": "TS-690S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2006,
+   "symbol": "TS711",
+   "mfg": "Kenwood",
+   "name": "TS-711",
+   "status": "Beta",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2007,
+   "symbol": "TS790",
+   "mfg": "Kenwood",
+   "name": "TS-790",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2008,
+   "symbol": "TS811",
+   "mfg": "Kenwood",
+   "name": "TS-811",
+   "status": "Beta",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2009,
+   "symbol": "TS850",
+   "mfg": "Kenwood",
+   "name": "TS-850",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2010,
+   "symbol": "TS870S",
+   "mfg": "Kenwood",
+   "name": "TS-870S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2011,
+   "symbol": "TS940",
+   "mfg": "Kenwood",
+   "name": "TS-940S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2012,
+   "symbol": "TS950S",
+   "mfg": "Kenwood",
+   "name": "TS-950S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2013,
+   "symbol": "TS950SDX",
+   "mfg": "Kenwood",
+   "name": "TS-950SDX",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2014,
+   "symbol": "TS2000",
+   "mfg": "Kenwood",
+   "name": "TS-2000",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2015,
+   "symbol": "R5000",
+   "mfg": "Kenwood",
+   "name": "R-5000",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2016,
+   "symbol": "TS570S",
+   "mfg": "Kenwood",
+   "name": "TS-570S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2017,
+   "symbol": "THD7A",
+   "mfg": "Kenwood",
+   "name": "TH-D7A",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2019,
+   "symbol": "THF6A",
+   "mfg": "Kenwood",
+   "name": "TH-F6A",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2020,
+   "symbol": "THF7E",
+   "mfg": "Kenwood",
+   "name": "TH-F7E",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2021,
+   "symbol": "K2",
+   "mfg": "Elecraft",
+   "name": "K2",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2022,
+   "symbol": "TS930",
+   "mfg": "Kenwood",
+   "name": "TS-930",
+   "status": "Beta",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2023,
+   "symbol": "THG71",
+   "mfg": "Kenwood",
+   "name": "TH-G71",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2024,
+   "symbol": "TS680S",
+   "mfg": "Kenwood",
+   "name": "TS-680S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2025,
+   "symbol": "TS140S",
+   "mfg": "Kenwood",
+   "name": "TS-140S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2026,
+   "symbol": "TMD700",
+   "mfg": "Kenwood",
+   "name": "TM-D700",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2027,
+   "symbol": "TMV7",
+   "mfg": "Kenwood",
+   "name": "TM-V7",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2028,
+   "symbol": "TS480",
+   "mfg": "Kenwood",
+   "name": "TS-480",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2029,
+   "symbol": "K3",
+   "mfg": "Elecraft",
+   "name": "K3",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2030,
+   "symbol": "TRC80",
+   "mfg": "Kenwood",
+   "name": "TRC-80",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2031,
+   "symbol": "TS590S",
+   "mfg": "Kenwood",
+   "name": "TS-590S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2032,
+   "symbol": "TRANSFOX",
+   "mfg": "SigFox",
+   "name": "Transfox",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2033,
+   "symbol": "THD72A",
+   "mfg": "Kenwood",
+   "name": "TH-D72A",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2034,
+   "symbol": "TMD710",
+   "mfg": "Kenwood",
+   "name": "TM-D710(G)",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2035,
+   "symbol": "TMV71",
+   "mfg": "Kenwood",
+   "name": "TM-V71(A)",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2036,
+   "symbol": "F6K",
+   "mfg": "FlexRadio",
+   "name": "6xxx",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "network"
+  },
+  {
+   "model": 2037,
+   "symbol": "TS590SG",
+   "mfg": "Kenwood",
+   "name": "TS-590SG",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2038,
+   "symbol": "XG3",
+   "mfg": "Elecraft",
+   "name": "XG3",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2039,
+   "symbol": "TS990S",
+   "mfg": "Kenwood",
+   "name": "TS-990S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2040,
+   "symbol": "HPSDR",
+   "mfg": "OpenHPSDR",
+   "name": "PiHPSDR",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2041,
+   "symbol": "TS890S",
+   "mfg": "Kenwood",
+   "name": "TS-890S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2042,
+   "symbol": "THD74",
+   "mfg": "Kenwood",
+   "name": "TH-D74",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 2043,
+   "symbol": "K3S",
+   "mfg": "Elecraft",
+   "name": "K3S",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2044,
+   "symbol": "KX2",
+   "mfg": "Elecraft",
+   "name": "KX2",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2045,
+   "symbol": "KX3",
+   "mfg": "Elecraft",
+   "name": "KX3",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2046,
+   "symbol": "PT8000A",
+   "mfg": "Hilberling",
+   "name": "PT-8000A",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2047,
+   "symbol": "K4",
+   "mfg": "Elecraft",
+   "name": "K4",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2048,
+   "symbol": "POWERSDR",
+   "mfg": "FlexRadio/Apache",
+   "name": "PowerSDR",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2049,
+   "symbol": "MALACHITE",
+   "mfg": "Malachite",
+   "name": "DSP",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2050,
+   "symbol": "LAB599_TX500",
+   "mfg": "Lab599",
+   "name": "TX-500",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2051,
+   "symbol": "SDRUNO",
+   "mfg": "SDRPlay",
+   "name": "SDRUno",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2052,
+   "symbol": "QRPLABS",
+   "mfg": "QRPLabs",
+   "name": "QCX/QDX",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2053,
+   "symbol": "FX4",
+   "mfg": "BG2FX",
+   "name": "FX4/C/CR/L",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 2054,
+   "symbol": "THETIS",
+   "mfg": "TAPR",
+   "name": "Thetis",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2055,
+   "symbol": "TRUSDX",
+   "mfg": "DL2MAN",
+   "name": "(tr)uSDX",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 38400,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2056,
+   "symbol": "SDRCONSOLE",
+   "mfg": "SDR Radio",
+   "name": "SDRConsole",
+   "status": "Stable",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 2057,
+   "symbol": "QRPLABS_QMX",
+   "mfg": "QRPLabs",
+   "name": "QMX",
+   "status": "Beta",
+   "backend": "kenwood",
+   "protocol": "kenwood",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 230400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3002,
+   "symbol": "IC1275",
+   "mfg": "Icom",
+   "name": "IC-1275",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3003,
+   "symbol": "IC271",
+   "mfg": "Icom",
+   "name": "IC-271",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3004,
+   "symbol": "IC275",
+   "mfg": "Icom",
+   "name": "IC-275",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3005,
+   "symbol": "IC375",
+   "mfg": "Icom",
+   "name": "IC-375",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3006,
+   "symbol": "IC471",
+   "mfg": "Icom",
+   "name": "IC-471",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3007,
+   "symbol": "IC475",
+   "mfg": "Icom",
+   "name": "IC-475",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3008,
+   "symbol": "IC575",
+   "mfg": "Icom",
+   "name": "IC-575",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3009,
+   "symbol": "IC706",
+   "mfg": "Icom",
+   "name": "IC-706",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3010,
+   "symbol": "IC706MKII",
+   "mfg": "Icom",
+   "name": "IC-706MkII",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3011,
+   "symbol": "IC706MKIIG",
+   "mfg": "Icom",
+   "name": "IC-706MkIIG",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3012,
+   "symbol": "IC707",
+   "mfg": "Icom",
+   "name": "IC-707",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3013,
+   "symbol": "IC718",
+   "mfg": "Icom",
+   "name": "IC-718",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3014,
+   "symbol": "IC725",
+   "mfg": "Icom",
+   "name": "IC-725",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3015,
+   "symbol": "IC726",
+   "mfg": "Icom",
+   "name": "IC-726",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3016,
+   "symbol": "IC728",
+   "mfg": "Icom",
+   "name": "IC-728",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3017,
+   "symbol": "IC729",
+   "mfg": "Icom",
+   "name": "IC-729",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3019,
+   "symbol": "IC735",
+   "mfg": "Icom",
+   "name": "IC-735",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3020,
+   "symbol": "IC736",
+   "mfg": "Icom",
+   "name": "IC-736",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3021,
+   "symbol": "IC737",
+   "mfg": "Icom",
+   "name": "IC-737",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3022,
+   "symbol": "IC738",
+   "mfg": "Icom",
+   "name": "IC-738",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3023,
+   "symbol": "IC746",
+   "mfg": "Icom",
+   "name": "IC-746",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3024,
+   "symbol": "IC751",
+   "mfg": "Icom",
+   "name": "IC-751",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3026,
+   "symbol": "IC756",
+   "mfg": "Icom",
+   "name": "IC-756",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3027,
+   "symbol": "IC756PRO",
+   "mfg": "Icom",
+   "name": "IC-756PRO",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3028,
+   "symbol": "IC761",
+   "mfg": "Icom",
+   "name": "IC-761",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3029,
+   "symbol": "IC765",
+   "mfg": "Icom",
+   "name": "IC-765",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3030,
+   "symbol": "IC775",
+   "mfg": "Icom",
+   "name": "IC-775",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3031,
+   "symbol": "IC781",
+   "mfg": "Icom",
+   "name": "IC-781",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3032,
+   "symbol": "IC820",
+   "mfg": "Icom",
+   "name": "IC-820H",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3034,
+   "symbol": "IC821H",
+   "mfg": "Icom",
+   "name": "IC-821H",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3035,
+   "symbol": "IC970",
+   "mfg": "Icom",
+   "name": "IC-970",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3036,
+   "symbol": "ICR10",
+   "mfg": "Icom",
+   "name": "IC-R10",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3037,
+   "symbol": "ICR71",
+   "mfg": "Icom",
+   "name": "IC-R71",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3038,
+   "symbol": "ICR72",
+   "mfg": "Icom",
+   "name": "IC-R72",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3039,
+   "symbol": "ICR75",
+   "mfg": "Icom",
+   "name": "IC-R75",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3040,
+   "symbol": "ICR7000",
+   "mfg": "Icom",
+   "name": "IC-R7000",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3041,
+   "symbol": "ICR7100",
+   "mfg": "Icom",
+   "name": "IC-R7100",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3042,
+   "symbol": "ICR8500",
+   "mfg": "Icom",
+   "name": "IC-R8500",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3043,
+   "symbol": "ICR9000",
+   "mfg": "Icom",
+   "name": "IC-R9000",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3044,
+   "symbol": "IC910",
+   "mfg": "Icom",
+   "name": "IC-910",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3045,
+   "symbol": "IC78",
+   "mfg": "Icom",
+   "name": "IC-78",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3046,
+   "symbol": "IC746PRO",
+   "mfg": "Icom",
+   "name": "IC-746PRO",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3047,
+   "symbol": "IC756PROII",
+   "mfg": "Icom",
+   "name": "IC-756PROII",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3051,
+   "symbol": "OMNIVIP",
+   "mfg": "Ten-Tec",
+   "name": "Omni VI Plus",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3052,
+   "symbol": "OS535",
+   "mfg": "Optoelectronics",
+   "name": "OptoScan535",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3053,
+   "symbol": "OS456",
+   "mfg": "Optoelectronics",
+   "name": "OptoScan456",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3054,
+   "symbol": "ICID1",
+   "mfg": "Icom",
+   "name": "IC ID-1",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 19200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3055,
+   "symbol": "IC703",
+   "mfg": "Icom",
+   "name": "IC-703",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3056,
+   "symbol": "IC7800",
+   "mfg": "Icom",
+   "name": "IC-7800",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3057,
+   "symbol": "IC756PROIII",
+   "mfg": "Icom",
+   "name": "IC-756PROIII",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3058,
+   "symbol": "ICR20",
+   "mfg": "Icom",
+   "name": "IC-R20",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3060,
+   "symbol": "IC7000",
+   "mfg": "Icom",
+   "name": "IC-7000",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3061,
+   "symbol": "IC7200",
+   "mfg": "Icom",
+   "name": "IC-7200",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3062,
+   "symbol": "IC7700",
+   "mfg": "Icom",
+   "name": "IC-7700",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3063,
+   "symbol": "IC7600",
+   "mfg": "Icom",
+   "name": "IC-7600",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3064,
+   "symbol": "DELTAII",
+   "mfg": "Ten-Tec",
+   "name": "Delta II",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3065,
+   "symbol": "IC92D",
+   "mfg": "Icom",
+   "name": "IC-92D",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 38400,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3066,
+   "symbol": "ICR9500",
+   "mfg": "Icom",
+   "name": "IC-R9500",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3067,
+   "symbol": "IC7410",
+   "mfg": "Icom",
+   "name": "IC-7410",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3068,
+   "symbol": "IC9100",
+   "mfg": "Icom",
+   "name": "IC-9100",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3069,
+   "symbol": "ICRX7",
+   "mfg": "Icom",
+   "name": "IC-RX7",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3070,
+   "symbol": "IC7100",
+   "mfg": "Icom",
+   "name": "IC-7100",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3071,
+   "symbol": "ID5100",
+   "mfg": "Icom",
+   "name": "ID-5100",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3072,
+   "symbol": "IC2730",
+   "mfg": "Icom",
+   "name": "IC-2730",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3073,
+   "symbol": "IC7300",
+   "mfg": "Icom",
+   "name": "IC-7300",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3074,
+   "symbol": "PERSEUS",
+   "mfg": "Microtelecom",
+   "name": "Perseus",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3075,
+   "symbol": "IC785x",
+   "mfg": "Icom",
+   "name": "IC-7850/7851",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3076,
+   "symbol": "X108G",
+   "mfg": "Xiegu",
+   "name": "X108G",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3077,
+   "symbol": "ICR6",
+   "mfg": "Icom",
+   "name": "IC-R6",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3078,
+   "symbol": "IC7610",
+   "mfg": "Icom",
+   "name": "IC-7610",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3079,
+   "symbol": "ICR8600",
+   "mfg": "Icom",
+   "name": "IC-R8600",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3080,
+   "symbol": "ICR30",
+   "mfg": "Icom",
+   "name": "IC-R30",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3081,
+   "symbol": "IC9700",
+   "mfg": "Icom",
+   "name": "IC-9700",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3082,
+   "symbol": "ID4100",
+   "mfg": "Icom",
+   "name": "ID-4100",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3083,
+   "symbol": "ID31",
+   "mfg": "Icom",
+   "name": "ID-31",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3084,
+   "symbol": "ID51",
+   "mfg": "Icom",
+   "name": "ID-51",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3085,
+   "symbol": "IC705",
+   "mfg": "Icom",
+   "name": "IC-705",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3086,
+   "symbol": "ICF8101",
+   "mfg": "Icom",
+   "name": "IC-F8101",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3087,
+   "symbol": "X6100",
+   "mfg": "Xiegu",
+   "name": "X6100",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3088,
+   "symbol": "G90",
+   "mfg": "Xiegu",
+   "name": "G90",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 19200,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3089,
+   "symbol": "X5105",
+   "mfg": "Xiegu",
+   "name": "X5105",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3090,
+   "symbol": "IC905",
+   "mfg": "Icom",
+   "name": "IC-905",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 230400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3091,
+   "symbol": "X6200",
+   "mfg": "Xiegu",
+   "name": "X6200",
+   "status": "Stable",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3092,
+   "symbol": "IC7760",
+   "mfg": "Icom",
+   "name": "IC-7760",
+   "status": "Alpha",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3093,
+   "symbol": "ID52PLUS",
+   "mfg": "Icom",
+   "name": "ID-52A/E PLUS",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 3094,
+   "symbol": "IC7300MK2",
+   "mfg": "Icom",
+   "name": "IC-7300MK2",
+   "status": "Beta",
+   "backend": "icom",
+   "protocol": "civ",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 4001,
+   "symbol": "PCR1000",
+   "mfg": "Icom",
+   "name": "IC-PCR1000",
+   "status": "Stable",
+   "backend": "pcr",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 4002,
+   "symbol": "PCR100",
+   "mfg": "Icom",
+   "name": "IC-PCR100",
+   "status": "Stable",
+   "backend": "pcr",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 4003,
+   "symbol": "PCR1500",
+   "mfg": "Icom",
+   "name": "IC-PCR1500",
+   "status": "Stable",
+   "backend": "pcr",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 4004,
+   "symbol": "PCR2500",
+   "mfg": "Icom",
+   "name": "IC-PCR2500",
+   "status": "Stable",
+   "backend": "pcr",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 5001,
+   "symbol": "AR8200",
+   "mfg": "AOR",
+   "name": "AR8200",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 5002,
+   "symbol": "AR8000",
+   "mfg": "AOR",
+   "name": "AR8000",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 5003,
+   "symbol": "AR7030",
+   "mfg": "AOR",
+   "name": "AR7030",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 5004,
+   "symbol": "AR5000",
+   "mfg": "AOR",
+   "name": "AR5000",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 5005,
+   "symbol": "AR3030",
+   "mfg": "AOR",
+   "name": "AR3030",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 5006,
+   "symbol": "AR3000A",
+   "mfg": "AOR",
+   "name": "AR3000A",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 5008,
+   "symbol": "AR2700",
+   "mfg": "AOR",
+   "name": "AR2700",
+   "status": "Beta",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 5013,
+   "symbol": "AR8600",
+   "mfg": "AOR",
+   "name": "AR8600",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 5014,
+   "symbol": "AR5000A",
+   "mfg": "AOR",
+   "name": "AR5000A",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 5015,
+   "symbol": "AR7030P",
+   "mfg": "AOR",
+   "name": "AR7030 Plus",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 5016,
+   "symbol": "SR2200",
+   "mfg": "AOR",
+   "name": "SR2200",
+   "status": "Stable",
+   "backend": "aor",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 19200,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 6001,
+   "symbol": "JST145",
+   "mfg": "JRC",
+   "name": "JST-145",
+   "status": "Stable",
+   "backend": "jrc",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 6002,
+   "symbol": "JST245",
+   "mfg": "JRC",
+   "name": "JST-245",
+   "status": "Stable",
+   "backend": "jrc",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 6005,
+   "symbol": "NRD525",
+   "mfg": "JRC",
+   "name": "NRD-525",
+   "status": "Stable",
+   "backend": "jrc",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 6006,
+   "symbol": "NRD535",
+   "mfg": "JRC",
+   "name": "NRD-535D",
+   "status": "Stable",
+   "backend": "jrc",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 6007,
+   "symbol": "NRD545",
+   "mfg": "JRC",
+   "name": "NRD-545 DSP",
+   "status": "Stable",
+   "backend": "jrc",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8001,
+   "symbol": "BC780",
+   "mfg": "Uniden",
+   "name": "BC780xlt",
+   "status": "Stable",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8002,
+   "symbol": "BC245",
+   "mfg": "Uniden",
+   "name": "BC245xlt",
+   "status": "Beta",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8003,
+   "symbol": "BC895",
+   "mfg": "Uniden",
+   "name": "BC895xlt",
+   "status": "Beta",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8004,
+   "symbol": "PRO2052",
+   "mfg": "Radio Shack",
+   "name": "PRO-2052",
+   "status": "Beta",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8006,
+   "symbol": "BC250",
+   "mfg": "Uniden",
+   "name": "BC250D",
+   "status": "Beta",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 19200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8010,
+   "symbol": "BCD396T",
+   "mfg": "Uniden",
+   "name": "BCD-396T",
+   "status": "Stable",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8011,
+   "symbol": "BCD996T",
+   "mfg": "Uniden",
+   "name": "BCD-996T",
+   "status": "Stable",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 8012,
+   "symbol": "BC898",
+   "mfg": "Uniden",
+   "name": "BC898T",
+   "status": "Beta",
+   "backend": "uniden",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 2400,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 9001,
+   "symbol": "DKR8",
+   "mfg": "Drake",
+   "name": "R-8",
+   "status": "New",
+   "backend": "drake",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "hardware"
+  },
+  {
+   "model": 9002,
+   "symbol": "DKR8A",
+   "mfg": "Drake",
+   "name": "R-8A",
+   "status": "Stable",
+   "backend": "drake",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 9003,
+   "symbol": "DKR8B",
+   "mfg": "Drake",
+   "name": "R-8B",
+   "status": "Beta",
+   "backend": "drake",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 10004,
+   "symbol": "HF235",
+   "mfg": "Lowe",
+   "name": "HF-235",
+   "status": "Stable",
+   "backend": "lowe",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 11003,
+   "symbol": "RA6790",
+   "mfg": "Racal",
+   "name": "RA6790/GM",
+   "status": "Beta",
+   "backend": "racal",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 9600,
+   "dataBits": 7,
+   "stopBits": 2,
+   "parity": "E",
+   "handshake": "none"
+  },
+  {
+   "model": 11005,
+   "symbol": "RA3702",
+   "mfg": "Racal",
+   "name": "RA3702",
+   "status": "Stable",
+   "backend": "racal",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 50,
+   "baudMax": 9600,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 12004,
+   "symbol": "WJ8888",
+   "mfg": "Watkins-Johnson",
+   "name": "WJ-8888",
+   "status": "Beta",
+   "backend": "wj",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 75,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 14002,
+   "symbol": "TRP8000",
+   "mfg": "Skanti",
+   "name": "TRP8000",
+   "status": "Beta",
+   "backend": "skanti",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 300,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "O",
+   "handshake": "none"
+  },
+  {
+   "model": 14004,
+   "symbol": "TRP8255",
+   "mfg": "Skanti",
+   "name": "TRP 8255 S R",
+   "status": "Beta",
+   "backend": "skanti",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 2400,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "O",
+   "handshake": "none"
+  },
+  {
+   "model": 15001,
+   "symbol": "WR1000",
+   "mfg": "Winradio",
+   "name": "WR-1000",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15002,
+   "symbol": "WR1500",
+   "mfg": "Winradio",
+   "name": "WR-1500",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15003,
+   "symbol": "WR1550",
+   "mfg": "Winradio",
+   "name": "WR-1550",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15004,
+   "symbol": "WR3100",
+   "mfg": "Winradio",
+   "name": "WR-3100",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15005,
+   "symbol": "WR3150",
+   "mfg": "Winradio",
+   "name": "WR-3150",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15006,
+   "symbol": "WR3500",
+   "mfg": "Winradio",
+   "name": "WR-3500",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15007,
+   "symbol": "WR3700",
+   "mfg": "Winradio",
+   "name": "WR-3700",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 15008,
+   "symbol": "G303",
+   "mfg": "Winradio",
+   "name": "WR-G303",
+   "status": "Stable",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 15009,
+   "symbol": "G313",
+   "mfg": "Winradio",
+   "name": "WR-G313",
+   "status": "Stable",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 15010,
+   "symbol": "G305",
+   "mfg": "Winradio",
+   "name": "WR-G305",
+   "status": "Beta",
+   "backend": "winradio",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 16001,
+   "symbol": "TT550",
+   "mfg": "Ten-Tec",
+   "name": "TT-550",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 57600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 16002,
+   "symbol": "TT538",
+   "mfg": "Ten-Tec",
+   "name": "TT-538 Jupiter",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 57600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 16003,
+   "symbol": "RX320",
+   "mfg": "Ten-Tec",
+   "name": "RX-320",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 16004,
+   "symbol": "RX340",
+   "mfg": "Ten-Tec",
+   "name": "RX-340",
+   "status": "Beta",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 75,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 16005,
+   "symbol": "RX350",
+   "mfg": "Ten-Tec",
+   "name": "RX-350",
+   "status": "Beta",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 57600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 16007,
+   "symbol": "TT516",
+   "mfg": "Ten-Tec",
+   "name": "TT-516 Argonaut V",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 16009,
+   "symbol": "TT585",
+   "mfg": "Ten-Tec",
+   "name": "TT-585 Paragon",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 1200,
+   "baudMax": 1200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 16011,
+   "symbol": "TT588",
+   "mfg": "Ten-Tec",
+   "name": "TT-588 Omni VII",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 57600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 16012,
+   "symbol": "RX331",
+   "mfg": "Ten-Tec",
+   "name": "RX-331",
+   "status": "Stable",
+   "backend": "tentec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 75,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 17001,
+   "symbol": "DX77",
+   "mfg": "Alinco",
+   "name": "DX-77",
+   "status": "Stable",
+   "backend": "alinco",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 17002,
+   "symbol": "DXSR8",
+   "mfg": "Alinco",
+   "name": "DX-SR8",
+   "status": "Stable",
+   "backend": "alinco",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 18001,
+   "symbol": "505DSP",
+   "mfg": "Kachina",
+   "name": "505DSP",
+   "status": "Stable",
+   "backend": "kachina",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 22001,
+   "symbol": "DSP10",
+   "mfg": "TAPR",
+   "name": "DSP-10",
+   "status": "Stable",
+   "backend": "tapr",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 23001,
+   "symbol": "SDR1000",
+   "mfg": "FlexRadio",
+   "name": "SDR-1000",
+   "status": "Beta",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23003,
+   "symbol": "DTTSP",
+   "mfg": "DTTS Microwave Society",
+   "name": "DttSP IPC",
+   "status": "Stable",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23004,
+   "symbol": "DTTSP_UDP",
+   "mfg": "DTTS Microwave Society",
+   "name": "DttSP UDP",
+   "status": "Stable",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 23005,
+   "symbol": "SMARTSDR_A",
+   "name": "SmartSDR Slice A",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23006,
+   "symbol": "SMARTSDR_B",
+   "name": "SmartSDR Slice B",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23007,
+   "symbol": "SMARTSDR_C",
+   "name": "SmartSDR Slice C",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23008,
+   "symbol": "SMARTSDR_D",
+   "name": "SmartSDR Slice D",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23009,
+   "symbol": "SMARTSDR_E",
+   "name": "SmartSDR Slice E",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23010,
+   "symbol": "SMARTSDR_F",
+   "name": "SmartSDR Slice F",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23011,
+   "symbol": "SMARTSDR_G",
+   "name": "SmartSDR Slice G",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 23012,
+   "symbol": "SMARTSDR_H",
+   "name": "SmartSDR Slice H",
+   "backend": "flexradio",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 24001,
+   "symbol": "EKD500",
+   "mfg": "RFT",
+   "name": "EKD-500",
+   "status": "Stable",
+   "backend": "rft",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 2400,
+   "dataBits": 7,
+   "stopBits": 2,
+   "parity": "E",
+   "handshake": "hardware"
+  },
+  {
+   "model": 25001,
+   "symbol": "ELEKTOR304",
+   "mfg": "Elektor",
+   "name": "Elektor 3/04",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 25002,
+   "symbol": "DRT1",
+   "mfg": "SAT-Schneider",
+   "name": "DRT1",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 25003,
+   "symbol": "DWT",
+   "mfg": "Coding Technologies",
+   "name": "Digital World Traveller",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 25005,
+   "symbol": "USRP",
+   "mfg": "GNU Radio",
+   "name": "USRP",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "none"
+  },
+  {
+   "model": 25006,
+   "symbol": "DDS60",
+   "mfg": "AmQRP",
+   "name": "DDS-60",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 25007,
+   "symbol": "ELEKTOR507",
+   "mfg": "Elektor",
+   "name": "Elektor SDR-USB",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25008,
+   "symbol": "MINIVNA",
+   "mfg": "mRS",
+   "name": "miniVNA",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 25009,
+   "symbol": "SI570AVRUSB",
+   "mfg": "SoftRock",
+   "name": "Si570 AVR-USB",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25011,
+   "symbol": "SI570PICUSB",
+   "mfg": "KTH-SDR kit",
+   "name": "Si570 PIC-USB",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25012,
+   "symbol": "FIFISDR",
+   "mfg": "FiFi",
+   "name": "FiFi-SDR",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25013,
+   "symbol": "FUNCUBEDONGLE",
+   "mfg": "AMSAT-UK",
+   "name": "FUNcube Dongle",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25014,
+   "symbol": "HIQSDR",
+   "mfg": "N2ADR",
+   "name": "HiQSDR",
+   "status": "Beta",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 25015,
+   "symbol": "FASDR",
+   "mfg": "Funkamateur",
+   "name": "FA-SDR",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25016,
+   "symbol": "SI570PEABERRY1",
+   "mfg": "AE9RB",
+   "name": "Si570 Peaberry V1",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25017,
+   "symbol": "SI570PEABERRY2",
+   "mfg": "AE9RB",
+   "name": "Si570 Peaberry V2",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25018,
+   "symbol": "FUNCUBEDONGLEPLUS",
+   "mfg": "AMSAT-UK",
+   "name": "FUNcube Dongle Pro+",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "usb"
+  },
+  {
+   "model": 25019,
+   "symbol": "RSHFIQ",
+   "mfg": "HobbyPCB",
+   "name": "RS-HFIQ",
+   "status": "Stable",
+   "backend": "kit",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 57600,
+   "baudMax": 57600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 26001,
+   "symbol": "V4L",
+   "mfg": "Video4Linux",
+   "name": "SW/FM radio",
+   "status": "Stable",
+   "backend": "tuner",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 26002,
+   "symbol": "V4L2",
+   "mfg": "Video4Linux2",
+   "name": "SW/FM radio",
+   "status": "Stable",
+   "backend": "tuner",
+   "protocol": "binary",
+   "port": "other"
+  },
+  {
+   "model": 27001,
+   "symbol": "ESMC",
+   "mfg": "Rohde&Schwarz",
+   "name": "ESMC",
+   "status": "Stable",
+   "backend": "rs",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 115200,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "hardware"
+  },
+  {
+   "model": 27002,
+   "symbol": "EB200",
+   "mfg": "Rohde&Schwarz",
+   "name": "EB200",
+   "status": "Beta",
+   "backend": "rs",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 300,
+   "baudMax": 115200,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "hardware"
+  },
+  {
+   "model": 27003,
+   "symbol": "XK2100",
+   "mfg": "Rohde&Schwarz",
+   "name": "XK2100",
+   "status": "Stable",
+   "backend": "rs",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 38400,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "none"
+  },
+  {
+   "model": 27004,
+   "symbol": "EK89X",
+   "mfg": "Rohde&Schwarz",
+   "name": "EK895/6",
+   "status": "Stable",
+   "backend": "rs",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 38400,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "O",
+   "handshake": "none"
+  },
+  {
+   "model": 27005,
+   "symbol": "XK852",
+   "mfg": "Rohde&Schwarz",
+   "name": "XK852",
+   "status": "Alpha",
+   "backend": "rs",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "none"
+  },
+  {
+   "model": 28001,
+   "symbol": "PRM8060",
+   "mfg": "Philips/Simoco",
+   "name": "PRM8060",
+   "status": "Stable",
+   "backend": "prm80",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 7,
+   "stopBits": 1,
+   "parity": "E",
+   "handshake": "none"
+  },
+  {
+   "model": 29001,
+   "symbol": "ADT_200A",
+   "mfg": "ADAT www.adat.ch",
+   "name": "ADT-200A",
+   "status": "Stable",
+   "backend": "adat",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 30001,
+   "symbol": "IC_M700PRO",
+   "mfg": "Icom",
+   "name": "IC-M700PRO",
+   "status": "Stable",
+   "backend": "icmarine",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 30002,
+   "symbol": "IC_M802",
+   "mfg": "Icom",
+   "name": "IC-M802",
+   "status": "Stable",
+   "backend": "icmarine",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 30003,
+   "symbol": "IC_M710",
+   "mfg": "Icom",
+   "name": "IC-M710",
+   "status": "Stable",
+   "backend": "icmarine",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 30004,
+   "symbol": "IC_M803",
+   "mfg": "Icom",
+   "name": "IC-M803",
+   "status": "Stable",
+   "backend": "icmarine",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 4800,
+   "baudMax": 4800,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 31001,
+   "symbol": "DORJI_DRA818V",
+   "mfg": "Dorji",
+   "name": "DRA818V",
+   "status": "Beta",
+   "backend": "dorji",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 31002,
+   "symbol": "DORJI_DRA818U",
+   "mfg": "Dorji",
+   "name": "DRA818U",
+   "status": "Beta",
+   "backend": "dorji",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 32001,
+   "symbol": "BARRETT_2050",
+   "mfg": "Barrett",
+   "name": "2050",
+   "status": "Stable",
+   "backend": "barrett",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 32002,
+   "symbol": "BARRETT_950",
+   "mfg": "Barrett",
+   "name": "950",
+   "status": "Stable",
+   "backend": "barrett",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 32003,
+   "symbol": "BARRETT_4050",
+   "mfg": "Barrett",
+   "name": "4050",
+   "status": "Stable",
+   "backend": "barrett",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "xonxoff"
+  },
+  {
+   "model": 32004,
+   "symbol": "BARRETT_4100",
+   "mfg": "Rhode&Schwarz",
+   "name": "4100",
+   "status": "Beta",
+   "backend": "barrett",
+   "protocol": "binary",
+   "port": "network"
+  },
+  {
+   "model": 33001,
+   "symbol": "ELAD_FDM_DUO",
+   "mfg": "ELAD",
+   "name": "FDM-DUO",
+   "status": "Stable",
+   "backend": "elad",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 34001,
+   "symbol": "CODAN_ENVOY",
+   "mfg": "CODAN",
+   "name": "Envoy",
+   "status": "Stable",
+   "backend": "codan",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 34002,
+   "symbol": "CODAN_NGT",
+   "mfg": "CODAN",
+   "name": "NGT",
+   "status": "Stable",
+   "backend": "codan",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 34003,
+   "symbol": "CODAN_2110",
+   "mfg": "CODAN",
+   "name": "2110",
+   "status": "Stable",
+   "backend": "codan",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 35001,
+   "symbol": "GS100",
+   "mfg": "GOMSPACE",
+   "name": "GS100",
+   "status": "Stable",
+   "backend": "gomspace",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 500000,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 36001,
+   "symbol": "MDS4710",
+   "mfg": "MDS",
+   "name": "4710",
+   "status": "Beta",
+   "backend": "mds",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 110,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 36002,
+   "symbol": "MDS9710",
+   "mfg": "MDS",
+   "name": "9710",
+   "status": "Beta",
+   "backend": "mds",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 110,
+   "baudMax": 38400,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "hardware"
+  },
+  {
+   "model": 37001,
+   "symbol": "ATD578UVIII",
+   "mfg": "AnyTone",
+   "name": "D578A",
+   "status": "Beta",
+   "backend": "anytone",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 38001,
+   "symbol": "MICOM2",
+   "mfg": "Micom",
+   "name": "Micom 2/3",
+   "status": "Alpha",
+   "backend": "motorola",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 9600,
+   "baudMax": 9600,
+   "dataBits": 8,
+   "stopBits": 2,
+   "parity": "O",
+   "handshake": "none"
+  },
+  {
+   "model": 39001,
+   "symbol": "CTX10",
+   "mfg": "Commradio",
+   "name": "CTX-10",
+   "status": "Stable",
+   "backend": "commradio",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 3000000,
+   "baudMax": 3000000,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 40001,
+   "symbol": "PMR171",
+   "mfg": "GUOHETEC",
+   "name": "PMR-171",
+   "status": "Stable",
+   "backend": "guohetec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  },
+  {
+   "model": 40002,
+   "symbol": "Q900",
+   "mfg": "GUOHETEC",
+   "name": "Q900",
+   "status": "Stable",
+   "backend": "guohetec",
+   "protocol": "binary",
+   "port": "serial",
+   "baudMin": 115200,
+   "baudMax": 115200,
+   "dataBits": 8,
+   "stopBits": 1,
+   "parity": "N",
+   "handshake": "none"
+  }
+ ],
+ "identify": {
+  "kenwood": [
+   {
+    "id": "001",
+    "models": [
+     2011
+    ]
+   },
+   {
+    "id": "002",
+    "models": [
+     2008
+    ]
+   },
+   {
+    "id": "003",
+    "models": [
+     2006
+    ]
+   },
+   {
+    "id": "004",
+    "models": [
+     2002
+    ]
+   },
+   {
+    "id": "005",
+    "models": [
+     2015
+    ]
+   },
+   {
+    "id": "006",
+    "models": [
+     2025
+    ]
+   },
+   {
+    "id": "007",
+    "models": [
+     2007
+    ]
+   },
+   {
+    "id": "008",
+    "models": [
+     2012
+    ]
+   },
+   {
+    "id": "009",
+    "models": [
+     2009
+    ]
+   },
+   {
+    "id": "010",
+    "models": [
+     2003
+    ]
+   },
+   {
+    "id": "011",
+    "models": [
+     2005
+    ]
+   },
+   {
+    "id": "012",
+    "models": [
+     2013
+    ]
+   },
+   {
+    "id": "013",
+    "models": [
+     2001
+    ]
+   },
+   {
+    "id": "015",
+    "models": [
+     2010
+    ]
+   },
+   {
+    "id": "017",
+    "models": [
+     2004
+    ]
+   },
+   {
+    "id": "018",
+    "models": [
+     2016
+    ]
+   },
+   {
+    "id": "019",
+    "models": [
+     2014
+    ]
+   },
+   {
+    "id": "020",
+    "models": [
+     2028,
+     2046,
+     2051,
+     2049
+    ]
+   },
+   {
+    "id": "021",
+    "models": [
+     2031
+    ]
+   },
+   {
+    "id": "022",
+    "models": [
+     2039
+    ]
+   },
+   {
+    "id": "023",
+    "models": [
+     2037
+    ]
+   },
+   {
+    "id": "024",
+    "models": [
+     2041
+    ]
+   }
+  ],
+  "yaesu": [
+   {
+    "id": "0101",
+    "models": [
+     1030
+    ],
+    "variants": [
+     "FTDX9000D"
+    ]
+   },
+   {
+    "id": "0102",
+    "models": [
+     1030
+    ],
+    "variants": [
+     "FTDX9000Contest"
+    ]
+   },
+   {
+    "id": "0103",
+    "models": [
+     1030
+    ],
+    "variants": [
+     "FTDX9000MP"
+    ]
+   },
+   {
+    "id": "0135",
+    "models": [
+     1036
+    ],
+    "variants": [
+     "FT891"
+    ]
+   },
+   {
+    "id": "0241",
+    "models": [
+     1027
+    ],
+    "variants": [
+     "FT450"
+    ]
+   },
+   {
+    "id": "0244",
+    "models": [
+     1046
+    ],
+    "variants": [
+     "FT450D"
+    ]
+   },
+   {
+    "id": "0251",
+    "models": [
+     1029
+    ],
+    "variants": [
+     "FT2000"
+    ]
+   },
+   {
+    "id": "0252",
+    "models": [
+     1029
+    ],
+    "variants": [
+     "FT2000D"
+    ]
+   },
+   {
+    "id": "0310",
+    "models": [
+     1028
+    ],
+    "variants": [
+     "FT950"
+    ]
+   },
+   {
+    "id": "0362",
+    "models": [
+     1032
+    ],
+    "variants": [
+     "FTDX5000"
+    ]
+   },
+   {
+    "id": "0460",
+    "models": [
+     1037
+    ],
+    "variants": [
+     "FTDX3000"
+    ]
+   },
+   {
+    "id": "0462",
+    "models": [
+     1037
+    ],
+    "variants": [
+     "FTDX3000DM"
+    ]
+   },
+   {
+    "id": "0570",
+    "models": [
+     1035
+    ],
+    "variants": [
+     "FT991"
+    ]
+   },
+   {
+    "id": "0583",
+    "models": [
+     1034
+    ],
+    "variants": [
+     "FTDX1200"
+    ]
+   },
+   {
+    "id": "0670",
+    "models": [
+     1035
+    ],
+    "variants": [
+     "FT991A"
+    ]
+   },
+   {
+    "id": "0681",
+    "models": [
+     1040
+    ],
+    "variants": [
+     "FTDX101D"
+    ]
+   },
+   {
+    "id": "0682",
+    "models": [
+     1044
+    ],
+    "variants": [
+     "FTDX101MP"
+    ]
+   },
+   {
+    "id": "0761",
+    "models": [
+     1042
+    ],
+    "variants": [
+     "FTDX10"
+    ]
+   },
+   {
+    "id": "0800",
+    "models": [
+     1049
+    ],
+    "variants": [
+     "FT710"
+    ]
+   },
+   {
+    "id": "0840",
+    "models": [
+     1051
+    ],
+    "variants": [
+     "FTX1"
+    ]
+   }
+  ],
+  "civ": [
+   {
+    "civ": "0x00",
+    "models": [
+     0
+    ]
+   },
+   {
+    "civ": "0x01",
+    "models": [
+     3054
+    ]
+   },
+   {
+    "civ": "0x02",
+    "models": [
+     3018
+    ]
+   },
+   {
+    "civ": "0x04",
+    "models": [
+     3019
+    ]
+   },
+   {
+    "civ": "0x08",
+    "models": [
+     3040
+    ]
+   },
+   {
+    "civ": "0x10",
+    "models": [
+     3004
+    ]
+   },
+   {
+    "civ": "0x12",
+    "models": [
+     3005
+    ]
+   },
+   {
+    "civ": "0x14",
+    "models": [
+     3007
+    ]
+   },
+   {
+    "civ": "0x16",
+    "models": [
+     3008
+    ]
+   },
+   {
+    "civ": "0x18",
+    "models": [
+     3002
+    ]
+   },
+   {
+    "civ": "0x1A",
+    "models": [
+     3037
+    ]
+   },
+   {
+    "civ": "0x1C",
+    "models": [
+     3024,
+     3025
+    ]
+   },
+   {
+    "civ": "0x1E",
+    "models": [
+     3028
+    ]
+   },
+   {
+    "civ": "0x20",
+    "models": [
+     3003
+    ]
+   },
+   {
+    "civ": "0x22",
+    "models": [
+     3006
+    ]
+   },
+   {
+    "civ": "0x24",
+    "models": [
+     3001
+    ]
+   },
+   {
+    "civ": "0x26",
+    "models": [
+     3031
+    ]
+   },
+   {
+    "civ": "0x28",
+    "models": [
+     3014
+    ]
+   },
+   {
+    "civ": "0x2A",
+    "models": [
+     3043
+    ]
+   },
+   {
+    "civ": "0x2C",
+    "models": [
+     3029
+    ]
+   },
+   {
+    "civ": "0x2E",
+    "models": [
+     3035
+    ]
+   },
+   {
+    "civ": "0x30",
+    "models": [
+     3015
+    ]
+   },
+   {
+    "civ": "0x32",
+    "models": [
+     3038
+    ]
+   },
+   {
+    "civ": "0x34",
+    "models": [
+     3041
+    ]
+   },
+   {
+    "civ": "0x38",
+    "models": [
+     3016
+    ]
+   },
+   {
+    "civ": "0x3A",
+    "models": [
+     3017
+    ]
+   },
+   {
+    "civ": "0x3C",
+    "models": [
+     3021
+    ]
+   },
+   {
+    "civ": "0x3E",
+    "models": [
+     3012
+    ]
+   },
+   {
+    "civ": "0x40",
+    "models": [
+     3020
+    ]
+   },
+   {
+    "civ": "0x42",
+    "models": [
+     3032
+    ]
+   },
+   {
+    "civ": "0x44",
+    "models": [
+     3022
+    ]
+   },
+   {
+    "civ": "0x46",
+    "models": [
+     3030
+    ]
+   },
+   {
+    "civ": "0x48",
+    "models": [
+     3009
+    ]
+   },
+   {
+    "civ": "0x4A",
+    "models": [
+     3042
+    ]
+   },
+   {
+    "civ": "0x4C",
+    "models": [
+     3034
+    ]
+   },
+   {
+    "civ": "0x4E",
+    "models": [
+     3010
+    ]
+   },
+   {
+    "civ": "0x50",
+    "models": [
+     3026
+    ]
+   },
+   {
+    "civ": "0x52",
+    "models": [
+     3036
+    ]
+   },
+   {
+    "civ": "0x56",
+    "models": [
+     3023
+    ]
+   },
+   {
+    "civ": "0x58",
+    "models": [
+     3011
+    ]
+   },
+   {
+    "civ": "0x5A",
+    "models": [
+     3039
+    ]
+   },
+   {
+    "civ": "0x5C",
+    "models": [
+     3027
+    ]
+   },
+   {
+    "civ": "0x5E",
+    "models": [
+     3013
+    ]
+   },
+   {
+    "civ": "0x60",
+    "models": [
+     3044
+    ]
+   },
+   {
+    "civ": "0x62",
+    "models": [
+     3045
+    ]
+   },
+   {
+    "civ": "0x64",
+    "models": [
+     3047
+    ]
+   },
+   {
+    "civ": "0x66",
+    "models": [
+     3046
+    ]
+   },
+   {
+    "civ": "0x68",
+    "models": [
+     3055
+    ]
+   },
+   {
+    "civ": "0x6A",
+    "models": [
+     3056
+    ]
+   },
+   {
+    "civ": "0x6C",
+    "models": [
+     3058
+    ]
+   },
+   {
+    "civ": "0x6E",
+    "models": [
+     3057
+    ]
+   },
+   {
+    "civ": "0x70",
+    "models": [
+     3060,
+     3076,
+     3087
+    ]
+   },
+   {
+    "civ": "0x72",
+    "models": [
+     3066
+    ]
+   },
+   {
+    "civ": "0x74",
+    "models": [
+     3062
+    ]
+   },
+   {
+    "civ": "0x76",
+    "models": [
+     3061
+    ]
+   },
+   {
+    "civ": "0x78",
+    "models": [
+     3069
+    ]
+   },
+   {
+    "civ": "0x7A",
+    "models": [
+     3063
+    ]
+   },
+   {
+    "civ": "0x7C",
+    "models": [
+     3068
+    ]
+   },
+   {
+    "civ": "0x7E",
+    "models": [
+     3077
+    ]
+   },
+   {
+    "civ": "0x80",
+    "models": [
+     3067,
+     3052
+    ]
+   },
+   {
+    "civ": "0x88",
+    "models": [
+     3070
+    ]
+   },
+   {
+    "civ": "0x8E",
+    "models": [
+     3075
+    ]
+   },
+   {
+    "civ": "0x94",
+    "models": [
+     3073
+    ]
+   },
+   {
+    "civ": "0x96",
+    "models": [
+     3079
+    ]
+   },
+   {
+    "civ": "0x98",
+    "models": [
+     3078
+    ]
+   },
+   {
+    "civ": "0x9C",
+    "models": [
+     3080
+    ]
+   },
+   {
+    "civ": "0xA2",
+    "models": [
+     3081
+    ]
+   },
+   {
+    "civ": "0xB2",
+    "models": [
+     3092
+    ]
+   },
+   {
+    "civ": "0xB6",
+    "models": [
+     3094
+    ]
+   },
+   {
+    "civ": "0xE1",
+    "models": [
+     3074
+    ]
+   }
+  ]
+ }
+}

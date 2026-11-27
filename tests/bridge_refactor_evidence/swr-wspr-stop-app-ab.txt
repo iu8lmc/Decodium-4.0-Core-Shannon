@@ -1,0 +1,2 @@
+before {"boundary": true, "cat": false, "disabled": true, "highBoundary": true, "highRejected": true, "lowBoundary": true, "lowRejected": true, "rejected": true, "stopped": true, "tx": false, "wsprBoundary": true, "wsprStopped": true}
+after {"boundary": true, "cat": false, "disabled": true, "highBoundary": true, "highRejected": true, "lowBoundary": true, "lowRejected": true, "rejected": true, "stopped": true, "tx": false, "wsprBoundary": true, "wsprStopped": true}

@@ -1,0 +1,1 @@
+Rig discovery A/B: empty and candidate data plus diagnostic reporting passed

@@ -15,7 +15,7 @@ TIME_RE = re.compile(
     r"^\s*(?:(?P<date8>\d{8})|(?P<date6>\d{6}))?[_\s-]?(?P<time>\d{2}:?\d{2}:?\d{2}|\d{4})\b"
 )
 CALL_RE = re.compile(r"\b(?=[A-Z0-9/]{3,12}\b)(?:[A-Z]{1,3}|[0-9][A-Z])?[0-9][A-Z0-9/]{1,9}\b")
-MODE_MARKERS = {"~", "#", "@", "$", "%", "&", "^", "?", "*", "`"}
+MODE_MARKERS = {"~", "#", "@", "$", "%", "&", "^", "?", "*", "`", ".", ":"}
 SKIP_CALL_TOKENS = {
     "73",
     "CQ",
@@ -45,6 +45,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--date", required=True, help="UTC date, YYYY-MM-DD")
     parser.add_argument("--start", required=True, help="UTC start, HH:MM:SS")
     parser.add_argument("--end", required=True, help="UTC end, HH:MM:SS")
+    parser.add_argument(
+        "--details",
+        type=int,
+        default=0,
+        help="Print up to N one-sided rows per side after the summary",
+    )
     return parser.parse_args()
 
 
@@ -62,6 +68,13 @@ def parse_time_token(value: str) -> dt.time:
     if len(raw) == 4:
         raw += "00"
     return dt.datetime.strptime(raw, "%H%M%S").time()
+
+
+def normalize_message(message: str) -> str:
+    tokens = message.upper().split()
+    while tokens and (tokens[-1] in MODE_MARKERS or re.fullmatch(r"A\d+", tokens[-1])):
+        tokens.pop()
+    return " ".join(tokens)
 
 
 def parse_row(line: str, fallback_date: dt.date) -> Row | None:
@@ -92,7 +105,9 @@ def parse_row(line: str, fallback_date: dt.date) -> Row | None:
     if message_start >= len(parts):
         return None
 
-    message = " ".join(parts[message_start:]).strip()
+    message = normalize_message(" ".join(parts[message_start:]))
+    if not message:
+        return None
     return Row(
         timestamp=dt.datetime.combine(row_date, row_time),
         snr=snr,
@@ -165,6 +180,44 @@ def key(row: Row) -> tuple[dt.datetime, str]:
     return row.timestamp, row.message
 
 
+def classify_message(message: str) -> str:
+    tokens = message.upper().split()
+    if not tokens:
+        return "other"
+    if "/" in message:
+        return "slash"
+    if "<" in message or ">" in message:
+        return "special"
+    if tokens[0] == "CQ":
+        return "cq"
+    calls = calls_in_message(message)
+    if len(calls) >= 2:
+        return "direct"
+    return "other"
+
+
+def print_one_sided(label: str, rows: list[Row], details: int) -> None:
+    counts: dict[str, int] = {}
+    by_slot: dict[str, int] = {}
+    for row in rows:
+        category = classify_message(row.message)
+        counts[category] = counts.get(category, 0) + 1
+        slot = row.timestamp.strftime("%H:%M:%S")
+        by_slot[slot] = by_slot.get(slot, 0) + 1
+    count_text = ", ".join(f"{name}={counts[name]}" for name in sorted(counts)) or "-"
+    slot_text = ", ".join(f"{slot}={by_slot[slot]}" for slot in sorted(by_slot)) or "-"
+    print(f"{label}: rows={len(rows)} categories: {count_text}")
+    print(f"{label}: by_slot: {slot_text}")
+    if details <= 0:
+        return
+    for row in sorted(rows, key=lambda item: (item.timestamp, item.freq, item.message))[:details]:
+        print(
+            f"{label}: {row.timestamp.strftime('%H:%M:%S')} "
+            f"{row.snr:>3} {row.delta_t:>4.1f} {row.freq:>4} "
+            f"{classify_message(row.message):>7} {row.message}"
+        )
+
+
 def print_summary(summary: dict[str, object]) -> None:
     print(
         f"{summary['label']}: rows={summary['rows']} unique_calls={summary['unique_calls']} "
@@ -204,6 +257,10 @@ def main() -> int:
     cq_b = {call for row in rows_b if (call := cq_call(row.message))}
     print(f"{args.label_a}-only CQ calls: {', '.join(sorted(cq_a - cq_b)) or '-'}")
     print(f"{args.label_b}-only CQ calls: {', '.join(sorted(cq_b - cq_a)) or '-'}")
+    only_a = [row for row in rows_a if key(row) not in by_key_b]
+    only_b = [row for row in rows_b if key(row) not in by_key_a]
+    print_one_sided(f"{args.label_a}-only", only_a, args.details)
+    print_one_sided(f"{args.label_b}-only", only_b, args.details)
     return 0
 
 

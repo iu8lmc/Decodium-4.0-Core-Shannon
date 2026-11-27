@@ -1,0 +1,10 @@
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QSet>
+#include <QTextStream>
+#include <QVariantMap>
+#include <utility>
+static QString decodeMirrorEntryKey(const QVariantMap&e){return e.value("key").toString();}static int secondsFromUtcDisplayToken(QString s){return s=="invalid"?-1:QTime::fromString(s,"hhmmss").msecsSinceStartOfDay()/1000;}static int signedUtcSecondDelta(int a,int b){int d=b-a;if(d< -43200)d+=86400;else if(d>43200)d-=86400;return d;}
+class DecodiumBridge {public:QList<QVariantMap>m_deferredWorldMapFeedQueue,m_pendingDecodeReleaseQueue;QSet<QString>m_deferredWorldMapFeedKeys,m_worldMapClearedDecodeKeys;bool m_worldMapFullReplayDeferred=true,m_worldMapDeferredLogActive=true;QVariantList m_decodeList,m_rxDecodeList;int resets=0;void worldMapResetRequested(){++resets;}QString worldMapFeedEntryKey(const QVariantMap&)const;bool worldMapEntryFreshEnough(const QVariantMap&,int,QString* = nullptr)const;void resetWorldMapDisplayFromCurrentDecodes();};
+#include "bridge_refactor_under_test.inc"
+int main(int argc,char**argv){QCoreApplication app(argc,argv);QTextStream o(stdout);DecodiumBridge b;auto now=QDateTime::currentMSecsSinceEpoch();QString reason;bool old=b.worldMapEntryFreshEnough({{"timestamp",now-5000}},2,&reason);o<<"old|"<<old<<'|'<<reason.startsWith("timestamp age")<<'\n';o<<"fresh|"<<b.worldMapEntryFreshEnough({{"timestamp",now}},2,nullptr)<<'|'<<b.worldMapEntryFreshEnough({{"time","invalid"}},2,nullptr)<<'\n';o<<"fallback|"<<b.worldMapFeedEntryKey({{"message"," CQ K1ABC "}})<<'\n';b.m_decodeList={QVariantMap{{"key","A"}},QVariantMap{{"key","TX"},{"isTx",true}}};b.m_rxDecodeList={QVariantMap{{"key","B"}}};b.m_pendingDecodeReleaseQueue={QVariantMap{{"key","C"}}};b.m_deferredWorldMapFeedQueue={QVariantMap{{"key","pending"}}};b.m_deferredWorldMapFeedKeys={"pending"};b.resetWorldMapDisplayFromCurrentDecodes();o<<"reset|"<<b.m_worldMapClearedDecodeKeys.size()<<'|'<<b.m_worldMapClearedDecodeKeys.contains("TX")<<'|'<<b.m_deferredWorldMapFeedQueue.size()<<'|'<<b.m_worldMapFullReplayDeferred<<'|'<<b.resets<<'\n';}

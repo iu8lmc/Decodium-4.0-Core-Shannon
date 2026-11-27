@@ -1,0 +1,2 @@
+before {"active": true, "cat": false, "detectedEmpty": true, "digitalReady": true, "idle": true, "ready": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false}
+after {"active": true, "cat": false, "detectedEmpty": true, "digitalReady": true, "idle": true, "ready": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false}

@@ -1,0 +1,3 @@
+[MAP-WAV-FILTER] blacklist legacyPath /Users/salvo/.qttest/Library/Preferences/decodium4.ini labRoot /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-clear-lab-q9g6z5zy
+[MAP-DIAG] {"contacts":0,"requested":false,"decodeList":[],"rxList":[]}
+probe_exit 1

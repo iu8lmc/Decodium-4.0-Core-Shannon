@@ -1,0 +1,1 @@
+{"call": "K1ABC", "connected": false, "enabledAfter": false, "grid": "FN42", "output": "BlackHole 2ch", "resume": true, "tx1": "K1ABC IU8LMC JM75", "tx2": "K1ABC IU8LMC -10", "tx3": "K1ABC IU8LMC R-10", "tx4": "K1ABC IU8LMC RR73", "tx5": "K1ABC IU8LMC 73", "txAfter": false}

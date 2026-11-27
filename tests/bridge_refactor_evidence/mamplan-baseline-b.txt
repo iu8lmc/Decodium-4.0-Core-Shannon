@@ -1,0 +1,1 @@
+b: MAM spacing status by mode passed; CAT disabled

@@ -1,0 +1,10 @@
+********* Start testing of TestDecolinkLink *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.1.1.101)), macos 27.0.1
+PASS   : TestDecolinkLink::initTestCase()
+PASS   : TestDecolinkLink::cwKeyEventsReachTheGatewayInTheDocumentedFormat()
+PASS   : TestDecolinkLink::longKeyTracesAreSplitInPacketsOfAtMost255Events()
+PASS   : TestDecolinkLink::cwKeyIsRefusedToListenersAndWhileAnotherOperatorTransmits()
+PASS   : TestDecolinkLink::emptyKeyTracesAreNotSent()
+PASS   : TestDecolinkLink::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 774ms
+********* Finished testing of TestDecolinkLink *********

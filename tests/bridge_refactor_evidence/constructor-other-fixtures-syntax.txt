@@ -1,0 +1,23 @@
+Current generated before variants, macOS compiler -fsyntax-only. SKIP means variant requires a separate check. CAT-connection variants omitted because separately exercised.
+bridge_audio_device_init_ab.py OK 
+bridge_audio_device_init_loopback_ab.py OK 
+bridge_cat_telemetry_ab.py OK 
+bridge_core_timers_init_ab.py OK 
+bridge_decode_cluster_connections_ab.py OK 
+bridge_decode_model_init_ab.py OK 
+bridge_decode_model_init_legacy_pair_ab.py SKIP variant not found
+bridge_dxcluster_init_ab.py OK 
+bridge_dxcluster_init_local_ab.py OK 
+bridge_mac_legacy_start_ab.py OK 
+bridge_mac_legacy_start_stall_ab.py SKIP variant not found
+bridge_mac_standalone_start_ab.py OK 
+bridge_ready_profile_apply_ab.py OK 
+bridge_ready_profile_init_ab.py OK 
+bridge_satellite_init_ab.py OK 
+bridge_satellite_init_apply_ab.py OK 
+bridge_tci_complete_ab.py OK 
+bridge_tci_signals_ab.py OK 
+bridge_wav_init_ab.py OK 
+bridge_wav_init_timed_ab.py OK 
+
+Follow-up: mac legacy stall before variant passed -fsyntax-only. The legacy decode-model pair before variant initially failed on missing decode UI declarations; the script now uses the same declarations and constructor transformation as bridge_decode_model_init_ab.py, whose generated variant compiled. No functional A/B rerun was performed in this follow-up.

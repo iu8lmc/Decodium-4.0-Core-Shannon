@@ -1,0 +1,1 @@
+AutoCQ history A/B: worked, abandoned, clear, cooldown and queue handling passed

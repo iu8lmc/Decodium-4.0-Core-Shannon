@@ -1,0 +1,1 @@
+sync timer A/B: retry, generation/serial cancellation, state guards and rearming passed

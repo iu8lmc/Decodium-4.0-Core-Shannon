@@ -1,0 +1,4 @@
+repair before {"armed": true, "cat": false, "deferred": true, "repaired": true, "selected": true, "tx": false}
+repair after {"armed": true, "cat": false, "deferred": true, "repaired": true, "selected": true, "tx": false}
+reject before {"blocked": true, "cat": false, "noRequest": true, "tx": false}
+reject after {"blocked": true, "cat": false, "noRequest": true, "tx": false}

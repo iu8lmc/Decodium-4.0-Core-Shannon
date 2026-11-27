@@ -1,0 +1,4 @@
+write|1|1|1|1|1|1|1|1|1|1|1
+append|1|1|2|2
+failure|0|0
+folder|1

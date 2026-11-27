@@ -1,0 +1,1 @@
+{"call": "K1ABC", "display": "CQ K1ABC FN42", "grid": "FN42", "tx": false}

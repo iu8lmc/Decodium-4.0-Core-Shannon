@@ -1,0 +1,1 @@
+a: SSTV mode choices, controls and Radiofax profiles passed; CAT disabled

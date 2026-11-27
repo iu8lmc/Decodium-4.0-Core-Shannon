@@ -1,0 +1,35 @@
+--- a/common/sound/drm_portaudio.cpp
++++ b/common/sound/drm_portaudio.cpp
+@@ -194,7 +194,7 @@
+ 
+ 	PaStreamParameters pParameters;
+ 
+-	memset(&pParameters, sizeof(pParameters), 0);
++	memset(&pParameters, 0, sizeof(pParameters));
+ 	pParameters.channelCount = 2;
+ 	pParameters.hostApiSpecificStreamInfo = NULL;
+ 	pParameters.sampleFormat = paInt16;
+@@ -327,6 +327,8 @@
+ 	size_t bytes = psData.Size() * sizeof(short);
+ 
+ 	//cout << "Write: got " << bytes << " can put " << PaUtil_GetRingBufferWriteAvailable(&ringBuffer) << endl;
++	while (PaUtil_GetRingBufferWriteAvailable(&ringBuffer) < int(bytes) && getenv("DECODIUM_TRX_LAB_CONFIG"))
++		Pa_Sleep(10);
+ 	if (PaUtil_GetRingBufferWriteAvailable(&ringBuffer) < int(bytes))
+ 		return FALSE;			/* TODO use newer data in preference to draining old */
+ 
+--- a/common/util/Settings.cpp
++++ b/common/util/Settings.cpp
+@@ -52,9 +52,9 @@
+ {
+         char *home;
+         char txamaini[100];
+-        home = getenv("HOME");
+-        strcpy(txamaini, home);
+-        strcat(txamaini, "/txamadrm.ini");         
++        home = getenv("DECODIUM_TRX_LAB_CONFIG");
++        if (!home || strlen(home) >= sizeof(txamaini)) { fprintf(stderr, "missing laboratory config\n"); exit(1); }
++        strcpy(txamaini, home);         
+ 
+ 	/* First load settings from init-file and then parse command line arguments.
+ 	   The command line arguments overwrite settings in init-file! */

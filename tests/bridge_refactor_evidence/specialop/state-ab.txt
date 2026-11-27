@@ -1,0 +1,1 @@
+special operation A/B: identical source and 16 legacy/transition cases

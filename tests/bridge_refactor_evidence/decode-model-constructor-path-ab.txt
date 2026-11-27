@@ -1,0 +1,2 @@
+before {"callCleared": true, "cat": false, "display": 5, "dxCleared": true, "models": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+after {"callCleared": true, "cat": false, "display": 5, "dxCleared": true, "models": true, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}

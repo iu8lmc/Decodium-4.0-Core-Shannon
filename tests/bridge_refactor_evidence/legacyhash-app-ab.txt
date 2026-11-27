@@ -1,0 +1,2 @@
+before {"cat": false, "resolved": "K1ABC K2XYZ RR73", "source": "synthetic-all.txt", "tx": false, "wrong": "<...> K2XYZ RR73"}
+after {"cat": false, "resolved": "K1ABC K2XYZ RR73", "source": "synthetic-all.txt", "tx": false, "wrong": "<...> K2XYZ RR73"}

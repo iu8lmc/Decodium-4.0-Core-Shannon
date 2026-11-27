@@ -1,0 +1,8 @@
+dyld[77108]: Symbol not found: __ZN13QJsonDocumentC1EO10QJsonArray
+  Referenced from: <86C49DD7-5C4F-3022-BE95-BFF00949C164> /private/tmp/decodium-color-baseline/Decodium4.app/Contents/MacOS/Decodium4
+  Expected in:     <A4D0AE4C-74E2-31A5-B1D5-B272CDD50E0E> /opt/homebrew/Cellar/qtbase/6.11.2/lib/QtCore.framework/Versions/A/QtCore
+
+Traceback (most recent call last):
+  File "/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/tests/tools/bridge_chronology_runtime_lab.py", line 29, in <module>
+    print(result.stdout[-10000:]);raise RuntimeError('ALL.TXT probe failed')
+RuntimeError: ALL.TXT probe failed

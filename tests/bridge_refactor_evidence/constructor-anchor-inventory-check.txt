@@ -1,0 +1,5 @@
+Potentially stale insertion anchors: 0
+FT8 fixture scripts with missing forwards: 0
+Courtesy fixture scripts with missing forwards: 0
+Potentially stale constructor call anchors: 0
+Synthetic stale direct constructor anchor detected

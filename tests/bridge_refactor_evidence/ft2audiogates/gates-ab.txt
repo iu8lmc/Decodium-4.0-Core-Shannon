@@ -1,0 +1,1 @@
+FT2 audio gates A/B: threshold, saturation, mode, async and adaptive channel profiles passed

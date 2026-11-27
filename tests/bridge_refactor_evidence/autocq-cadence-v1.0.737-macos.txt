@@ -1,0 +1,1 @@
+AutoCQ: one-call burst, two-cycle listen, two-call stop, and FT8 RX decode passed; BlackHole only; CAT disabled

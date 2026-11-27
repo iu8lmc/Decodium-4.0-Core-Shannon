@@ -67,14 +67,43 @@ namespace
   float max_metric_for_bit (float const* values, int count, int bit_index, int bit_value)
   {
     float best = -std::numeric_limits<float>::infinity ();
-    for (int i = 0; i < count; ++i)
+    // Visit the same selected indices in ascending order, skipping the
+    // alternating blocks that cannot match this bit. This preserves the
+    // max operation and its floating-point ordering.
+    int const block = 1 << bit_index;
+    for (int start = bit_value ? block : 0; start < count; start += 2 * block)
       {
-        if (((i >> bit_index) & 1) == bit_value)
+        int const end = std::min (start + block, count);
+        for (int i = start; i < end; ++i)
           {
             best = std::max (best, values[static_cast<size_t> (i)]);
           }
       }
     return best;
+  }
+
+  // Reduce adjacent groups in place. At each level the even and odd groups
+  // are exactly the original values with this bit clear and set. Sanitizing
+  // NaNs matches max_metric_for_bit's initial -infinity and std::max order.
+  void full_symbol_metrics (float* values, float* out)
+  {
+    float const negativeInfinity = -std::numeric_limits<float>::infinity ();
+    for (int i = 0; i < 65536; ++i)
+      if (std::isnan (values[i])) values[i] = negativeInfinity;
+    for (int count = 65536, bit = 0; count > 1; count /= 2, ++bit)
+      {
+        float zero = negativeInfinity;
+        float one = negativeInfinity;
+        for (int i = 0; i < count / 2; ++i)
+          {
+            float const even = values[2 * i];
+            float const odd = values[2 * i + 1];
+            zero = std::max (zero, even);
+            one = std::max (one, odd);
+            values[i] = std::max (even, odd);
+          }
+        out[15 - bit] = one - zero;
+      }
   }
 
   void normalize_bitmetrics (float* column, int n)
@@ -311,11 +340,7 @@ namespace
               }
           }
         int const ipt = 2 * k;
-        for (int ib = 0; ib < 16; ++ib)
-          {
-            metric_slot (ipt + ib, 3) = max_metric_for_bit (s2.data (), 65536, 15 - ib, 1)
-                                      - max_metric_for_bit (s2.data (), 65536, 15 - ib, 0);
-          }
+        full_symbol_metrics (s2.data (), bitmetrics + ipt + kFst4MetricRows * 3);
       }
 
     *nsync_qual = fst4_hard_sync_quality (bitmetrics);

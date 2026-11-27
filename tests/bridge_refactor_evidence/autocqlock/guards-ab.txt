@@ -1,0 +1,1 @@
+AutoCQ lock/queue A/B: restoration and active/recent/duplicate/full guards passed

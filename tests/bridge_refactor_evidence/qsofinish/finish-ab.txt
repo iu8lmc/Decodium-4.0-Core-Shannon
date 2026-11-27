@@ -1,0 +1,1 @@
+QSO finish A/B: courtesy, log, queue, automatic CQ and stale timer passed

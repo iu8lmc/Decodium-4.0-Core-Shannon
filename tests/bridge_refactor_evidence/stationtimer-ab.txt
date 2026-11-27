@@ -1,0 +1,5 @@
+even|sendStationTelemetry: rimandata al prossimo slot TX (even) fra 215 ms|1
+odd|sendStationTelemetry: rimandata al prossimo slot TX (odd) fra 115 ms
+fallback|sendStationTelemetry: rimandata al prossimo slot TX (fallback) fra 1000 ms
+forced|2|1
+guards|0|0

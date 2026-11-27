@@ -1,0 +1,4 @@
+initial|0
+appguard|1
+shutdown|1|0|0|111|ptt:0,freq:101,tx:0|1|1
+repeat|3|1

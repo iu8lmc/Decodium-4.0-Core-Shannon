@@ -1,0 +1,4 @@
+before a {"input": 0, "loaded": true, "missing": false, "missingPreserved": true, "monitor": false, "output": 3, "saved": true, "tx": false}
+before b {"input": 3, "loaded": true, "missing": false, "missingPreserved": true, "monitor": false, "output": 0, "saved": true, "tx": false}
+after a {"input": 0, "loaded": true, "missing": false, "missingPreserved": true, "monitor": false, "output": 3, "saved": true, "tx": false}
+after b {"input": 3, "loaded": true, "missing": false, "missingPreserved": true, "monitor": false, "output": 0, "saved": true, "tx": false}

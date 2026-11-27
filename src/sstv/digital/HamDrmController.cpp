@@ -1,0 +1,2846 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "HamDrmController.h"
+
+#include "HamDrmBsrCodec.h"
+#include "HamDrmHybridCodec.h"
+#include "HamDrmRsCodec.h"
+#include "src/sstv/diagnostics/SstvDiagnosticLogging.h"
+
+#include <QBuffer>
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QMetaObject>
+#include <QRegularExpression>
+#include <QStandardPaths>
+#include <QSaveFile>
+#include <QStringList>
+#include <QThread>
+#include <QUuid>
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <iterator>
+#include <stdexcept>
+#include <utility>
+
+namespace decodium::sstv::hamdrm {
+
+struct HamDrmController::InboxRecord final
+{
+    explicit InboxRecord(std::uint16_t transportId,
+                         const HamDrmLimits& limits)
+        : assembler(std::make_unique<HamDrmObjectAssembler>(transportId,
+                                                             limits))
+    {
+        progress.transportId = transportId;
+    }
+
+    std::unique_ptr<HamDrmObjectAssembler> assembler;
+    HamDrmAssemblyProgress progress;
+    std::optional<HamDrmMotObjectMetadata> metadata;
+    std::map<std::uint16_t, std::vector<std::uint8_t>> headerSegments;
+    std::optional<std::size_t> totalHeaderSegments;
+    std::size_t headerBytes {0U};
+    std::size_t bodySegmentSize {0U};
+    std::optional<HamDrmAssembledObject> completedObject;
+    // Compact fingerprints let carousel repeats be recognised after the
+    // assembler's potentially large segment buffers have been released.
+    std::map<std::pair<HamDrmMotGroupKind, std::uint16_t>, std::pair<bool, QByteArray>> completedSegments;
+    std::optional<HamDrmImageInfo> imageInfo;
+    QImage galleryImage;
+    QString receivedProfileId;
+    const QString referenceToken {QUuid::createUuid().toString(QUuid::WithoutBraces)};
+    QString error;
+    bool persisted {false};
+    bool rejected {false};
+    bool jpeg2000Decoded {false};
+    bool imageDecoded {false};
+    bool hybridReference {false};
+    bool hybridDownloaded {false};
+    bool bsrRollover {false};
+};
+
+namespace {
+
+constexpr std::size_t kMaximumControllerInboxObjects = 4'096U;
+constexpr std::size_t kMaximumControllerErrorCharacters = 65'536U;
+constexpr std::size_t kMaximumMissingTextItems = 256U;
+// Match the default Gallery decoded-image allowance.  The archive snapshot
+// must not turn a structurally valid HAMDRM object into a larger, unbounded
+// Qt decoder allocation.
+constexpr std::uint32_t kMaximumGallerySnapshotDimension = 8'192U;
+constexpr std::uint64_t kMaximumGallerySnapshotPixels =
+    32ULL * 1024ULL * 1024ULL;
+constexpr std::uint64_t kMaximumGallerySnapshotBytes =
+    128ULL * 1024ULL * 1024ULL;
+
+bool gallerySnapshotWithinLimits(std::uint32_t width,
+                                 std::uint32_t height,
+                                 const HamDrmLimits& limits) noexcept
+{
+    if (width == 0U || height == 0U
+        || width > limits.maximumImageDimension
+        || height > limits.maximumImageDimension
+        || width > kMaximumGallerySnapshotDimension
+        || height > kMaximumGallerySnapshotDimension) {
+        return false;
+    }
+    const std::uint64_t pixels = static_cast<std::uint64_t>(width)
+        * static_cast<std::uint64_t>(height);
+    return pixels <= limits.maximumImagePixels
+        && pixels <= kMaximumGallerySnapshotPixels
+        && pixels <= std::numeric_limits<std::uint64_t>::max() / 4U
+        && pixels * 4U <= kMaximumGallerySnapshotBytes
+        && pixels * 4U
+            <= static_cast<std::uint64_t>(
+                std::numeric_limits<qsizetype>::max());
+}
+
+QImage decodeGalleryImage(const QByteArray& bytes,
+                          const HamDrmImageInfo& info,
+                          const HamDrmLimits& limits)
+{
+    if (bytes.isEmpty()
+        || info.width == 0U || info.height == 0U
+        || info.width > static_cast<std::uint32_t>(
+            std::numeric_limits<int>::max())
+        || info.height > static_cast<std::uint32_t>(
+            std::numeric_limits<int>::max())
+        // This is deliberately checked before QImageReader::read(): the
+        // native allocation-free validator and this Gallery copy share the
+        // same dimension/pixel policy, plus the Gallery decoded-byte cap.
+        || !gallerySnapshotWithinLimits(info.width, info.height, limits)) {
+        return {};
+    }
+    QBuffer input;
+    input.setData(bytes);
+    if (!input.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    QImageReader reader(&input);
+    reader.setAutoTransform(false);
+    const QSize expected(static_cast<int>(info.width),
+                         static_cast<int>(info.height));
+    if (reader.size() != expected) {
+        return {};
+    }
+    const QImage decoded = reader.read();
+    if (decoded.isNull() || decoded.size() != expected) {
+        return {};
+    }
+    const QImage normalized = decoded.convertToFormat(QImage::Format_RGBA8888);
+    if (normalized.isNull() || normalized.sizeInBytes() <= 0
+        || static_cast<std::uint64_t>(normalized.sizeInBytes())
+            > kMaximumGallerySnapshotBytes) {
+        return {};
+    }
+    return normalized;
+}
+
+QImage galleryImageFromRgba(const HamDrmRgbaImage& decoded,
+                            const HamDrmLimits& limits)
+{
+    if (decoded.width == 0U || decoded.height == 0U
+        || decoded.width > static_cast<std::uint32_t>(
+            std::numeric_limits<int>::max())
+        || decoded.height > static_cast<std::uint32_t>(
+            std::numeric_limits<int>::max())
+        || !gallerySnapshotWithinLimits(decoded.width, decoded.height,
+                                        limits)) {
+        return {};
+    }
+    const std::uint64_t pixels = static_cast<std::uint64_t>(decoded.width)
+        * static_cast<std::uint64_t>(decoded.height);
+    if (pixels > std::numeric_limits<std::size_t>::max() / 4U
+        || decoded.rgba.size() != static_cast<std::size_t>(pixels * 4U)) {
+        return {};
+    }
+    QImage image(static_cast<int>(decoded.width),
+                 static_cast<int>(decoded.height),
+                 QImage::Format_RGBA8888);
+    if (image.isNull()
+        || image.sizeInBytes() != static_cast<qsizetype>(pixels * 4U)) {
+        return {};
+    }
+    std::memcpy(image.bits(), decoded.rgba.data(), decoded.rgba.size());
+    return image;
+}
+
+class NativeJpeg2000Backend final : public HamDrmJpeg2000Backend
+{
+public:
+    HamDrmJpeg2000Capability capability() const override
+    {
+        return {true,
+                true,
+                QStringLiteral("OpenJPEG / Decodium native"),
+                HamDrmController::tr(
+                    "Native bounded JPEG2000 decode and lossless encode are linked")};
+    }
+
+    HamDrmValueResult<HamDrmRgbaImage> decode(
+        const std::uint8_t* data,
+        std::size_t size,
+        const HamDrmLimits& limits) const override
+    {
+        return decodeHamDrmJpeg2000(data, size, limits);
+    }
+
+    HamDrmValueResult<std::vector<std::uint8_t>> encodeLossless(
+        const HamDrmRgbaImage& image,
+        const HamDrmLimits& limits) const override
+    {
+        return encodeHamDrmJpeg2000Lossless(image, limits);
+    }
+};
+
+QString statusDetail(const HamDrmStatus& status, const char* fallback)
+{
+    return status.detail.empty()
+        ? QString::fromLatin1(fallback)
+        : QString::fromUtf8(status.detail.data(),
+                            static_cast<qsizetype>(status.detail.size()));
+}
+
+std::vector<std::uint8_t> byteVector(const QByteArray& bytes)
+{
+    const auto* begin = reinterpret_cast<const std::uint8_t*>(
+        bytes.constData());
+    return std::vector<std::uint8_t>(begin, begin + bytes.size());
+}
+
+} // namespace
+
+std::shared_ptr<HamDrmJpeg2000Backend>
+makeNativeHamDrmJpeg2000Backend()
+{
+    return std::make_shared<NativeJpeg2000Backend>();
+}
+
+HamDrmController::HamDrmController(QObject* parent)
+    : HamDrmController(HamDrmControllerConfig {},
+                       HamDrmControllerBackends {
+                           {}, {}, makeNativeHamDrmJpeg2000Backend()},
+                       parent)
+{
+}
+
+HamDrmController::HamDrmController(HamDrmControllerConfig config,
+                                   HamDrmControllerBackends backends,
+                                   QObject* parent)
+    : QObject(parent)
+    , config_(std::move(config))
+    , backends_(std::move(backends))
+{
+    validateConfig();
+    if (!config_.partialStoreRoot.isEmpty()) {
+        partialStore_ = std::make_unique<HamDrmPartialStore>(
+            config_.partialStoreRoot, config_.limits);
+    }
+
+    const auto& registered = HamDrmProfileRegistry::all();
+    if (registered.size() != 72U) {
+        throw std::logic_error(
+            "HAMDRM controller requires the canonical 72-profile registry");
+    }
+    profiles_.reserve(static_cast<qsizetype>(registered.size()));
+    for (const HamDrmProfile& profile : registered) {
+        if (!HamDrmProfileRegistry::validate(profile).ok()) {
+            throw std::logic_error("HAMDRM registry contains an invalid profile");
+        }
+        profiles_.push_back(profileMap(profile));
+    }
+    selectedProfileId_ = QString::fromStdString(registered.front().id);
+    rxState_ = waveformRxAvailable()
+        ? OperationState::Idle : OperationState::Unavailable;
+    txState_ = waveformTxAvailable()
+        ? OperationState::Idle : OperationState::Unavailable;
+    connect(&hybridFtp_, &HamDrmHybridFtp::finished, this,
+            [this](bool success, const QByteArray& bytes, const QString& failure) {
+        const int id = hybridDownloadId_;
+        const QString token = hybridDownloadToken_;
+        const QUrl destination = hybridDownloadDestination_;
+        hybridDownloadId_ = -1;
+        hybridDownloadToken_.clear();
+        hybridDownloadDestination_ = QUrl();
+        emit hybridDownloadBusyChanged();
+        auto* record = recordFor(id);
+        if (!success || !record || !record->hybridReference || !record->metadata
+            || token.isEmpty() || record->referenceToken != token) {
+            setError(success ? tr("Hybrid reference no longer exists") : failure);
+            emit hybridDownloadFinished(false);
+            return;
+        }
+        auto metadata = *record->metadata;
+        metadata.bodySize = static_cast<std::uint32_t>(bytes.size());
+        const auto image = validateHamDrmImage(metadata,
+            reinterpret_cast<const std::uint8_t*>(bytes.constData()), static_cast<std::size_t>(bytes.size()), config_.limits);
+        QImage galleryImage;
+        if (image.ok() && image.value->format == HamDrmImageFormat::Jpeg2000 && backends_.jpeg2000) {
+            try {
+                const auto jp2 = backends_.jpeg2000->decode(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                                            static_cast<std::size_t>(bytes.size()), config_.limits);
+                if (jp2.ok() && jp2.value->width == image.value->width && jp2.value->height == image.value->height)
+                    galleryImage = galleryImageFromRgba(*jp2.value, config_.limits);
+            } catch (...) { galleryImage = {}; }
+        } else if (image.ok()) {
+            galleryImage = decodeGalleryImage(bytes, *image.value, config_.limits);
+        }
+        if (!image.ok() || galleryImage.isNull()) {
+            setError(tr("Downloaded hybrid file is not a valid image"));
+            emit hybridDownloadFinished(false);
+            return;
+        }
+        QSaveFile file(destination.toLocalFile());
+        if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+            setError(tr("Could not save the downloaded hybrid image"));
+            emit hybridDownloadFinished(false);
+            return;
+        }
+        const bool archive = !record->hybridDownloaded;
+        const QString profileId = record->receivedProfileId;
+        record->hybridDownloaded = true;
+        clearError();
+        publishInbox(static_cast<std::uint16_t>(id));
+        if (archive) emit receivedImageReady(galleryImage, profileId, true);
+        emit hybridDownloadFinished(true);
+    });
+    connect(&hybridUploadFtp_, &HamDrmHybridFtp::finished, this,
+            [this](bool success, const QByteArray&, const QString& failure) {
+        if (!hybridUpload_) return;
+        auto pending = std::move(*hybridUpload_);
+        hybridUpload_.reset();
+        if (!success) {
+            if (hybridUploadCancelRequested_) {
+                hybridUploadCancelRequested_ = false;
+                setTxState(OperationState::Cancelled, 0.0);
+            } else {
+                setTxState(OperationState::Error, 0.0);
+                setError(failure);
+            }
+            return;
+        }
+        const auto* profile = HamDrmProfileRegistry::findById(pending.profileId.toStdString());
+        if (!profile || !backends_.waveformTx) {
+            setTxState(OperationState::Error, 0.0);
+            setError(tr("Hybrid upload succeeded, but the radio backend is unavailable"));
+            return;
+        }
+        pendingRepairSource_ = RepairSource {pending.object,
+            std::min(config_.txBodySegmentBytes, static_cast<std::size_t>(pending.object.metadata.bodySize)), pending.profileId};
+        txSessionId_ = nextSessionId();
+        const auto session = txSessionId_;
+        HamDrmStatus status;
+        try { status = backends_.waveformTx->start(*profile, pending.object, session, *this); }
+        catch (...) { status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, "hybrid waveform backend failed"); }
+        if (!status.ok()) {
+            pendingRepairSource_.reset(); txSessionId_ = 0;
+            setTxState(OperationState::Error, 0.0);
+            setError(tr("Hybrid upload succeeded, but radio transmission failed"));
+            return;
+        }
+        if (txSessionId_ == session && txState_ == OperationState::Starting)
+            setTxState(OperationState::Active, 0.0);
+        emit txImageAccepted(pending.image, pending.profileId, pending.occupiedBandwidthHz);
+    });
+}
+
+HamDrmController::~HamDrmController()
+{
+    if (rxSessionId_ != 0U && backends_.waveformRx) {
+        backends_.waveformRx->cancel(rxSessionId_);
+    }
+    if (txSessionId_ != 0U && backends_.waveformTx) {
+        backends_.waveformTx->cancel(txSessionId_);
+    }
+    rxSessionId_ = 0U;
+    txSessionId_ = 0U;
+}
+
+QVariantMap HamDrmController::profileMap(const HamDrmProfile& profile)
+{
+    QVariantMap result;
+    result.insert(QStringLiteral("id"), QString::fromStdString(profile.id));
+    result.insert(QStringLiteral("displayName"),
+                  QString::fromStdString(profile.displayName));
+    result.insert(QStringLiteral("robustness"),
+                  QString::fromStdString(
+                      hamDrmRobustnessName(profile.robustness)));
+    result.insert(QStringLiteral("bandwidth"),
+                  QString::fromStdString(
+                      hamDrmBandwidthName(profile.occupiedBandwidth)));
+    result.insert(QStringLiteral("bandwidthHz"),
+                  static_cast<qulonglong>(profile.occupiedBandwidthHz));
+    result.insert(QStringLiteral("constellation"),
+                  QString::fromStdString(
+                      hamDrmConstellationName(profile.constellation)));
+    result.insert(QStringLiteral("protection"),
+                  QString::fromStdString(
+                      hamDrmProtectionName(profile.protection)));
+    result.insert(QStringLiteral("interleaver"),
+                  QString::fromStdString(
+                      hamDrmInterleaverName(profile.interleaver)));
+    result.insert(QStringLiteral("payloadBytesPer400msFrame"),
+                  static_cast<qulonglong>(
+                      profile.payloadBytesPer400msFrame));
+    result.insert(QStringLiteral("expectedPayloadBitrate"),
+                  static_cast<qulonglong>(profile.expectedPayloadBitrate));
+    return result;
+}
+
+QVariantList HamDrmController::profiles() const
+{
+    return profiles_;
+}
+
+QString HamDrmController::selectedProfileId() const
+{
+    return selectedProfileId_;
+}
+
+QVariantMap HamDrmController::selectedProfile() const
+{
+    const HamDrmProfile* profile = currentProfile();
+    return profile == nullptr ? QVariantMap {} : profileMap(*profile);
+}
+
+void HamDrmController::setSelectedProfileId(const QString& profileId)
+{
+    if (!ownerThread()) {
+        return;
+    }
+    const QString requested = profileId.trimmed();
+    const HamDrmProfile* selected = HamDrmProfileRegistry::findById(
+        requested.toStdString());
+    if (selected == nullptr) {
+        for (const HamDrmProfile& candidate : HamDrmProfileRegistry::all()) {
+            if (QString::compare(QString::fromStdString(candidate.id),
+                                 requested,
+                                 Qt::CaseInsensitive) == 0) {
+                selected = &candidate;
+                break;
+            }
+        }
+    }
+    if (selected == nullptr) {
+        static_cast<void>(reject(
+            QStringLiteral("profile"),
+            tr("Unknown HAMDRM profile ID; profile selection was unchanged")));
+        return;
+    }
+    const QString canonical = QString::fromStdString(selected->id);
+    if (canonical == selectedProfileId_) {
+        return;
+    }
+    if (busy()) {
+        static_cast<void>(reject(
+            QStringLiteral("profile"),
+            tr("Cancel the active HAMDRM operation before changing profile")));
+        return;
+    }
+    selectedProfileId_ = canonical;
+    clearError();
+    emit selectedProfileChanged();
+    emit repairStateChanged();
+}
+
+bool HamDrmController::experimentalTimingAvailable() const noexcept
+{
+    return backends_.waveformRx && backends_.waveformRx->supportsExperimentalTiming();
+}
+
+bool HamDrmController::experimentalTiming() const noexcept
+{
+    return experimentalTiming_;
+}
+
+void HamDrmController::setExperimentalTiming(bool enabled)
+{
+    if (!ownerThread() || enabled == experimentalTiming_) return;
+    if (busy() || !backends_.waveformRx
+        || !backends_.waveformRx->supportsExperimentalTiming()
+        || !backends_.waveformRx->setExperimentalTiming(enabled)) {
+        static_cast<void>(reject(QStringLiteral("rx-timing"),
+            tr("Experimental RX timing cannot be changed during an operation or is unavailable")));
+        return;
+    }
+    experimentalTiming_ = enabled;
+    clearError();
+    emit experimentalTimingChanged();
+}
+
+HamDrmWaveformCapability HamDrmController::rxCapability() const
+{
+    if (!backends_.waveformRx) {
+        return {false, {}, tr("Complete HAMDRM waveform RX backend is not connected")};
+    }
+    try {
+        HamDrmWaveformCapability capability =
+            backends_.waveformRx->capability();
+        if (!capability.completeBackend && capability.detail.isEmpty()) {
+            capability.detail = tr(
+                "Injected HAMDRM RX component is not a complete waveform backend");
+        }
+        return capability;
+    } catch (...) {
+        return {false, {}, tr("HAMDRM waveform RX capability probe failed")};
+    }
+}
+
+HamDrmWaveformCapability HamDrmController::txCapability() const
+{
+    if (!backends_.waveformTx) {
+        return {false, {}, tr("Complete HAMDRM waveform TX backend is not connected")};
+    }
+    try {
+        HamDrmWaveformCapability capability =
+            backends_.waveformTx->capability();
+        if (!capability.completeBackend && capability.detail.isEmpty()) {
+            capability.detail = tr(
+                "Injected HAMDRM TX component is not a complete waveform backend");
+        }
+        return capability;
+    } catch (...) {
+        return {false, {}, tr("HAMDRM waveform TX capability probe failed")};
+    }
+}
+
+HamDrmJpeg2000Capability HamDrmController::jpegCapability() const
+{
+    if (!backends_.jpeg2000) {
+        return {false, false, {},
+                tr("JPEG2000 codec adapter is not connected")};
+    }
+    try {
+        HamDrmJpeg2000Capability capability =
+            backends_.jpeg2000->capability();
+        if (!capability.decodeAvailable && !capability.encodeAvailable
+            && capability.detail.isEmpty()) {
+            capability.detail = tr(
+                "Injected JPEG2000 component exposes no operational direction");
+        }
+        return capability;
+    } catch (...) {
+        return {false, false, {},
+                tr("JPEG2000 capability probe failed")};
+    }
+}
+
+QVariantMap HamDrmController::capabilities() const
+{
+    const HamDrmWaveformCapability rx = rxCapability();
+    const HamDrmWaveformCapability tx = txCapability();
+    const HamDrmJpeg2000Capability jpeg = jpegCapability();
+    QVariantMap result;
+    result.insert(QStringLiteral("profileRegistry"), true);
+    result.insert(QStringLiteral("profileCount"), profiles_.size());
+    result.insert(QStringLiteral("motObjectCodec"), true);
+    result.insert(QStringLiteral("bsrCodec"), true);
+    result.insert(QStringLiteral("boundedImageStructuralValidation"), true);
+    result.insert(QStringLiteral("partialResume"), partialResumeAvailable());
+    result.insert(QStringLiteral("waveformRx"), rx.completeBackend);
+    result.insert(QStringLiteral("waveformTx"), tx.completeBackend);
+    result.insert(QStringLiteral("jpeg2000Decode"), jpeg.decodeAvailable);
+    result.insert(QStringLiteral("jpeg2000Encode"), jpeg.encodeAvailable);
+    result.insert(QStringLiteral("rxBackendName"), rx.backendName);
+    result.insert(QStringLiteral("txBackendName"), tx.backendName);
+    result.insert(QStringLiteral("jpeg2000BackendName"), jpeg.backendName);
+    return result;
+}
+
+QString HamDrmController::capabilityMessage() const
+{
+    QStringList unavailable;
+    if (!waveformRxAvailable()) {
+        unavailable.push_back(tr("complete waveform RX"));
+    }
+    if (!waveformTxAvailable()) {
+        unavailable.push_back(tr("complete waveform TX"));
+    }
+    if (!jpeg2000DecodeAvailable()) {
+        unavailable.push_back(tr("JPEG2000 decode adapter"));
+    }
+    if (!jpeg2000EncodeAvailable()) {
+        unavailable.push_back(tr("JPEG2000 encode adapter"));
+    }
+    if (!partialResumeAvailable()) {
+        unavailable.push_back(tr("configured partial-object store"));
+    }
+
+    const QString base = tr(
+        "HAMDRM application core provides 72 named profiles, bounded MOT/BSR handling and structural image validation.");
+    if (unavailable.isEmpty()) {
+        return base + QLatin1Char(' ')
+            + tr("All injected adapters report operational; this is not an on-air interoperability claim.");
+    }
+    return base + QLatin1Char(' ')
+        + tr("Not connected: %1. RF start remains blocked for each missing waveform direction.")
+              .arg(unavailable.join(QStringLiteral(", ")));
+}
+
+bool HamDrmController::waveformRxAvailable() const
+{
+    return rxCapability().completeBackend;
+}
+
+bool HamDrmController::waveformTxAvailable() const
+{
+    return txCapability().completeBackend;
+}
+
+bool HamDrmController::jpeg2000DecodeAvailable() const
+{
+    return jpegCapability().decodeAvailable;
+}
+
+bool HamDrmController::jpeg2000EncodeAvailable() const
+{
+    return jpegCapability().encodeAvailable;
+}
+
+bool HamDrmController::partialResumeAvailable() const noexcept
+{
+    return static_cast<bool>(partialStore_);
+}
+
+HamDrmController::OperationState HamDrmController::rxState() const noexcept
+{
+    return rxState_;
+}
+
+HamDrmController::OperationState HamDrmController::txState() const noexcept
+{
+    return txState_;
+}
+
+QString HamDrmController::operationStateName(OperationState state,
+                                              bool receive)
+{
+    switch (state) {
+    case OperationState::Unavailable: return tr("Unavailable");
+    case OperationState::Idle: return tr("Idle");
+    case OperationState::Starting: return tr("Starting");
+    case OperationState::Active:
+        return receive ? tr("Receiving") : tr("Transmitting");
+    case OperationState::Cancelling: return tr("Cancelling");
+    case OperationState::Completed: return tr("Completed");
+    case OperationState::Cancelled: return tr("Cancelled");
+    case OperationState::Error: return tr("Error");
+    }
+    return tr("Unknown");
+}
+
+QString HamDrmController::rxStateName() const
+{
+    return operationStateName(rxState_, true);
+}
+
+QString HamDrmController::txStateName() const
+{
+    return operationStateName(txState_, false);
+}
+
+double HamDrmController::rxProgress() const noexcept
+{
+    return rxProgress_;
+}
+
+double HamDrmController::txProgress() const noexcept
+{
+    return txProgress_;
+}
+
+bool HamDrmController::activeState(OperationState state) noexcept
+{
+    return state == OperationState::Starting
+        || state == OperationState::Active
+        || state == OperationState::Cancelling;
+}
+
+bool HamDrmController::busy() const noexcept
+{
+    return activeState(rxState_) || activeState(txState_);
+}
+
+QString HamDrmController::error() const
+{
+    return error_;
+}
+
+QString HamDrmController::imageFormatName(HamDrmImageFormat format)
+{
+    switch (format) {
+    case HamDrmImageFormat::Jpeg: return QStringLiteral("JPEG");
+    case HamDrmImageFormat::Jpeg2000: return QStringLiteral("JPEG2000/JP2");
+    case HamDrmImageFormat::Png: return QStringLiteral("PNG");
+    case HamDrmImageFormat::Gif: return QStringLiteral("GIF");
+    case HamDrmImageFormat::Bmp: return QStringLiteral("BMP");
+    }
+    return QStringLiteral("unknown");
+}
+
+QVariantList HamDrmController::inbox() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(inbox_.size()));
+    for (const auto& entry : inbox_) {
+        const InboxRecord& record = *entry.second;
+        QVariantMap row;
+        row.insert(QStringLiteral("transportId"), entry.first);
+        row.insert(QStringLiteral("transportKey"),
+                   QStringLiteral("0x%1").arg(entry.first, 4, 16,
+                                              QLatin1Char('0')));
+        QString state = QStringLiteral("partial");
+        if (record.rejected) {
+            state = QStringLiteral("rejected");
+        } else if (record.hybridReference) {
+            state = QStringLiteral("hybrid-reference");
+        } else if (record.completedObject.has_value()) {
+            state = record.imageInfo.has_value() && !record.imageDecoded
+                ? QStringLiteral("complete-structural")
+                : QStringLiteral("complete");
+        }
+        row.insert(QStringLiteral("state"), state);
+        row.insert(QStringLiteral("headerComplete"),
+                   record.progress.headerComplete);
+        row.insert(QStringLiteral("objectComplete"),
+                   record.progress.objectComplete);
+        row.insert(QStringLiteral("bodySegmentsReceived"),
+                   static_cast<qulonglong>(
+                       record.progress.bodySegmentsReceived));
+        row.insert(QStringLiteral("totalBodySegments"),
+                   static_cast<qulonglong>(record.progress.totalBodySegments));
+        row.insert(QStringLiteral("bodyBytesReceived"),
+                   static_cast<qulonglong>(record.progress.bodyBytesReceived));
+        row.insert(QStringLiteral("expectedBodyBytes"),
+                   static_cast<qulonglong>(record.progress.expectedBodyBytes));
+        double progress = 0.0;
+        if (record.progress.expectedBodyBytes != 0U) {
+            progress = std::min(
+                1.0,
+                static_cast<double>(record.progress.bodyBytesReceived)
+                    / static_cast<double>(record.progress.expectedBodyBytes));
+        } else if (record.progress.totalBodySegments != 0U) {
+            progress = std::min(
+                1.0,
+                static_cast<double>(record.progress.bodySegmentsReceived)
+                    / static_cast<double>(record.progress.totalBodySegments));
+        }
+        row.insert(QStringLiteral("progress"), progress);
+        const std::size_t missing = record.assembler
+            ? record.assembler->missingBodySegments().size() : 0U;
+        row.insert(QStringLiteral("missingCount"),
+                   static_cast<qulonglong>(missing));
+        row.insert(QStringLiteral("persisted"), record.persisted);
+        row.insert(QStringLiteral("hybridReference"), record.hybridReference);
+        row.insert(QStringLiteral("hybridDownloaded"), record.hybridDownloaded);
+        if (record.hybridReference && record.completedObject) {
+            row.insert(QStringLiteral("hybridReferenceToken"), record.referenceToken);
+            const auto decoded = decodeHamDrmHybridServer(record.completedObject->originalBytes);
+            if (decoded.ok()) row.insert(QStringLiteral("hybridHost"), QString::fromStdString(decoded.value->host));
+        }
+        row.insert(QStringLiteral("error"), record.error);
+        row.insert(QStringLiteral("filename"),
+                   record.metadata.has_value()
+                       ? QString::fromStdString(record.metadata->filename)
+                       : QString {});
+        row.insert(QStringLiteral("mimeType"),
+                   record.metadata.has_value()
+                       ? QString::fromStdString(record.metadata->mimeType)
+                       : QString {});
+        row.insert(QStringLiteral("imageStructurallyValidated"),
+                   record.imageInfo.has_value());
+        row.insert(QStringLiteral("imageFullyDecoded"), record.imageDecoded);
+        row.insert(QStringLiteral("jpeg2000Decoded"),
+                   record.jpeg2000Decoded);
+        if (record.imageInfo.has_value()) {
+            row.insert(QStringLiteral("imageFormat"),
+                       imageFormatName(record.imageInfo->format));
+            row.insert(QStringLiteral("width"), record.imageInfo->width);
+            row.insert(QStringLiteral("height"), record.imageInfo->height);
+        } else {
+            row.insert(QStringLiteral("imageFormat"), QString {});
+            row.insert(QStringLiteral("width"), 0U);
+            row.insert(QStringLiteral("height"), 0U);
+        }
+        result.push_back(row);
+    }
+    return result;
+}
+
+int HamDrmController::selectedTransportId() const noexcept
+{
+    return selectedTransportId_;
+}
+
+HamDrmController::InboxRecord* HamDrmController::recordFor(
+    int transportId) noexcept
+{
+    if (!validTransportId(transportId)) {
+        return nullptr;
+    }
+    const auto found = inbox_.find(static_cast<std::uint16_t>(transportId));
+    return found == inbox_.end() ? nullptr : found->second.get();
+}
+
+const HamDrmController::InboxRecord* HamDrmController::recordFor(
+    int transportId) const noexcept
+{
+    if (!validTransportId(transportId)) {
+        return nullptr;
+    }
+    const auto found = inbox_.find(static_cast<std::uint16_t>(transportId));
+    return found == inbox_.end() ? nullptr : found->second.get();
+}
+
+std::vector<std::uint16_t> HamDrmController::selectedMissingSegments() const
+{
+    const InboxRecord* record = recordFor(selectedTransportId_);
+    return record != nullptr && record->assembler
+        ? bsrMissingSegments(*record)
+        : std::vector<std::uint16_t> {};
+}
+
+QVariantList HamDrmController::missingSegments() const
+{
+    const auto missing = selectedMissingSegments();
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(missing.size()));
+    for (const std::uint16_t segment : missing) {
+        result.push_back(segment);
+    }
+    return result;
+}
+
+QString HamDrmController::missingSegmentsText() const
+{
+    const auto missing = selectedMissingSegments();
+    QStringList text;
+    const std::size_t shown = std::min(missing.size(),
+                                       kMaximumMissingTextItems);
+    text.reserve(static_cast<qsizetype>(shown));
+    for (std::size_t index = 0U; index < shown; ++index) {
+        text.push_back(QString::number(missing[index]));
+    }
+    QString result = text.join(QStringLiteral(", "));
+    if (shown < missing.size()) {
+        result += tr(" … and %1 more").arg(missing.size() - shown);
+    }
+    const InboxRecord* record = recordFor(selectedTransportId_);
+    if (!missing.empty() && record && !record->progress.bodyExtentKnown)
+        result += tr(" (segment count inferred from header)");
+    return result;
+}
+
+std::optional<std::size_t> HamDrmController::bsrSegmentSize(const InboxRecord& record)
+{
+    if (!record.assembler || !record.metadata || record.bodySegmentSize == 0U) return {};
+    std::size_t segmentBytes = record.bodySegmentSize;
+    if (!record.progress.bodyExtentKnown) {
+        const std::size_t bytes = record.metadata->bodySize;
+        const std::size_t total = bytes / segmentBytes + (bytes % segmentBytes != 0U);
+        if (total < 2U || total > 65536U) return {};
+        const std::size_t finalBytes = bytes - (total - 1U) * segmentBytes;
+        bool regularPresent = false;
+        bool inconsistent = false;
+        record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
+                                             bool last, const std::vector<std::uint8_t>& payload) {
+            if (kind != HamDrmMotGroupKind::Body) return;
+            if (last || std::size_t(index) >= total) { inconsistent = true; return; }
+            if (std::size_t(index) == total - 1U) {
+                if (payload.size() != finalBytes) inconsistent = true;
+            } else if (payload.size() != segmentBytes) {
+                inconsistent = true;
+            } else {
+                regularPresent = true;
+            }
+        });
+        if (inconsistent || !regularPresent
+            || segmentBytes > std::numeric_limits<std::uint16_t>::max()) return {};
+        return segmentBytes;
+    }
+    std::optional<std::size_t> finalIndex;
+    std::size_t finalBytes = 0U;
+    std::optional<std::size_t> regularBytes;
+    bool inconsistentRegular = false;
+    record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
+                                         bool last, const std::vector<std::uint8_t>& payload) {
+        if (kind != HamDrmMotGroupKind::Body) return;
+        if (last) { finalIndex = index; finalBytes = payload.size(); }
+        else if (!regularBytes) regularBytes = payload.size();
+        else if (*regularBytes != payload.size()) inconsistentRegular = true;
+    });
+    if (inconsistentRegular) return {};
+    if (finalIndex && *finalIndex > 0U) {
+        if (record.metadata->bodySize <= finalBytes) return {};
+        const std::size_t prefix = record.metadata->bodySize - finalBytes;
+        if (prefix % *finalIndex != 0U || prefix / *finalIndex < finalBytes
+            || (regularBytes && *regularBytes != prefix / *finalIndex)) return {};
+        segmentBytes = prefix / *finalIndex;
+    } else if (regularBytes) {
+        segmentBytes = *regularBytes;
+    }
+    if (segmentBytes == 0U || segmentBytes > std::numeric_limits<std::uint16_t>::max()) return {};
+    return segmentBytes;
+}
+
+std::vector<std::uint16_t> HamDrmController::bsrMissingSegments(const InboxRecord& record) const
+{
+    if (!record.assembler || !record.metadata) return {};
+    if (record.progress.bodyExtentKnown) return record.assembler->missingBodySegments();
+    const auto segmentSize = bsrSegmentSize(record);
+    if (!segmentSize) return {};
+    const std::size_t bytes = record.metadata->bodySize;
+    const std::size_t total = bytes / *segmentSize + (bytes % *segmentSize != 0U);
+    if (total < 2U || total > config_.limits.maximumSegments || total > 65536U) return {};
+    std::vector<bool> present(total, false);
+    bool inconsistent = false;
+    record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t index,
+                                         bool last, const std::vector<std::uint8_t>& payload) {
+        if (kind != HamDrmMotGroupKind::Body) return;
+        if (last || std::size_t(index) >= total) {
+            inconsistent = true;
+            return;
+        }
+        if (std::size_t(index) == total - 1U) {
+            // Its bytes may have arrived without a terminal marker. Request it
+            // again so completion still requires an explicit last segment.
+            if (payload.size() != bytes - (total - 1U) * *segmentSize) inconsistent = true;
+            return;
+        }
+        if (payload.size() != *segmentSize) { inconsistent = true; return; }
+        present[index] = true;
+    });
+    if (inconsistent) return {};
+    std::vector<std::uint16_t> missing;
+    for (std::size_t index = 0U; index < total; ++index)
+        if (!present[index]) missing.push_back(static_cast<std::uint16_t>(index));
+    return missing;
+}
+
+bool HamDrmController::canBuildBsr() const
+{
+    const InboxRecord* record = recordFor(selectedTransportId_);
+    return record != nullptr && record->assembler
+        && record->progress.headerComplete
+        && record->metadata.has_value()
+        && bsrSegmentSize(*record).has_value()
+        && !bsrMissingSegments(*record).empty();
+}
+
+QString HamDrmController::bsrText() const
+{
+    return bsrText_;
+}
+
+QString HamDrmController::receivedBsrText() const
+{
+    return receivedBsrText_;
+}
+
+bool HamDrmController::receivedBsrSegmentSizeUnknown() const
+{
+    const QByteArray bytes = receivedBsrText_.toLatin1();
+    const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                         std::size_t(bytes.size()), config_.limits, true);
+    return request.ok() && request.value->segmentSize == 0U;
+}
+
+bool HamDrmController::canRepairReceivedBsr() const
+{
+    if (!lastRepairSource_ || receivedBsrText_.isEmpty()
+        || selectedProfileId_ != lastRepairSource_->profileId) return false;
+    const QByteArray bytes = receivedBsrText_.toLatin1();
+    const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                         std::size_t(bytes.size()), config_.limits, true);
+    if (!request.ok() || request.value->transportId != lastRepairSource_->object.metadata.transportId
+        || (request.value->segmentSize != 0U
+            && request.value->segmentSize != lastRepairSource_->segmentBytes)
+        || (request.value->filename && *request.value->filename != lastRepairSource_->object.metadata.filename))
+        return false;
+    return std::all_of(request.value->missingSegments.begin(), request.value->missingSegments.end(),
+        [this](std::uint16_t index) { return index < lastRepairSource_->object.bodyGroups.size(); });
+}
+
+QVariantMap HamDrmController::lastImageValidation() const
+{
+    return lastImageValidation_;
+}
+
+void HamDrmController::validateConfig()
+{
+    const HamDrmLimits& limits = config_.limits;
+    if (limits.maximumObjectBytes == 0U
+        || limits.maximumObjectBytes
+            > std::numeric_limits<std::uint32_t>::max()
+        || limits.maximumHeaderBytes == 0U
+        || limits.maximumSegmentBytes == 0U
+        || limits.maximumSegmentBytes
+            > std::numeric_limits<std::uint16_t>::max()
+        || limits.maximumSegments == 0U
+        || limits.maximumSegments
+            > static_cast<std::size_t>(
+                std::numeric_limits<std::uint16_t>::max()) + 1U
+        || limits.maximumFilenameBytes == 0U
+        || limits.maximumImageDimension == 0U
+        || limits.maximumImagePixels == 0U
+        || config_.maximumInboxObjects == 0U
+        || config_.maximumInboxObjects > kMaximumControllerInboxObjects
+        || config_.maximumCompletedObjects == 0U
+        || config_.maximumCompletedObjects > config_.maximumInboxObjects
+        || config_.maximumCompletedBytes == 0U
+        || config_.txBodySegmentBytes == 0U
+        || config_.txBodySegmentBytes > limits.maximumSegmentBytes
+        || config_.maximumErrorCharacters == 0U
+        || config_.maximumErrorCharacters
+            > kMaximumControllerErrorCharacters) {
+        throw std::invalid_argument("invalid HAMDRM controller bounds");
+    }
+    if (!config_.partialStoreRoot.isEmpty()) {
+        const QString cleaned = QDir::cleanPath(config_.partialStoreRoot);
+        if (!QFileInfo(cleaned).isAbsolute()) {
+            throw std::invalid_argument(
+                "HAMDRM partial-store root must be absolute");
+        }
+        config_.partialStoreRoot = cleaned;
+    }
+}
+
+bool HamDrmController::ownerThread() const noexcept
+{
+    return QThread::currentThread() == thread();
+}
+
+const HamDrmProfile* HamDrmController::currentProfile() const noexcept
+{
+    return HamDrmProfileRegistry::findById(
+        selectedProfileId_.toStdString());
+}
+
+std::uint64_t HamDrmController::nextSessionId() noexcept
+{
+    ++sessionSequence_;
+    if (sessionSequence_ == 0U) {
+        ++sessionSequence_;
+    }
+    return sessionSequence_;
+}
+
+QString HamDrmController::bounded(QString detail) const
+{
+    return detail.left(static_cast<qsizetype>(
+        config_.maximumErrorCharacters));
+}
+
+void HamDrmController::setError(QString detail)
+{
+    detail = bounded(std::move(detail));
+    if (detail == error_) {
+        return;
+    }
+    error_ = std::move(detail);
+    recordSstvDiagnosticEvent(
+        sstvHamDrmLog(), QtWarningMsg, QStringLiteral("hamdrm.error-set"),
+        {{QStringLiteral("component"), QStringLiteral("controller")},
+         {QStringLiteral("success"), false}});
+    emit errorChanged();
+}
+
+void HamDrmController::clearError()
+{
+    if (!ownerThread() || error_.isEmpty()) {
+        return;
+    }
+    error_.clear();
+    emit errorChanged();
+}
+
+bool HamDrmController::reject(const QString& operation,
+                              const QString& detail)
+{
+    const QString safe = bounded(detail);
+    setError(safe);
+    recordSstvDiagnosticEvent(
+        sstvHamDrmLog(), QtWarningMsg,
+        QStringLiteral("hamdrm.operation-rejected"),
+        {{QStringLiteral("operation"), operation},
+         {QStringLiteral("success"), false}});
+    emit operationRejected(operation, safe);
+    return false;
+}
+
+void HamDrmController::setRxState(OperationState state, double progress)
+{
+    const double boundedProgress = std::clamp(progress, 0.0, 1.0);
+    if (state == rxState_ && boundedProgress == rxProgress_) {
+        return;
+    }
+    const OperationState previous = rxState_;
+    rxState_ = state;
+    rxProgress_ = boundedProgress;
+    recordSstvDiagnosticEvent(
+        sstvHamDrmLog(), state == OperationState::Error
+                         ? QtWarningMsg : QtInfoMsg,
+        QStringLiteral("hamdrm.rx-state-changed"),
+        {{QStringLiteral("component"), QStringLiteral("rx")},
+         {QStringLiteral("previousState"), static_cast<int>(previous)},
+         {QStringLiteral("state"), static_cast<int>(state)}});
+    emit operationStateChanged();
+}
+
+void HamDrmController::setTxState(OperationState state, double progress)
+{
+    const double boundedProgress = std::clamp(progress, 0.0, 1.0);
+    if (state == txState_ && boundedProgress == txProgress_) {
+        return;
+    }
+    const OperationState previous = txState_;
+    txState_ = state;
+    txProgress_ = boundedProgress;
+    recordSstvDiagnosticEvent(
+        sstvHamDrmLog(), state == OperationState::Error
+                         ? QtWarningMsg : QtInfoMsg,
+        QStringLiteral("hamdrm.tx-state-changed"),
+        {{QStringLiteral("component"), QStringLiteral("tx")},
+         {QStringLiteral("previousState"), static_cast<int>(previous)},
+         {QStringLiteral("state"), static_cast<int>(state)}});
+    emit operationStateChanged();
+}
+
+bool HamDrmController::startRx()
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    if (busy()) {
+        return reject(QStringLiteral("rx"),
+                      tr("Another HAMDRM RX/TX operation is active"));
+    }
+    const HamDrmWaveformCapability capability = rxCapability();
+    if (!capability.completeBackend || !backends_.waveformRx) {
+        return reject(QStringLiteral("rx"),
+                      capability.detail.isEmpty()
+                          ? tr("Complete HAMDRM waveform RX backend is not connected")
+                          : capability.detail);
+    }
+    const HamDrmProfile* profile = currentProfile();
+    if (profile == nullptr) {
+        setRxState(OperationState::Error, 0.0);
+        return reject(QStringLiteral("rx"),
+                      tr("Selected HAMDRM profile is invalid"));
+    }
+
+    // BSR objects use a fixed filename and therefore normally reuse the same
+    // transport ID. Preserve completed images, but release old completed BSRs
+    // at the start of a new receive session so a later request can be received.
+    std::vector<std::uint16_t> oldBsrIds;
+    for (const auto& entry : inbox_) {
+        if (entry.second->completedObject && entry.second->metadata
+            && entry.second->metadata->mimeType == "application/x-hamdrm-bsr")
+            oldBsrIds.push_back(entry.first);
+    }
+    for (const auto id : oldBsrIds)
+        static_cast<void>(takeCompletedObject(id));
+    if (!receivedBsrText_.isEmpty()) {
+        receivedBsrText_.clear();
+        receivedBsrObjectId_.reset();
+        emit receivedBsrChanged();
+        emit repairStateChanged();
+    }
+
+    clearError();
+    rxSessionId_ = nextSessionId();
+    const std::uint64_t session = rxSessionId_;
+    setRxState(OperationState::Starting, 0.0);
+    HamDrmStatus status;
+    try {
+        status = backends_.waveformRx->start(*profile, session, *this);
+    } catch (const std::exception& exception) {
+        status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                       exception.what());
+    } catch (...) {
+        status = HamDrmStatus::failure(
+            HamDrmErrorCode::IoFailure,
+            "HAMDRM waveform RX backend threw an unknown exception");
+    }
+    if (!status.ok()) {
+        if (rxSessionId_ == session) {
+            rxSessionId_ = 0U;
+            setRxState(OperationState::Error, 0.0);
+        }
+        return reject(QStringLiteral("rx"),
+                      statusDetail(status,
+                                   "HAMDRM waveform RX start failed"));
+    }
+    if (rxSessionId_ == session
+        && rxState_ == OperationState::Starting) {
+        setRxState(OperationState::Active, 0.0);
+    }
+    return true;
+}
+
+HamDrmValueResult<HamDrmController::TxImageCandidate>
+HamDrmController::readTxImage(const QUrl& localImage,
+                              bool requireJpeg2000Decode) const
+{
+    if (!localImage.isValid() || !localImage.isLocalFile()) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument,
+                                      "HAMDRM TX image must be a local file")};
+    }
+    const QString requested = QDir::cleanPath(
+        localImage.toLocalFile().trimmed());
+    const QFileInfo info(requested);
+    const QString canonicalPath = info.canonicalFilePath();
+    if (requested.isEmpty() || !info.isAbsolute() || canonicalPath.isEmpty()
+        || !info.exists() || !info.isFile() || info.isSymLink()
+        || !info.isReadable() || info.size() <= 0
+        || static_cast<quint64>(info.size()) > config_.limits.maximumObjectBytes
+        || static_cast<quint64>(info.size())
+            > std::numeric_limits<std::uint32_t>::max()) {
+        return {std::nullopt,
+                HamDrmStatus::failure(
+                    HamDrmErrorCode::InvalidArgument,
+                    "HAMDRM TX image is unavailable, unsafe or exceeds policy")};
+    }
+
+    const QByteArray filename = info.fileName().toUtf8();
+    const std::string safeFilename(filename.constData(),
+                                   static_cast<std::size_t>(filename.size()));
+    if (const HamDrmStatus status = validateHamDrmFilename(
+            safeFilename, config_.limits);
+        !status.ok()) {
+        return {std::nullopt, status};
+    }
+
+    QFile file(canonicalPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                      "cannot open HAMDRM TX image")};
+    }
+    const qint64 expectedSize = info.size();
+    QByteArray bytes = file.readAll();
+    if (bytes.size() != expectedSize || file.size() != expectedSize) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                      "HAMDRM TX image changed while reading")};
+    }
+
+    HamDrmMotObjectMetadata metadata;
+    metadata.transportId = qsstvCompatibleTransportId(safeFilename);
+    metadata.bodySize = static_cast<std::uint32_t>(bytes.size());
+    metadata.filename = safeFilename;
+    const auto encodedHeader = encodeHamDrmMotHeader(metadata, config_.limits);
+    if (!encodedHeader.ok()) {
+        return {std::nullopt, encodedHeader.status};
+    }
+    const auto canonicalMetadata = parseHamDrmMotHeader(
+        encodedHeader.value->data(), encodedHeader.value->size(),
+        metadata.transportId, config_.limits);
+    if (!canonicalMetadata.ok()) {
+        return {std::nullopt, canonicalMetadata.status};
+    }
+    const auto image = validateHamDrmImage(
+        *canonicalMetadata.value,
+        reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+        static_cast<std::size_t>(bytes.size()),
+        config_.limits);
+    if (!image.ok()) {
+        return {std::nullopt, image.status};
+    }
+
+    TxImageCandidate candidate;
+    candidate.bytes = std::move(bytes);
+    candidate.metadata = *canonicalMetadata.value;
+    candidate.imageInfo = *image.value;
+    candidate.canonicalPath = canonicalPath;
+    // This guard is intentionally before either OpenJPEG or QImageReader.
+    // The persisted Gallery uses the same 8192 px / 32 MiB-pixel / 128 MiB
+    // decoded-image envelope, so an otherwise valid HAMDRM object cannot
+    // make the decoder allocate an image that the archive must later reject.
+    if (!gallerySnapshotWithinLimits(candidate.imageInfo.width,
+                                     candidate.imageInfo.height,
+                                     config_.limits)) {
+        return {std::nullopt,
+                HamDrmStatus::failure(
+                    HamDrmErrorCode::LimitExceeded,
+                    "HAMDRM TX image exceeds bounded Gallery snapshot limits")};
+    }
+    if (candidate.imageInfo.format == HamDrmImageFormat::Jpeg2000) {
+        const HamDrmJpeg2000Capability capability = jpegCapability();
+        if (!capability.decodeAvailable || !backends_.jpeg2000) {
+            if (requireJpeg2000Decode) {
+                return {std::nullopt,
+                        HamDrmStatus::failure(
+                            HamDrmErrorCode::UnsupportedFeature,
+                            "JPEG2000 is structurally valid but a complete decode adapter is not connected")};
+            }
+        } else {
+            HamDrmValueResult<HamDrmRgbaImage> decoded;
+            try {
+                decoded = backends_.jpeg2000->decode(
+                    reinterpret_cast<const std::uint8_t*>(
+                        candidate.bytes.constData()),
+                    static_cast<std::size_t>(candidate.bytes.size()),
+                    config_.limits);
+            } catch (const std::exception& exception) {
+                decoded.status = HamDrmStatus::failure(
+                    HamDrmErrorCode::Malformed, exception.what());
+            } catch (...) {
+                decoded.status = HamDrmStatus::failure(
+                    HamDrmErrorCode::Malformed,
+                    "JPEG2000 decode adapter threw an unknown exception");
+            }
+            if (!decoded.ok()) {
+                return {std::nullopt, decoded.status};
+            }
+            if (decoded.value->width != candidate.imageInfo.width
+                || decoded.value->height != candidate.imageInfo.height) {
+                return {std::nullopt,
+                        HamDrmStatus::failure(
+                            HamDrmErrorCode::InconsistentObject,
+                            "JPEG2000 decoded dimensions differ from JP2 metadata")};
+            }
+            candidate.jpeg2000Decoded = true;
+            candidate.galleryImage = galleryImageFromRgba(*decoded.value,
+                                                          config_.limits);
+        }
+    } else {
+        candidate.galleryImage = decodeGalleryImage(candidate.bytes,
+                                                    candidate.imageInfo,
+                                                    config_.limits);
+    }
+    return {std::move(candidate), HamDrmStatus::success()};
+}
+
+QVariantMap HamDrmController::imageValidationMap(
+    const TxImageCandidate& candidate) const
+{
+    QVariantMap result;
+    result.insert(QStringLiteral("valid"), true);
+    result.insert(QStringLiteral("path"), candidate.canonicalPath);
+    result.insert(QStringLiteral("filename"),
+                  QString::fromStdString(candidate.metadata.filename));
+    result.insert(QStringLiteral("mimeType"),
+                  QString::fromStdString(candidate.metadata.mimeType));
+    result.insert(QStringLiteral("format"),
+                  imageFormatName(candidate.imageInfo.format));
+    result.insert(QStringLiteral("width"), candidate.imageInfo.width);
+    result.insert(QStringLiteral("height"), candidate.imageInfo.height);
+    result.insert(QStringLiteral("bytes"),
+                  static_cast<qulonglong>(candidate.bytes.size()));
+    result.insert(QStringLiteral("structuralValidation"), true);
+    result.insert(QStringLiteral("jpeg2000"),
+                  candidate.imageInfo.format == HamDrmImageFormat::Jpeg2000);
+    result.insert(QStringLiteral("jpeg2000Decoded"),
+                  candidate.jpeg2000Decoded);
+    return result;
+}
+
+bool HamDrmController::validateTxImage(const QUrl& localImage)
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    const auto candidate = readTxImage(localImage, false);
+    if (!candidate.ok()) {
+        lastImageValidation_ = {
+            {QStringLiteral("valid"), false},
+            {QStringLiteral("error"),
+             statusDetail(candidate.status,
+                          "HAMDRM image validation failed")},
+        };
+        emit imageValidationChanged();
+        return reject(QStringLiteral("image"),
+                      lastImageValidation_.value(
+                          QStringLiteral("error")).toString());
+    }
+    lastImageValidation_ = imageValidationMap(*candidate.value);
+    emit imageValidationChanged();
+    clearError();
+    return true;
+}
+
+bool HamDrmController::startTx(const QUrl& localImage)
+{
+    return startTxWithRs(localImage, 0);
+}
+
+bool HamDrmController::startHybridTx(const QUrl& localImage, const QString& callsign,
+                                     const QString& host, const QString& user,
+                                     const QString& password, const QString& directory)
+{
+    if (!ownerThread() || busy()) return false;
+    const auto call = callsign.trimmed().toUpper();
+    static const QRegularExpression callPattern(QStringLiteral("^[A-Z0-9_]{1,16}$"));
+    if (!callPattern.match(call).hasMatch())
+        return reject(QStringLiteral("hybrid-tx"), tr("Enter a valid callsign using letters, digits or underscore"));
+    const HamDrmHybridServer server{host.toStdString(), user.toStdString(), password.toStdString(), directory.toStdString()};
+    const auto reference = encodeHamDrmHybridServer(server);
+    if (!reference.ok()) return reject(QStringLiteral("hybrid-tx"), tr("Invalid hybrid server settings"));
+    const auto* profile = currentProfile();
+    if (!profile || !backends_.waveformTx || !txCapability().completeBackend)
+        return reject(QStringLiteral("hybrid-tx"), tr("HAMDRM waveform TX is unavailable"));
+    const auto candidate = readTxImage(localImage, true);
+    if (!candidate.ok() || candidate.value->galleryImage.isNull())
+        return reject(QStringLiteral("hybrid-tx"), tr("Select a valid, decodable image"));
+    const QString original = QString::fromStdString(candidate.value->metadata.filename);
+    const int dot = original.lastIndexOf('.');
+    if (dot <= 0) return reject(QStringLiteral("hybrid-tx"), tr("Invalid image filename"));
+    const QString prefix = QStringLiteral("de_%1-1-%2-").arg(call, QUuid::createUuid().toString(QUuid::Id128).left(16));
+    const QString extension = original.mid(dot);
+    const int available = static_cast<int>(config_.limits.maximumFilenameBytes) - prefix.size() - extension.size();
+    if (available < 1) return reject(QStringLiteral("hybrid-tx"), tr("Hybrid image filename is too long"));
+    const QString filename = prefix + original.left(dot).left(available) + extension;
+    HamDrmMotObjectMetadata metadata;
+    metadata.filename = filename.toStdString();
+    const auto object = encodeHamDrmObject(metadata, *reference.value, config_.txBodySegmentBytes, config_.limits);
+    if (!object.ok()) return reject(QStringLiteral("hybrid-tx"), tr("Unable to encode hybrid reference"));
+    hybridUpload_ = HybridUpload{*object.value, candidate.value->galleryImage, selectedProfileId_,
+                                 static_cast<int>(profile->occupiedBandwidthHz)};
+    hybridUploadCancelRequested_ = false;
+    quint16 uploadPort = config_.hybridFtpPort;
+    if (QStandardPaths::isTestModeEnabled()) {
+        bool ok = false;
+        const int port = qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT", &ok);
+        if (ok && port > 0 && port <= 65535) uploadPort = static_cast<quint16>(port);
+    }
+    if (!hybridUploadFtp_.upload(server, filename, candidate.value->bytes, uploadPort)) {
+        hybridUpload_.reset();
+        return reject(QStringLiteral("hybrid-tx"), tr("Unable to start hybrid upload"));
+    }
+    clearError();
+    setTxState(OperationState::Starting, 0.0);
+    return true;
+}
+
+bool HamDrmController::startTxWithRs(const QUrl& localImage, int level)
+{
+    return startTxWithRsOptions(localImage, level, false);
+}
+
+bool HamDrmController::startTxWithRsQsstvCompatibility(const QUrl& localImage, int level)
+{
+    return startTxWithRsOptions(localImage, level, true);
+}
+
+bool HamDrmController::startTxWithRsOptions(const QUrl& localImage, int level, bool qsstvCompatibility)
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    if (busy()) {
+        return reject(QStringLiteral("tx"),
+                      tr("Another HAMDRM RX/TX operation is active"));
+    }
+    if (level < 0 || level > 4) return reject(QStringLiteral("tx"), tr("Invalid RS protection level"));
+    const HamDrmWaveformCapability capability = txCapability();
+    if (!capability.completeBackend || !backends_.waveformTx) {
+        return reject(QStringLiteral("tx"),
+                      capability.detail.isEmpty()
+                          ? tr("Complete HAMDRM waveform TX backend is not connected")
+                          : capability.detail);
+    }
+    const HamDrmProfile* profile = currentProfile();
+    if (profile == nullptr) {
+        setTxState(OperationState::Error, 0.0);
+        return reject(QStringLiteral("tx"),
+                      tr("Selected HAMDRM profile is invalid"));
+    }
+
+    const auto candidate = readTxImage(localImage, true);
+    if (!candidate.ok()) {
+        setTxState(OperationState::Error, 0.0);
+        return reject(QStringLiteral("tx"),
+                      statusDetail(candidate.status,
+                                   "HAMDRM TX image validation failed"));
+    }
+    lastImageValidation_ = imageValidationMap(*candidate.value);
+    emit imageValidationChanged();
+    // The accepted TX must have an exact, bounded Gallery snapshot.  Do this
+    // before the waveform backend sees any object: a structurally valid image
+    // that Qt cannot decode must not become an unarchived on-air TX.
+    if (candidate.value->galleryImage.isNull()) {
+        setTxState(OperationState::Error, 0.0);
+        return reject(QStringLiteral("tx"),
+                      tr("HAMDRM TX image cannot be archived as a bounded Gallery snapshot"));
+    }
+
+    auto metadata = candidate.value->metadata;
+    auto body = byteVector(candidate.value->bytes);
+    if (qsstvCompatibility) {
+        if (level < 1 || level > 4 || metadata.mimeType != "image/jpeg")
+            return reject(QStringLiteral("tx"), tr("QSSTV RS compatibility requires a JPEG image and RS protection"));
+        const std::size_t k = 256U - 32U * static_cast<std::size_t>(level);
+        const std::size_t padding = k - body.size() % k;
+        if (padding >= 128U) {
+            const std::size_t extra = padding - 127U;
+            if (body.size() > config_.limits.maximumObjectBytes
+                || extra > config_.limits.maximumObjectBytes - body.size())
+                return reject(QStringLiteral("tx"), tr("QSSTV compatibility padding exceeds the image size limit"));
+            body.insert(body.end(), extra, 0U);
+        }
+    }
+    const QString structuralLab = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_HAMDRM_STRUCTURAL_ONLY") : QString {};
+    if (structuralLab == QStringLiteral("a") || structuralLab == QStringLiteral("b")) {
+        const bool b = structuralLab == QStringLiteral("b");
+        const auto width = static_cast<std::uint8_t>(b ? 17 : 16);
+        body = {0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, width,
+                0x00, width, 0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00,
+                0x03, 0x11, 0x00, 0xff, 0xd9};
+        body.resize(160U, 0);
+        metadata.filename = b ? "structural-b.jpg" : "structural-a.jpg";
+        metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+        metadata.bodySize = static_cast<std::uint32_t>(body.size());
+        metadata.contentType = 0U; metadata.contentSubtype = 0U; metadata.mimeType.clear();
+        qInfo("[LAB][HAMDRM] structural-only image fixture selected");
+    }
+    const QString hybridLab = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_HAMDRM_HYBRID") : QString {};
+    if (hybridLab == QStringLiteral("a") || hybridLab == QStringLiteral("b")) {
+        const bool b = hybridLab == QStringLiteral("b");
+        const bool localFtpLab = qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT") > 0;
+        const HamDrmHybridServer server {
+            localFtpLab ? "127.0.0.1" : (b ? "b.example.invalid" : "a.example.invalid"),
+            b ? "operator-b" : "operator-a",
+            b ? "dummy-B-1234" : "dummy-A", b ? "radio/b" : "radio/a"};
+        const auto encodedHybrid = encodeHamDrmHybridServer(server);
+        if (!encodedHybrid.ok()) return reject(QStringLiteral("tx"), tr("Hybrid lab fixture failed"));
+        body = *encodedHybrid.value;
+        const bool dotName = qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_HYBRID_DOT") == 1;
+        metadata.filename = dotName
+            ? (b ? ".de_TEST2-1-image-b.jpg" : ".de_TEST1-1-image-a.jpg")
+            : (b ? "de_TEST2-1-image-b.jpg" : "de_TEST1-1-image-a.jpg");
+        metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+        metadata.bodySize = static_cast<std::uint32_t>(body.size());
+        metadata.contentType = 0U;
+        metadata.contentSubtype = 0U;
+        metadata.mimeType.clear();
+        qInfo("[LAB][HAMDRM] synthetic hybrid reference selected");
+    }
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_HAMDRM_PNG_AS_JP2") == 1
+        && level == 0 && metadata.mimeType == "image/png") {
+        metadata.filename = metadata.filename.substr(0, metadata.filename.find_last_of('.')) + ".jp2";
+        metadata.contentType = 0U;
+        metadata.contentSubtype = 0U;
+        metadata.mimeType.clear();
+        qInfo("[LAB][HAMDRM] PNG declared as JP2 for interoperability test");
+    }
+    if (level != 0) {
+        const std::string extension = metadata.mimeType == "image/jpeg" ? "jpg"
+            : metadata.mimeType == "image/jp2" ? "jp2"
+            : metadata.mimeType == "image/png" ? "png"
+            : metadata.mimeType == "image/gif" ? "gif" : "bmp";
+        auto protectedBytes = encodeHamDrmRs(body, extension, static_cast<unsigned>(level), config_.limits);
+        if (!protectedBytes.ok()) {
+            setTxState(OperationState::Error, 0.0);
+            return reject(QStringLiteral("tx"), statusDetail(protectedBytes.status, "HAMDRM RS encoding failed"));
+        }
+        body = std::move(*protectedBytes.value);
+        metadata.filename = metadata.filename.substr(0, metadata.filename.find_last_of('.'))
+            + ".rs" + std::to_string(level);
+        metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+        metadata.bodySize = static_cast<std::uint32_t>(body.size());
+        metadata.contentType = 0U;
+        metadata.contentSubtype = 0U;
+        metadata.mimeType.clear();
+    }
+    // QSSTV derives its regular segment size from a non-final body segment.
+    // An RS object sent as one final-only segment leaves that size unset.
+    const std::size_t segmentSize = level == 0 ? config_.txBodySegmentBytes
+        : std::min(config_.txBodySegmentBytes, (body.size() + 1U) / 2U);
+    const auto encoded = encodeHamDrmObject(
+        metadata,
+        body,
+        segmentSize,
+        config_.limits);
+    if (!encoded.ok()) {
+        setTxState(OperationState::Error, 0.0);
+        return reject(QStringLiteral("tx"),
+                      statusDetail(encoded.status,
+                                   "HAMDRM MOT object encoding failed"));
+    }
+
+    // Retain only one bounded candidate and publish it for repair only after
+    // the waveform backend reports a completed transmission.
+    const std::size_t segmentBytes = std::min(segmentSize, body.size());
+    pendingRepairSource_ = RepairSource {*encoded.value, segmentBytes, selectedProfileId_};
+
+    clearError();
+    txSessionId_ = nextSessionId();
+    const std::uint64_t session = txSessionId_;
+    setTxState(OperationState::Starting, 0.0);
+    HamDrmStatus status;
+    try {
+        status = backends_.waveformTx->start(
+            *profile, *encoded.value, session, *this);
+    } catch (const std::exception& exception) {
+        status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                       exception.what());
+    } catch (...) {
+        status = HamDrmStatus::failure(
+            HamDrmErrorCode::IoFailure,
+            "HAMDRM waveform TX backend threw an unknown exception");
+    }
+    if (!status.ok()) {
+        pendingRepairSource_.reset();
+        if (txSessionId_ == session) {
+            txSessionId_ = 0U;
+            setTxState(OperationState::Error, 0.0);
+        }
+        return reject(QStringLiteral("tx"),
+                      statusDetail(status,
+                                   "HAMDRM waveform TX start failed"));
+    }
+    if (txSessionId_ == session
+        && txState_ == OperationState::Starting) {
+        setTxState(OperationState::Active, 0.0);
+    }
+    emit txImageAccepted(
+        candidate.value->galleryImage,
+        QString::fromStdString(profile->id),
+        static_cast<int>(profile->occupiedBandwidthHz));
+    return true;
+}
+
+bool HamDrmController::cancelRx()
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    if (!activeState(rxState_) || rxSessionId_ == 0U
+        || !backends_.waveformRx) {
+        return reject(QStringLiteral("rx"),
+                      tr("No active HAMDRM RX operation to cancel"));
+    }
+    const std::uint64_t session = rxSessionId_;
+    setRxState(OperationState::Cancelling, rxProgress_);
+    backends_.waveformRx->cancel(session);
+    if (rxSessionId_ == session) {
+        rxSessionId_ = 0U;
+        setRxState(OperationState::Cancelled, rxProgress_);
+    }
+    return true;
+}
+
+bool HamDrmController::cancelTx()
+{
+    if (ownerThread() && hybridUpload_) {
+        hybridUploadCancelRequested_ = true;
+        hybridUploadFtp_.cancel();
+        return true;
+    }
+    if (!ownerThread()) {
+        return false;
+    }
+    if (!activeState(txState_) || txSessionId_ == 0U
+        || !backends_.waveformTx) {
+        return reject(QStringLiteral("tx"),
+                      tr("No active HAMDRM TX operation to cancel"));
+    }
+    const std::uint64_t session = txSessionId_;
+    setTxState(OperationState::Cancelling, txProgress_);
+    backends_.waveformTx->cancel(session);
+    pendingRepairSource_.reset();
+    if (txSessionId_ == session) {
+        txSessionId_ = 0U;
+        setTxState(OperationState::Cancelled, txProgress_);
+    }
+    return true;
+}
+
+bool HamDrmController::cancelAll()
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    bool cancelled = false;
+    if (activeState(rxState_) && rxSessionId_ != 0U) {
+        cancelled = cancelRx() || cancelled;
+    }
+    if (activeState(txState_) && (txSessionId_ != 0U || hybridUpload_)) {
+        cancelled = cancelTx() || cancelled;
+    }
+    if (hybridDownloadBusy()) cancelled = cancelHybridDownload() || cancelled;
+    return cancelled
+        ? true
+        : reject(QStringLiteral("cancel"),
+                 tr("No active HAMDRM operation to cancel"));
+}
+
+HamDrmStatus HamDrmController::updateHeaderMetadata(
+    InboxRecord& record,
+    const HamDrmMotDataGroup& group)
+{
+    if (group.kind == HamDrmMotGroupKind::Body) {
+        record.bodySegmentSize = std::max(record.bodySegmentSize,
+                                          group.payload.size());
+        return HamDrmStatus::success();
+    }
+
+    const auto existing = record.headerSegments.find(group.segmentNumber);
+    if (existing == record.headerSegments.end()) {
+        if (group.payload.size()
+            > config_.limits.maximumHeaderBytes - record.headerBytes) {
+            return HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
+                                         "MOT header cache exceeds policy");
+        }
+        record.headerBytes += group.payload.size();
+        record.headerSegments.emplace(group.segmentNumber, group.payload);
+    } else if (existing->second != group.payload) {
+        return HamDrmStatus::failure(
+            HamDrmErrorCode::ConflictingDuplicate,
+            "conflicting duplicate MOT header segment");
+    }
+    if (group.lastSegment) {
+        const std::size_t total = static_cast<std::size_t>(
+            group.segmentNumber) + 1U;
+        if (record.totalHeaderSegments.has_value()
+            && *record.totalHeaderSegments != total) {
+            return HamDrmStatus::failure(
+                HamDrmErrorCode::InconsistentObject,
+                "MOT header extent changed");
+        }
+        record.totalHeaderSegments = total;
+    }
+    if (!record.totalHeaderSegments.has_value()
+        || record.headerSegments.size() != *record.totalHeaderSegments) {
+        return HamDrmStatus::success();
+    }
+
+    std::vector<std::uint8_t> header;
+    header.reserve(record.headerBytes);
+    for (std::size_t index = 0U;
+         index < *record.totalHeaderSegments; ++index) {
+        const auto found = record.headerSegments.find(
+            static_cast<std::uint16_t>(index));
+        if (found == record.headerSegments.end()) {
+            return HamDrmStatus::success();
+        }
+        header.insert(header.end(), found->second.begin(), found->second.end());
+    }
+    const auto metadata = parseHamDrmMotHeader(
+        header.data(), header.size(), record.progress.transportId,
+        config_.limits);
+    if (!metadata.ok()) {
+        return metadata.status;
+    }
+    record.metadata = *metadata.value;
+    return HamDrmStatus::success();
+}
+
+HamDrmStatus HamDrmController::rebuildRecordMetadata(InboxRecord& record)
+{
+    if (!record.assembler) {
+        return HamDrmStatus::failure(HamDrmErrorCode::Incomplete,
+                                     "partial assembler is unavailable");
+    }
+    record.headerSegments.clear();
+    record.totalHeaderSegments.reset();
+    record.headerBytes = 0U;
+    record.bodySegmentSize = 0U;
+    record.metadata.reset();
+    const auto snapshot = record.assembler->snapshotGroups();
+    if (!snapshot.ok()) {
+        return snapshot.status;
+    }
+    for (const auto& encoded : *snapshot.value) {
+        const auto group = parseHamDrmMotDataGroup(
+            encoded.data(), encoded.size(), config_.limits);
+        if (!group.ok()) {
+            return group.status;
+        }
+        const HamDrmStatus status = updateHeaderMetadata(record, *group.value);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    record.progress = record.assembler->progress();
+    return HamDrmStatus::success();
+}
+
+HamDrmStatus HamDrmController::persistRecord(InboxRecord& record)
+{
+    if (!partialStore_ || !record.assembler) {
+        record.persisted = false;
+        return HamDrmStatus::success();
+    }
+    const HamDrmStatus status = partialStore_->save(*record.assembler, record.receivedProfileId);
+    record.persisted = status.ok();
+    return status;
+}
+
+HamDrmStatus HamDrmController::finishRecord(InboxRecord& record)
+{
+    if (!record.assembler) {
+        return HamDrmStatus::failure(HamDrmErrorCode::Incomplete,
+                                     "HAMDRM assembler is unavailable");
+    }
+    auto assembled = record.assembler->assembledObject();
+    if (!assembled.ok()) {
+        return assembled.status;
+    }
+    const auto& name = assembled.value->metadata.filename;
+    const bool hybridReference = (name.rfind("de_", 0) == 0 || name.rfind(".de", 0) == 0)
+        && decodeHamDrmHybridServer(assembled.value->originalBytes).ok();
+    if (assembled.value->metadata.mimeType == "application/x-hamdrm-bsr" || hybridReference) {
+        if (!hybridReference) {
+            const auto parsed = parseHamDrmBsr(assembled.value->originalBytes.data(),
+                                                assembled.value->originalBytes.size(), config_.limits, true);
+            if (!parsed.ok()) return parsed.status;
+        }
+        const std::size_t size = assembled.value->originalBytes.size();
+        if (completedObjects_ >= config_.maximumCompletedObjects
+            || size > config_.maximumCompletedBytes - completedBytes_) {
+            return HamDrmStatus::failure(HamDrmErrorCode::LimitExceeded,
+                                         "completed HAMDRM inbox capacity is exhausted");
+        }
+        std::map<std::pair<HamDrmMotGroupKind, std::uint16_t>, std::pair<bool, QByteArray>> fingerprints;
+        record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t number,
+                                             bool last, const std::vector<std::uint8_t>& bytes) {
+            const QByteArray payload = QByteArray::fromRawData(
+                reinterpret_cast<const char*>(bytes.data()), static_cast<qsizetype>(bytes.size()));
+            fingerprints.emplace(std::make_pair(kind, number),
+                                 std::make_pair(last, QCryptographicHash::hash(payload, QCryptographicHash::Sha256)));
+        });
+        if (partialStore_) {
+            const auto removed = partialStore_->remove(record.progress.transportId);
+            if (!removed.ok()) return removed;
+        }
+        record.progress = record.assembler->progress();
+        record.metadata = assembled.value->metadata;
+        if (record.receivedProfileId.isEmpty())
+            record.receivedProfileId = selectedProfileId_;
+        record.persisted = false;
+        record.hybridReference = hybridReference;
+        record.completedObject = std::move(*assembled.value);
+        record.completedSegments = std::move(fingerprints);
+        record.assembler.reset();
+        record.headerSegments.clear();
+        record.headerBytes = 0U;
+        record.totalHeaderSegments.reset();
+        ++completedObjects_;
+        completedBytes_ += size;
+        return HamDrmStatus::success();
+    }
+    if (assembled.value->metadata.mimeType == "application/x-hamdrm-rs") {
+        auto& object = *assembled.value;
+        const auto& filename = object.metadata.filename;
+        const auto levelChar = filename.back();
+        const unsigned level = static_cast<unsigned>(levelChar - '0');
+        auto decoded = decodeHamDrmRs(object.originalBytes, level, {}, config_.limits);
+        if (!decoded.ok()) return decoded.status;
+        object.metadata.filename = filename.substr(0, filename.size() - 3U) + decoded.value->extension;
+        object.metadata.bodySize = static_cast<std::uint32_t>(decoded.value->bytes.size());
+        object.metadata.mimeType = decoded.value->extension == "jpg" ? "image/jpeg"
+            : decoded.value->extension == "jp2" ? "image/jp2"
+            : decoded.value->extension == "png" ? "image/png"
+            : decoded.value->extension == "gif" ? "image/gif" : "image/bmp";
+        object.metadata.contentSubtype = decoded.value->extension == "png" ? 3U
+            : decoded.value->extension == "gif" ? 0U
+            : decoded.value->extension == "bmp" ? 2U : 1U;
+        object.originalBytes = std::move(decoded.value->bytes);
+    }
+    // Some QSSTV transmitters retain a small original PNG in the compressed
+    // image buffer while labelling the MOT object as JP2. Accept only the
+    // exact PNG signature here, then apply the normal bounded PNG validation
+    // and expose a filename matching the actual format.
+    auto& object = *assembled.value;
+    static constexpr unsigned char pngSignature[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+    if (object.metadata.mimeType == "image/jp2"
+        && object.originalBytes.size() >= sizeof(pngSignature)
+        && std::equal(std::begin(pngSignature), std::end(pngSignature), object.originalBytes.begin())
+        && object.metadata.filename.size() >= 4U
+        && object.metadata.filename.substr(object.metadata.filename.size() - 4U) == ".jp2") {
+        object.metadata.mimeType = "image/png";
+        object.metadata.contentSubtype = 3U;
+        object.metadata.filename.replace(object.metadata.filename.size() - 4U, 4U, ".png");
+    }
+    const auto image = validateHamDrmImage(
+        assembled.value->metadata,
+        assembled.value->originalBytes.data(),
+        assembled.value->originalBytes.size(),
+        config_.limits);
+    if (!image.ok()) {
+        return image.status;
+    }
+
+    bool jpegDecoded = false;
+    QImage galleryImage;
+    if (image.value->format == HamDrmImageFormat::Jpeg2000
+        && jpeg2000DecodeAvailable() && backends_.jpeg2000) {
+        HamDrmValueResult<HamDrmRgbaImage> decoded;
+        try {
+            decoded = backends_.jpeg2000->decode(
+                assembled.value->originalBytes.data(),
+                assembled.value->originalBytes.size(), config_.limits);
+        } catch (const std::exception& exception) {
+            decoded.status = HamDrmStatus::failure(
+                HamDrmErrorCode::Malformed, exception.what());
+        } catch (...) {
+            decoded.status = HamDrmStatus::failure(
+                HamDrmErrorCode::Malformed,
+                "JPEG2000 decode adapter threw an unknown exception");
+        }
+        if (!decoded.ok()) {
+            return decoded.status;
+        }
+        if (decoded.value->width != image.value->width
+            || decoded.value->height != image.value->height) {
+            return HamDrmStatus::failure(
+                HamDrmErrorCode::InconsistentObject,
+                "decoded JPEG2000 dimensions differ from MOT image metadata");
+        }
+        jpegDecoded = true;
+        galleryImage = galleryImageFromRgba(*decoded.value, config_.limits);
+    } else if (image.value->format != HamDrmImageFormat::Jpeg2000) {
+        const QByteArray encoded = QByteArray::fromRawData(
+            reinterpret_cast<const char*>(object.originalBytes.data()), static_cast<qsizetype>(object.originalBytes.size()));
+        galleryImage = decodeGalleryImage(encoded, *image.value, config_.limits);
+    }
+
+    const std::size_t objectBytes = assembled.value->originalBytes.size();
+    if (completedObjects_ >= config_.maximumCompletedObjects
+        || objectBytes > config_.maximumCompletedBytes - completedBytes_) {
+        return HamDrmStatus::failure(
+            HamDrmErrorCode::LimitExceeded,
+            "completed HAMDRM inbox capacity is exhausted");
+    }
+    std::map<std::pair<HamDrmMotGroupKind, std::uint16_t>, std::pair<bool, QByteArray>> fingerprints;
+    record.assembler->forEachSegment([&](HamDrmMotGroupKind kind, std::uint16_t number,
+                                         bool last, const std::vector<std::uint8_t>& bytes) {
+        const QByteArray payload = QByteArray::fromRawData(
+            reinterpret_cast<const char*>(bytes.data()), static_cast<qsizetype>(bytes.size()));
+        fingerprints.emplace(std::make_pair(kind, number),
+                             std::make_pair(last,
+                                            QCryptographicHash::hash(payload, QCryptographicHash::Sha256)));
+    });
+    if (partialStore_) {
+        const HamDrmStatus removed = partialStore_->remove(
+            record.progress.transportId);
+        if (!removed.ok()) {
+            return removed;
+        }
+    }
+
+    record.progress = record.assembler->progress();
+    record.metadata = assembled.value->metadata;
+    record.imageInfo = *image.value;
+    record.imageDecoded = !galleryImage.isNull();
+    record.galleryImage = std::move(galleryImage);
+    if (record.receivedProfileId.isEmpty())
+        record.receivedProfileId = selectedProfileId_;
+    record.jpeg2000Decoded = jpegDecoded;
+    record.persisted = false;
+    record.completedObject = std::move(*assembled.value);
+    record.completedSegments = std::move(fingerprints);
+    record.assembler.reset();
+    record.headerSegments.clear();
+    record.headerBytes = 0U;
+    record.totalHeaderSegments.reset();
+    ++completedObjects_;
+    completedBytes_ += objectBytes;
+    return HamDrmStatus::success();
+}
+
+bool HamDrmController::reconstructRsSegments(InboxRecord& record, std::uint16_t transportId,
+                                               bool allowMissingFinal)
+{
+    if (!record.assembler || !record.metadata
+        || record.metadata->mimeType != "application/x-hamdrm-rs") return false;
+    const unsigned level = static_cast<unsigned>(record.metadata->filename.back() - '0');
+    constexpr std::size_t parity[] = {0U, 31U, 63U, 95U, 127U};
+    const std::size_t expected = record.progress.expectedBodyBytes;
+    if (level < 1U || level > 4U || expected % 255U != 0U
+        || record.progress.bodyBytesReceived > expected
+        || expected - record.progress.bodyBytesReceived > (expected / 255U) * parity[level]) return false;
+    const auto partial = record.assembler->partialBodyForRepair(allowMissingFinal);
+    if (!partial) return false;
+    const auto recovered = decodeHamDrmRs(partial->bytes, level, partial->erasures, config_.limits);
+    if (!recovered.ok() || recovered.value->repairedContainer.size() != partial->bytes.size()) return false;
+    const auto& corrected = recovered.value->repairedContainer;
+    for (const auto index : partial->missingSegments) {
+        const std::size_t offset = std::size_t(index) * partial->segmentSize;
+        const std::size_t length = std::min(partial->segmentSize, corrected.size() - offset);
+        HamDrmMotDataGroup restored;
+        restored.kind = HamDrmMotGroupKind::Body;
+        restored.transportId = transportId;
+        restored.segmentNumber = index;
+        restored.lastSegment = std::size_t(index) + 1U == partial->totalSegments;
+        restored.payload.assign(corrected.begin() + static_cast<std::ptrdiff_t>(offset),
+                                corrected.begin() + static_cast<std::ptrdiff_t>(offset + length));
+        if (!record.assembler->ingest(restored).ok()) return false;
+    }
+    record.progress = record.assembler->progress();
+    return record.progress.objectComplete;
+}
+
+bool HamDrmController::tryRsRecovery(int transportId)
+{
+    if (!ownerThread()) return false;
+    if (busy()) return reject(QStringLiteral("rs-recovery"), tr("Stop HAMDRM RX or TX before manual recovery"));
+    InboxRecord* record = recordFor(transportId);
+    if (!record || record->rejected || record->completedObject || !record->assembler
+        || !reconstructRsSegments(*record, static_cast<std::uint16_t>(transportId), true)) {
+        return reject(QStringLiteral("rs-recovery"), tr("The RS object cannot yet be recovered"));
+    }
+    const HamDrmStatus status = finishRecord(*record);
+    if (!status.ok()) {
+        record->error = bounded(statusDetail(status, "HAMDRM RS image validation failed"));
+        setError(record->error);
+        publishInbox(static_cast<std::uint16_t>(transportId));
+        return false;
+    }
+    clearError();
+    publishInbox(static_cast<std::uint16_t>(transportId));
+    const QImage galleryImage = std::move(record->galleryImage);
+    const QString profile = record->receivedProfileId;
+    const QString filename = QString::fromStdString(record->metadata->filename);
+    if (!galleryImage.isNull()) emit receivedImageReady(galleryImage, profile, false);
+    emit objectCompleted(static_cast<std::uint16_t>(transportId), filename);
+    return true;
+}
+
+void HamDrmController::publishInbox(std::uint16_t preferredTransportId)
+{
+    if (inbox_.find(preferredTransportId) != inbox_.end()) {
+        selectedTransportId_ = preferredTransportId;
+    } else if (recordFor(selectedTransportId_) == nullptr) {
+        selectedTransportId_ = inbox_.empty()
+            ? -1 : static_cast<int>(inbox_.begin()->first);
+    }
+    emit inboxChanged();
+    emit selectedObjectChanged();
+}
+
+HamDrmStatus HamDrmController::ingestMotGroup(
+    const QByteArray& encodedGroup)
+{
+    if (!ownerThread()) {
+        return HamDrmStatus::failure(
+            HamDrmErrorCode::InvalidArgument,
+            "HAMDRM MOT ingestion must run on the controller owner thread");
+    }
+    if (encodedGroup.isEmpty()) {
+        return HamDrmStatus::failure(HamDrmErrorCode::InvalidArgument,
+                                     "empty HAMDRM MOT data group");
+    }
+    auto parsed = parseHamDrmMotDataGroup(
+        reinterpret_cast<const std::uint8_t*>(encodedGroup.constData()),
+        static_cast<std::size_t>(encodedGroup.size()), config_.limits);
+    if (!parsed.ok()) {
+        setError(statusDetail(parsed.status, "HAMDRM MOT parse failed"));
+        return parsed.status;
+    }
+    const std::uint16_t transportId = parsed.value->transportId;
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_TRACE_MOT") == 1) {
+        qInfo() << "[LAB][HAMDRM] MOT" << transportId
+                << (parsed.value->kind == HamDrmMotGroupKind::Body ? "body" : "header")
+                << parsed.value->segmentNumber << "final" << parsed.value->lastSegment
+                << "bytes" << parsed.value->payload.size();
+    }
+    auto found = inbox_.find(transportId);
+    bool bsrRollover = false;
+    if (found != inbox_.end() && found->second->completedObject
+        && found->second->metadata
+        && found->second->metadata->mimeType == "application/x-hamdrm-bsr"
+        && parsed.value->kind == HamDrmMotGroupKind::Header
+        && parsed.value->segmentNumber == 0U) {
+        // BSR uses a fixed transport ID. A new header starts the next request;
+        // never evict a completed image or an unfinished object on collision.
+        static_cast<void>(takeCompletedObject(transportId));
+        found = inbox_.end();
+        bsrRollover = true;
+    }
+    if (found != inbox_.end() && found->second->bsrRollover
+        && parsed.value->kind == HamDrmMotGroupKind::Header
+        && parsed.value->segmentNumber == 0U) {
+        const auto previous = found->second->headerSegments.find(0U);
+        if (found->second->rejected
+            || (previous != found->second->headerSegments.end()
+                && previous->second != parsed.value->payload)) {
+            // A previous carousel header can trail a completed BSR. Replace
+            // only this BSR rollover candidate when a different header starts.
+            if (!discardObject(transportId))
+                return HamDrmStatus::failure(HamDrmErrorCode::IoFailure,
+                                             "could not discard old BSR candidate");
+            found = inbox_.end();
+            bsrRollover = true;
+        }
+    }
+    if (found == inbox_.end()) {
+        if (inbox_.size() >= config_.maximumInboxObjects) {
+            const HamDrmStatus status = HamDrmStatus::failure(
+                HamDrmErrorCode::LimitExceeded,
+                "HAMDRM inbox object bound is exhausted");
+            setError(statusDetail(status, "HAMDRM inbox is full"));
+            return status;
+        }
+        found = inbox_.emplace(
+            transportId,
+            std::make_unique<InboxRecord>(transportId, config_.limits)).first;
+        // Preserve the profile used for this partial object even if the
+        // operator selects another profile before constructing a BSR.
+        found->second->receivedProfileId = selectedProfileId_;
+        found->second->bsrRollover = bsrRollover;
+    }
+    InboxRecord& record = *found->second;
+    if (record.completedObject && !record.completedSegments.empty()) {
+        const auto segment = record.completedSegments.find(
+            std::make_pair(parsed.value->kind, parsed.value->segmentNumber));
+        const QByteArray payload(reinterpret_cast<const char*>(parsed.value->payload.data()),
+                                 static_cast<qsizetype>(parsed.value->payload.size()));
+        if (segment != record.completedSegments.end()
+            && segment->second.first == parsed.value->lastSegment
+            && segment->second.second == QCryptographicHash::hash(payload, QCryptographicHash::Sha256)) {
+            return HamDrmStatus::success();
+        }
+    }
+    if (!record.assembler || record.rejected
+        || record.completedObject.has_value()) {
+        const HamDrmStatus status = HamDrmStatus::failure(
+            HamDrmErrorCode::InconsistentObject,
+            "HAMDRM transport ID already has a terminal inbox object");
+        setError(statusDetail(status, "HAMDRM object is terminal"));
+        return status;
+    }
+
+    // The live-repair laboratory discards a selected segment until the
+    // initial TX is finished. The later repair is accepted.
+    const QString labDropUntil = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_DROP_MOT_UNTIL") : QString {};
+    if (!labDropUntil.isEmpty() && QDir::isAbsolutePath(labDropUntil)
+        && !QFile::exists(labDropUntil) && record.metadata
+        && (record.metadata->mimeType != "application/x-hamdrm-rs"
+            || qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_DROP_RS") == 1)
+        && record.metadata->mimeType != "application/x-hamdrm-bsr"
+        && parsed.value->kind == HamDrmMotGroupKind::Body
+        && (qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_MOT_FINAL") == 1
+            ? parsed.value->lastSegment : parsed.value->segmentNumber == 1U)) {
+        if (!labDroppedMotSegment_) {
+            labDroppedMotSegment_ = true;
+            qInfo() << "[LAB][HAMDRM] discarded initial MOT body segment" << parsed.value->segmentNumber
+                    << "final" << parsed.value->lastSegment;
+        }
+        return HamDrmStatus::success();
+    }
+    if (!labDropUntil.isEmpty() && QDir::isAbsolutePath(labDropUntil)
+        && !QFile::exists(labDropUntil)
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_REPAIR_UNMARK_FINAL") == 1
+        && record.metadata && record.metadata->mimeType != "application/x-hamdrm-rs"
+        && record.metadata->mimeType != "application/x-hamdrm-bsr"
+        && parsed.value->kind == HamDrmMotGroupKind::Body && parsed.value->lastSegment) {
+        parsed.value->lastSegment = false;
+        qInfo() << "[LAB][HAMDRM] unmarked initial final MOT segment" << parsed.value->segmentNumber;
+    }
+
+    // Explicit two-application test mode can discard one received RS segment
+    // after PCM demodulation to exercise the real recovery path without RF.
+    const int labDrop = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariableIntValue("DECODIUM_LAB_DROP_RS_SEGMENT") : 0;
+    if (!labDroppedRsSegment_ && labDrop != 0
+        && record.metadata && record.metadata->mimeType == "application/x-hamdrm-rs"
+        && parsed.value->kind == HamDrmMotGroupKind::Body
+        && ((labDrop == 1 && parsed.value->segmentNumber == 1U)
+            || (labDrop == 2 && parsed.value->lastSegment))) {
+        labDroppedRsSegment_ = true;
+        qInfo("[LAB][HAMDRM] discarded RS body segment %u", unsigned(parsed.value->segmentNumber));
+        return HamDrmStatus::success();
+    }
+
+    if (QStandardPaths::isTestModeEnabled() && !labInjectedShortFinal_
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_INJECT_SHORT_FINAL") == 1
+        && !labDropUntil.isEmpty() && QFile::exists(labDropUntil)
+        && record.metadata && parsed.value->kind == HamDrmMotGroupKind::Body
+        && parsed.value->lastSegment && parsed.value->payload.size() > 1U) {
+        labInjectedShortFinal_ = true;
+        const auto before = record.assembler->progress();
+        auto invalid = *parsed.value;
+        invalid.payload.pop_back();
+        const auto rejected = record.assembler->ingest(invalid);
+        const auto after = record.assembler->progress();
+        const bool preserved = !rejected.ok() && before.bodyExtentKnown == after.bodyExtentKnown
+            && before.bodyBytesReceived == after.bodyBytesReceived
+            && before.bodySegmentsReceived == after.bodySegmentsReceived;
+        qInfo() << "[LAB][HAMDRM] short final rejected and state preserved" << preserved;
+    }
+
+    const auto ingested = record.assembler->ingest(*parsed.value);
+    if (!ingested.ok()) {
+        record.error = bounded(statusDetail(
+            ingested.status, "HAMDRM MOT segment rejected"));
+        setError(record.error);
+        publishInbox(transportId);
+        return ingested.status;
+    }
+    const HamDrmStatus metadataStatus = updateHeaderMetadata(
+        record, *parsed.value);
+    if (!metadataStatus.ok()) {
+        record.rejected = true;
+        record.error = bounded(statusDetail(
+            metadataStatus, "HAMDRM MOT header rejected"));
+        record.assembler.reset();
+        setError(record.error);
+        publishInbox(transportId);
+        return metadataStatus;
+    }
+    record.progress = record.assembler->progress();
+    record.error.clear();
+
+    if (!record.progress.objectComplete)
+        (void) reconstructRsSegments(record, transportId, false);
+    if (record.progress.objectComplete) {
+        const HamDrmStatus completed = finishRecord(record);
+        if (!completed.ok()) {
+            record.rejected = true;
+            record.error = bounded(statusDetail(
+                completed, "HAMDRM object validation failed"));
+            record.assembler.reset();
+            if (partialStore_) {
+                static_cast<void>(partialStore_->remove(transportId));
+            }
+            setError(record.error);
+            publishInbox(transportId);
+            return completed;
+        }
+        clearError();
+        publishInbox(transportId);
+        if (record.metadata->mimeType == "application/x-hamdrm-bsr") {
+            const auto& b = record.completedObject->originalBytes;
+            const auto parsedBsr = parseHamDrmBsr(b.data(), b.size(), config_.limits, true);
+            Q_ASSERT(parsedBsr.ok());
+            const QString text = QString::fromLatin1(
+                reinterpret_cast<const char*>(b.data()), static_cast<qsizetype>(b.size()));
+            const bool textChanged = text != receivedBsrText_;
+            if (textChanged || receivedBsrObjectId_ != transportId) {
+                receivedBsrObjectId_ = transportId;
+                if (textChanged) {
+                    receivedBsrText_ = text;
+                    emit receivedBsrChanged();
+                    emit repairStateChanged();
+                }
+                emit bsrReceived(transportId, parsedBsr.value->transportId);
+            }
+        } else if (record.hybridReference) {
+            emit hybridReferenceReceived(transportId, QString::fromStdString(record.metadata->filename));
+        } else {
+            const QImage galleryImage = std::move(record.galleryImage);
+            const QString profile = record.receivedProfileId;
+            const QString filename = QString::fromStdString(record.metadata->filename);
+            if (!galleryImage.isNull()) emit receivedImageReady(galleryImage, profile, false);
+            emit objectCompleted(transportId, filename);
+        }
+        return HamDrmStatus::success();
+    }
+
+    if (*ingested.value != HamDrmIngestOutcome::DuplicateIgnored) {
+        const HamDrmStatus persisted = persistRecord(record);
+        if (!persisted.ok()) {
+            record.error = bounded(statusDetail(
+                persisted, "HAMDRM partial persistence failed"));
+            setError(record.error);
+            publishInbox(transportId);
+            return persisted;
+        }
+    }
+    clearError();
+    publishInbox(transportId);
+    return HamDrmStatus::success();
+}
+
+bool HamDrmController::validTransportId(int transportId) noexcept
+{
+    return transportId >= 0
+        && transportId <= std::numeric_limits<std::uint16_t>::max();
+}
+
+bool HamDrmController::selectObject(int transportId)
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    if (!validTransportId(transportId) || recordFor(transportId) == nullptr) {
+        return reject(QStringLiteral("inbox"),
+                      tr("Unknown HAMDRM transport ID"));
+    }
+    if (selectedTransportId_ != transportId) {
+        selectedTransportId_ = transportId;
+        bsrText_.clear();
+        emit selectedObjectChanged();
+        emit bsrChanged();
+    }
+    clearError();
+    return true;
+}
+
+QString HamDrmController::buildBsr(int transportId, bool qsstvExtended)
+{
+    if (!ownerThread()) {
+        return {};
+    }
+    InboxRecord* record = recordFor(transportId);
+    if (record == nullptr || !record->assembler
+        || !record->progress.headerComplete
+        || !record->metadata.has_value()
+        || record->bodySegmentSize == 0U) {
+        static_cast<void>(reject(
+            QStringLiteral("bsr"),
+            tr("Selected HAMDRM object has insufficient partial metadata for BSR")));
+        return {};
+    }
+    const auto missing = bsrMissingSegments(*record);
+    if (missing.empty()) {
+        static_cast<void>(reject(
+            QStringLiteral("bsr"),
+            tr("Selected HAMDRM object has no missing body segments")));
+        return {};
+    }
+    const auto segmentBytes = bsrSegmentSize(*record);
+    const HamDrmProfile* profile = record->receivedProfileId.isEmpty()
+        ? currentProfile()
+        : HamDrmProfileRegistry::findById(record->receivedProfileId.toStdString());
+    if (profile == nullptr || !segmentBytes) {
+        static_cast<void>(reject(QStringLiteral("bsr"),
+                                 tr("HAMDRM BSR profile or segment size is invalid")));
+        return {};
+    }
+
+    HamDrmBsrRequest request;
+    request.transportId = static_cast<std::uint16_t>(transportId);
+    request.headerReceived = true;
+    request.segmentSize = static_cast<std::uint16_t>(*segmentBytes);
+    request.missingSegments = missing;
+    if (qsstvExtended) {
+        request.filename = record->metadata->filename;
+        request.qsstvCompatibilityCode = profile->qsstvCompatibilityCode;
+    }
+    const auto encoded = encodeHamDrmBsr(
+        request,
+        qsstvExtended ? HamDrmBsrDialect::QsstvExtended
+                      : HamDrmBsrDialect::EasyPalCompatible,
+        config_.limits);
+    if (!encoded.ok()) {
+        static_cast<void>(reject(
+            QStringLiteral("bsr"),
+            statusDetail(encoded.status, "HAMDRM BSR encoding failed")));
+        return {};
+    }
+    bsrText_ = QString::fromLatin1(
+        reinterpret_cast<const char*>(encoded.value->data()),
+        static_cast<qsizetype>(encoded.value->size()));
+    selectedTransportId_ = transportId;
+    clearError();
+    emit selectedObjectChanged();
+    emit bsrChanged();
+    return bsrText_;
+}
+
+bool HamDrmController::startBsrTx(int transportId, bool qsstvExtended)
+{
+    if (!ownerThread()) return false;
+    if (busy()) return reject(QStringLiteral("bsr-tx"), tr("Another HAMDRM RX/TX operation is active"));
+    const auto capability = txCapability();
+    if (!capability.completeBackend || !backends_.waveformTx)
+        return reject(QStringLiteral("bsr-tx"), tr("Complete HAMDRM waveform TX backend is not connected"));
+    const auto* profile = currentProfile();
+    if (!profile) return reject(QStringLiteral("bsr-tx"), tr("Selected HAMDRM profile is invalid"));
+    const QString text = buildBsr(transportId, qsstvExtended);
+    if (text.isEmpty()) return false;
+    QByteArray body = text.toLatin1();
+    // Test-only bridge for transmitting an independently generated BSR
+    // through the normal modem. Require it to match the actual partial object.
+    const QString labBsr = QStandardPaths::isTestModeEnabled()
+        ? qEnvironmentVariable("DECODIUM_LAB_BSR_UNKNOWN_FILE") : QString {};
+    if (!labBsr.isEmpty()) {
+        QFile file(labBsr);
+        if (!QDir::isAbsolutePath(labBsr) || QFileInfo(file).isSymLink()
+            || !file.open(QIODevice::ReadOnly) || file.size() <= 0 || file.size() > 128 * 1024)
+            return reject(QStringLiteral("bsr-tx"), tr("Laboratory BSR file is invalid"));
+        const QByteArray candidate = file.readAll();
+        const auto supplied = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(candidate.constData()),
+                                              std::size_t(candidate.size()), config_.limits, true);
+        const auto generated = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(body.constData()),
+                                               std::size_t(body.size()), config_.limits);
+        if (!supplied.ok() || !generated.ok() || supplied.value->segmentSize != 0U
+            || supplied.value->transportId != generated.value->transportId
+            || supplied.value->missingSegments != generated.value->missingSegments
+            || supplied.value->filename != generated.value->filename
+            || supplied.value->qsstvCompatibilityCode != generated.value->qsstvCompatibilityCode)
+            return reject(QStringLiteral("bsr-tx"), tr("Laboratory BSR does not match the partial object"));
+        body = candidate;
+        qInfo("[LAB][REPAIR] transmitting matched external BSR with unknown segment size");
+    }
+    if (QStandardPaths::isTestModeEnabled()
+        && qEnvironmentVariableIntValue("DECODIUM_LAB_BSR_SEPARATORS") == 1) {
+        QByteArray formatted;
+        formatted.reserve(body.size() * 3);
+        for (const char value : body) {
+            if (value == '\n') formatted.append("\r\n\r\n");
+            else formatted.append(value);
+        }
+        body = std::move(formatted);
+        qInfo("[LAB][HAMDRM] BSR separator compatibility control enabled");
+    }
+    HamDrmMotObjectMetadata metadata;
+    metadata.filename = "bsr.bin";
+    metadata.transportId = qsstvCompatibleTransportId(metadata.filename);
+    const auto encoded = encodeHamDrmObject(metadata, byteVector(body), config_.txBodySegmentBytes, config_.limits);
+    if (!encoded.ok()) return reject(QStringLiteral("bsr-tx"), statusDetail(encoded.status, "HAMDRM BSR encoding failed"));
+    clearError();
+    txSessionId_ = nextSessionId();
+    const std::uint64_t session = txSessionId_;
+    setTxState(OperationState::Starting, 0.0);
+    HamDrmStatus status;
+    try {
+        status = backends_.waveformTx->start(*profile, *encoded.value, session, *this);
+    } catch (const std::exception& exception) {
+        status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, exception.what());
+    } catch (...) {
+        status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, "HAMDRM BSR TX backend failed");
+    }
+    if (!status.ok()) {
+        if (txSessionId_ == session) { txSessionId_ = 0U; setTxState(OperationState::Error, 0.0); }
+        return reject(QStringLiteral("bsr-tx"), statusDetail(status, "HAMDRM BSR TX start failed"));
+    }
+    if (txSessionId_ == session && txState_ == OperationState::Starting)
+        setTxState(OperationState::Active, 0.0);
+    return true;
+}
+
+bool HamDrmController::startBsrRepair()
+{
+    if (!ownerThread()) return false;
+    if (busy()) return reject(QStringLiteral("bsr-repair"), tr("Another HAMDRM RX/TX operation is active"));
+    if (!backends_.waveformTx || !txCapability().completeBackend || !canRepairReceivedBsr())
+        return reject(QStringLiteral("bsr-repair"), tr("BSR does not match the last completed image transmission"));
+    const QByteArray bytes = receivedBsrText_.toLatin1();
+    const auto request = parseHamDrmBsr(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+                                         std::size_t(bytes.size()), config_.limits, true);
+    if (!request.ok()) return reject(QStringLiteral("bsr-repair"), tr("Received BSR is invalid"));
+    HamDrmEncodedObject repair;
+    repair.metadata = lastRepairSource_->object.metadata;
+    repair.headerGroups = lastRepairSource_->object.headerGroups;
+    for (const auto index : request.value->missingSegments)
+        repair.bodyGroups.push_back(lastRepairSource_->object.bodyGroups[index]);
+    const auto* profile = currentProfile();
+    if (!profile) return reject(QStringLiteral("bsr-repair"), tr("Selected HAMDRM profile is invalid"));
+    clearError();
+    txSessionId_ = nextSessionId();
+    const auto session = txSessionId_;
+    setTxState(OperationState::Starting, 0.0);
+    HamDrmStatus status;
+    try { status = backends_.waveformTx->start(*profile, std::move(repair), session, *this); }
+    catch (const std::exception& e) { status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, e.what()); }
+    catch (...) { status = HamDrmStatus::failure(HamDrmErrorCode::IoFailure, "HAMDRM repair TX backend failed"); }
+    if (!status.ok()) {
+        if (txSessionId_ == session) { txSessionId_ = 0U; setTxState(OperationState::Error, 0.0); }
+        return reject(QStringLiteral("bsr-repair"), statusDetail(status, "HAMDRM repair TX start failed"));
+    }
+    if (txSessionId_ == session && txState_ == OperationState::Starting)
+        setTxState(OperationState::Active, 0.0);
+    return true;
+}
+
+QVariantList HamDrmController::savedPartialIds() const
+{
+    QVariantList result;
+    if (!ownerThread() || !partialStore_) return result;
+    for (const auto id : partialStore_->savedTransportIds())
+        result.append(QStringLiteral("%1").arg(id, 4, 16, QLatin1Char('0')).toUpper());
+    return result;
+}
+
+bool HamDrmController::resumePartial(int transportId)
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    if (!partialStore_) {
+        return reject(QStringLiteral("resume"),
+                      tr("HAMDRM partial-object store is not configured"));
+    }
+    if (!validTransportId(transportId)) {
+        return reject(QStringLiteral("resume"),
+                      tr("HAMDRM transport ID is outside 0…65535"));
+    }
+    if (recordFor(transportId) != nullptr) {
+        return reject(QStringLiteral("resume"),
+                      tr("HAMDRM transport ID is already present in the inbox"));
+    }
+    if (inbox_.size() >= config_.maximumInboxObjects) {
+        return reject(QStringLiteral("resume"),
+                      tr("HAMDRM inbox object bound is exhausted"));
+    }
+    QString savedProfile;
+    const auto loaded = partialStore_->load(
+        static_cast<std::uint16_t>(transportId), &savedProfile);
+    if (!loaded.ok()) {
+        return reject(QStringLiteral("resume"),
+                      statusDetail(loaded.status,
+                                   "HAMDRM partial resume failed"));
+    }
+
+    auto record = std::make_unique<InboxRecord>(
+        static_cast<std::uint16_t>(transportId), config_.limits);
+    record->receivedProfileId = savedProfile;
+    record->assembler = std::make_unique<HamDrmObjectAssembler>(
+        *loaded.value);
+    record->persisted = true;
+    const HamDrmStatus rebuilt = rebuildRecordMetadata(*record);
+    if (!rebuilt.ok()) {
+        return reject(QStringLiteral("resume"),
+                      statusDetail(rebuilt,
+                                   "HAMDRM partial metadata reconstruction failed"));
+    }
+    const std::uint16_t id = static_cast<std::uint16_t>(transportId);
+    inbox_.emplace(id, std::move(record));
+    clearError();
+    publishInbox(id);
+    return true;
+}
+
+bool HamDrmController::discardObject(int transportId)
+{
+    if (!ownerThread()) {
+        return false;
+    }
+    if (!validTransportId(transportId)) {
+        return reject(QStringLiteral("discard"),
+                      tr("HAMDRM transport ID is outside 0…65535"));
+    }
+    if (hybridDownloadId_ == transportId) cancelHybridDownload();
+    const std::uint16_t id = static_cast<std::uint16_t>(transportId);
+    if (partialStore_) {
+        const HamDrmStatus removed = partialStore_->remove(id);
+        if (!removed.ok()) {
+            return reject(QStringLiteral("discard"),
+                          statusDetail(removed,
+                                       "HAMDRM partial removal failed"));
+        }
+    }
+    const auto found = inbox_.find(id);
+    if (found != inbox_.end()) {
+        if (found->second->completedObject.has_value()) {
+            const std::size_t bytes =
+                found->second->completedObject->originalBytes.size();
+            completedBytes_ = bytes > completedBytes_
+                ? 0U : completedBytes_ - bytes;
+            if (completedObjects_ != 0U) {
+                --completedObjects_;
+            }
+        }
+        inbox_.erase(found);
+    }
+    if (selectedTransportId_ == transportId) {
+        bsrText_.clear();
+        emit bsrChanged();
+    }
+    clearError();
+    publishInbox(id);
+    return true;
+}
+
+bool HamDrmController::downloadHybridIfUnchanged(int transportId, const QUrl& destination,
+                                                   const QString& referenceToken)
+{
+    if (!ownerThread()) return false;
+    const auto* record = recordFor(transportId);
+    if (!record || !record->hybridReference || referenceToken.isEmpty()
+        || record->referenceToken != referenceToken)
+        return reject(QStringLiteral("hybrid-download"), tr("Hybrid reference changed; select it again"));
+    return downloadHybrid(transportId, destination);
+}
+
+bool HamDrmController::downloadHybrid(int transportId, const QUrl& destination)
+{
+    if (!ownerThread() || hybridDownloadBusy() || !destination.isLocalFile()
+        || destination.toLocalFile().isEmpty()) return false;
+    const auto* record = recordFor(transportId);
+    if (!record || !record->hybridReference || !record->completedObject || !record->metadata)
+        return reject(QStringLiteral("hybrid-download"), tr("Select a valid hybrid reference"));
+    const auto server = decodeHamDrmHybridServer(record->completedObject->originalBytes);
+    if (!server.ok()) return reject(QStringLiteral("hybrid-download"), tr("Invalid hybrid server reference"));
+    hybridDownloadId_ = transportId;
+    hybridDownloadToken_ = record->referenceToken;
+    hybridDownloadDestination_ = destination;
+    quint16 port = config_.hybridFtpPort;
+    if (QStandardPaths::isTestModeEnabled()) {
+        bool ok = false;
+        const int testPort = qEnvironmentVariableIntValue("DECODIUM_LAB_HYBRID_FTP_PORT", &ok);
+        if (ok && testPort > 0 && testPort <= 65535) port = static_cast<quint16>(testPort);
+    }
+    if (!hybridFtp_.download(*server.value, QString::fromStdString(record->metadata->filename), port,
+                             static_cast<qsizetype>(std::min<std::size_t>(config_.limits.maximumObjectBytes, 16U * 1024U * 1024U)))) {
+        hybridDownloadId_ = -1;
+        hybridDownloadToken_.clear();
+        hybridDownloadDestination_ = QUrl();
+        return reject(QStringLiteral("hybrid-download"), tr("Unable to start hybrid download"));
+    }
+    clearError();
+    emit hybridDownloadBusyChanged();
+    return true;
+}
+
+bool HamDrmController::cancelHybridDownload()
+{
+    if (!ownerThread() || !hybridDownloadBusy()) return false;
+    hybridFtp_.cancel();
+    return true;
+}
+
+bool HamDrmController::saveCompletedImage(int transportId, const QUrl& destination)
+{
+    if (!ownerThread() || !destination.isLocalFile() || destination.toLocalFile().isEmpty())
+        return false;
+    const auto* record = recordFor(transportId);
+    if (!record || !record->completedObject || !record->imageInfo || record->hybridReference)
+        return reject(QStringLiteral("save-image"), tr("Select a completed HAMDRM image"));
+    const auto& data = record->completedObject->originalBytes;
+    QSaveFile output(destination.toLocalFile());
+    if (!output.open(QIODevice::WriteOnly)
+        || output.write(reinterpret_cast<const char*>(data.data()), static_cast<qint64>(data.size())) != static_cast<qint64>(data.size())
+        || !output.commit())
+        return reject(QStringLiteral("save-image"), tr("Could not save the HAMDRM image"));
+    clearError();
+    return true;
+}
+
+bool HamDrmController::canSaveSelectedImage() const noexcept
+{
+    const auto* record = recordFor(selectedTransportId_);
+    return record && record->completedObject && record->imageInfo && !record->hybridReference;
+}
+
+bool HamDrmController::selectedImageStructuralOnly() const noexcept
+{
+    const auto* record = recordFor(selectedTransportId_);
+    return record && record->completedObject && record->imageInfo && !record->imageDecoded;
+}
+
+HamDrmValueResult<HamDrmAssembledObject>
+HamDrmController::completedObject(std::uint16_t transportId) const
+{
+    if (!ownerThread()) {
+        return {std::nullopt, HamDrmStatus::failure(
+            HamDrmErrorCode::InvalidArgument,
+            "completed object must be read on the owner thread")};
+    }
+    const auto found = inbox_.find(transportId);
+    if (found == inbox_.end() || !found->second->completedObject) {
+        return {std::nullopt, HamDrmStatus::failure(
+            HamDrmErrorCode::Incomplete, "HAMDRM object is not complete")};
+    }
+    return {*found->second->completedObject, HamDrmStatus::success()};
+}
+
+HamDrmValueResult<HamDrmAssembledObject>
+HamDrmController::takeCompletedObject(std::uint16_t transportId)
+{
+    if (!ownerThread()) {
+        return {std::nullopt,
+                HamDrmStatus::failure(
+                    HamDrmErrorCode::InvalidArgument,
+                    "completed object must be taken on the owner thread")};
+    }
+    const auto found = inbox_.find(transportId);
+    if (found == inbox_.end()
+        || !found->second->completedObject.has_value()) {
+        return {std::nullopt,
+                HamDrmStatus::failure(HamDrmErrorCode::Incomplete,
+                                      "HAMDRM object is not complete")};
+    }
+    HamDrmAssembledObject result = std::move(
+        *found->second->completedObject);
+    const std::size_t bytes = result.originalBytes.size();
+    completedBytes_ = bytes > completedBytes_ ? 0U : completedBytes_ - bytes;
+    if (completedObjects_ != 0U) {
+        --completedObjects_;
+    }
+    inbox_.erase(found);
+    publishInbox(transportId);
+    return {std::move(result), HamDrmStatus::success()};
+}
+
+void HamDrmController::handleRxProgress(std::uint64_t sessionId,
+                                        double progress)
+{
+    if (sessionId != rxSessionId_ || !activeState(rxState_)) {
+        return;
+    }
+    if (!std::isfinite(progress) || progress < rxProgress_
+        || progress < 0.0 || progress > 1.0) {
+        const std::uint64_t active = rxSessionId_;
+        rxSessionId_ = 0U;
+        backends_.waveformRx->cancel(active);
+        setRxState(OperationState::Error, rxProgress_);
+        static_cast<void>(reject(
+            QStringLiteral("rx"),
+            tr("HAMDRM waveform RX backend reported invalid progress")));
+        return;
+    }
+    setRxState(OperationState::Active, progress);
+}
+
+void HamDrmController::handleRxMotGroup(std::uint64_t sessionId,
+                                        QByteArray encodedGroup)
+{
+    if (sessionId != rxSessionId_ || !activeState(rxState_)) {
+        return;
+    }
+    const HamDrmStatus status = ingestMotGroup(encodedGroup);
+    if (!status.ok()) {
+        emit operationRejected(
+            QStringLiteral("mot"),
+            statusDetail(status, "HAMDRM MOT group rejected"));
+    }
+}
+
+void HamDrmController::handleRxFinished(std::uint64_t sessionId,
+                                        HamDrmStatus status)
+{
+    if (sessionId != rxSessionId_) {
+        return;
+    }
+    rxSessionId_ = 0U;
+    if (status.ok()) {
+        clearError();
+        setRxState(OperationState::Completed, 1.0);
+    } else {
+        setRxState(OperationState::Error, rxProgress_);
+        static_cast<void>(reject(
+            QStringLiteral("rx"),
+            statusDetail(status, "HAMDRM waveform RX failed")));
+    }
+}
+
+void HamDrmController::handleTxProgress(std::uint64_t sessionId,
+                                        double progress)
+{
+    if (sessionId != txSessionId_ || !activeState(txState_)) {
+        return;
+    }
+    if (!std::isfinite(progress) || progress < txProgress_
+        || progress < 0.0 || progress > 1.0) {
+        const std::uint64_t active = txSessionId_;
+        txSessionId_ = 0U;
+        backends_.waveformTx->cancel(active);
+        pendingRepairSource_.reset();
+        setTxState(OperationState::Error, txProgress_);
+        static_cast<void>(reject(
+            QStringLiteral("tx"),
+            tr("HAMDRM waveform TX backend reported invalid progress")));
+        return;
+    }
+    setTxState(OperationState::Active, progress);
+}
+
+void HamDrmController::handleTxFinished(std::uint64_t sessionId,
+                                        HamDrmStatus status)
+{
+    if (sessionId != txSessionId_) {
+        return;
+    }
+    txSessionId_ = 0U;
+    if (status.ok()) {
+        if (pendingRepairSource_) {
+            lastRepairSource_ = std::move(pendingRepairSource_);
+            pendingRepairSource_.reset();
+            emit repairStateChanged();
+        }
+        clearError();
+        setTxState(OperationState::Completed, 1.0);
+    } else {
+        pendingRepairSource_.reset();
+        setTxState(OperationState::Error, txProgress_);
+        static_cast<void>(reject(
+            QStringLiteral("tx"),
+            statusDetail(status, "HAMDRM waveform TX failed")));
+    }
+}
+
+void HamDrmController::hamDrmRxProgress(std::uint64_t sessionId,
+                                        double progress)
+{
+    if (ownerThread()) {
+        handleRxProgress(sessionId, progress);
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, sessionId, progress] {
+            handleRxProgress(sessionId, progress);
+        },
+        Qt::QueuedConnection);
+}
+
+void HamDrmController::hamDrmRxMotGroup(std::uint64_t sessionId,
+                                        QByteArray encodedGroup)
+{
+    if (ownerThread()) {
+        handleRxMotGroup(sessionId, std::move(encodedGroup));
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, sessionId, encodedGroup = std::move(encodedGroup)]() mutable {
+            handleRxMotGroup(sessionId, std::move(encodedGroup));
+        },
+        Qt::QueuedConnection);
+}
+
+void HamDrmController::hamDrmRxFinished(std::uint64_t sessionId,
+                                        HamDrmStatus status)
+{
+    if (ownerThread()) {
+        handleRxFinished(sessionId, std::move(status));
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, sessionId, status = std::move(status)]() mutable {
+            handleRxFinished(sessionId, std::move(status));
+        },
+        Qt::QueuedConnection);
+}
+
+void HamDrmController::hamDrmTxProgress(std::uint64_t sessionId,
+                                        double progress)
+{
+    if (ownerThread()) {
+        handleTxProgress(sessionId, progress);
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, sessionId, progress] {
+            handleTxProgress(sessionId, progress);
+        },
+        Qt::QueuedConnection);
+}
+
+void HamDrmController::hamDrmTxFinished(std::uint64_t sessionId,
+                                        HamDrmStatus status)
+{
+    if (ownerThread()) {
+        handleTxFinished(sessionId, std::move(status));
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, sessionId, status = std::move(status)]() mutable {
+            handleTxFinished(sessionId, std::move(status));
+        },
+        Qt::QueuedConnection);
+}
+
+} // namespace decodium::sstv::hamdrm

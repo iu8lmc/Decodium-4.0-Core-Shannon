@@ -1,0 +1,8 @@
+report|-08|-08
+report|R+09|+09
+report|+99|+49
+report|-99|-50
+report|bad|-10
+report||
+snr|42|-50|-99
+format|+00|+49|-50

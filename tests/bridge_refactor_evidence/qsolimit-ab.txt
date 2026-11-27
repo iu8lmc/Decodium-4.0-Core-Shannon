@@ -1,0 +1,6 @@
+limit=0 notify=0 persisted=-1
+limit=1 notify=1 9H1SR|40M|FT8=1 K1ABC|20M|FT2=2 persisted=1
+limit=1 notify=1 9H1SR|40M|FT8=1 K1ABC|20M|FT2=2 persisted=1
+limit=3 notify=2 9H1SR|40M|FT8=1 K1ABC|20M|FT2=2 persisted=3
+limit=0 notify=3 persisted=0
+missing=0

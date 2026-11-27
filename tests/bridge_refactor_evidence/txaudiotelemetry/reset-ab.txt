@@ -1,0 +1,1 @@
+TX audio telemetry A/B: identical source, reset and summary with and without sink

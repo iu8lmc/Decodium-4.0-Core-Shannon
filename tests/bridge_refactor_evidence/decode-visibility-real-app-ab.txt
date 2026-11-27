@@ -1,0 +1,2 @@
+before {"bypassShown": true, "cat": false, "explicitHidden": true, "normalShown": true, "telemetryHidden": true, "tx": false, "workedHidden": true}
+after {"bypassShown": true, "cat": false, "explicitHidden": true, "normalShown": true, "telemetryHidden": true, "tx": false, "workedHidden": true}

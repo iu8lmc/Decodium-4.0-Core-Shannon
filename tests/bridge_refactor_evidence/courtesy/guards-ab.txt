@@ -1,0 +1,1 @@
+courtesy A/B: QSO/queue/PTT guards, repeat limit, release and timer passed

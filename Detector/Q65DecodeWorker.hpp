@@ -2,6 +2,8 @@
 #ifndef Q65DECODEWORKER_HPP
 #define Q65DECODEWORKER_HPP
 
+#include <atomic>
+#include <cstdint>
 #include <QObject>
 #include <QByteArray>
 #include <QStringList>
@@ -25,7 +27,10 @@ struct DecodeRequest
   int ndepth {1};
   int nfa {0};
   int nfb {0};
-  int nclearave {0};
+  // A normal Q65 window must not inherit coherent averages from a preceding
+  // station/mode.  The bridge explicitly disables this only when the user has
+  // enabled coherent averaging.
+  int nclearave {1};
   bool coherentAvgEnabled {false};
   int single_decode {0};
   int nagain {0};
@@ -38,6 +43,7 @@ struct DecodeRequest
   int nqsoprogress {0};
   int ncontest {0};
   int lapcqonly {0};
+  bool zapEnabled {false};
 };
 
 class Q65DecodeWorker final : public QObject
@@ -48,6 +54,10 @@ public:
   explicit Q65DecodeWorker (QObject * parent = nullptr);
 
   void decode (DecodeRequest const& request);
+  void retireThrough (quint64 serial);
+
+private:
+  std::atomic<std::uint64_t> m_retiredSerial {0};
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);

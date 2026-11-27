@@ -1,0 +1,20 @@
+--- a/src/drmrx/sourcedecoder.cpp
++++ b/src/drmrx/sourcedecoder.cpp
+@@ -406,6 +406,8 @@
+       break;
+     case 12:
+       tbPtr->fileName=QString::fromLatin1(currentDataPacket.ba.data()+1).left(len-1);
++      if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1)
++        fprintf(stderr,"LAB reverse RX header id=%u name=%s\n",tbPtr->transportID,qPrintable(tbPtr->fileName));
+       stce= new rxDRMStatusEvent(QString("%1").arg(tbPtr->fileName));
+       QApplication::postEvent( dispatcherPtr, stce );  // Qt will delete it when done
+       break;
+@@ -748,6 +750,8 @@
+       tbPtr->newFileName=fileName;
+       if((tbPtr->fileName=="bsr.bin")&&(!tbPtr->alreadyReceived))
+         {
++          if(qEnvironmentVariableIntValue("QSSTV_REVERSE_LAB")==1)
++            fprintf(stderr,"LAB reverse RX complete BSR bytes=%lld\n",static_cast<long long>(ba.size()));
+           tbPtr->setAlreadyReceived(true);
+           pe = new prepareFixEvent(ba);
+           QApplication::postEvent(dispatcherPtr, pe);

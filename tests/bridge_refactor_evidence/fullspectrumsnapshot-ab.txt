@@ -1,0 +1,5 @@
+empty|1
+scheduled|1|1
+defer|0|1
+applied|1|15|2|A,B|0|0
+missing|1|1

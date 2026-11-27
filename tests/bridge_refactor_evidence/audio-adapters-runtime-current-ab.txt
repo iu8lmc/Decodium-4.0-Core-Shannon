@@ -1,0 +1,4 @@
+Command: python3 tests/tools/bridge_audio_adapters_runtime_ab.py
+Exit code: 0; virtual BlackHole device; CAT and TX disabled.
+before {"cat": false, "deviceFound": true, "format": "rate=12000 channels=2 sampleFormat=2", "id": "426c61636b486f6c653263685f554944", "tx": false}
+after {"cat": false, "deviceFound": true, "format": "rate=12000 channels=2 sampleFormat=2", "id": "426c61636b486f6c653263685f554944", "tx": false}

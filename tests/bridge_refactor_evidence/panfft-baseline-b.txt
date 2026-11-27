@@ -1,0 +1,1 @@
+b: unavailable guard, backend selection and CPU fallback passed; CAT disabled

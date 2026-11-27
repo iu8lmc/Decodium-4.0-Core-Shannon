@@ -1,0 +1,4 @@
+cmake --build build --target decodium_qml wsjtx -j 2
+Exit code: 0. Both macOS targets updated after temporary A/B source restoration.
+The linker warned that some local Homebrew dependencies were built for a newer macOS version than the configured deployment target; this is not evidence of compatibility on older macOS.
+Ninja graph inspection: all 410 DecodiumBridge*.cpp sources present in both target command graphs.

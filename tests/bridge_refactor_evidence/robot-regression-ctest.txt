@@ -1,0 +1,16 @@
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+    Start 211: test_sstv_robot
+1/3 Test #211: test_sstv_robot ..................   Passed    0.75 sec
+    Start 212: test_sstv_robot_rx_session
+2/3 Test #212: test_sstv_robot_rx_session .......   Passed    2.34 sec
+    Start 215: test_sstv_rx_runtime
+3/3 Test #215: test_sstv_rx_runtime .............   Passed  389.86 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Label Time Summary:
+integration    = 389.86 sec*proc (1 test)
+sstv           = 392.95 sec*proc (3 tests)
+unit           =   3.09 sec*proc (2 tests)
+
+Total Test time (real) = 392.96 sec

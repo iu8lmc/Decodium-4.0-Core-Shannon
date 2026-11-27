@@ -1,0 +1,1 @@
+b: synthetic ADIF imported and exported with one matching QSO; CAT disabled

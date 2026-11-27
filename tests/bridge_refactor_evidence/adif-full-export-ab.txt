@@ -1,0 +1,4 @@
+before a a: full export, guards, edit and deletion passed on synthetic QSO; CAT disabled
+before b b: full export, guards, edit and deletion passed on synthetic QSO; CAT disabled
+after a a: full export, guards, edit and deletion passed on synthetic QSO; CAT disabled
+after b b: full export, guards, edit and deletion passed on synthetic QSO; CAT disabled

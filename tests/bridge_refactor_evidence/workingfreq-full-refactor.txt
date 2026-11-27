@@ -1,0 +1,1 @@
+a: {"bands": 32, "modes": 15, "regions": 4, "rows": 196, "sha256": "667fd9d890d44f3e55b9e63d388e6349ae7280b6f4afea77860ea0c125a93ce3"}

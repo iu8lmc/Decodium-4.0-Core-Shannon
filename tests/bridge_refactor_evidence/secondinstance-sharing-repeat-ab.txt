@@ -1,0 +1,4 @@
+secondinstance before {"comma": true, "empty": true, "slash": true}
+secondinstance after {"comma": true, "empty": true, "slash": true}
+sharingconfig before {"cat": 4533, "catEnabled": false, "native": 0, "spot": 4534}
+sharingconfig after {"cat": 4533, "catEnabled": false, "native": 0, "spot": 4534}

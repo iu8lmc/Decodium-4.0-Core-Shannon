@@ -1,0 +1,2 @@
+before {"blocked": true, "cat": false, "disabled": true, "invalidated": true, "manual": true, "tx": false}
+after {"blocked": true, "cat": false, "disabled": true, "invalidated": true, "manual": true, "tx": false}

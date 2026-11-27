@@ -1,0 +1,2 @@
+{"auth": 200, "qr": true, "restarted": true, "running": true, "started": true, "stopped": true, "stoppedAgain": true, "tokenReused": true, "unauth": 401, "url": true}
+{"auth": 200, "qr": true, "restarted": true, "running": true, "started": true, "stopped": true, "stoppedAgain": true, "tokenReused": true, "unauth": 401, "url": true}

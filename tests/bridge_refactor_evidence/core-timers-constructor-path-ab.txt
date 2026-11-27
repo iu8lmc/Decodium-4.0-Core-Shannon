@@ -1,0 +1,2 @@
+before {"async": true, "cat": false, "cpu": true, "fired": true, "period": true, "readback": "persisted", "release": true, "shutdown": true, "spectrum": true, "stall": true, "tx": false, "utc": true, "wasShutdown": false}
+after {"async": true, "cat": false, "cpu": true, "fired": true, "period": true, "readback": "persisted", "release": true, "shutdown": true, "spectrum": true, "stall": true, "tx": false, "utc": true, "wasShutdown": false}

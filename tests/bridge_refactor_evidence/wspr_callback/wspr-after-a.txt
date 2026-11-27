@@ -1,0 +1,1 @@
+{"found": [{"call": "DU1MGA", "freq": "1500", "grid": "PK04", "message": "DU1MGA PK04 37", "mode": "WSPR"}], "tx": false}

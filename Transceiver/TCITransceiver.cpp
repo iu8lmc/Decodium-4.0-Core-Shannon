@@ -234,6 +234,14 @@ namespace
 
   constexpr int kMaxKin = NTMAX * RX_SAMPLE_RATE;
 
+  // 1.0.542 iu8lmc - ritmo del ripiego push e finestra di cortesia entro cui
+  // si lascia comandare il server se manda TxChrono.
+  constexpr int kTxPushIntervalMs = 40;
+  constexpr qint64 kTxChronoGraceMs = 500;
+  // margine di audio che si tiene in anticipo sul tempo reale, per coprire
+  // il jitter del timer senza accumulare ritardo.
+  constexpr qint64 kTxPushLeadUs = 120000;
+
   quint64 sample_size_for_format (quint32 format)
   {
     switch (format)
@@ -354,11 +362,16 @@ namespace
       }
     bool ok = false;
     double const parsed = QLocale::c ().toDouble (value.trimmed (), &ok);
-    if (!ok)
+    double const scaled = parsed * 10.0;
+    if (!ok
+        || !std::isfinite (parsed)
+        || !std::isfinite (scaled)
+        || scaled < 0.0
+        || scaled > static_cast<double> (std::numeric_limits<int>::max ()))
       {
         return false;
       }
-    *out = qMax (0, qRound (parsed * 10.0));
+    *out = qRound (scaled);
     return true;
   }
 
@@ -785,7 +798,7 @@ void TCITransceiver::process_pending_tci_frames()
 
 int TCITransceiver::do_start ()
 {
-  if (tci_audio_) QThread::currentThread()->setPriority(QThread::HighPriority);
+  // 1.0.326 B3: removed QThread::HighPriority - on Windows it preempts the main thread (audio watchdog restart)
   CAT_TRACE ("TCITransceiver entered TCI do_start and tci_Ready is " + QString::number(tci_Ready) + '\n');
   qDebug () << "qDebug says do_start tci_Ready is: " << tci_Ready;
   if (wrapped_) wrapped_->start (0);
@@ -892,6 +905,7 @@ int TCITransceiver::do_start ()
   requested_drive_ = "";
   drive_ = "";
   level_ = -54;
+  rxAtten = 0;   // 0 dB: nessuna attenuazione sull'audio RX via TCI
   txAtten = 45;
   power_ = 0;
   swr_ = 0;
@@ -1196,6 +1210,23 @@ void TCITransceiver::onMessageReceived(const QString &str)
           }
         }
         break;
+      case Cmd_AudioSR:
+        {
+          bool ok = false;
+          quint32 const rate = arg (0).toUInt (&ok);
+          if (ok && rate > 0)
+            {
+              negotiatedSampleRate_ = rate;
+              if (rate != audioSampleRate && !warnedSampleRateMismatch_)
+                {
+                  warnedSampleRateMismatch_ = true;
+                  qWarning () << "TCI: audio_samplerate del server" << rate
+                              << "diverso da quello che generiamo" << audioSampleRate
+                              << "- l'audio TX viene timbrato col rate reale";
+                }
+            }
+        }
+        break;
       case Cmd_AudioStreamSampleType:
         break;
       case Cmd_AudioStreamChannels:
@@ -1255,6 +1286,11 @@ void TCITransceiver::onMessageReceived(const QString &str)
       case Cmd_Device:
         TCI_VERBOSE_PRINTF("%s CmdDevice : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if((arg (0) == "SunSDR2DX" || arg (0) == "SunSDR2PRO") && !ESDR3) tx_top_ = false;
+        // 1.0.537 iu8lmc - il nome del dispositivo finisce nel registro
+        // diagnostico: serve a distinguere ColibriNANO e le altre
+        // chiavette Expert Electronics dai transceiver veri e propri.
+        device_name_ = arg (0);
+        qInfo () << "[TCI] device:" << device_name_;
         TCI_VERBOSE_PRINTF("tx_top_:%d\n",tx_top_);
         break;
       case Cmd_Ready:
@@ -1315,74 +1351,14 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
           return;
         }
 
-      std::lock_guard<std::mutex> lock (mtx_);
-      tx_fifo = (tx_fifo + 1) & 7;
-      int const ssize = static_cast<int> (ssize64);
-      if (m_tx1[tx_fifo].size () != ssize)
+      lastTxChronoMs_ = QDateTime::currentMSecsSinceEpoch ();
+      if (txPushActive_)
         {
-          m_tx1[tx_fifo].resize (ssize);
+          txPushActive_ = false;
+          if (tx_push_timer_) tx_push_timer_->stop ();
+          qInfo () << "TCI: arrivato un TxChrono, ripiego push disattivato";
         }
-
-      auto * pOStream1 = reinterpret_cast<Data_Stream *> (m_tx1[tx_fifo].data ());
-      std::memset (pOStream1, 0, AudioHeaderSize);
-      pOStream1->receiver = pStream->receiver;
-      pOStream1->sampleRate = pStream->sampleRate ? pStream->sampleRate : audioSampleRate;
-      pOStream1->format = tx_format;
-      pOStream1->codec = 0;
-      pOStream1->crc = 0;
-      pOStream1->length = sample_count;
-      pOStream1->type = TxAudioStream;
-      pOStream1->channels = tx_channels;
-
-      quint32 const generated_count = tx_channels == 1 ? sample_count * 2u : sample_count;
-      QVector<float> generated (static_cast<int> (generated_count));
-      quint16 done = readAudioData (generated.data (), static_cast<qint32> (generated_count), txAtten);
-      if (done && done != generated_count)
-        {
-          quint16 const ready = done;
-          readAudioData (generated.data () + ready, static_cast<qint32> (generated_count - ready), txAtten);
-        }
-      QVector<float> mono;
-      float const * samples = generated.constData ();
-      if (tx_channels == 1)
-        {
-          mono.resize (static_cast<int> (sample_count));
-          for (quint32 i = 0; i < sample_count; ++i)
-            {
-              mono[static_cast<int> (i)] = generated[static_cast<int> (i * 2u)];
-            }
-          samples = mono.constData ();
-        }
-      pack_tci_tx_audio (samples,
-                         sample_count,
-                         tx_format,
-                         reinterpret_cast<char *> (pOStream1->data));
-
-      ++txChronoFrames_;
-      tx_fifo2 = tx_fifo;
-      if (inConnected && socket_worker_)
-        {
-          ++txAudioFrames_;
-          Q_EMIT request_socket_send_binary (m_tx1[tx_fifo2]);
-        }
-
-      qint64 const nowMs = QDateTime::currentMSecsSinceEpoch ();
-      if (nowMs - lastTxChronoLogMs_ > 1000)
-        {
-          lastTxChronoLogMs_ = nowMs;
-          qInfo () << "TCI TX chrono handled:"
-                   << "rx=" << pStream->receiver
-                   << "chronoLen=" << pStream->length
-                   << "payload=" << payload_bytes
-                   << "txLen=" << pOStream1->length
-                   << "format=" << pOStream1->format
-                   << "channels=" << pOStream1->channels
-                   << "state=" << m_state
-                   << "tune=" << m_tuning
-                   << "txAudio=" << tx_audio_
-                   << "frames=" << txChronoFrames_
-                   << "sent=" << txAudioFrames_;
-        }
+      send_tx_audio_frame (pStream->receiver, sample_count, tx_format, tx_channels);
       return;
     }
 
@@ -1422,6 +1398,186 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
     }
 }
 
+
+// 1.0.542 iu8lmc - arma o disarma il ripiego push. Si attiva solo se stiamo
+// trasmettendo e il server non ha mandato un TxChrono di recente: con
+// ExpertSDR, che scandisce sempre lui, non entra mai in funzione.
+void TCITransceiver::update_tx_push_state ()
+{
+  // 1.0.542 iu8lmc - condizione stretta: non basta che il modulatore sia
+  // armato (tx_audio_ resta vero anche a trasmissione finita), serve che il
+  // trasmettitore sia davvero in emissione. Con la sola tx_audio_ il ripiego
+  // push continuava a spingere frame all'infinito verso il server TCI.
+  bool const keyed = PTT_ || requested_PTT_ || m_tuning;
+  bool const transmitting = keyed && (tx_audio_ || m_tuning);
+  if (!tci_audio_ || !transmitting || !inConnected || !stream_audio_)
+    {
+      if (txPushActive_)
+        {
+          txPushActive_ = false;
+          qInfo () << "TCI: ripiego push TX disattivato (trasmissione finita)";
+        }
+      if (tx_push_timer_) tx_push_timer_->stop ();
+      return;
+    }
+
+  if (!tx_push_timer_)
+    {
+      tx_push_timer_ = new QTimer {this};
+      tx_push_timer_->setTimerType (Qt::PreciseTimer);
+      connect (tx_push_timer_, &QTimer::timeout, this, &TCITransceiver::on_tx_push_tick);
+    }
+  if (!tx_push_timer_->isActive ())
+    {
+      tx_push_timer_->start (kTxPushIntervalMs);
+    }
+}
+
+// Un tick ogni 40 ms. Finche' i TxChrono arrivano non si fa nulla: si spinge
+// solo dopo mezzo secondo di silenzio del server, e da quel momento si tiene
+// il ritmo da soli.
+void TCITransceiver::on_tx_push_tick ()
+{
+  // 1.0.542 iu8lmc - condizione stretta: non basta che il modulatore sia
+  // armato (tx_audio_ resta vero anche a trasmissione finita), serve che il
+  // trasmettitore sia davvero in emissione. Con la sola tx_audio_ il ripiego
+  // push continuava a spingere frame all'infinito verso il server TCI.
+  bool const keyed = PTT_ || requested_PTT_ || m_tuning;
+  bool const transmitting = keyed && (tx_audio_ || m_tuning);
+  if (!tci_audio_ || !transmitting || !inConnected || !stream_audio_)
+    {
+      update_tx_push_state ();
+      return;
+    }
+
+  qint64 const now = QDateTime::currentMSecsSinceEpoch ();
+  if (lastTxChronoMs_ > 0 && now - lastTxChronoMs_ < kTxChronoGraceMs)
+    {
+      return;   // il server sta scandendo lui: non ci si intromette
+    }
+
+  if (!txPushActive_)
+    {
+      txPushActive_ = true;
+      txPushStartMs_ = now;
+      txPushAudioUs_ = 0;
+      qInfo () << "TCI: nessun TxChrono dal server, il client inizia a spingere"
+               << "l'audio TX da solo; ultimo chrono"
+               << (lastTxChronoMs_ > 0 ? now - lastTxChronoMs_ : -1) << "ms fa";
+    }
+
+  quint32 const channels = qBound<quint32> (1, audioStreamChannels_, 2);
+  quint32 sample_count = qMax<quint32> (2, audioStreamSamples_ * channels);
+  if (sample_count & 1u) ++sample_count;
+  sample_count = qBound<quint32> (2, sample_count, 8192);
+
+  // 1.0.542 iu8lmc - il ritmo va misurato, non dato per buono. Un frame porta
+  // sample_count/canali campioni per canale, cioe' 42,7 ms a 48 kHz, mentre il
+  // timer scatta ogni 40: senza questo controllo si genera il 6,7% piu' veloce
+  // del tempo reale e su una trasmissione FT8 si accumula quasi un secondo di
+  // ritardo nel buffer del server, con la coda oltre lo slot. Si spedisce solo
+  // finche' l'audio prodotto non supera il tempo trascorso piu' un margine.
+  quint32 const frames_per_channel = qMax<quint32> (1, sample_count / qMax<quint32> (1, channels));
+  quint32 const rate = audioSampleRate ? audioSampleRate : 48000u;
+  qint64 const frame_us = (static_cast<qint64> (frames_per_channel) * 1000000LL) / rate;
+  qint64 const elapsed_us = (now - txPushStartMs_) * 1000LL;
+  if (txPushAudioUs_ > elapsed_us + kTxPushLeadUs)
+    {
+      return;   // siamo gia' avanti: si lascia scorrere il tempo reale
+    }
+
+  txPushAudioUs_ += frame_us;
+  send_tx_audio_frame (rx_.toUInt (), sample_count, SampleFloat32, channels);
+}
+// 1.0.542 iu8lmc - impacchetta e spedisce un frame di audio TX. Estratta dal
+// ramo TxChrono perche' la usa anche il ripiego push, per i server che non
+// scandiscono il ritmo con TxChrono.
+void TCITransceiver::send_tx_audio_frame (quint32 receiver, quint32 sample_count,
+                                         quint32 format, quint32 channels)
+{
+  quint64 const bytes_per_sample = sample_size_for_format (format);
+  quint64 const ssize64 = static_cast<quint64> (AudioHeaderSize)
+      + static_cast<quint64> (sample_count) * bytes_per_sample;
+  if (ssize64 > static_cast<quint64> (std::numeric_limits<int>::max ()))
+    {
+      qWarning () << "TCI: frame audio TX troppo grande, byte=" << ssize64;
+      return;
+    }
+
+      std::lock_guard<std::mutex> lock (mtx_);
+      tx_fifo = (tx_fifo + 1) & 7;
+      int const ssize = static_cast<int> (ssize64);
+      if (m_tx1[tx_fifo].size () != ssize)
+        {
+          m_tx1[tx_fifo].resize (ssize);
+        }
+
+      auto * pOStream1 = reinterpret_cast<Data_Stream *> (m_tx1[tx_fifo].data ());
+      std::memset (pOStream1, 0, AudioHeaderSize);
+      pOStream1->receiver = receiver;
+      // 1.0.542 iu8lmc - si dichiara il rate a cui i campioni sono stati
+      // davvero generati. Prima si ripeteva quello del server: se i due
+      // valori differivano, il server riproduceva audio a 48000 credendolo
+      // di un'altra frequenza.
+      pOStream1->sampleRate = audioSampleRate;
+      pOStream1->format = format;
+      pOStream1->codec = 0;
+      pOStream1->crc = 0;
+      pOStream1->length = sample_count;
+      pOStream1->type = TxAudioStream;
+      pOStream1->channels = channels;
+
+      quint32 const generated_count = channels == 1 ? sample_count * 2u : sample_count;
+      QVector<float> generated (static_cast<int> (generated_count));
+      quint16 done = readAudioData (generated.data (), static_cast<qint32> (generated_count), txAtten);
+      if (done && done != generated_count)
+        {
+          quint16 const ready = done;
+          readAudioData (generated.data () + ready, static_cast<qint32> (generated_count - ready), txAtten);
+        }
+      QVector<float> mono;
+      float const * samples = generated.constData ();
+      if (channels == 1)
+        {
+          mono.resize (static_cast<int> (sample_count));
+          for (quint32 i = 0; i < sample_count; ++i)
+            {
+              mono[static_cast<int> (i)] = generated[static_cast<int> (i * 2u)];
+            }
+          samples = mono.constData ();
+        }
+      pack_tci_tx_audio (samples,
+                         sample_count,
+                         format,
+                         reinterpret_cast<char *> (pOStream1->data));
+
+      ++txChronoFrames_;
+      tx_fifo2 = tx_fifo;
+      if (inConnected && socket_worker_)
+        {
+          ++txAudioFrames_;
+          Q_EMIT request_socket_send_binary (m_tx1[tx_fifo2]);
+        }
+
+      qint64 const nowMs = QDateTime::currentMSecsSinceEpoch ();
+      if (nowMs - lastTxChronoLogMs_ > 1000)
+        {
+          lastTxChronoLogMs_ = nowMs;
+          qInfo () << "TCI TX audio frame:"
+                   << "rx=" << receiver
+                   << "txLen=" << pOStream1->length
+                   << "format=" << pOStream1->format
+                   << "channels=" << pOStream1->channels
+                   << "state=" << m_state
+                   << "tune=" << m_tuning
+                   << "txAudio=" << tx_audio_
+                   << "frames=" << txChronoFrames_
+                   << "sent=" << txAudioFrames_
+                   << "ptt=" << PTT_
+                   << "push=" << txPushActive_
+                   << "serverRate=" << negotiatedSampleRate_;
+        }
+}
 void TCITransceiver::txAudioData(quint32 len, float * data)
 {
   QByteArray tx;
@@ -1604,7 +1760,10 @@ void TCITransceiver::rig_power (bool on)
 void TCITransceiver::stream_audio (bool on)
 {
   TRACE_CAT ("TCITransceiver", on << state ());
-  if (on != stream_audio_ && tci_Ready) {
+  // 1.0.537 iu8lmc - si confronta anche con l'intento gia' inviato: un
+  // audio_start subito dopo un audio_stop non va scartato solo perche'
+  // l'eco del server non e' ancora tornata.
+  if ((on != stream_audio_ || on != requested_stream_audio_) && tci_Ready) {
     requested_stream_audio_ = on;
     if (on) {
       audioStreamChannels_ = 2;
@@ -1858,6 +2017,7 @@ void TCITransceiver::do_poll ()
           arm_wait_timer (tci_timer6_, 500, "poll/audio-off");
         }
     }
+  update_tx_push_state ();
   update_rx_frequency (string_to_frequency (rx_frequency_));
   update_split(split_);
   if (state ().split ()) {
@@ -2082,6 +2242,11 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
   m_state = (synchronize && m_silentFrames) ?
                 Synchronizing : Active;
   tx_audio_ = true;
+  // 1.0.542 iu8lmc - si arma subito il ripiego push: se in questa sessione
+  // non e' mai arrivato un TxChrono, l'audio parte comunque al primo tick.
+  // Lo spegnimento non serve agganciarlo qui: il tick stesso si disarma
+  // appena la trasmissione finisce.
+  update_tx_push_state ();
   TCI_VERBOSE_PRINTF("%s TCI modulator startdelay_ms=%d ASR=%d mstr=%d m_ic=%d s_Frames=%lld synchronize=%d m_tuning=%d State=%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),delay_ms,audioSampleRate,mstr,m_ic,m_silentFrames,synchronize,m_tuning,m_state);
   Q_EMIT tci_mod_active(m_state != Idle);
 }

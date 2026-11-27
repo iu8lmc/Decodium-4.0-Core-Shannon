@@ -1,0 +1,8 @@
+retry before {"blocked": true, "cat": false, "noRequest": true, "retry": true, "tx": false}
+retry after {"blocked": true, "cat": false, "noRequest": true, "retry": true, "tx": false}
+roger before {"cat": false, "forced": true, "next": true, "tx": false}
+roger after {"cat": false, "forced": true, "next": true, "tx": false}
+old-roger before {"cat": false, "forced": false, "next": true, "tx": false}
+old-roger after {"cat": false, "forced": false, "next": true, "tx": false}
+ft8 before {   "role": "immediate",   "txcode": 0,   "rxcode": 0,   "peak": 0.4019775390625,   "active_windows": 127,   "first_active_mod15": 0.47041797637939453,   "matching_messages": [     "CQ 9H1SR JM75"   ] }
+ft8 after {   "role": "immediate",   "txcode": 0,   "rxcode": 0,   "peak": 0.4019775390625,   "active_windows": 127,   "first_active_mod15": 0.41991400718688965,   "matching_messages": [     "CQ 9H1SR JM75"   ] }

@@ -1,0 +1,1 @@
+{"b4": false, "bgcolor": "#2600ff88", "call": "9H1SR", "continent": "EU", "country": "Malta", "cq": true, "display": "CQ 9H1SR JM75", "dxcall": "9H1SR", "grid": "JM75", "highlight": true, "itu": 28, "newgrid": true, "prefix": "9H", "provenance": "Local decoder", "snrcolor": "#00ff88", "source": "Local decoder", "tx": false, "zone": 15}

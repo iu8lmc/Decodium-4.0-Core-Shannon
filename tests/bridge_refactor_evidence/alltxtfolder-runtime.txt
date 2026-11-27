@@ -1,0 +1,1 @@
+{"isolated_alltxt": true, "legacy": true, "tx": false}

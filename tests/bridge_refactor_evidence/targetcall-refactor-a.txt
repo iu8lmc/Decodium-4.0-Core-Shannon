@@ -1,0 +1,1 @@
+a: {"call":"K1ABC","retries":999,"timeout":10,"period":2,"pause":300,"armed":true,"rearm":true,"active":false}

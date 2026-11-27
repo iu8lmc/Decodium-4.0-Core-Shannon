@@ -1,0 +1,4 @@
+Focused A/B: UI stall windows, hidden reset, short-stall burst and severe gating: OK (pressure sink substituted).
+Original and refactored macOS apps: synthetic UI event-loop stall >=1100 ms observed in diagnostic log; CAT and monitoring disabled; TX false.
+Initial probes searched stdout or the isolated profile; diagnostics are written to the shared application log. The successful runs inspected only appended bytes and preserved the shared log.
+App probe did not exercise pressure activation during RX/TX or physical RF.

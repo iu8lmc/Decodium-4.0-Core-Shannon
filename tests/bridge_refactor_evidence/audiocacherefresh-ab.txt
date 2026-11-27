@@ -1,0 +1,10 @@
+normal
+first|Mic|Speaker|1|1|0|1|0
+same|1|1|1
+changed-silent|1|1|0|2|1
+unchanged|1|1
+linux-simulated
+first|Mic,pulse:source1,pulse:source2|Speaker,pulse:sink1|1|1|0|1|0
+same|1|1|1
+changed-silent|1|1|0|2|1
+unchanged|1|1

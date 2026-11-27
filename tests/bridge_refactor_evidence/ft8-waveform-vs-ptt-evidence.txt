@@ -1,0 +1,2 @@
+Retained A/B test_bridge_txwave_real_ab results: FT8 generates 606720 float samples with equal baseline/refactor waveforms. DecodiumBridgeTxWave.cpp passes 48000 Hz to generateFt8Wave: 606720 / 48000 = 12.640 s.
+This is the generated native waveform length; it is not a measurement of non-silent playback edges, hardware PTT lead/tail or RF relay duration. The test results were reviewed without rerunning.

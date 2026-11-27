@@ -1,0 +1,4006 @@
+{
+  "description": "Filename references only; not evidence of function, A/B, or runtime coverage. Review each reference and unlisted indirect tests manually.",
+  "sources": [
+    {
+      "source": "src/bridge/DecodiumBridge.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_custom_cq_persistence.cpp",
+        "tests/test_ft2_qso_sim.cpp",
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_liquid_glass_windows.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_adif_full_export_ab.py",
+        "tests/tools/bridge_adif_import_wrapper_ab.py",
+        "tests/tools/bridge_adifappend_ab.py",
+        "tests/tools/bridge_adifsupport_ab.py",
+        "tests/tools/bridge_adiftcp_ab.py",
+        "tests/tools/bridge_adifudp_ab.py",
+        "tests/tools/bridge_alltxtfolder_ab.py",
+        "tests/tools/bridge_amplifier_port_runtime_ab.py",
+        "tests/tools/bridge_amplifierconfig_runtime_lab.py",
+        "tests/tools/bridge_appinfo_ab.py",
+        "tests/tools/bridge_application_modes_runtime_ab.py",
+        "tests/tools/bridge_async_logs_runtime_ab.py",
+        "tests/tools/bridge_asynchistory_ab.py",
+        "tests/tools/bridge_audio_adapters_runtime_ab.py",
+        "tests/tools/bridge_audio_channel_helpers_runtime_ab.py",
+        "tests/tools/bridge_audio_channel_loopback_ab.py",
+        "tests/tools/bridge_audio_device_identity_runtime_ab.py",
+        "tests/tools/bridge_audio_device_init_ab.py",
+        "tests/tools/bridge_audio_device_init_loopback_ab.py",
+        "tests/tools/bridge_audio_device_recovery_runtime_lab.py",
+        "tests/tools/bridge_audio_device_resolve_runtime_ab.py",
+        "tests/tools/bridge_audio_level_math_runtime_ab.py",
+        "tests/tools/bridge_audiobuffers_ab.py",
+        "tests/tools/bridge_audiocacheaccess_ab.py",
+        "tests/tools/bridge_audiocachehelpers_ab.py",
+        "tests/tools/bridge_audiocacherefresh_ab.py",
+        "tests/tools/bridge_audiocapture_sstv_ab.py",
+        "tests/tools/bridge_audiocapture_start_ab.py",
+        "tests/tools/bridge_audiofrequencies_runtime_lab.py",
+        "tests/tools/bridge_audiohealth_ab.py",
+        "tests/tools/bridge_audioidentity_runtime_lab.py",
+        "tests/tools/bridge_audioinputselection_ab.py",
+        "tests/tools/bridge_audiolevels_ab.py",
+        "tests/tools/bridge_audiorecovery_ab.py",
+        "tests/tools/bridge_audiorefresh_runtime_lab.py",
+        "tests/tools/bridge_audioruntimechange_runtime_lab.py",
+        "tests/tools/bridge_audiosink_gateway_ab.py",
+        "tests/tools/bridge_audiosink_recording_ab.py",
+        "tests/tools/bridge_audiosink_ssb_ab.py",
+        "tests/tools/bridge_audiosink_sstv_ab.py",
+        "tests/tools/bridge_audiosink_taps_ab.py",
+        "tests/tools/bridge_audiostop_ab.py",
+        "tests/tools/bridge_auto_sequence_runtime_ab.py",
+        "tests/tools/bridge_autocallcomplete_runtime_lab.py",
+        "tests/tools/bridge_autocallselect_runtime_lab.py",
+        "tests/tools/bridge_autocqhistory_runtime_lab.py",
+        "tests/tools/bridge_autocqlock_runtime_lab.py",
+        "tests/tools/bridge_autocqrepeat_runtime_lab.py",
+        "tests/tools/bridge_autolog_helpers_runtime_ab.py",
+        "tests/tools/bridge_autologsnapshot_ab.py",
+        "tests/tools/bridge_autorx_ab.py",
+        "tests/tools/bridge_backlog_ab.py",
+        "tests/tools/bridge_callsign_confirmed_adif_ab.py",
+        "tests/tools/bridge_callsign_init_ab.py",
+        "tests/tools/bridge_callsign_url_ab.py",
+        "tests/tools/bridge_cat_backend_helpers_runtime_ab.py",
+        "tests/tools/bridge_cat_connections_ab.py",
+        "tests/tools/bridge_cat_connections_confirm_ab.py",
+        "tests/tools/bridge_cat_connections_connect_ab.py",
+        "tests/tools/bridge_cat_connections_frequency_ab.py",
+        "tests/tools/bridge_cat_connections_mode_ab.py",
+        "tests/tools/bridge_cat_connections_ptt_ab.py",
+        "tests/tools/bridge_cat_connections_rigctl_ab.py",
+        "tests/tools/bridge_cat_dispatch_runtime_ab.py",
+        "tests/tools/bridge_cat_dispatch_ssb_runtime_ab.py",
+        "tests/tools/bridge_cat_migration_startup_runtime_ab.py",
+        "tests/tools/bridge_cat_ptt_state_runtime_ab.py",
+        "tests/tools/bridge_cat_telemetry_ab.py",
+        "tests/tools/bridge_catbackendswitch_runtime_lab.py",
+        "tests/tools/bridge_catqsy_runtime_lab.py",
+        "tests/tools/bridge_catrecovery_runtime_lab.py",
+        "tests/tools/bridge_catrigmode_runtime_lab.py",
+        "tests/tools/bridge_catsplitsync_runtime_lab.py",
+        "tests/tools/bridge_chronology_ab.py",
+        "tests/tools/bridge_cleartx_active_ab.py",
+        "tests/tools/bridge_cleartxmessages_runtime_lab.py",
+        "tests/tools/bridge_complete_tx_loopback_ab.py",
+        "tests/tools/bridge_complete_tx_pcm_ab.py",
+        "tests/tools/bridge_complete_tx_runtime_ab.py",
+        "tests/tools/bridge_complete_tx_special_ab.py",
+        "tests/tools/bridge_complete_tx_sstv_legacy_ab.py",
+        "tests/tools/bridge_constructor_legacy_runtime_ab.py",
+        "tests/tools/bridge_constructor_runtime_ab.py",
+        "tests/tools/bridge_core_timers_init_ab.py",
+        "tests/tools/bridge_correctedtime_runtime_lab.py",
+        "tests/tools/bridge_courtesy_runtime_lab.py",
+        "tests/tools/bridge_cpupressure_ab.py",
+        "tests/tools/bridge_cwadmission_ab.py",
+        "tests/tools/bridge_cwplay_ab.py",
+        "tests/tools/bridge_cwports_ab.py",
+        "tests/tools/bridge_cwports_registry_ab.py",
+        "tests/tools/bridge_cwremote_ab.py",
+        "tests/tools/bridge_cwrig_ab.py",
+        "tests/tools/bridge_cwsettings_ab.py",
+        "tests/tools/bridge_cwtest_ab.py",
+        "tests/tools/bridge_cwtune_ab.py",
+        "tests/tools/bridge_decode_adapters_runtime_ab.py",
+        "tests/tools/bridge_decode_cluster_connections_ab.py",
+        "tests/tools/bridge_decode_colors_placement_ab.py",
+        "tests/tools/bridge_decode_keys_runtime_ab.py",
+        "tests/tools/bridge_decode_model_init_ab.py",
+        "tests/tools/bridge_decode_model_init_legacy_pair_ab.py",
+        "tests/tools/bridge_decodealerts_ab.py",
+        "tests/tools/bridge_decodeclear_ab.py",
+        "tests/tools/bridge_decodecontext_ab.py",
+        "tests/tools/bridge_decodeflow_ab.py",
+        "tests/tools/bridge_decodeflow_queue_runtime_ab.py",
+        "tests/tools/bridge_decodeidentity_ab.py",
+        "tests/tools/bridge_decodeindicators_ab.py",
+        "tests/tools/bridge_decodemodelfilter_ab.py",
+        "tests/tools/bridge_decodepersistence_ab.py",
+        "tests/tools/bridge_decodeshutdown_ab.py",
+        "tests/tools/bridge_decodetimestamp_ab.py",
+        "tests/tools/bridge_decodetxwait_runtime_lab.py",
+        "tests/tools/bridge_decodeuinotifications_ab.py",
+        "tests/tools/bridge_decodeuischedule_ab.py",
+        "tests/tools/bridge_decodeuisnapshot_ab.py",
+        "tests/tools/bridge_decodeutc_ab.py",
+        "tests/tools/bridge_decodevisibility_ab.py",
+        "tests/tools/bridge_decolinklogin_runtime_lab.py",
+        "tests/tools/bridge_decolog_init_ab.py",
+        "tests/tools/bridge_decolog_local_ab.py",
+        "tests/tools/bridge_decolog_tune_ab.py",
+        "tests/tools/bridge_decoportaudioinput_runtime_lab.py",
+        "tests/tools/bridge_decoportcredentials_runtime_lab.py",
+        "tests/tools/bridge_decoportdriver_runtime_lab.py",
+        "tests/tools/bridge_decoportgateway_nokey_runtime_lab.py",
+        "tests/tools/bridge_decoportgateway_runtime_lab.py",
+        "tests/tools/bridge_decoporthubrefresh_runtime_lab.py",
+        "tests/tools/bridge_decoporthubrows_runtime_lab.py",
+        "tests/tools/bridge_decoportmonitor_runtime_lab.py",
+        "tests/tools/bridge_decoportobject_runtime_lab.py",
+        "tests/tools/bridge_decoportptt_runtime_lab.py",
+        "tests/tools/bridge_decoporttxaudio_runtime_lab.py",
+        "tests/tools/bridge_decoporttxframes_runtime_lab.py",
+        "tests/tools/bridge_decoportuse_runtime_lab.py",
+        "tests/tools/bridge_deferredseq_runtime_lab.py",
+        "tests/tools/bridge_destructor_active_decode_ab.py",
+        "tests/tools/bridge_destructor_runtime_ab.py",
+        "tests/tools/bridge_diagnostic_connections_ab.py",
+        "tests/tools/bridge_diagnostics_runtime_ab.py",
+        "tests/tools/bridge_directaudiotx_runtime_lab.py",
+        "tests/tools/bridge_directedghost_ab.py",
+        "tests/tools/bridge_directory_dialog_ab.py",
+        "tests/tools/bridge_display_frequency_runtime_ab.py",
+        "tests/tools/bridge_displaydedup_ab.py",
+        "tests/tools/bridge_dxcall_runtime_lab.py",
+        "tests/tools/bridge_dxcluster_commands_runtime_lab.py",
+        "tests/tools/bridge_dxcluster_init_ab.py",
+        "tests/tools/bridge_dxcluster_init_local_ab.py",
+        "tests/tools/bridge_environment_rx_policy_runtime_ab.py",
+        "tests/tools/bridge_externaladif_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_ft2_ab.py",
+        "tests/tools/bridge_feeddecoder_ft4_ab.py",
+        "tests/tools/bridge_feeddecoder_ft8_ab.py",
+        "tests/tools/bridge_feeddecoder_jt4_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_jt9_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_msk144_ab.py",
+        "tests/tools/bridge_feeddecoder_q65_ab.py",
+        "tests/tools/bridge_feeddecoder_wspr_reference_ab.py",
+        "tests/tools/bridge_file_paths_runtime_ab.py",
+        "tests/tools/bridge_filtercontrols_ab.py",
+        "tests/tools/bridge_fontscale_ab.py",
+        "tests/tools/bridge_frequencyupdate_runtime_lab.py",
+        "tests/tools/bridge_ft2_async_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_async_ready_guards_ab.py",
+        "tests/tools/bridge_ft2_async_timer_adaptive_ab.py",
+        "tests/tools/bridge_ft2_async_timer_audio_ab.py",
+        "tests/tools/bridge_ft2_async_timer_guards_ab.py",
+        "tests/tools/bridge_ft2_async_timer_ranges_ab.py",
+        "tests/tools/bridge_ft2_async_timer_sequential_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_cache_ab.py",
+        "tests/tools/bridge_ft2audiogates_runtime_lab.py",
+        "tests/tools/bridge_ft2logbridge_ab.py",
+        "tests/tools/bridge_ft2smtpcredentials_ab.py",
+        "tests/tools/bridge_ft2smtpcredentials_runtime_lab.py",
+        "tests/tools/bridge_ft2smtpsend_runtime_lab.py",
+        "tests/tools/bridge_ft4early_runtime_lab.py",
+        "tests/tools/bridge_ft8_ready_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_cq_filter_ab.py",
+        "tests/tools/bridge_ft8_ready_dedup_ab.py",
+        "tests/tools/bridge_ft8_ready_fst4_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_ft2_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_ft4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_guards_ab.py",
+        "tests/tools/bridge_ft8_ready_jt4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_jt9_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_immediate_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_mirror_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_publish_ab.py",
+        "tests/tools/bridge_ft8_ready_msk144_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_mycall_filter_ab.py",
+        "tests/tools/bridge_ft8_ready_q65_audio_ab.py",
+        "tests/tools/bridge_ft8bridgegate_runtime_lab.py",
+        "tests/tools/bridge_ft8early_decode_ab.py",
+        "tests/tools/bridge_ft8early_gates_ab.py",
+        "tests/tools/bridge_ft8queue_decode_ab.py",
+        "tests/tools/bridge_ft8queue_params_ab.py",
+        "tests/tools/bridge_ft_scheduler_runtime_ab.py",
+        "tests/tools/bridge_ft_thread_budget_helpers_runtime_ab.py",
+        "tests/tools/bridge_ftx_helpers_ab.py",
+        "tests/tools/bridge_ftx_settings_placement_ab.py",
+        "tests/tools/bridge_fullspectrumsnapshot_ab.py",
+        "tests/tools/bridge_ghost_ab.py",
+        "tests/tools/bridge_halt_active_ab.py",
+        "tests/tools/bridge_halt_runtime_lab.py",
+        "tests/tools/bridge_houndtxprepare_runtime_lab.py",
+        "tests/tools/bridge_jt65_deep_probe.py",
+        "tests/tools/bridge_jt65_tolerance_probe.py",
+        "tests/tools/bridge_jtdecodefallback_runtime_lab.py",
+        "tests/tools/bridge_keyboardlog_ab.py",
+        "tests/tools/bridge_knowncq_ab.py",
+        "tests/tools/bridge_layout_runtime_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_guard_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_loopback_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_stop_ab.py",
+        "tests/tools/bridge_legacy_filter_connections_ab.py",
+        "tests/tools/bridge_legacy_filter_connections_runtime_ab.py",
+        "tests/tools/bridge_legacy_palette_backend_runtime_ab.py",
+        "tests/tools/bridge_legacy_preflight_abort_ab.py",
+        "tests/tools/bridge_legacy_preflight_loopback_ab.py",
+        "tests/tools/bridge_legacy_presentation_helpers_runtime_ab.py",
+        "tests/tools/bridge_legacy_rig_policy_runtime_ab.py",
+        "tests/tools/bridge_legacy_sync_blacklist_ab.py",
+        "tests/tools/bridge_legacy_sync_cq_filter_ab.py",
+        "tests/tools/bridge_legacy_sync_dedup_ab.py",
+        "tests/tools/bridge_legacy_sync_guards_ab.py",
+        "tests/tools/bridge_legacy_sync_queued_ab.py",
+        "tests/tools/bridge_legacy_sync_runtime_ab.py",
+        "tests/tools/bridge_legacyadifmirror_ab.py",
+        "tests/tools/bridge_legacyadifmirror_realfile_ab.py",
+        "tests/tools/bridge_legacyalltxt_ab.py",
+        "tests/tools/bridge_legacyaudiopolicy_runtime_lab.py",
+        "tests/tools/bridge_legacyaudiostart_runtime_lab.py",
+        "tests/tools/bridge_legacyaugment_ab.py",
+        "tests/tools/bridge_legacyaugment_runtime_ab.py",
+        "tests/tools/bridge_legacydelta_ab.py",
+        "tests/tools/bridge_legacydelta_realmodel_ab.py",
+        "tests/tools/bridge_legacydialogsync_ab.py",
+        "tests/tools/bridge_legacyhash_ab.py",
+        "tests/tools/bridge_legacyhashbridge_ab.py",
+        "tests/tools/bridge_legacyinit_runtime_lab.py",
+        "tests/tools/bridge_legacyorder_source_ab.py",
+        "tests/tools/bridge_legacyownership_ab.py",
+        "tests/tools/bridge_legacypcmrecovery_ab.py",
+        "tests/tools/bridge_legacyptttransition_runtime_lab.py",
+        "tests/tools/bridge_legacyrefresh_ab.py",
+        "tests/tools/bridge_legacyrxhandoff_ab.py",
+        "tests/tools/bridge_legacystatesync_runtime_lab.py",
+        "tests/tools/bridge_legacytext_ab.py",
+        "tests/tools/bridge_localcall_ab.py",
+        "tests/tools/bridge_log_prompt_cluster_offline_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_add_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_satellite_ab.py",
+        "tests/tools/bridge_log_qso_legacy_delegate_ab.py",
+        "tests/tools/bridge_log_qso_legacy_real_ab.py",
+        "tests/tools/bridge_log_qso_runtime_ab.py",
+        "tests/tools/bridge_log_routing_runtime_ab.py",
+        "tests/tools/bridge_logbook_reload_ab.py",
+        "tests/tools/bridge_logpreview_ab.py",
+        "tests/tools/bridge_logpreview_snapshot_runtime_ab.py",
+        "tests/tools/bridge_logstall_ab.py",
+        "tests/tools/bridge_lotw_cache_runtime_ab.py",
+        "tests/tools/bridge_lotw_download_runtime_ab.py",
+        "tests/tools/bridge_lotw_empty_download_runtime_ab.py",
+        "tests/tools/bridge_lotw_existing_runtime_ab.py",
+        "tests/tools/bridge_lotw_migration_runtime_ab.py",
+        "tests/tools/bridge_lotw_network_empty_cache_ab.py",
+        "tests/tools/bridge_lotw_network_error_runtime_ab.py",
+        "tests/tools/bridge_lotw_newest_runtime_ab.py",
+        "tests/tools/bridge_mac_legacy_start_ab.py",
+        "tests/tools/bridge_mac_standalone_start_ab.py",
+        "tests/tools/bridge_mamcaller_runtime_lab.py",
+        "tests/tools/bridge_mamprune_expiry_runtime_ab.py",
+        "tests/tools/bridge_manualhold_runtime_lab.py",
+        "tests/tools/bridge_map_init_ab.py",
+        "tests/tools/bridge_map_init_abort_ab.py",
+        "tests/tools/bridge_map_init_moon_ab.py",
+        "tests/tools/bridge_mode_period_ab.py",
+        "tests/tools/bridge_modecleanup_runtime_lab.py",
+        "tests/tools/bridge_modeswitch_decode_ab.py",
+        "tests/tools/bridge_modeswitch_runtime_ab.py",
+        "tests/tools/bridge_modulator_finish_loopback_ab.py",
+        "tests/tools/bridge_modulator_idle_ft2_ab.py",
+        "tests/tools/bridge_modulator_idle_legacy_ab.py",
+        "tests/tools/bridge_modulator_idle_pcm_ab.py",
+        "tests/tools/bridge_modulator_idle_runtime_ab.py",
+        "tests/tools/bridge_multianswer_mode_ab.py",
+        "tests/tools/bridge_multianswer_mode_slot_ab.py",
+        "tests/tools/bridge_ntp_manual_runtime_lab.py",
+        "tests/tools/bridge_offline_ab.py",
+        "tests/tools/bridge_offline_runtime_ab.py",
+        "tests/tools/bridge_overlay_ab.py",
+        "tests/tools/bridge_panadapter_gpu_init_runtime_ab.py",
+        "tests/tools/bridge_panregistration_ab.py",
+        "tests/tools/bridge_partner_guard_ft8_loopback_ab.py",
+        "tests/tools/bridge_partner_guard_old_roger_ab.py",
+        "tests/tools/bridge_partner_guard_reject_ab.py",
+        "tests/tools/bridge_partner_guard_repair_ab.py",
+        "tests/tools/bridge_partner_guard_retry_ab.py",
+        "tests/tools/bridge_partner_guard_roger_ab.py",
+        "tests/tools/bridge_period_timer_ft8_audio_ab.py",
+        "tests/tools/bridge_period_timer_runtime_ab.py",
+        "tests/tools/bridge_period_timer_watchdog_ab.py",
+        "tests/tools/bridge_periodic_tx_cancel_ab.py",
+        "tests/tools/bridge_periodic_tx_direct_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_dispatch_ab.py",
+        "tests/tools/bridge_periodic_tx_ft8_loopback_ab.py",
+        "tests/tools/bridge_periodic_tx_guards_ab.py",
+        "tests/tools/bridge_periodic_tx_late_ab.py",
+        "tests/tools/bridge_periodic_tx_late_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_capture_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_receive_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_two_receive_ab.py",
+        "tests/tools/bridge_periodic_tx_parity_ab.py",
+        "tests/tools/bridge_periodic_tx_retry_ab.py",
+        "tests/tools/bridge_periodtimerarm_runtime_lab.py",
+        "tests/tools/bridge_precomputed_wave_store_runtime_ab.py",
+        "tests/tools/bridge_priority_ab.py",
+        "tests/tools/bridge_processusage_runtime_lab.py",
+        "tests/tools/bridge_promptlifecycle_ab.py",
+        "tests/tools/bridge_promptsnapshot_ab.py",
+        "tests/tools/bridge_psk_ab.py",
+        "tests/tools/bridge_psk_cloudlog_adif_ab.py",
+        "tests/tools/bridge_psk_cloudlog_http_ab.py",
+        "tests/tools/bridge_psk_cloudlog_init_ab.py",
+        "tests/tools/bridge_psk_local_response_ab.py",
+        "tests/tools/bridge_q65split_runtime_lab.py",
+        "tests/tools/bridge_qml_load_timestamp_ab.py",
+        "tests/tools/bridge_qrz_wspr_init_ab.py",
+        "tests/tools/bridge_qso_journal_runtime_ab.py",
+        "tests/tools/bridge_qsoband_ab.py",
+        "tests/tools/bridge_qsocompletion_ab.py",
+        "tests/tools/bridge_qsofields_ab.py",
+        "tests/tools/bridge_qsofinish_runtime_lab.py",
+        "tests/tools/bridge_qsolimit_ab.py",
+        "tests/tools/bridge_qsoreset_runtime_lab.py",
+        "tests/tools/bridge_qsosnapshot_ab.py",
+        "tests/tools/bridge_qsotransition_runtime_lab.py",
+        "tests/tools/bridge_qsycommand_runtime_lab.py",
+        "tests/tools/bridge_qsyguard_ab.py",
+        "tests/tools/bridge_ready_profile_apply_ab.py",
+        "tests/tools/bridge_ready_profile_init_ab.py",
+        "tests/tools/bridge_reload_settings_runtime_ab.py",
+        "tests/tools/bridge_remote_web_commands_ab.py",
+        "tests/tools/bridge_remote_web_credentials_ab.py",
+        "tests/tools/bridge_remote_web_http_ab.py",
+        "tests/tools/bridge_remote_web_init_ab.py",
+        "tests/tools/bridge_remote_web_ws_auth_ab.py",
+        "tests/tools/bridge_remotefrequency_runtime_lab.py",
+        "tests/tools/bridge_remotelinkobjects_runtime_lab.py",
+        "tests/tools/bridge_remotelinkselection_runtime_lab.py",
+        "tests/tools/bridge_remoteradiostate_runtime_lab.py",
+        "tests/tools/bridge_remoterxaudio_runtime_lab.py",
+        "tests/tools/bridge_rigdiscovery_runtime_lab.py",
+        "tests/tools/bridge_rigtelemetry_runtime_lab.py",
+        "tests/tools/bridge_rtl_init_ab.py",
+        "tests/tools/bridge_rtl_init_retune_ab.py",
+        "tests/tools/bridge_rtl_init_started_ab.py",
+        "tests/tools/bridge_rtlsdrcapture_runtime_lab.py",
+        "tests/tools/bridge_rtlsdrconfig_runtime_lab.py",
+        "tests/tools/bridge_rtlsdrdiscovery_runtime_lab.py",
+        "tests/tools/bridge_rtlsdrstatus_runtime_lab.py",
+        "tests/tools/bridge_rttyexit_ab.py",
+        "tests/tools/bridge_rttyrigmode_runtime_lab.py",
+        "tests/tools/bridge_rx_monitoring_loopback_ab.py",
+        "tests/tools/bridge_rxappend_ab.py",
+        "tests/tools/bridge_rxaudiotx_runtime_lab.py",
+        "tests/tools/bridge_rxcontrol_audio_ab.py",
+        "tests/tools/bridge_rxpolicy_ab.py",
+        "tests/tools/bridge_rxrebuild_ab.py",
+        "tests/tools/bridge_rxrecording_ab.py",
+        "tests/tools/bridge_rxterminal_ab.py",
+        "tests/tools/bridge_satellite_init_ab.py",
+        "tests/tools/bridge_satellite_init_apply_ab.py",
+        "tests/tools/bridge_save_settings_restart_ab.py",
+        "tests/tools/bridge_secondary_ab.py",
+        "tests/tools/bridge_secondinstance_runtime_lab.py",
+        "tests/tools/bridge_selfcheck_runtime_lab.py",
+        "tests/tools/bridge_semantic_ab.py",
+        "tests/tools/bridge_sendtx_ft8_deferred_ab.py",
+        "tests/tools/bridge_sendtx_ft8_guards_ab.py",
+        "tests/tools/bridge_sendtx_ft8_loopback_ab.py",
+        "tests/tools/bridge_sendtx_jtty_ab.py",
+        "tests/tools/bridge_sendtx_jtty_result_ab.py",
+        "tests/tools/bridge_sendtx_legacy_delegate_ab.py",
+        "tests/tools/bridge_sendtx_repair_partner_ab.py",
+        "tests/tools/bridge_sendtx_stale_partner_ab.py",
+        "tests/tools/bridge_services_runtime_ab.py",
+        "tests/tools/bridge_settings_helpers_runtime_ab.py",
+        "tests/tools/bridge_shared_runtime_ab.py",
+        "tests/tools/bridge_sharing_accessors_runtime_ab.py",
+        "tests/tools/bridge_sharingconfig_runtime_lab.py",
+        "tests/tools/bridge_shutdown_active_ab.py",
+        "tests/tools/bridge_shutdown_runtime_ab.py",
+        "tests/tools/bridge_signalreport_ab.py",
+        "tests/tools/bridge_smartft2scheduler_runtime_lab.py",
+        "tests/tools/bridge_specialop_wrappers_ab.py",
+        "tests/tools/bridge_spectrum_timer_cpu_ab.py",
+        "tests/tools/bridge_spectrum_timer_fallback_frame_ab.py",
+        "tests/tools/bridge_spectrum_timer_gpu_handoff_ab.py",
+        "tests/tools/bridge_spectrum_timer_hidden_ab.py",
+        "tests/tools/bridge_spectrum_timer_visible_fallback_ab.py",
+        "tests/tools/bridge_spectrumvisibility_ab.py",
+        "tests/tools/bridge_ssb_unit_runtime_ab.py",
+        "tests/tools/bridge_sstvqso_runtime_lab.py",
+        "tests/tools/bridge_start_tx_guards_ab.py",
+        "tests/tools/bridge_start_tx_loopback_ab.py",
+        "tests/tools/bridge_start_tx_selection_runtime_ab.py",
+        "tests/tools/bridge_startup_order_ab.py",
+        "tests/tools/bridge_startupmode_runtime_lab.py",
+        "tests/tools/bridge_startupqso_ab.py",
+        "tests/tools/bridge_startupservices_runtime_lab.py",
+        "tests/tools/bridge_state_runtime_ab.py",
+        "tests/tools/bridge_station_ab.py",
+        "tests/tools/bridge_stationfreq_real_ab.py",
+        "tests/tools/bridge_stationsend_ab.py",
+        "tests/tools/bridge_stationtimer_ab.py",
+        "tests/tools/bridge_stationweather_ab.py",
+        "tests/tools/bridge_stop_tx_audio_ab.py",
+        "tests/tools/bridge_stop_tx_routes_ab.py",
+        "tests/tools/bridge_stop_tx_runtime_ab.py",
+        "tests/tools/bridge_targetcall_decode_runtime_ab.py",
+        "tests/tools/bridge_targetcall_timeout_runtime_ab.py",
+        "tests/tools/bridge_tci_complete_ab.py",
+        "tests/tools/bridge_tci_signals_ab.py",
+        "tests/tools/bridge_telemetry_ab.py",
+        "tests/tools/bridge_teleprinter_ab.py",
+        "tests/tools/bridge_test_anchor_inventory.py",
+        "tests/tools/bridge_timesync_init_ab.py",
+        "tests/tools/bridge_timesync_init_rearm_ab.py",
+        "tests/tools/bridge_timesyncdispatch_decode_ab.py",
+        "tests/tools/bridge_timesyncdispatch_runtime_ab.py",
+        "tests/tools/bridge_tokenclass_ab.py",
+        "tests/tools/bridge_tune_audio_ab.py",
+        "tests/tools/bridge_tune_guards_ab.py",
+        "tests/tools/bridge_tune_legacy_audio_ab.py",
+        "tests/tools/bridge_tune_rtl_toggle_ab.py",
+        "tests/tools/bridge_tunewatchdog_runtime_lab.py",
+        "tests/tools/bridge_tx_adapters_loopback_ab.py",
+        "tests/tools/bridge_tx_adapters_runtime_ab.py",
+        "tests/tools/bridge_tx_audio_startup_ab.py",
+        "tests/tools/bridge_tx_audio_startup_loopback_ab.py",
+        "tests/tools/bridge_tx_audio_startup_runtime_ab.py",
+        "tests/tools/bridge_tx_enable_runtime_ab.py",
+        "tests/tools/bridge_tx_output_device_loopback_ab.py",
+        "tests/tools/bridge_tx_output_fallback_ab.py",
+        "tests/tools/bridge_tx_output_resolve_runtime_ab.py",
+        "tests/tools/bridge_tx_pcm_offset_loopback_ab.py",
+        "tests/tools/bridge_tx_policy_adapters_runtime_ab.py",
+        "tests/tools/bridge_tx_slot_helpers_runtime_ab.py",
+        "tests/tools/bridge_tx_wave_helpers_runtime_ab.py",
+        "tests/tools/bridge_txappend_ab.py",
+        "tests/tools/bridge_txaudiotelemetry_explicit_lab.py",
+        "tests/tools/bridge_txboundary_runtime_lab.py",
+        "tests/tools/bridge_txdispatchguard_runtime_lab.py",
+        "tests/tools/bridge_txfinish_runtime_lab.py",
+        "tests/tools/bridge_txrecording_runtime_lab.py",
+        "tests/tools/bridge_txscheduling_ab.py",
+        "tests/tools/bridge_txtiming_ab.py",
+        "tests/tools/bridge_udpdecode_ab.py",
+        "tests/tools/bridge_udpinit_runtime_lab.py",
+        "tests/tools/bridge_udpinit_wire_runtime_lab.py",
+        "tests/tools/bridge_udpqso_ab.py",
+        "tests/tools/bridge_udprestart_runtime_lab.py",
+        "tests/tools/bridge_udpstatus_ab.py",
+        "tests/tools/bridge_ui_actions_ab.py",
+        "tests/tools/bridge_ui_actions_runtime_ab.py",
+        "tests/tools/bridge_ui_audio_state_runtime_ab.py",
+        "tests/tools/bridge_ui_startup_settings_runtime_ab.py",
+        "tests/tools/bridge_uistall_ab.py",
+        "tests/tools/bridge_uistall_monitor_runtime_ab.py",
+        "tests/tools/bridge_unresolved_ab.py",
+        "tests/tools/bridge_userfilters_ab.py",
+        "tests/tools/bridge_usstate_dxcc_refresh_ab.py",
+        "tests/tools/bridge_usstate_wspr_init_ab.py",
+        "tests/tools/bridge_utcslot_ab.py",
+        "tests/tools/bridge_validation_ab.py",
+        "tests/tools/bridge_verify_otp_runtime_ab.py",
+        "tests/tools/bridge_vhfuhfsetting_runtime_lab.py",
+        "tests/tools/bridge_visual_tx_time_runtime_ab.py",
+        "tests/tools/bridge_visualfeedscheduling_ab.py",
+        "tests/tools/bridge_watchdog_ab.py",
+        "tests/tools/bridge_wav_init_ab.py",
+        "tests/tools/bridge_wav_init_timed_ab.py",
+        "tests/tools/bridge_workedhistory_ab.py",
+        "tests/tools/bridge_workers_real_ab.py",
+        "tests/tools/bridge_workingfreq_real_ab.py",
+        "tests/tools/bridge_worldmap_call_helpers_runtime_ab.py",
+        "tests/tools/bridge_worldmapentry_ab.py",
+        "tests/tools/bridge_worldmapgrid_ab.py",
+        "tests/tools/bridge_worldmapqso_ab.py",
+        "tests/tools/bridge_worldmapqueue_ab.py",
+        "tests/tools/bridge_worldmapreplay_ab.py",
+        "tests/tools/bridge_worldmapreset_ab.py",
+        "tests/tools/bridge_worldmapselection_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdifAppend.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_b4_worked_before.cpp",
+        "tests/tools/bridge_adifappend_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdifEditing.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_adif_full_export_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdifImport.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_adif_import_wrapper_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdifRecord.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdifTcp.cpp",
+      "test_sources": [
+        "tests/tools/bridge_adiftcp_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdifUdp.cpp",
+      "test_sources": [
+        "tests/tools/bridge_adifudp_ab.py",
+        "tests/tools/bridge_udpqso_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAdvancedDecode.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAlcCalibration.cpp",
+      "test_sources": [
+        "tests/tools/bridge_alc_calibration_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAmplifierConfig.cpp",
+      "test_sources": [
+        "tests/tools/bridge_amplifier_port_ab.py",
+        "tests/tools/bridge_amplifier_port_runtime_ab.py",
+        "tests/tools/bridge_amplifierconfig_ab.py",
+        "tests/tools/bridge_amplifierconfig_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAppInfo.cpp",
+      "test_sources": [
+        "tests/tools/bridge_appinfo_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeApplicationModes.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_application_modes_ab.py",
+        "tests/tools/bridge_application_modes_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAsyncHistory.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_asynchistory_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAsyncLogs.cpp",
+      "test_sources": [
+        "tests/tools/bridge_async_logs_ab.py",
+        "tests/tools/bridge_async_logs_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioAdapters.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audio_adapters_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioBuffers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_audiobuffers_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioCaptureStart.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audiocapture_sstv_ab.py",
+        "tests/tools/bridge_audiocapture_start_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioCaptureStop.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audiostop_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioChannelHelpers.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audio_channel_helpers_ab.py",
+        "tests/tools/bridge_audio_channel_helpers_runtime_ab.py",
+        "tests/tools/bridge_audio_channel_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioDeviceCacheAccess.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audiocacheaccess_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioDeviceCacheRefresh.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audiocachehelpers_ab.py",
+        "tests/tools/bridge_audiocacherefresh_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioDeviceIdentity.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audio_device_identity_ab.py",
+        "tests/tools/bridge_audio_device_identity_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioDeviceInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audio_device_init_ab.py",
+        "tests/tools/bridge_audio_device_init_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioDeviceResolve.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audio_device_resolve_ab.py",
+        "tests/tools/bridge_audio_device_resolve_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioFrequencies.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audiofrequencies_ab.py",
+        "tests/tools/bridge_audiofrequencies_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioHealth.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audiohealth_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioIdentity.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audioidentity_ab.py",
+        "tests/tools/bridge_audioidentity_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioInputSelection.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audioinputselection_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioLevelMath.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audio_level_math_ab.py",
+        "tests/tools/bridge_audio_level_math_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioLevels.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audiolevels_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioRecovery.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_audio_mode_change_capture_policy.cpp",
+        "tests/tools/bridge_audio_device_recovery_ab.py",
+        "tests/tools/bridge_audio_device_recovery_runtime_lab.py",
+        "tests/tools/bridge_audiorecovery_ab.py",
+        "tests/tools/bridge_rttyexit_ab.py",
+        "tests/tools/bridge_watchdog_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioRefresh.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audiorefresh_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioRuntimeChange.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audioruntimechange_ab.py",
+        "tests/tools/bridge_audioruntimechange_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioSelection.cpp",
+      "test_sources": [
+        "tests/tools/bridge_audio_selection_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioSink.cpp",
+      "test_sources": [
+        "tests/test_liquid_glass_windows.cpp",
+        "tests/tools/bridge_audiosink_gateway_ab.py",
+        "tests/tools/bridge_audiosink_recording_ab.py",
+        "tests/tools/bridge_audiosink_ssb_ab.py",
+        "tests/tools/bridge_audiosink_sstv_ab.py",
+        "tests/tools/bridge_audiosink_taps_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAudioSinkRetire.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_audio_sink_retire_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCall.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_autocallcomplete_ab.py",
+        "tests/tools/bridge_autocallcomplete_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCallSelect.cpp",
+      "test_sources": [
+        "tests/tools/bridge_autocallselect_ab.py",
+        "tests/tools/bridge_autocallselect_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCqCadence.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCqDedupe.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_mam_tx_payload_policy.cpp"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCqHistory.cpp",
+      "test_sources": [
+        "tests/tools/bridge_autocqhistory_ab.py",
+        "tests/tools/bridge_autocqhistory_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCqLockQueue.cpp",
+      "test_sources": [
+        "tests/tools/bridge_autocqlock_ab.py",
+        "tests/tools/bridge_autocqlock_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoCqRepeat.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_autocqrepeat_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoLogSnapshot.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_autologsnapshot_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoRxLevel.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_autorx_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoSeqAfterTx.cpp",
+      "test_sources": [
+        "tests/tools/bridge_deferredseq_ab.py",
+        "tests/tools/bridge_deferredseq_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutoSequence.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_auto_sequence_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeAutologHelpers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_autolog_helpers_ab.py",
+        "tests/tools/bridge_autolog_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCabrillo.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCallerQueue.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_mam_tx_payload_policy.cpp"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCallerScoring.cpp",
+      "test_sources": [
+        "tests/tools/bridge_caller_scoring_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCallsignInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_callsign_confirmed_adif_ab.py",
+        "tests/tools/bridge_callsign_init_ab.py",
+        "tests/tools/bridge_callsign_url_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatBackendHelpers.cpp",
+      "test_sources": [
+        "tests/tools/bridge_cat_backend_helpers_ab.py",
+        "tests/tools/bridge_cat_backend_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatBackendSwitch.cpp",
+      "test_sources": [
+        "tests/tools/bridge_catbackendswitch_ab.py",
+        "tests/tools/bridge_catbackendswitch_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatConnections.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_rigctl_dashboard_controls.cpp",
+        "tests/tools/bridge_cat_connections_ab.py",
+        "tests/tools/bridge_cat_connections_confirm_ab.py",
+        "tests/tools/bridge_cat_connections_connect_ab.py",
+        "tests/tools/bridge_cat_connections_frequency_ab.py",
+        "tests/tools/bridge_cat_connections_mode_ab.py",
+        "tests/tools/bridge_cat_connections_ptt_ab.py",
+        "tests/tools/bridge_cat_connections_rigctl_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatDispatch.cpp",
+      "test_sources": [
+        "tests/tools/bridge_cat_dispatch_ab.py",
+        "tests/tools/bridge_cat_dispatch_runtime_ab.py",
+        "tests/tools/bridge_cat_dispatch_ssb_runtime_ab.py",
+        "tests/tools/bridge_cat_ptt_state_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatMigrationStartup.cpp",
+      "test_sources": [
+        "tests/tools/bridge_cat_migration_startup_ab.py",
+        "tests/tools/bridge_cat_migration_startup_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatModes.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatProfiles.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatQsy.cpp",
+      "test_sources": [
+        "tests/tools/bridge_catqsy_ab.py",
+        "tests/tools/bridge_catqsy_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatRecovery.cpp",
+      "test_sources": [
+        "tests/tools/bridge_catrecovery_ab.py",
+        "tests/tools/bridge_catrecovery_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatRigMode.cpp",
+      "test_sources": [
+        "tests/test_rigctl_dashboard_controls.cpp",
+        "tests/tools/bridge_catrigmode_ab.py",
+        "tests/tools/bridge_catrigmode_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatSplitMath.cpp",
+      "test_sources": [
+        "tests/tools/bridge_cat_split_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatSplitSync.cpp",
+      "test_sources": [
+        "tests/test_rigctl_dashboard_controls.cpp",
+        "tests/tools/bridge_catsplitsync_ab.py",
+        "tests/tools/bridge_catsplitsync_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCatTelemetry.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_cat_telemetry_ab.py",
+        "tests/tools/bridge_tci_complete_ab.py",
+        "tests/tools/bridge_tci_signals_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCompleteTxPlayback.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_complete_tx_loopback_ab.py",
+        "tests/tools/bridge_complete_tx_pcm_ab.py",
+        "tests/tools/bridge_complete_tx_runtime_ab.py",
+        "tests/tools/bridge_complete_tx_special_ab.py",
+        "tests/tools/bridge_complete_tx_sstv_legacy_ab.py",
+        "tests/tools/bridge_tci_complete_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeConstructor.cpp",
+      "test_sources": [
+        "tests/tools/bridge_constructor_legacy_runtime_ab.py",
+        "tests/tools/bridge_constructor_runtime_ab.py",
+        "tests/tools/bridge_layout_runtime_ab.py",
+        "tests/tools/bridge_mac_legacy_start_stall_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCoreTimers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_core_timers_init_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCorrectedTime.cpp",
+      "test_sources": [
+        "tests/tools/bridge_correctedtime_ab.py",
+        "tests/tools/bridge_correctedtime_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCourtesySignoff.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_courtesy_ab.py",
+        "tests/tools/bridge_courtesy_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCpuPressure.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_graphics_pipeline_cache.cpp",
+        "tests/tools/bridge_cpupressure_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCpuProfile.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_priority_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCqReplyWindow.cpp",
+      "test_sources": [
+        "tests/tools/bridge_cq_window_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCwMonitorSettings.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_cwplay_ab.py",
+        "tests/tools/bridge_cwsettings_ab.py",
+        "tests/tools/bridge_cwtest_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCwPorts.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_cwports_ab.py",
+        "tests/tools/bridge_cwports_registry_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCwRemote.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_cwadmission_ab.py",
+        "tests/tools/bridge_cwremote_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeCwRig.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_cwrig_ab.py",
+        "tests/tools/bridge_cwtune_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoLogInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decolog_init_ab.py",
+        "tests/tools/bridge_decolog_local_ab.py",
+        "tests/tools/bridge_decolog_tune_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortCredentials.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportcredentials_ab.py",
+        "tests/tools/bridge_decoportcredentials_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortDriver.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportdriver_ab.py",
+        "tests/tools/bridge_decoportdriver_runtime_lab.py",
+        "tests/tools/bridge_decoportgateway_nokey_runtime_lab.py",
+        "tests/tools/bridge_decoportobject_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortGateway.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportgateway_ab.py",
+        "tests/tools/bridge_decoportgateway_nokey_runtime_lab.py",
+        "tests/tools/bridge_decoportgateway_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortHubRefresh.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoporthubrefresh_ab.py",
+        "tests/tools/bridge_decoporthubrefresh_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortHubRows.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoporthubrows_ab.py",
+        "tests/tools/bridge_decoporthubrows_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortMonitor.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportmonitor_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortObject.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportobject_ab.py",
+        "tests/tools/bridge_decoportobject_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortPtt.cpp",
+      "test_sources": [
+        "tests/test_decortty_tx.cpp",
+        "tests/tools/bridge_decoportptt_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortTxAudio.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoporttxaudio_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortTxFrames.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoporttxframes_ab.py",
+        "tests/tools/bridge_decoporttxframes_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecoPortUseRemote.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportuse_ab.py",
+        "tests/tools/bridge_decoportuse_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeAdapters.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decode_adapters_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeAlerts.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodealerts_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeBacklog.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_backlog_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeClear.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodeclear_ab.py",
+        "tests/tools/bridge_decodecontext_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeClick.cpp",
+      "test_sources": [
+        "tests/test_custom_cq_persistence.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_decode_click_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeClusterConnections.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decode_cluster_connections_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeColors.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_b4_worked_before.cpp",
+        "tests/tools/bridge_decode_colors_placement_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeDedup.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeDepth.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeEnrichment.cpp",
+      "test_sources": [
+        "tests/test_b4_worked_before.cpp",
+        "tests/tools/bridge_enrichment_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeFilterSettings.cpp",
+      "test_sources": [
+        "tests/tools/bridge_filtersettings_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_immediate_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_publish_ab.py",
+        "tests/tools/bridge_legacy_sync_blacklist_ab.py",
+        "tests/tools/bridge_legacy_sync_cq_filter_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeFlow.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodeflow_ab.py",
+        "tests/tools/bridge_decodeflow_queue_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeHistory.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeIdentity.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decodeidentity_ab.py",
+        "tests/tools/bridge_localcall_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeIndicators.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodeindicators_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeKeys.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decode_keys_ab.py",
+        "tests/tools/bridge_decode_keys_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeMetrics.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_overlay_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeMirrorKeys.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decode_mirror_keys_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeModelFilter.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodemodelfilter_ab.py",
+        "tests/tools/bridge_legacyorder_source_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeModelInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decode_model_init_ab.py",
+        "tests/tools/bridge_decode_model_init_legacy_pair_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodePersistence.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodepersistence_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeRefresh.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decode_refresh_ab.py",
+        "tests/tools/bridge_usstate_dxcc_refresh_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeRowParsers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeRxAppend.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rxappend_ab.py",
+        "tests/tools/bridge_rxpolicy_ab.py",
+        "tests/tools/bridge_rxrebuild_ab.py",
+        "tests/tools/bridge_txappend_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeSecondary.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_secondary_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeSemantic.cpp",
+      "test_sources": [
+        "tests/tools/bridge_semantic_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeShutdown.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodeshutdown_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeTiming.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeTxRendezvous.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_decodetxwait_ab.py",
+        "tests/tools/bridge_decodetxwait_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeUiNotifications.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodeuinotifications_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeUiSchedule.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decodeuischedule_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeUiSnapshot.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_b4_worked_before.cpp",
+        "tests/tools/bridge_decodeuisnapshot_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeVisibility.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_b4_worked_before.cpp",
+        "tests/tools/bridge_decodevisibility_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecodeWorkers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_workers_real_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDecolinkLogin.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decolinklogin_ab.py",
+        "tests/tools/bridge_decolinklogin_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDeferredAutoSeq.cpp",
+      "test_sources": [
+        "tests/tools/bridge_autoseq_rearm_ab.py",
+        "tests/tools/bridge_deferred_autoseq_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDestructor.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_destructor_active_decode_ab.py",
+        "tests/tools/bridge_destructor_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDiagnosticConnections.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_diagnostic_connections_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDiagnostics.cpp",
+      "test_sources": [
+        "tests/tools/bridge_diagnostics_ab.py",
+        "tests/tools/bridge_diagnostics_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDirectAudioTx.cpp",
+      "test_sources": [
+        "tests/tools/bridge_directaudiotx_ab.py",
+        "tests/tools/bridge_directaudiotx_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDirectedReportGuard.cpp",
+      "test_sources": [
+        "tests/tools/bridge_directed_report_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDisplayFrequency.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_display_frequency_ab.py",
+        "tests/tools/bridge_display_frequency_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDxCall.cpp",
+      "test_sources": [
+        "tests/tools/bridge_dxcall_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDxClusterCommands.cpp",
+      "test_sources": [
+        "tests/tools/bridge_dxcluster_commands_ab.py",
+        "tests/tools/bridge_dxcluster_commands_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeDxClusterInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_dxcluster_init_ab.py",
+        "tests/tools/bridge_dxcluster_init_local_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeEnvironmentRxPolicy.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_environment_rx_policy_ab.py",
+        "tests/tools/bridge_environment_rx_policy_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeExternalAdif.cpp",
+      "test_sources": [
+        "tests/tools/bridge_externaladif_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeExternalUrl.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFeedDecoder.cpp",
+      "test_sources": [
+        "tests/test_audio_mode_change_capture_policy.cpp",
+        "tests/tools/bridge_feeddecoder_fst4_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_ft2_ab.py",
+        "tests/tools/bridge_feeddecoder_ft4_ab.py",
+        "tests/tools/bridge_feeddecoder_ft8_ab.py",
+        "tests/tools/bridge_feeddecoder_jt4_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_jt9_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_msk144_ab.py",
+        "tests/tools/bridge_feeddecoder_q65_ab.py",
+        "tests/tools/bridge_feeddecoder_wspr_reference_ab.py",
+        "tests/tools/bridge_jt65_deep_probe.py",
+        "tests/tools/bridge_jt65_tolerance_probe.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFileIO.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFilePaths.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_file_paths_ab.py",
+        "tests/tools/bridge_file_paths_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFilterControls.cpp",
+      "test_sources": [
+        "tests/tools/bridge_filtercontrols_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFontSettings.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_fontscale_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFoxVerifier.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_verify_otp_ab.py",
+        "tests/tools/bridge_verify_otp_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFrequencyCalibration.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFrequencyUpdate.cpp",
+      "test_sources": [
+        "tests/tools/bridge_frequencyupdate_ab.py",
+        "tests/tools/bridge_frequencyupdate_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2Access.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2AsyncReady.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft2_async_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_async_ready_guards_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2AsyncTimer.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft2_async_timer_adaptive_ab.py",
+        "tests/tools/bridge_ft2_async_timer_audio_ab.py",
+        "tests/tools/bridge_ft2_async_timer_guards_ab.py",
+        "tests/tools/bridge_ft2_async_timer_ranges_ab.py",
+        "tests/tools/bridge_ft2_async_timer_sequential_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2AudioGates.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft2audiogates_ab.py",
+        "tests/tools/bridge_ft2audiogates_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2LogBridge.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_ft2logbridge_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2PartnerGuards.cpp",
+      "test_sources": [
+        "tests/test_nonstandard_call_directed.cpp",
+        "tests/tools/bridge_ft2_partner_guards_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2SmtpCredentials.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft2smtpcredentials_ab.py",
+        "tests/tools/bridge_ft2smtpcredentials_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2SmtpSend.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft2smtpsend_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt2SyncReady.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft2_sync_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_cache_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt4Early.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft4early_ab.py",
+        "tests/tools/bridge_ft4early_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt8AutoGate.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/tools/bridge_ft8bridgegate_ab.py",
+        "tests/tools/bridge_ft8bridgegate_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt8Early.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft8early_decode_ab.py",
+        "tests/tools/bridge_ft8early_gates_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt8Queue.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft8queue_decode_ab.py",
+        "tests/tools/bridge_ft8queue_params_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFt8Ready.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/tools/bridge_feeddecoder_fst4_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_ft2_ab.py",
+        "tests/tools/bridge_feeddecoder_ft4_ab.py",
+        "tests/tools/bridge_feeddecoder_jt4_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_jt9_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_msk144_ab.py",
+        "tests/tools/bridge_feeddecoder_q65_ab.py",
+        "tests/tools/bridge_feeddecoder_wspr_reference_ab.py",
+        "tests/tools/bridge_ft2_async_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_async_timer_audio_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_cq_filter_ab.py",
+        "tests/tools/bridge_ft8_ready_dedup_ab.py",
+        "tests/tools/bridge_ft8_ready_fst4_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_ft2_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_ft4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_guards_ab.py",
+        "tests/tools/bridge_ft8_ready_jt4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_jt9_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_immediate_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_mirror_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_publish_ab.py",
+        "tests/tools/bridge_ft8_ready_msk144_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_mycall_filter_ab.py",
+        "tests/tools/bridge_ft8_ready_q65_audio_ab.py",
+        "tests/tools/bridge_jt65_deep_probe.py",
+        "tests/tools/bridge_jt65_tolerance_probe.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFtScheduler.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ft_scheduler_ab.py",
+        "tests/tools/bridge_ft_scheduler_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFtThreadBudget.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_ft_thread_budget_helpers_ab.py",
+        "tests/tools/bridge_ft_thread_budget_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFtxProfiles.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_ready_profile_apply_ab.py",
+        "tests/tools/bridge_ready_profile_init_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFtxSettings.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_ftx_settings_placement_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeFullSpectrumSnapshot.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_fullspectrumsnapshot_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeGenericSettings.cpp",
+      "test_sources": [
+        "tests/tools/bridge_generic_settings_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeGhostFilter.cpp",
+      "test_sources": [
+        "tests/tools/bridge_directedghost_ab.py",
+        "tests/tools/bridge_ghost_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeGraphicsStartup.cpp",
+      "test_sources": [
+        "tests/tools/bridge_graphics_startup_ab.py",
+        "tests/tools/bridge_qml_load_timestamp_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeGrid.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeHalt.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_halt_ab.py",
+        "tests/tools/bridge_halt_active_ab.py",
+        "tests/tools/bridge_halt_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeHoundTxPrepare.cpp",
+      "test_sources": [
+        "tests/tools/bridge_houndtxprepare_ab.py",
+        "tests/tools/bridge_houndtxprepare_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeJtDecodeFallback.cpp",
+      "test_sources": [
+        "tests/tools/bridge_jtdecodefallback_ab.py",
+        "tests/tools/bridge_jtdecodefallback_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeKeyboardAudio.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_decortty_tx.cpp"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeKeyboardLog.cpp",
+      "test_sources": [
+        "tests/tools/bridge_keyboardlog_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeKnownCq.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_knowncq_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyAdifMirror.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_legacyadifmirror_ab.py",
+        "tests/tools/bridge_legacyadifmirror_realfile_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyAllTxt.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_alltxtfolder_ab.py",
+        "tests/tools/bridge_legacyalltxt_ab.py",
+        "tests/tools/bridge_legacyaugment_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyAudio.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacy_audio_ab.py",
+        "tests/tools/bridge_legacy_audio_paths_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyAudioPolicy.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacyaudiopolicy_ab.py",
+        "tests/tools/bridge_legacyaudiopolicy_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyAudioStart.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacyaudiostart_ab.py",
+        "tests/tools/bridge_legacyaudiostart_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyAugment.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacyaugment_ab.py",
+        "tests/tools/bridge_legacyaugment_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyBridgeAudio.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_guard_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_loopback_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_stop_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyDecodeDelta.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_legacydelta_ab.py",
+        "tests/tools/bridge_legacydelta_realmodel_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyDialogSync.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_audio_mode_change_capture_policy.cpp",
+        "tests/tools/bridge_legacydialogsync_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyFilterConnections.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacy_filter_connections_ab.py",
+        "tests/tools/bridge_legacy_filter_connections_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyHash.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacyhashbridge_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_constructor_legacy_runtime_ab.py",
+        "tests/tools/bridge_decode_model_init_legacy_pair_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_loopback_ab.py",
+        "tests/tools/bridge_legacy_preflight_loopback_ab.py",
+        "tests/tools/bridge_legacyinit_runtime_lab.py",
+        "tests/tools/bridge_legacystatesync_runtime_lab.py",
+        "tests/tools/bridge_log_qso_legacy_real_ab.py",
+        "tests/tools/bridge_mac_legacy_start_ab.py",
+        "tests/tools/bridge_mac_legacy_start_stall_ab.py",
+        "tests/tools/bridge_mac_standalone_start_ab.py",
+        "tests/tools/bridge_stop_tx_routes_ab.py",
+        "tests/tools/bridge_tune_legacy_audio_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyJtCallbacks.cpp",
+      "test_sources": [
+        "tests/tools/bridge_feeddecoder_ft4_ab.py",
+        "tests/tools/bridge_ft8_ready_ft4_audio_ab.py",
+        "tests/tools/bridge_legacy_jt_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyMirror.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacymirror_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyOwnership.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_legacyownership_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyPcmRecovery.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_panadapter_gpu_recovery.cpp",
+        "tests/tools/bridge_legacypcmrecovery_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyPreflight.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_legacy_preflight_abort_ab.py",
+        "tests/tools/bridge_legacy_preflight_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyPresentationHelpers.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacy_palette_backend_runtime_ab.py",
+        "tests/tools/bridge_legacy_presentation_helpers_ab.py",
+        "tests/tools/bridge_legacy_presentation_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyPttTransition.cpp",
+      "test_sources": [
+        "tests/tools/bridge_cat_connections_ptt_ab.py",
+        "tests/tools/bridge_complete_tx_sstv_legacy_ab.py",
+        "tests/tools/bridge_legacyptttransition_runtime_lab.py",
+        "tests/tools/bridge_modulator_idle_legacy_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyRefresh.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_legacyrefresh_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyRigPolicy.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacy_rig_policy_ab.py",
+        "tests/tools/bridge_legacy_rig_policy_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyRxHandoff.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_audio_mode_change_capture_policy.cpp",
+        "tests/test_panadapter_gpu_recovery.cpp",
+        "tests/tools/bridge_legacyrxhandoff_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacySettings.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyState.cpp",
+      "test_sources": [
+        "tests/test_audio_mode_change_capture_policy.cpp",
+        "tests/tools/bridge_legacystatesync_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacySync.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_legacy_sync_blacklist_ab.py",
+        "tests/tools/bridge_legacy_sync_cq_filter_ab.py",
+        "tests/tools/bridge_legacy_sync_dedup_ab.py",
+        "tests/tools/bridge_legacy_sync_guards_ab.py",
+        "tests/tools/bridge_legacy_sync_queued_ab.py",
+        "tests/tools/bridge_legacy_sync_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLegacyWaterfall.cpp",
+      "test_sources": [
+        "tests/tools/bridge_legacy_waterfall_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLinuxAudioHelpers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_linux_audio_helpers_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLoadSettings.cpp",
+      "test_sources": [
+        "tests/test_custom_cq_persistence.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_load_settings_ab.py",
+        "tests/tools/bridge_reload_settings_ab.py",
+        "tests/tools/bridge_reload_settings_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLocalDataState.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLocalUpdate.cpp",
+      "test_sources": [
+        "tests/tools/bridge_localupdate_ab.py",
+        "tests/tools/bridge_localupdate_success_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogPreview.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_logpreview_ab.py",
+        "tests/tools/bridge_logpreview_snapshot_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogPrompt.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogPromptDialog.cpp",
+      "test_sources": [
+        "tests/tools/bridge_log_prompt_cluster_offline_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_add_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_satellite_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogPromptLifecycle.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_promptlifecycle_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogQso.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_b4_worked_before.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_qso_waterfall_recovery.cpp",
+        "tests/tools/bridge_log_qso_legacy_delegate_ab.py",
+        "tests/tools/bridge_log_qso_legacy_real_ab.py",
+        "tests/tools/bridge_log_qso_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogRouting.cpp",
+      "test_sources": [
+        "tests/tools/bridge_log_routing_ab.py",
+        "tests/tools/bridge_log_routing_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogStallProbe.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_logstall_ab.py",
+        "tests/tools/bridge_logstall_real.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeLogbookProfiles.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_logbook_reload_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamCaller.cpp",
+      "test_sources": [
+        "tests/tools/bridge_mamcaller_ab.py",
+        "tests/tools/bridge_mamcaller_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamControls.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_mam_tx_payload_policy.cpp"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamDispatch.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_foxelastic_ab.py",
+        "tests/tools/bridge_mamdispatch_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamFrequencyPlan.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamIngest.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_mamingest_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamLog.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_mamlog_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamPromote.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_mampromote_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamPrune.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_mamprune_ab.py",
+        "tests/tools/bridge_mamprune_expiry_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamQueue.cpp",
+      "test_sources": [
+        "tests/tools/bridge_mamenqueue_ab.py",
+        "tests/tools/bridge_mamqueue_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamRecovery.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_mamrecovery_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamState.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_mamstate_ab.py",
+        "tests/tools/bridge_multianswer_mode_ab.py",
+        "tests/tools/bridge_multianswer_mode_slot_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMamWave.cpp",
+      "test_sources": [
+        "tests/tools/bridge_mamwave_ab.py",
+        "tests/tools/bridge_wavio_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeManualHold.cpp",
+      "test_sources": [
+        "tests/tools/bridge_manualhold_ab.py",
+        "tests/tools/bridge_manualhold_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMapInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_map_init_ab.py",
+        "tests/tools/bridge_map_init_abort_ab.py",
+        "tests/tools/bridge_map_init_moon_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeMode.cpp",
+      "test_sources": [
+        "tests/test_audio_mode_change_capture_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_mode_period_ab.py",
+        "tests/tools/bridge_modecleanup_runtime_lab.py",
+        "tests/tools/bridge_modeswitch_decode_ab.py",
+        "tests/tools/bridge_modeswitch_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeModulatorFinish.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_modulator_finish_loopback_ab.py",
+        "tests/tools/bridge_modulator_idle_ft2_ab.py",
+        "tests/tools/bridge_modulator_idle_legacy_ab.py",
+        "tests/tools/bridge_modulator_idle_pcm_ab.py",
+        "tests/tools/bridge_modulator_idle_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeNetworkPreferences.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeOffline.cpp",
+      "test_sources": [
+        "tests/tools/bridge_offline_ab.py",
+        "tests/tools/bridge_offline_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeOnlineLogbook.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_psk_cloudlog_adif_ab.py",
+        "tests/tools/bridge_psk_cloudlog_http_ab.py",
+        "tests/tools/bridge_psk_cloudlog_init_ab.py",
+        "tests/tools/bridge_qrz_wspr_init_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePanadapterFft.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePanadapterGpuInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_panadapter_gpu_init_ab.py",
+        "tests/tools/bridge_panadapter_gpu_init_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePanadapterRegistration.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_panregistration_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePartnerMemory.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePeriodTimer.cpp",
+      "test_sources": [
+        "tests/tools/bridge_period_timer_ft8_audio_ab.py",
+        "tests/tools/bridge_period_timer_runtime_ab.py",
+        "tests/tools/bridge_period_timer_watchdog_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePeriodTimerArm.cpp",
+      "test_sources": [
+        "tests/tools/bridge_periodtimerarm_ab.py",
+        "tests/tools/bridge_periodtimerarm_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePeriodicTx.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_periodic_tx_cancel_ab.py",
+        "tests/tools/bridge_periodic_tx_direct_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_dispatch_ab.py",
+        "tests/tools/bridge_periodic_tx_ft8_loopback_ab.py",
+        "tests/tools/bridge_periodic_tx_guards_ab.py",
+        "tests/tools/bridge_periodic_tx_late_ab.py",
+        "tests/tools/bridge_periodic_tx_late_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_capture_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_receive_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_two_receive_ab.py",
+        "tests/tools/bridge_periodic_tx_parity_ab.py",
+        "tests/tools/bridge_periodic_tx_retry_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePortSettings.cpp",
+      "test_sources": [
+        "tests/tools/bridge_port_settings_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePrecomputedWave.cpp",
+      "test_sources": [
+        "tests/tools/bridge_precomputed_wave_store_ab.py",
+        "tests/tools/bridge_precomputed_wave_store_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeProcessUsage.cpp",
+      "test_sources": [
+        "tests/tools/bridge_processusage_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePromptSnapshot.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_promptsnapshot_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePskQueries.cpp",
+      "test_sources": [
+        "tests/tools/bridge_psk_local_response_ab.py",
+        "tests/tools/bridge_psk_queries_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgePskReporter.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_psk_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQ65Split.cpp",
+      "test_sources": [
+        "tests/tools/bridge_q65split_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoCache.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoCompletion.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_qsocompletion_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoFields.cpp",
+      "test_sources": [
+        "tests/tools/bridge_qsofields_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoFinish.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_qsofinish_ab.py",
+        "tests/tools/bridge_qsofinish_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoJournal.cpp",
+      "test_sources": [
+        "tests/tools/bridge_qso_journal_ab.py",
+        "tests/tools/bridge_qso_journal_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoLimit.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_qsoband_ab.py",
+        "tests/tools/bridge_qsolimit_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoReset.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_qsoreset_ab.py",
+        "tests/tools/bridge_qsoreset_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsoTransition.cpp",
+      "test_sources": [
+        "tests/tools/bridge_qsotransition_ab.py",
+        "tests/tools/bridge_qsotransition_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsyCommand.cpp",
+      "test_sources": [
+        "tests/tools/bridge_qsycommand_ab.py",
+        "tests/tools/bridge_qsycommand_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeQsyGuard.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_qsyguard_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeReceivedFiles.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_file_dialog_focus.cpp",
+        "tests/tools/bridge_directory_dialog_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteActivity.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteFrequency.cpp",
+      "test_sources": [
+        "tests/tools/bridge_remotefrequency_ab.py",
+        "tests/tools/bridge_remotefrequency_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteLinkObjects.cpp",
+      "test_sources": [
+        "tests/tools/bridge_remotelinkobjects_ab.py",
+        "tests/tools/bridge_remotelinkobjects_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteLinkSelection.cpp",
+      "test_sources": [
+        "tests/tools/bridge_remotelinkselection_ab.py",
+        "tests/tools/bridge_remotelinkselection_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteRadioState.cpp",
+      "test_sources": [
+        "tests/tools/bridge_remoteradiostate_ab.py",
+        "tests/tools/bridge_remoteradiostate_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteRxAudio.cpp",
+      "test_sources": [
+        "tests/tools/bridge_decoportaudioinput_ab.py",
+        "tests/tools/bridge_decoportaudioinput_runtime_lab.py",
+        "tests/tools/bridge_remoterxaudio_ab.py",
+        "tests/tools/bridge_remoterxaudio_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRemoteWebInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_remote_web_commands_ab.py",
+        "tests/tools/bridge_remote_web_credentials_ab.py",
+        "tests/tools/bridge_remote_web_http_ab.py",
+        "tests/tools/bridge_remote_web_init_ab.py",
+        "tests/tools/bridge_remote_web_ws_auth_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeResumeReply.cpp",
+      "test_sources": [
+        "tests/tools/bridge_resume_reply_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRigDiscovery.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rigdiscovery_ab.py",
+        "tests/tools/bridge_rigdiscovery_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRigTelemetry.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rigtelemetry_ab.py",
+        "tests/tools/bridge_rigtelemetry_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_rtl_init_ab.py",
+        "tests/tools/bridge_rtl_init_retune_ab.py",
+        "tests/tools/bridge_rtl_init_started_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlSdrCapture.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rtlsdrcapture_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlSdrConfig.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rtlsdrconfig_ab.py",
+        "tests/tools/bridge_rtlsdrconfig_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlSdrDiscovery.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rtlsdrdiscovery_ab.py",
+        "tests/tools/bridge_rtlsdrdiscovery_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlSdrPlayback.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlSdrSamples.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRtlSdrStatus.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rtlsdrstatus_ab.py",
+        "tests/tools/bridge_rtlsdrstatus_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRttyRigMode.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rttyrigmode_ab.py",
+        "tests/tools/bridge_rttyrigmode_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRxAudioTx.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rxaudiotx_ab.py",
+        "tests/tools/bridge_rxaudiotx_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRxControl.cpp",
+      "test_sources": [
+        "tests/tools/bridge_rxcontrol_audio_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRxMonitoring.cpp",
+      "test_sources": [
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_rx_monitoring_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRxRecording.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_rxrecording_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeRxTerminal.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_rxterminal_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSatelliteHalfDuplex.cpp",
+      "test_sources": [
+        "tests/tools/bridge_satellitehd_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSatelliteInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_satellite_init_ab.py",
+        "tests/tools/bridge_satellite_init_apply_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSatelliteOptions.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSaveSettings.cpp",
+      "test_sources": [
+        "tests/test_custom_cq_persistence.cpp",
+        "tests/tools/bridge_save_settings_ab.py",
+        "tests/tools/bridge_save_settings_restart_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSecondInstance.cpp",
+      "test_sources": [
+        "tests/tools/bridge_secondinstance_ab.py",
+        "tests/tools/bridge_secondinstance_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSelfCheck.cpp",
+      "test_sources": [
+        "tests/tools/bridge_selfcheck_ab.py",
+        "tests/tools/bridge_selfcheck_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSendTx.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_sendtx_ft8_deferred_ab.py",
+        "tests/tools/bridge_sendtx_ft8_guards_ab.py",
+        "tests/tools/bridge_sendtx_ft8_loopback_ab.py",
+        "tests/tools/bridge_sendtx_jtty_ab.py",
+        "tests/tools/bridge_sendtx_jtty_result_ab.py",
+        "tests/tools/bridge_sendtx_legacy_delegate_ab.py",
+        "tests/tools/bridge_sendtx_repair_partner_ab.py",
+        "tests/tools/bridge_sendtx_stale_partner_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSequenceOptions.cpp",
+      "test_sources": [
+        "tests/tools/bridge_sequence_options_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeServices.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_services_runtime_ab.py",
+        "tests/tools/bridge_sharing_accessors_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSettingsHelpers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_settings_helpers_ab.py",
+        "tests/tools/bridge_settings_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSharedRuntime.cpp",
+      "test_sources": [
+        "tests/tools/bridge_shared_runtime_ab.py",
+        "tests/tools/bridge_shared_runtime_env_ab.py",
+        "tests/tools/bridge_tx_policy_adapters_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSharingConfig.cpp",
+      "test_sources": [
+        "tests/tools/bridge_sharingconfig_ab.py",
+        "tests/tools/bridge_sharingconfig_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeShutdown.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_shutdown_active_ab.py",
+        "tests/tools/bridge_shutdown_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSmartFt2Scheduler.cpp",
+      "test_sources": [
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_smartft2scheduler_ab.py",
+        "tests/tools/bridge_smartft2scheduler_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSpecialOperation.cpp",
+      "test_sources": [
+        "tests/tools/bridge_specialop_ab.py",
+        "tests/tools/bridge_specialop_deferred_ab.py",
+        "tests/tools/bridge_specialop_wrappers_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSpectrum.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSpectrumTimer.cpp",
+      "test_sources": [
+        "tests/tools/bridge_spectrum_timer_cpu_ab.py",
+        "tests/tools/bridge_spectrum_timer_fallback_frame_ab.py",
+        "tests/tools/bridge_spectrum_timer_gpu_handoff_ab.py",
+        "tests/tools/bridge_spectrum_timer_hidden_ab.py",
+        "tests/tools/bridge_spectrum_timer_visible_fallback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSpectrumVisibility.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_qso_waterfall_recovery.cpp",
+        "tests/tools/bridge_spectrumvisibility_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSsb.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ssb_unit_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstv.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_amplifier_port_runtime_ab.py",
+        "tests/tools/bridge_async_logs_runtime_ab.py",
+        "tests/tools/bridge_audio_adapters_runtime_ab.py",
+        "tests/tools/bridge_audio_channel_helpers_runtime_ab.py",
+        "tests/tools/bridge_audio_channel_loopback_ab.py",
+        "tests/tools/bridge_audio_device_init_ab.py",
+        "tests/tools/bridge_audiorefresh_runtime_lab.py",
+        "tests/tools/bridge_audiosink_gateway_ab.py",
+        "tests/tools/bridge_audiosink_ssb_ab.py",
+        "tests/tools/bridge_audiosink_taps_ab.py",
+        "tests/tools/bridge_auto_sequence_runtime_ab.py",
+        "tests/tools/bridge_autocallcomplete_runtime_lab.py",
+        "tests/tools/bridge_autocallselect_runtime_lab.py",
+        "tests/tools/bridge_autocqhistory_runtime_lab.py",
+        "tests/tools/bridge_autocqlock_runtime_lab.py",
+        "tests/tools/bridge_autocqrepeat_runtime_lab.py",
+        "tests/tools/bridge_autolog_helpers_runtime_ab.py",
+        "tests/tools/bridge_callsign_confirmed_adif_ab.py",
+        "tests/tools/bridge_callsign_init_ab.py",
+        "tests/tools/bridge_callsign_url_ab.py",
+        "tests/tools/bridge_cat_backend_helpers_runtime_ab.py",
+        "tests/tools/bridge_cat_connections_ab.py",
+        "tests/tools/bridge_cat_connections_confirm_ab.py",
+        "tests/tools/bridge_cat_connections_connect_ab.py",
+        "tests/tools/bridge_cat_connections_frequency_ab.py",
+        "tests/tools/bridge_cat_connections_mode_ab.py",
+        "tests/tools/bridge_cat_connections_ptt_ab.py",
+        "tests/tools/bridge_cat_connections_rigctl_ab.py",
+        "tests/tools/bridge_cat_dispatch_runtime_ab.py",
+        "tests/tools/bridge_cat_dispatch_ssb_runtime_ab.py",
+        "tests/tools/bridge_cat_migration_startup_runtime_ab.py",
+        "tests/tools/bridge_cat_ptt_state_runtime_ab.py",
+        "tests/tools/bridge_cat_telemetry_ab.py",
+        "tests/tools/bridge_catqsy_runtime_lab.py",
+        "tests/tools/bridge_catrecovery_runtime_lab.py",
+        "tests/tools/bridge_catrigmode_runtime_lab.py",
+        "tests/tools/bridge_catsplitsync_runtime_lab.py",
+        "tests/tools/bridge_cleartxmessages_runtime_lab.py",
+        "tests/tools/bridge_complete_tx_pcm_ab.py",
+        "tests/tools/bridge_complete_tx_runtime_ab.py",
+        "tests/tools/bridge_complete_tx_special_ab.py",
+        "tests/tools/bridge_complete_tx_sstv_legacy_ab.py",
+        "tests/tools/bridge_constructor_runtime_ab.py",
+        "tests/tools/bridge_core_timers_init_ab.py",
+        "tests/tools/bridge_correctedtime_runtime_lab.py",
+        "tests/tools/bridge_courtesy_runtime_lab.py",
+        "tests/tools/bridge_decode_adapters_runtime_ab.py",
+        "tests/tools/bridge_decode_cluster_connections_ab.py",
+        "tests/tools/bridge_decode_keys_runtime_ab.py",
+        "tests/tools/bridge_decode_model_init_ab.py",
+        "tests/tools/bridge_decodeflow_queue_runtime_ab.py",
+        "tests/tools/bridge_decodetxwait_runtime_lab.py",
+        "tests/tools/bridge_decolog_init_ab.py",
+        "tests/tools/bridge_decolog_local_ab.py",
+        "tests/tools/bridge_decolog_tune_ab.py",
+        "tests/tools/bridge_decoportaudioinput_runtime_lab.py",
+        "tests/tools/bridge_decoportdriver_runtime_lab.py",
+        "tests/tools/bridge_decoportptt_runtime_lab.py",
+        "tests/tools/bridge_decoporttxaudio_runtime_lab.py",
+        "tests/tools/bridge_decoporttxframes_runtime_lab.py",
+        "tests/tools/bridge_deferredseq_runtime_lab.py",
+        "tests/tools/bridge_destructor_runtime_ab.py",
+        "tests/tools/bridge_diagnostic_connections_ab.py",
+        "tests/tools/bridge_diagnostics_runtime_ab.py",
+        "tests/tools/bridge_directaudiotx_runtime_lab.py",
+        "tests/tools/bridge_directory_dialog_ab.py",
+        "tests/tools/bridge_display_frequency_runtime_ab.py",
+        "tests/tools/bridge_dxcall_runtime_lab.py",
+        "tests/tools/bridge_dxcluster_init_ab.py",
+        "tests/tools/bridge_dxcluster_init_local_ab.py",
+        "tests/tools/bridge_environment_rx_policy_runtime_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_ft2_ab.py",
+        "tests/tools/bridge_feeddecoder_ft4_ab.py",
+        "tests/tools/bridge_feeddecoder_ft8_ab.py",
+        "tests/tools/bridge_feeddecoder_jt4_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_jt9_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_msk144_ab.py",
+        "tests/tools/bridge_feeddecoder_q65_ab.py",
+        "tests/tools/bridge_feeddecoder_wspr_reference_ab.py",
+        "tests/tools/bridge_file_paths_runtime_ab.py",
+        "tests/tools/bridge_ft2_async_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_async_ready_guards_ab.py",
+        "tests/tools/bridge_ft2_async_timer_adaptive_ab.py",
+        "tests/tools/bridge_ft2_async_timer_audio_ab.py",
+        "tests/tools/bridge_ft2_async_timer_guards_ab.py",
+        "tests/tools/bridge_ft2_async_timer_ranges_ab.py",
+        "tests/tools/bridge_ft2_async_timer_sequential_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_cache_ab.py",
+        "tests/tools/bridge_ft2audiogates_runtime_lab.py",
+        "tests/tools/bridge_ft4early_runtime_lab.py",
+        "tests/tools/bridge_ft8_ready_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_cq_filter_ab.py",
+        "tests/tools/bridge_ft8_ready_dedup_ab.py",
+        "tests/tools/bridge_ft8_ready_fst4_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_ft2_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_ft4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_guards_ab.py",
+        "tests/tools/bridge_ft8_ready_jt4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_jt9_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_immediate_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_mirror_ab.py",
+        "tests/tools/bridge_ft8_ready_legacy_publish_ab.py",
+        "tests/tools/bridge_ft8_ready_msk144_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_mycall_filter_ab.py",
+        "tests/tools/bridge_ft8_ready_q65_audio_ab.py",
+        "tests/tools/bridge_ft8bridgegate_runtime_lab.py",
+        "tests/tools/bridge_ft8early_decode_ab.py",
+        "tests/tools/bridge_ft8early_gates_ab.py",
+        "tests/tools/bridge_ft8queue_decode_ab.py",
+        "tests/tools/bridge_ft8queue_params_ab.py",
+        "tests/tools/bridge_ft_scheduler_runtime_ab.py",
+        "tests/tools/bridge_ft_thread_budget_helpers_runtime_ab.py",
+        "tests/tools/bridge_hamdrm_deferred_gallery_ab.py",
+        "tests/tools/bridge_hamdrm_gallery_archive_ab.py",
+        "tests/tools/bridge_houndtxprepare_runtime_lab.py",
+        "tests/tools/bridge_jt65_deep_probe.py",
+        "tests/tools/bridge_jt65_tolerance_probe.py",
+        "tests/tools/bridge_jtdecodefallback_runtime_lab.py",
+        "tests/tools/bridge_layout_runtime_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_guard_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_loopback_ab.py",
+        "tests/tools/bridge_legacy_bridge_audio_stop_ab.py",
+        "tests/tools/bridge_legacy_filter_connections_runtime_ab.py",
+        "tests/tools/bridge_legacy_palette_backend_runtime_ab.py",
+        "tests/tools/bridge_legacy_preflight_abort_ab.py",
+        "tests/tools/bridge_legacy_preflight_loopback_ab.py",
+        "tests/tools/bridge_legacy_presentation_helpers_runtime_ab.py",
+        "tests/tools/bridge_legacy_rig_policy_runtime_ab.py",
+        "tests/tools/bridge_legacy_sync_blacklist_ab.py",
+        "tests/tools/bridge_legacy_sync_cq_filter_ab.py",
+        "tests/tools/bridge_legacy_sync_guards_ab.py",
+        "tests/tools/bridge_legacy_sync_queued_ab.py",
+        "tests/tools/bridge_legacyaudiopolicy_runtime_lab.py",
+        "tests/tools/bridge_legacyaudiostart_runtime_lab.py",
+        "tests/tools/bridge_legacyaugment_runtime_ab.py",
+        "tests/tools/bridge_legacyinit_runtime_lab.py",
+        "tests/tools/bridge_legacyptttransition_runtime_lab.py",
+        "tests/tools/bridge_legacystatesync_runtime_lab.py",
+        "tests/tools/bridge_log_prompt_cluster_offline_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_add_ab.py",
+        "tests/tools/bridge_log_prompt_dialog_satellite_ab.py",
+        "tests/tools/bridge_log_qso_legacy_delegate_ab.py",
+        "tests/tools/bridge_log_qso_legacy_real_ab.py",
+        "tests/tools/bridge_log_qso_runtime_ab.py",
+        "tests/tools/bridge_log_routing_runtime_ab.py",
+        "tests/tools/bridge_logpreview_snapshot_runtime_ab.py",
+        "tests/tools/bridge_mac_legacy_start_ab.py",
+        "tests/tools/bridge_mac_standalone_start_ab.py",
+        "tests/tools/bridge_mamcaller_runtime_lab.py",
+        "tests/tools/bridge_mamprune_expiry_runtime_ab.py",
+        "tests/tools/bridge_manualhold_runtime_lab.py",
+        "tests/tools/bridge_map_init_ab.py",
+        "tests/tools/bridge_map_init_abort_ab.py",
+        "tests/tools/bridge_map_init_moon_ab.py",
+        "tests/tools/bridge_mode_period_ab.py",
+        "tests/tools/bridge_modecleanup_runtime_lab.py",
+        "tests/tools/bridge_modulator_idle_ft2_ab.py",
+        "tests/tools/bridge_modulator_idle_legacy_ab.py",
+        "tests/tools/bridge_modulator_idle_pcm_ab.py",
+        "tests/tools/bridge_modulator_idle_runtime_ab.py",
+        "tests/tools/bridge_multianswer_mode_ab.py",
+        "tests/tools/bridge_partner_guard_old_roger_ab.py",
+        "tests/tools/bridge_partner_guard_reject_ab.py",
+        "tests/tools/bridge_partner_guard_repair_ab.py",
+        "tests/tools/bridge_partner_guard_retry_ab.py",
+        "tests/tools/bridge_partner_guard_roger_ab.py",
+        "tests/tools/bridge_period_timer_ft8_audio_ab.py",
+        "tests/tools/bridge_period_timer_runtime_ab.py",
+        "tests/tools/bridge_period_timer_watchdog_ab.py",
+        "tests/tools/bridge_periodic_tx_cancel_ab.py",
+        "tests/tools/bridge_periodic_tx_direct_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_dispatch_ab.py",
+        "tests/tools/bridge_periodic_tx_guards_ab.py",
+        "tests/tools/bridge_periodic_tx_late_ab.py",
+        "tests/tools/bridge_periodic_tx_late_audio_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_ab.py",
+        "tests/tools/bridge_periodic_tx_parity_ab.py",
+        "tests/tools/bridge_periodic_tx_retry_ab.py",
+        "tests/tools/bridge_periodtimerarm_runtime_lab.py",
+        "tests/tools/bridge_precomputed_wave_store_runtime_ab.py",
+        "tests/tools/bridge_processusage_runtime_lab.py",
+        "tests/tools/bridge_psk_cloudlog_adif_ab.py",
+        "tests/tools/bridge_psk_cloudlog_http_ab.py",
+        "tests/tools/bridge_psk_cloudlog_init_ab.py",
+        "tests/tools/bridge_q65split_runtime_lab.py",
+        "tests/tools/bridge_qml_load_timestamp_ab.py",
+        "tests/tools/bridge_qrz_wspr_init_ab.py",
+        "tests/tools/bridge_qso_journal_runtime_ab.py",
+        "tests/tools/bridge_qsofinish_runtime_lab.py",
+        "tests/tools/bridge_qsoreset_runtime_lab.py",
+        "tests/tools/bridge_qsotransition_runtime_lab.py",
+        "tests/tools/bridge_ready_profile_apply_ab.py",
+        "tests/tools/bridge_ready_profile_init_ab.py",
+        "tests/tools/bridge_remote_web_commands_ab.py",
+        "tests/tools/bridge_remote_web_http_ab.py",
+        "tests/tools/bridge_remote_web_init_ab.py",
+        "tests/tools/bridge_remote_web_ws_auth_ab.py",
+        "tests/tools/bridge_remotefrequency_runtime_lab.py",
+        "tests/tools/bridge_remoteradiostate_runtime_lab.py",
+        "tests/tools/bridge_rigtelemetry_runtime_lab.py",
+        "tests/tools/bridge_rtl_init_ab.py",
+        "tests/tools/bridge_rtl_init_retune_ab.py",
+        "tests/tools/bridge_rtl_init_started_ab.py",
+        "tests/tools/bridge_rtlsdrcapture_runtime_lab.py",
+        "tests/tools/bridge_rtlsdrconfig_runtime_lab.py",
+        "tests/tools/bridge_rttyrigmode_runtime_lab.py",
+        "tests/tools/bridge_rxaudiotx_runtime_lab.py",
+        "tests/tools/bridge_satellite_init_ab.py",
+        "tests/tools/bridge_satellite_init_apply_ab.py",
+        "tests/tools/bridge_sendtx_ft8_deferred_ab.py",
+        "tests/tools/bridge_sendtx_ft8_guards_ab.py",
+        "tests/tools/bridge_sendtx_jtty_ab.py",
+        "tests/tools/bridge_sendtx_jtty_result_ab.py",
+        "tests/tools/bridge_sendtx_legacy_delegate_ab.py",
+        "tests/tools/bridge_sendtx_repair_partner_ab.py",
+        "tests/tools/bridge_sendtx_stale_partner_ab.py",
+        "tests/tools/bridge_services_runtime_ab.py",
+        "tests/tools/bridge_shared_runtime_ab.py",
+        "tests/tools/bridge_sharing_accessors_runtime_ab.py",
+        "tests/tools/bridge_shutdown_active_ab.py",
+        "tests/tools/bridge_shutdown_runtime_ab.py",
+        "tests/tools/bridge_smartft2scheduler_runtime_lab.py",
+        "tests/tools/bridge_spectrum_timer_cpu_ab.py",
+        "tests/tools/bridge_spectrum_timer_fallback_frame_ab.py",
+        "tests/tools/bridge_spectrum_timer_gpu_handoff_ab.py",
+        "tests/tools/bridge_spectrum_timer_hidden_ab.py",
+        "tests/tools/bridge_spectrum_timer_visible_fallback_ab.py",
+        "tests/tools/bridge_ssb_unit_runtime_ab.py",
+        "tests/tools/bridge_sstv_audio_relay_hamdrm_loopback_ab.py",
+        "tests/tools/bridge_sstv_audio_relay_radiofax_loopback_ab.py",
+        "tests/tools/bridge_sstv_audio_source_extraction_ab.py",
+        "tests/tools/bridge_sstv_auto_image_save_ab.py",
+        "tests/tools/bridge_sstv_calibration_tx_capture_ab.py",
+        "tests/tools/bridge_sstv_calibration_tx_extraction_ab.py",
+        "tests/tools/bridge_sstv_diagnostics_snapshot_ab.py",
+        "tests/tools/bridge_sstv_fax480_tx_loopback_ab.py",
+        "tests/tools/bridge_sstv_fax480_tx_reject_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_active_diagnostics_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_diagnostics_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_tx_cancel_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_tx_loopback_ab.py",
+        "tests/tools/bridge_sstv_helpers_controls_ab.py",
+        "tests/tools/bridge_sstv_helpers_hamdrm_loopback_ab.py",
+        "tests/tools/bridge_sstv_helpers_qso_share_ab.py",
+        "tests/tools/bridge_sstv_helpers_radiofax_loopback_ab.py",
+        "tests/tools/bridge_sstv_image_save_ab.py",
+        "tests/tools/bridge_sstv_image_status_ab.py",
+        "tests/tools/bridge_sstv_producer_taps_hamdrm_loopback_ab.py",
+        "tests/tools/bridge_sstv_producer_taps_radiofax_loopback_ab.py",
+        "tests/tools/bridge_sstv_qso_association_ab.py",
+        "tests/tools/bridge_sstv_qso_association_extraction_ab.py",
+        "tests/tools/bridge_sstv_qso_choices_ab.py",
+        "tests/tools/bridge_sstv_qso_choices_async_ab.py",
+        "tests/tools/bridge_sstv_radiofax_tx_loopback_ab.py",
+        "tests/tools/bridge_sstv_radiofax_tx_reject_ab.py",
+        "tests/tools/bridge_sstv_raw_audio_ab.py",
+        "tests/tools/bridge_sstv_raw_cancel_ab.py",
+        "tests/tools/bridge_sstv_raw_image_ab.py",
+        "tests/tools/bridge_sstv_redecode_ab.py",
+        "tests/tools/bridge_sstv_reset_probe_ab.py",
+        "tests/tools/bridge_sstv_runtime_shutdown_extraction_ab.py",
+        "tests/tools/bridge_sstv_rx_controls_ab.py",
+        "tests/tools/bridge_sstv_rx_diagnostics_ab.py",
+        "tests/tools/bridge_sstv_rx_reset_ab.py",
+        "tests/tools/bridge_sstv_rx_source_route_extraction_ab.py",
+        "tests/tools/bridge_sstv_rx_start_extraction_ab.py",
+        "tests/tools/bridge_sstv_rx_start_rollback_ab.py",
+        "tests/tools/bridge_sstv_rx_stop_extraction_ab.py",
+        "tests/tools/bridge_sstv_status_ab.py",
+        "tests/tools/bridge_sstv_storage_queue_extraction_ab.py",
+        "tests/tools/bridge_sstv_storage_shutdown_extraction_ab.py",
+        "tests/tools/bridge_sstv_storage_startup_ab.py",
+        "tests/tools/bridge_sstv_storage_startup_share_ab.py",
+        "tests/tools/bridge_sstv_studio_archive_ab.py",
+        "tests/tools/bridge_sstv_studio_status_ab.py",
+        "tests/tools/bridge_sstv_tx_init_capture_ab.py",
+        "tests/tools/bridge_sstv_tx_lifecycle_extraction_ab.py",
+        "tests/tools/bridge_sstv_tx_lifecycle_loopback_ab.py",
+        "tests/tools/bridge_sstv_tx_start_loopback_ab.py",
+        "tests/tools/bridge_sstv_tx_start_reject_ab.py",
+        "tests/tools/bridge_sstv_wav_replay_ab.py",
+        "tests/tools/bridge_sstv_wav_replay_cancel_ab.py",
+        "tests/tools/bridge_sstv_wav_replay_real_rebind_ab.py",
+        "tests/tools/bridge_sstv_workspace_extraction_ab.py",
+        "tests/tools/bridge_sstvqso_runtime_lab.py",
+        "tests/tools/bridge_start_tx_guards_ab.py",
+        "tests/tools/bridge_start_tx_selection_runtime_ab.py",
+        "tests/tools/bridge_startupmode_runtime_lab.py",
+        "tests/tools/bridge_startupservices_runtime_lab.py",
+        "tests/tools/bridge_state_runtime_ab.py",
+        "tests/tools/bridge_stop_tx_audio_ab.py",
+        "tests/tools/bridge_stop_tx_routes_ab.py",
+        "tests/tools/bridge_stop_tx_runtime_ab.py",
+        "tests/tools/bridge_targetcall_decode_runtime_ab.py",
+        "tests/tools/bridge_targetcall_timeout_runtime_ab.py",
+        "tests/tools/bridge_tci_complete_ab.py",
+        "tests/tools/bridge_tci_signals_ab.py",
+        "tests/tools/bridge_timesync_init_ab.py",
+        "tests/tools/bridge_timesync_init_rearm_ab.py",
+        "tests/tools/bridge_timesyncdispatch_decode_ab.py",
+        "tests/tools/bridge_timesyncdispatch_runtime_ab.py",
+        "tests/tools/bridge_tune_audio_ab.py",
+        "tests/tools/bridge_tune_guards_ab.py",
+        "tests/tools/bridge_tune_legacy_audio_ab.py",
+        "tests/tools/bridge_tune_rtl_toggle_ab.py",
+        "tests/tools/bridge_tunewatchdog_runtime_lab.py",
+        "tests/tools/bridge_tx_adapters_runtime_ab.py",
+        "tests/tools/bridge_tx_audio_startup_runtime_ab.py",
+        "tests/tools/bridge_tx_enable_runtime_ab.py",
+        "tests/tools/bridge_tx_output_fallback_ab.py",
+        "tests/tools/bridge_tx_output_resolve_runtime_ab.py",
+        "tests/tools/bridge_tx_pcm_offset_loopback_ab.py",
+        "tests/tools/bridge_tx_policy_adapters_runtime_ab.py",
+        "tests/tools/bridge_tx_slot_helpers_runtime_ab.py",
+        "tests/tools/bridge_tx_wave_helpers_runtime_ab.py",
+        "tests/tools/bridge_txaudiotelemetry_explicit_lab.py",
+        "tests/tools/bridge_txdispatchguard_runtime_lab.py",
+        "tests/tools/bridge_txprecompute_explicit_lab.py",
+        "tests/tools/bridge_txrecording_runtime_lab.py",
+        "tests/tools/bridge_udpinit_runtime_lab.py",
+        "tests/tools/bridge_udpinit_wire_runtime_lab.py",
+        "tests/tools/bridge_udprestart_runtime_lab.py",
+        "tests/tools/bridge_ui_audio_state_runtime_ab.py",
+        "tests/tools/bridge_uistall_monitor_runtime_ab.py",
+        "tests/tools/bridge_usstate_dxcc_refresh_ab.py",
+        "tests/tools/bridge_usstate_wspr_init_ab.py",
+        "tests/tools/bridge_visual_tx_time_runtime_ab.py",
+        "tests/tools/bridge_wav_init_ab.py",
+        "tests/tools/bridge_wav_init_timed_ab.py",
+        "tests/tools/bridge_worldmap_call_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvAudioSource.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_audio_source_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvCalibrationTx.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_calibration_tx_capture_ab.py",
+        "tests/tools/bridge_sstv_calibration_tx_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvControls.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvDiagnosticsSnapshot.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_diagnostics_snapshot_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvFax480Tx.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_fax480_tx_loopback_ab.py",
+        "tests/tools/bridge_sstv_fax480_tx_reject_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvHamDrmTx.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_tx_cancel_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_tx_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvHelpers.cpp",
+      "test_sources": [
+        "tests/tools/bridge_sstv_helpers_controls_ab.py",
+        "tests/tools/bridge_sstv_helpers_hamdrm_loopback_ab.py",
+        "tests/tools/bridge_sstv_helpers_qso_share_ab.py",
+        "tests/tools/bridge_sstv_helpers_radiofax_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvImageSave.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_auto_image_save_ab.py",
+        "tests/tools/bridge_sstv_image_save_ab.py",
+        "tests/tools/bridge_sstv_reset_probe_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvProducerTaps.cpp",
+      "test_sources": [
+        "tests/tools/bridge_sstv_producer_taps_hamdrm_loopback_ab.py",
+        "tests/tools/bridge_sstv_producer_taps_radiofax_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvQso.cpp",
+      "test_sources": [
+        "tests/tools/bridge_sstvqso_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvQsoAssociation.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_qso_association_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvQsoChoices.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_qso_association_ab.py",
+        "tests/tools/bridge_sstv_qso_choices_ab.py",
+        "tests/tools/bridge_sstv_qso_choices_async_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRadiofaxTx.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_radiofax_tx_loopback_ab.py",
+        "tests/tools/bridge_sstv_radiofax_tx_reject_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRawAudio.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_raw_audio_ab.py",
+        "tests/tools/bridge_sstv_raw_cancel_ab.py",
+        "tests/tools/bridge_sstv_raw_image_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRedecode.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_redecode_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRuntimeShutdown.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_runtime_shutdown_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRxDiagnostics.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_active_diagnostics_ab.py",
+        "tests/tools/bridge_sstv_hamdrm_diagnostics_ab.py",
+        "tests/tools/bridge_sstv_rx_diagnostics_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRxReset.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_rx_controls_ab.py",
+        "tests/tools/bridge_sstv_rx_reset_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRxSourceRoute.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_rx_source_route_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRxStart.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_rx_start_extraction_ab.py",
+        "tests/tools/bridge_sstv_rx_start_rollback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvRxStop.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_rx_stop_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvStatus.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_image_status_ab.py",
+        "tests/tools/bridge_sstv_status_ab.py",
+        "tests/tools/bridge_sstv_studio_status_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvStorageQueue.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_storage_queue_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvStorageShutdown.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_storage_shutdown_extraction_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvStorageStartup.cpp",
+      "test_sources": [
+        "tests/tools/bridge_sstv_storage_startup_ab.py",
+        "tests/tools/bridge_sstv_storage_startup_share_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvStorageState.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvStudioArchive.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_hamdrm_deferred_gallery_ab.py",
+        "tests/tools/bridge_hamdrm_gallery_archive_ab.py",
+        "tests/tools/bridge_sstv_studio_archive_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvTiming.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvTxInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_tx_init_capture_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvTxLifecycle.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_tx_lifecycle_extraction_ab.py",
+        "tests/tools/bridge_sstv_tx_lifecycle_loopback_ab.py",
+        "tests/tools/bridge_stop_tx_routes_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvTxStart.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_tx_start_loopback_ab.py",
+        "tests/tools/bridge_sstv_tx_start_reject_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvTxState.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvWavReplay.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_wav_replay_ab.py",
+        "tests/tools/bridge_sstv_wav_replay_cancel_ab.py",
+        "tests/tools/bridge_sstv_wav_replay_real_rebind_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSstvWorkspace.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_sstv_workspace_extraction_ab.py",
+        "tests/tools/bridge_sstv_workspace_mock_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStartTx.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_periodic_tx_cancel_ab.py",
+        "tests/tools/bridge_periodic_tx_dispatch_ab.py",
+        "tests/tools/bridge_periodic_tx_late_ab.py",
+        "tests/tools/bridge_periodic_tx_mam_ab.py",
+        "tests/tools/bridge_periodic_tx_parity_ab.py",
+        "tests/tools/bridge_periodic_tx_retry_ab.py",
+        "tests/tools/bridge_start_tx_guards_ab.py",
+        "tests/tools/bridge_start_tx_loopback_ab.py",
+        "tests/tools/bridge_start_tx_selection_runtime_ab.py",
+        "tests/tools/bridge_tx_pcm_offset_loopback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStartTxPreflight.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_tx_dispatch_guard.cpp"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStartTxSelection.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStartupMode.cpp",
+      "test_sources": [
+        "tests/tools/bridge_startupmode_ab.py",
+        "tests/tools/bridge_startupmode_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStartupQso.cpp",
+      "test_sources": [
+        "tests/tools/bridge_startupqso_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStartupServices.cpp",
+      "test_sources": [
+        "tests/tools/bridge_startupservices_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeState.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/tools/bridge_state_runtime_ab.py",
+        "tests/tools/bridge_ui_audio_state_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStation.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_custom_cq_persistence.cpp",
+        "tests/tools/bridge_map_init_moon_ab.py",
+        "tests/tools/bridge_station_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStationFrequencies.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_stationfreq_real_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStationTelemetry.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_stationsend_ab.py",
+        "tests/tools/bridge_stationtimer_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStationWeather.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_stationweather_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeStopTx.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_stop_tx_audio_ab.py",
+        "tests/tools/bridge_stop_tx_routes_ab.py",
+        "tests/tools/bridge_stop_tx_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeSyncSchedule.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_periodic_tx_retry_ab.py",
+        "tests/tools/bridge_syncschedule_ab.py",
+        "tests/tools/bridge_syncschedule_timer_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTargetCallSettings.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_targetcall_decode_runtime_ab.py",
+        "tests/tools/bridge_targetcall_timeout_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTciAudio.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_tci_complete_ab.py",
+        "tests/tools/bridge_tci_signals_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTeleprinter.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_teleprinter_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTimeSync.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_ntp_manual_ab.py",
+        "tests/tools/bridge_ntp_manual_runtime_lab.py",
+        "tests/tools/bridge_timesync_init_ab.py",
+        "tests/tools/bridge_timesync_init_rearm_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTimeSyncDispatch.cpp",
+      "test_sources": [
+        "tests/tools/bridge_feeddecoder_fst4_ab.py",
+        "tests/tools/bridge_feeddecoder_fst4_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_ft2_ab.py",
+        "tests/tools/bridge_feeddecoder_ft4_ab.py",
+        "tests/tools/bridge_feeddecoder_ft8_ab.py",
+        "tests/tools/bridge_feeddecoder_jt4_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_ab.py",
+        "tests/tools/bridge_feeddecoder_jt65_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_jt9_reference_ab.py",
+        "tests/tools/bridge_feeddecoder_msk144_ab.py",
+        "tests/tools/bridge_feeddecoder_q65_ab.py",
+        "tests/tools/bridge_feeddecoder_wspr_reference_ab.py",
+        "tests/tools/bridge_ft2_async_ready_audio_ab.py",
+        "tests/tools/bridge_ft2_async_timer_audio_ab.py",
+        "tests/tools/bridge_ft2_sync_ready_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_fst4_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_ft2_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_ft4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_jt4_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_jt9_reference_ab.py",
+        "tests/tools/bridge_ft8_ready_msk144_audio_ab.py",
+        "tests/tools/bridge_ft8_ready_q65_audio_ab.py",
+        "tests/tools/bridge_ft8queue_decode_ab.py",
+        "tests/tools/bridge_jt65_deep_probe.py",
+        "tests/tools/bridge_jt65_tolerance_probe.py",
+        "tests/tools/bridge_period_timer_ft8_audio_ab.py",
+        "tests/tools/bridge_timesyncdispatch_decode_ab.py",
+        "tests/tools/bridge_timesyncdispatch_runtime_ab.py",
+        "tests/tools/bridge_timesyncdispatch_windows_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTune.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_tune_audio_ab.py",
+        "tests/tools/bridge_tune_guards_ab.py",
+        "tests/tools/bridge_tune_legacy_audio_ab.py",
+        "tests/tools/bridge_tune_rtl_toggle_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTuneWatchdog.cpp",
+      "test_sources": [
+        "tests/tools/bridge_tunewatchdog_ab.py",
+        "tests/tools/bridge_tunewatchdog_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxAudioStartup.cpp",
+      "test_sources": [
+        "tests/tools/bridge_tx_audio_startup_ab.py",
+        "tests/tools/bridge_tx_audio_startup_loopback_ab.py",
+        "tests/tools/bridge_tx_audio_startup_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxAudioTelemetry.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txaudiotelemetry_ab.py",
+        "tests/tools/bridge_txaudiotelemetry_explicit_lab.py",
+        "tests/tools/bridge_txaudiotelemetry_timer_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxDispatchGuard.cpp",
+      "test_sources": [
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_txdispatchguard_ab.py",
+        "tests/tools/bridge_txdispatchguard_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxEnable.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/test_tx_dispatch_guard.cpp",
+        "tests/tools/bridge_autocqrepeat_runtime_lab.py",
+        "tests/tools/bridge_tx_enable_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxFinish.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txboundary_ab.py",
+        "tests/tools/bridge_txboundary_runtime_lab.py",
+        "tests/tools/bridge_txfinish_ab.py",
+        "tests/tools/bridge_txfinish_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxFormat.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txbuffers_ab.py",
+        "tests/tools/bridge_txformat_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxMessages.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_custom_cq_persistence.cpp",
+        "tests/tools/bridge_cleartx_active_ab.py",
+        "tests/tools/bridge_cleartxmessages_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxOutputDevice.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_tx_output_device_loopback_ab.py",
+        "tests/tools/bridge_tx_output_fallback_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxOutputResolve.cpp",
+      "test_sources": [
+        "tests/tools/bridge_tx_output_linux_link_ab.py",
+        "tests/tools/bridge_tx_output_linux_syntax.py",
+        "tests/tools/bridge_tx_output_resolve_linux_ab.py",
+        "tests/tools/bridge_tx_output_resolve_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxPartnerGuard.cpp",
+      "test_sources": [
+        "tests/tools/bridge_partner_guard_ft8_loopback_ab.py",
+        "tests/tools/bridge_partner_guard_old_roger_ab.py",
+        "tests/tools/bridge_partner_guard_reject_ab.py",
+        "tests/tools/bridge_partner_guard_repair_ab.py",
+        "tests/tools/bridge_partner_guard_retry_ab.py",
+        "tests/tools/bridge_partner_guard_roger_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxPcm.cpp",
+      "test_sources": [],
+      "manual_note": "Indirect reference: tests/test_bridge_txpcm_ab.cpp includes the header and compares buildTxPcmBuffer to a baseline fixture; CMakeLists.txt links the production source. This alone does not prove runtime coverage."
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxPolicy.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxPrecompute.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txprecompute_ab.py",
+        "tests/tools/bridge_txprecompute_explicit_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxPrepare.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_tx_adapters_loopback_ab.py",
+        "tests/tools/bridge_tx_adapters_runtime_ab.py",
+        "tests/tools/bridge_txprepare_ab.py",
+        "tests/tools/bridge_txprepare_errors_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxProtection.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxRecording.cpp",
+      "test_sources": [
+        "tests/test_mam_tx_payload_policy.cpp",
+        "tests/tools/bridge_txrecording_ab.py",
+        "tests/tools/bridge_txrecording_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxScheduling.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_txscheduling_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxSelection.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txselection_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxSlot.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txslot_ab.py",
+        "tests/tools/bridge_txtimingcontrols_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxSlotHelpers.cpp",
+      "test_sources": [
+        "tests/tools/bridge_tx_slot_helpers_ab.py",
+        "tests/tools/bridge_tx_slot_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxTiming.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_ft8_auto_tx_decode_gate.cpp",
+        "tests/tools/bridge_tx_pcm_offset_loopback_ab.py",
+        "tests/tools/bridge_txtiming_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxTimingMath.cpp",
+      "test_sources": [
+        "tests/test_bridge_txwave_real_ab.cpp"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxWatchdog.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxWave.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txwave_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeTxWaveHelpers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_tx_wave_helpers_ab.py",
+        "tests/tools/bridge_tx_wave_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUdpDecode.cpp",
+      "test_sources": [
+        "tests/tools/bridge_udpdecode_ab.py",
+        "tests/tools/bridge_udpstatus_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUdpInit.cpp",
+      "test_sources": [
+        "tests/tools/bridge_udpinit_runtime_lab.py",
+        "tests/tools/bridge_udpinit_wire_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUdpRestart.cpp",
+      "test_sources": [
+        "tests/tools/bridge_udprestart_ab.py",
+        "tests/tools/bridge_udprestart_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUiActions.cpp",
+      "test_sources": [
+        "tests/tools/bridge_ui_actions_ab.py",
+        "tests/tools/bridge_ui_actions_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUiPreferences.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUiStall.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_uistall_ab.py",
+        "tests/tools/bridge_uistall_monitor_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUiStartupSettings.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_ui_startup_settings_ab.py",
+        "tests/tools/bridge_ui_startup_settings_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUpdates.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeUsStateLotw.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_lotw_cache_runtime_ab.py",
+        "tests/tools/bridge_lotw_download_runtime_ab.py",
+        "tests/tools/bridge_lotw_empty_download_runtime_ab.py",
+        "tests/tools/bridge_lotw_existing_runtime_ab.py",
+        "tests/tools/bridge_lotw_migration_runtime_ab.py",
+        "tests/tools/bridge_lotw_network_empty_cache_ab.py",
+        "tests/tools/bridge_lotw_network_error_runtime_ab.py",
+        "tests/tools/bridge_lotw_newest_runtime_ab.py",
+        "tests/tools/bridge_usstate_dxcc_refresh_ab.py",
+        "tests/tools/bridge_usstate_wspr_init_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeVhfUhfSetting.cpp",
+      "test_sources": [
+        "tests/tools/bridge_vhfuhfsetting_ab.py",
+        "tests/tools/bridge_vhfuhfsetting_runtime_lab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeVisualFeedScheduling.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_visualfeedscheduling_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeVisualTxCoalesce.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_decode_mirror_keys_ab.py",
+        "tests/tools/bridge_visual_tx_coalesce_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeVisualTxTime.cpp",
+      "test_sources": [
+        "tests/tools/bridge_visual_tx_time_ab.py",
+        "tests/tools/bridge_visual_tx_time_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWaitPounce.cpp",
+      "test_sources": [
+        "tests/tools/bridge_wait_pounce_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWavDecode.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWavIO.cpp",
+      "test_sources": [
+        "tests/tools/bridge_txrecording_ab.py",
+        "tests/tools/bridge_wavio_ab.py",
+        "tests/tools/bridge_wavio_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWavInit.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_wav_init_ab.py",
+        "tests/tools/bridge_wav_init_timed_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWebServer.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWindowState.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorkedHistory.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/test_b4_worked_before.cpp",
+        "tests/tools/bridge_workedhistory_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorkingFrequencies.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_workingfreq_real_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldClock.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapCalls.cpp",
+      "test_sources": [
+        "tests/tools/bridge_worldmap_call_helpers_ab.py",
+        "tests/tools/bridge_worldmap_call_helpers_runtime_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapConsumers.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapEntry.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapentry_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapGrid.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapgrid_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapQso.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapqso_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapQueue.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapqueue_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapReplay.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapreplay_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapReset.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapreset_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWorldMapSelection.cpp",
+      "test_sources": [
+        "tests/run_bridge_refactor_ab.py",
+        "tests/tools/bridge_worldmapselection_ab.py"
+      ]
+    },
+    {
+      "source": "src/bridge/DecodiumBridgeWsprCallback.cpp",
+      "test_sources": [
+        "tests/tools/bridge_wspr_callback_ab.py"
+      ]
+    }
+  ]
+}

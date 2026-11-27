@@ -1,0 +1,3 @@
+Focused A/B: RX/TX bounds, manual auto-level cancellation, legacy and audio sinks: OK (sinks substituted).
+Original and refactored isolated macOS apps: auto, manual, RX high/low and TX high/low true; transmitting false. Both modern and legacy active runs passed.
+CAT and monitoring disabled. Hardware gain and RF output not tested.

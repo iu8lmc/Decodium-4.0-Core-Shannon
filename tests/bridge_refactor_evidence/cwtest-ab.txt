@@ -1,0 +1,6 @@
+disabled|0|1
+busy|0|1
+pending|0|1
+failure|1|0
+queued|2|1|1
+released|0

@@ -1,0 +1,162 @@
+{
+  "warning": "Token matching does not establish function definitions, A/B execution or runtime coverage; missing names may be tested indirectly.",
+  "distinct_method_tokens": 1276,
+  "not_named_in_test_sources": [
+    {
+      "method": "activateHamDrmRxTap",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvProducerTaps.cpp"
+      ]
+    },
+    {
+      "method": "confirmLegacyPttTransition",
+      "sources": [
+        "src/bridge/DecodiumBridgeLegacyPttTransition.cpp"
+      ]
+    },
+    {
+      "method": "deactivateHamDrmRxTap",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvProducerTaps.cpp"
+      ]
+    },
+    {
+      "method": "disableSstvProducerTaps",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvProducerTaps.cpp"
+      ]
+    },
+    {
+      "method": "disconnectSstvProducerTaps",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvProducerTaps.cpp"
+      ]
+    },
+    {
+      "method": "failLegacyPttTransition",
+      "sources": [
+        "src/bridge/DecodiumBridgeLegacyPttTransition.cpp"
+      ]
+    },
+    {
+      "method": "finishSstvWavReplay",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvWavReplay.cpp"
+      ]
+    },
+    {
+      "method": "handleSstvStudioPreparedChanged",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvStudioArchive.cpp"
+      ]
+    },
+    {
+      "method": "initialiseSstvTx",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvTxInit.cpp"
+      ]
+    },
+    {
+      "method": "launchTuneAudio",
+      "sources": [
+        "src/bridge/DecodiumBridgeTune.cpp"
+      ]
+    },
+    {
+      "method": "mamBuildSlotMessage",
+      "sources": [
+        "src/bridge/DecodiumBridgeMamState.cpp"
+      ]
+    },
+    {
+      "method": "queueSstvRxImageSave",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvImageSave.cpp"
+      ]
+    },
+    {
+      "method": "releaseSstvTxBridgeOwnership",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvTxLifecycle.cpp"
+      ]
+    },
+    {
+      "method": "restoreSstvLiveAfterReplay",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvWavReplay.cpp"
+      ]
+    },
+    {
+      "method": "saveSettingsInternal",
+      "sources": [
+        "src/bridge/DecodiumBridgeSaveSettings.cpp"
+      ]
+    },
+    {
+      "method": "saveSstvRxRawAudioImpl",
+      "sources": [
+        "src/bridge/DecodiumBridgeSstvRawAudio.cpp"
+      ]
+    },
+    {
+      "method": "setAdvAutoModeEnabled",
+      "sources": [
+        "src/bridge/DecodiumBridgeAdvancedDecode.cpp"
+      ]
+    },
+    {
+      "method": "setAutoDetachFullSpectrum",
+      "sources": [
+        "src/bridge/DecodiumBridgeUiPreferences.cpp"
+      ]
+    },
+    {
+      "method": "setFoxMode",
+      "sources": [
+        "src/bridge/DecodiumBridgeSpecialOperation.cpp"
+      ]
+    },
+    {
+      "method": "setHoundMode",
+      "sources": [
+        "src/bridge/DecodiumBridgeSpecialOperation.cpp"
+      ]
+    },
+    {
+      "method": "setNcontest",
+      "sources": [
+        "src/bridge/DecodiumBridgeSpecialOperation.cpp"
+      ]
+    },
+    {
+      "method": "setPttConfirmedState",
+      "sources": [
+        "src/bridge/DecodiumBridgeLegacyPttTransition.cpp"
+      ]
+    },
+    {
+      "method": "setPttPendingState",
+      "sources": [
+        "src/bridge/DecodiumBridgeLegacyPttTransition.cpp"
+      ]
+    },
+    {
+      "method": "setSpectrumFpsCap",
+      "sources": [
+        "src/bridge/DecodiumBridgeUiPreferences.cpp"
+      ]
+    },
+    {
+      "method": "setUiFramelessPopouts",
+      "sources": [
+        "src/bridge/DecodiumBridgeUiPreferences.cpp"
+      ]
+    },
+    {
+      "method": "setUiStyle",
+      "sources": [
+        "src/bridge/DecodiumBridgeUiPreferences.cpp"
+      ]
+    }
+  ]
+}

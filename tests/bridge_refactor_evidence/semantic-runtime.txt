@@ -1,0 +1,1 @@
+{"tx": false, "valid": true}; diagnostic confirms invalid CQ rejection

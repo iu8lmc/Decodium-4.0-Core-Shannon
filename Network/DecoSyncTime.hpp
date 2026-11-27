@@ -77,6 +77,8 @@ public:
     // periodo si chiude con abbastanza sample, viene ingerito un sample
     // nel Kalman con varianza derivata da MAD.
     void reportDecodeDt(double dtSec, int snrDb);
+    void setSelfCalibrationEnabled(bool on);
+    bool selfCalibrationEnabled() const { return m_selfCalibrationEnabled; }
     void setSelfCalPeriodMs(int ms);
     Q_INVOKABLE int    selfCalPendingCount() const;
     Q_INVOKABLE double selfCalLastOffsetMs() const;
@@ -102,6 +104,7 @@ private:
     QTimer           m_kalmanTickTimer;
     qint64           m_kalmanLastTickMs {0};
     bool             m_enabled {true};  // default ON
+    bool             m_selfCalibrationEnabled {false};
     bool             m_lastEmittedSynced {false};
     double           m_lastEmittedOffsetMs {0.0};
 };

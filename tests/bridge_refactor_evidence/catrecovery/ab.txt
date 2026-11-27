@@ -1,0 +1,1 @@
+CAT recovery A/B: TX/tune guards, legacy ownership and backend release/reconnect passed

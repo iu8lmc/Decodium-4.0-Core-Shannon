@@ -1,0 +1,113 @@
+diff --git a/src/config/directoriesconfig.cpp b/src/config/directoriesconfig.cpp
+index 4d9b2c6..1c9d190 100644
+--- a/src/config/directoriesconfig.cpp
++++ b/src/config/directoriesconfig.cpp
+@@ -58,13 +58,13 @@ void directoriesConfig::readSettings()
+ {
+   QSettings qSettings;
+   qSettings.beginGroup("DIRECTORIES");
+-  rxSSTVImagesPath=qSettings.value("rxSSTVImagesPath",QString(getenv("HOME"))+"/qsstv/rx_sstv/").toString();
+-  rxDRMImagesPath=qSettings.value("rxDRMImagesPath",QString(getenv("HOME"))+"/qsstv/rx_drm/").toString();
+-  txSSTVImagesPath=qSettings.value("txSSTVImagesPath",QString(getenv("HOME"))+"/qsstv/tx_sstv/").toString();
+-  txDRMImagesPath=qSettings.value("txDRMImagesPath",QString(getenv("HOME"))+"/qsstv/tx_drm/").toString();
+-  txStockImagesPath=qSettings.value("txStockImagesPath",QString(getenv("HOME"))+"/qsstv/tx_stock/").toString();
+-  templatesPath=qSettings.value("templatesPath",QString(getenv("HOME"))+"/qsstv/templates/").toString();
+-  audioPath=qSettings.value("audioPath",QString(getenv("HOME"))+"/qsstv/audio/").toString();
++  rxSSTVImagesPath=qSettings.value("rxSSTVImagesPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/rx_sstv/").toString();
++  rxDRMImagesPath=qSettings.value("rxDRMImagesPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/rx_drm/").toString();
++  txSSTVImagesPath=qSettings.value("txSSTVImagesPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/tx_sstv/").toString();
++  txDRMImagesPath=qSettings.value("txDRMImagesPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/tx_drm/").toString();
++  txStockImagesPath=qSettings.value("txStockImagesPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/tx_stock/").toString();
++  templatesPath=qSettings.value("templatesPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/templates/").toString();
++  audioPath=qSettings.value("audioPath",qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/qsstv/audio/").toString();
+   docURL=qSettings.value("docURL","https://www.qsl.net/o/on4qz/qsstv/manual").toString();
+   saveTXimages=qSettings.value("saveTXimages",false).toBool();
+   recursiveScanDirs=qSettings.value("recursiveScanDirs",false).toBool();
+diff --git a/src/main.cpp b/src/main.cpp
+index 78c3d54..bd0be06 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -27,6 +27,9 @@
+ #include <QPixmap>
+ #include <QSplashScreen>
+ #include <QTimer>
++#include <QSettings>
++#include <QDir>
++#include <QFileInfo>
+ #include "dispatcher.h"
+ 
+ 
+@@ -35,6 +38,13 @@ QSplashScreen *splash;
+ int main( int argc, char ** argv )
+ {
+ 
++  const QString labRoot = qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT");
++  const QFileInfo rootInfo(labRoot);
++  if (labRoot.isEmpty() || !rootInfo.isAbsolute() || !rootInfo.isDir() || rootInfo.isSymLink()
++      || rootInfo.canonicalFilePath().isEmpty()) return 2;
++  QSettings::setDefaultFormat(QSettings::IniFormat);
++  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, rootInfo.canonicalFilePath());
++  QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, rootInfo.canonicalFilePath());
+   int result;
+   QTimer tm;
+   tm.setSingleShot(true);
+diff --git a/src/utils/dirdialog.cpp b/src/utils/dirdialog.cpp
+index 79b0af9..0053953 100644
+--- a/src/utils/dirdialog.cpp
++++ b/src/utils/dirdialog.cpp
+@@ -30,7 +30,7 @@ QString dirDialog::openFileName(const QString &path, const QString &filter)
+   QString fn;
+   if (path.isEmpty() && lastPath.isEmpty())
+     {
+-      lastPath=QDir::homePath();
++      lastPath=qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT");
+     }
+   else if (!path.isEmpty())
+     {
+@@ -59,7 +59,7 @@ QStringList dirDialog::openFileNames(const QString &path, const QString &filter)
+   QStringList fl;
+   if (path.isEmpty() && lastPath.isEmpty())
+     {
+-      lastPath=QDir::homePath();
++      lastPath=qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT");
+     }
+   else if (!path.isEmpty())
+     {
+@@ -90,7 +90,7 @@ QString dirDialog::openDirName(const QString &path)
+   QString fn;
+   if ((path.isEmpty()) && lastPath.isEmpty())
+     {
+-      lastPath=QDir::homePath();
++      lastPath=qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT");
+     }
+   else if (!path.isEmpty())
+     {
+diff --git a/src/utils/logging.cpp b/src/utils/logging.cpp
+index 5887a56..7743010 100644
+--- a/src/utils/logging.cpp
++++ b/src/utils/logging.cpp
+@@ -61,9 +61,9 @@ logFile::logFile() : maskBA(NUMDEBUGLEVELS,false)
+ bool logFile::open(QString logname)
+ {
+ 
+-  lf->setFileName(QDir::homePath()+"/"+logname);
++  lf->setFileName(qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/"+logname);
+ #ifdef ENABLEAUX
+-  auxFile->setFileName(QDir::homePath()+"/aux_"+logname);
++  auxFile->setFileName(qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/aux_"+logname);
+ #endif
+   return reopen();
+ 
+diff --git a/src/utils/supportfunctions.cpp b/src/utils/supportfunctions.cpp
+index 4d77add..b8b4a0f 100644
+--- a/src/utils/supportfunctions.cpp
++++ b/src/utils/supportfunctions.cpp
+@@ -300,7 +300,7 @@ bool trash(QString filename,bool forceDelete)
+   QDir filesDir;
+   QString infoTxt;
+   trDir.setPath(getenv("XDG_DATA_HOME"));
+-  if (trDir.path().isEmpty())  trDir.setPath(QDir::homePath()+"/.local/share/Trash");
++  if (trDir.path().isEmpty())  trDir.setPath(qEnvironmentVariable("DECODIUM_QSSTV_LAB_ROOT")+"/.local/share/Trash");
+   infoDir.setPath(trDir.path()+"/info");
+   filesDir.setPath(trDir.path()+"/files");
+   infoFile.setFileName(infoDir.path()+"/"+info.fileName()+".trashinfo");

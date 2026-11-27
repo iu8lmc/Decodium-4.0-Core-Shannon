@@ -1,0 +1,13 @@
+diff --git a/src/sstv/sstvparam.h b/src/sstv/sstvparam.h
+index 6198b45..c2b4a64 100644
+--- a/src/sstv/sstvparam.h
++++ b/src/sstv/sstvparam.h
+@@ -88,7 +88,7 @@ enum esstvMode
+ #define ENDNARROW MC180N
+ 
+ #define STARTWIDE M1
+-#define ENDWIDE FAX480
++#define ENDWIDE AVT94
+ 
+ 
+ /*

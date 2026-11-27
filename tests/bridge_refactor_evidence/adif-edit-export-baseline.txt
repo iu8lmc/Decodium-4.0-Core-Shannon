@@ -1,0 +1,1 @@
+b: selected export guards, edit and deletion passed on synthetic QSO; CAT disabled

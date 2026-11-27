@@ -1,4 +1,5 @@
 #include "MessageClient.hpp"
+#include "AdifUdpPayload.hpp"
 
 #include <stdexcept>
 #include <vector>
@@ -18,6 +19,7 @@
 #include <QCryptographicHash>
 
 #include "NetworkMessage.hpp"
+#include "UdpClientId.hpp"
 #include "qt_helpers.hpp"
 #include "pimpl_impl.hpp"
 #include "revision_utils.hpp"
@@ -233,7 +235,7 @@ public:
         MessageClient * self, QString const& reporting_role)
     : self_ {self}
     , enabled_ {false}
-    , id_ {id}
+    , id_ {decodium::network::normalizedUdpClientId (id)}
     , version_ {version}
     , revision_ {revision}
     , reporting_role_ {reporting_role.trimmed ()}
@@ -441,9 +443,11 @@ void MessageClient::impl::start ()
       // A fixed port allows external programs (JTAlert, DecoAlert) to
       // reliably send commands to Decodium without heartbeat discovery.
       bool bound {false};
+      bool fixed_port {false};
       if (listen_port_ > 0)
         {
           bound = bind (interface_addr, listen_port_, ShareAddress | ReuseAddressHint);
+          fixed_port = bound;
           if (!bound)
             {
               Q_EMIT self_->error (
@@ -456,8 +460,30 @@ void MessageClient::impl::start ()
         {
           bound = bind (interface_addr);
         }
+      // 1.0.588 - la riga di log dice porta, interfaccia e modo del bind. Serve
+      // a rendere verificabili i report sulla 2237: senza sapere se il socket e'
+      // su porta fissa condivisa o su porta effimera non si distingue un
+      // conflitto di porta da un problema di rete.
       qInfo ().noquote () << log_prefix () + QStringLiteral (": bound")
-                          << "local=" << localAddress ().toString () + QStringLiteral (":") + QString::number (localPort ());
+                          << "local=" << localAddress ().toString () + QStringLiteral (":") + QString::number (localPort ())
+                          << "requested=" << (listen_port_ > 0 ? QString::number (listen_port_) : QStringLiteral ("ephemeral"))
+                          << "mode=" << (fixed_port ? QStringLiteral ("fixed-shared") : QStringLiteral ("ephemeral"))
+                          << "interface=" << (interface_addr == QHostAddress {QHostAddress::AnyIPv4}
+                                              ? QStringLiteral ("any-ipv4") : interface_addr.toString ());
+
+      // Su Windows ShareAddress vale SO_REUSEADDR: un secondo programma riesce
+      // a legarsi alla stessa porta, ma i datagrammi unicast vanno a uno solo
+      // dei due, senza che nessuno riceva un errore. Se la porta d'ascolto e'
+      // la stessa a cui gli altri programmi (GridTracker, JTAlert, Log4OM) si
+      // aspettano di ricevere i decode, il sintomo e' che "la 2237 non arriva
+      // piu'" - e va detto qui, perche' a valle non lo dira' nessuno.
+      if (fixed_port && listen_port_ == server_port_)
+        {
+          qWarning ().noquote ()
+            << log_prefix () + QStringLiteral (": listen port equals the server port")
+            << "port=" << QString::number (listen_port_)
+            << "note=" << QStringLiteral ("other UDP consumers on this port may stop receiving; set the listen port to 0 for an automatic one");
+        }
 
       // set multicast TTL to limit scope when sending to multicast
       // group addresses
@@ -914,6 +940,14 @@ bool MessageClient::impl::message_target_matches (QString const& incoming_id) co
     {
       return true;
     }
+  // 1.0.538 iu8lmc - stessi alias gia' accettati dai messaggi di controllo:
+  // ora che ci firmiamo "Decodium", un programma che ci indirizza come
+  // "WSJTX" deve continuare a essere ascoltato.
+  if (0 == trimmed.compare ("WSJTX", Qt::CaseInsensitive)
+      || 0 == trimmed.compare ("WSJT-X", Qt::CaseInsensitive))
+    {
+      return true;
+    }
   return trimmed.compare ("ALLCALL", Qt::CaseInsensitive) == 0
       || trimmed.compare ("BROADCAST", Qt::CaseInsensitive) == 0
       || trimmed == "*";
@@ -1101,6 +1135,8 @@ MessageClient::MessageClient (QString const& id, QString const& version, QString
   m_->set_server (server_name, network_interface_names);
 }
 
+MessageClient::~MessageClient () = default;
+
 QHostAddress MessageClient::server_address () const
 {
   return m_->server_;
@@ -1125,6 +1161,19 @@ void MessageClient::set_TTL (int TTL)
 {
   m_->TTL_ = TTL;
   m_->setSocketOption (QAbstractSocket::MulticastTtlOption, m_->TTL_);
+}
+
+void MessageClient::set_client_id (QString const& id)
+{
+  QString const normalized = decodium::network::normalizedUdpClientId (id);
+  if (normalized == m_->id_)
+    {
+      return;
+    }
+
+  m_->id_ = normalized;
+  m_->last_message_.clear ();
+  m_->heartbeat ();
 }
 
 void MessageClient::set_listen_port (port_type listen_port)
@@ -1284,7 +1333,7 @@ void MessageClient::logged_ADIF (QByteArray const& ADIF_record)
           .arg (program_id.size ())
           .arg (program_id)
           .toLatin1 ()
-        + ADIF_record + " <EOR>"};
+        + decodium::adif::udpPayload(ADIF_record) + " <EOR>"};
       out << ADIF;
       TRACE_UDP ("ADIF:" << ADIF);
       m_->send_message (out, message);

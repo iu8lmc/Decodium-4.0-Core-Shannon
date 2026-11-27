@@ -1,0 +1,3 @@
+#include <QtCore>
+#include "bridge_refactor_under_test.inc"
+int main(int argc,char**argv){QCoreApplication app(argc,argv);QTemporaryDir d;QString p=d.filePath("ALL.TXT");QFile f(p);if(!f.open(QIODevice::WriteOnly))return 1;f.write("first\r\nsecond\nthird\nfourth\n");f.close();QTextStream o(stdout);auto show=[&](const QString& n,const QStringList& lines){o<<n<<'|'<<lines.join(",")<<'\n';};show("all",readTextLinesFromOffset(p,0,10));show("last2",readTextLinesFromOffset(p,0,2));show("offset",readTextLinesFromOffset(p,7,10));show("end",readTextLinesFromOffset(p,999,10));show("tail",readTextTailLines(p,14,10));show("tail1",readTextTailLines(p,100,1));show("missing",readTextTailLines(d.filePath("missing"),100,2));show("invalid",readTextLinesFromOffset(p,-1,2));}

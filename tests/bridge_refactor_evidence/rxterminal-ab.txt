@@ -1,0 +1,5 @@
+missing|0
+missing-error|1
+no-terminal|1|1
+launch|1|1|1|1
+fallback|1|1
