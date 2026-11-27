@@ -1,0 +1,2 @@
+{"cq": "CQ 9H1SR JM75", "custom": "CQ WWA 9H1SR JM75", "empty": true, "tx": false, "tx1": "K1ABC 9H1SR JM75", "tx2": "K1ABC 9H1SR -10", "wspr": "9H1SR JN70 37"}
+{"cq": "CQ 9H1SR JM75", "custom": "CQ WWA 9H1SR JM75", "empty": true, "tx": false, "tx1": "K1ABC 9H1SR JM75", "tx2": "K1ABC 9H1SR -10", "wspr": "9H1SR JN70 37"}

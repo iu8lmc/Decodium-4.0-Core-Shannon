@@ -1,0 +1,4 @@
+before a: SSTV mode choices, controls and Radiofax profiles passed; CAT disabled
+before b: SSTV mode choices, controls and Radiofax profiles passed; CAT disabled
+after a: SSTV mode choices, controls and Radiofax profiles passed; CAT disabled
+after b: SSTV mode choices, controls and Radiofax profiles passed; CAT disabled

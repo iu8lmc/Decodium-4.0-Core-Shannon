@@ -1,0 +1,2 @@
+before {"cat": false, "digl": true, "readback": "persisted", "shutdown": true, "split": true, "tx": false, "usb": true, "wasShutdown": false, "wrong": true}
+after {"cat": false, "digl": true, "readback": "persisted", "shutdown": true, "split": true, "tx": false, "usb": true, "wasShutdown": false, "wrong": true}

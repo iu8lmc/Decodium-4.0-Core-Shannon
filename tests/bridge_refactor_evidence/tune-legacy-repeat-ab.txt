@@ -1,0 +1,2 @@
+before {"accepted": true, "audioPeak": 0.89996337890625, "cat": false, "enabled": false, "seen": true, "stopSeen": true, "stopped": true, "tailPeak": 0.0, "tx": false}
+after {"accepted": true, "audioPeak": 0.89996337890625, "cat": false, "enabled": false, "seen": true, "stopSeen": true, "stopped": true, "tailPeak": 0.0, "tx": false}

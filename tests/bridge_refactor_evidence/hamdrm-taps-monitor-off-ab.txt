@@ -1,0 +1,4 @@
+before PASS two Decodium apps: a exact bytes 225 artifacts /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-two-app-a-ivt8x1f5
+ 
+after PASS two Decodium apps: a exact bytes 225 artifacts /var/folders/8v/ygsh3p0x3gz2jmd2pm9wzz500000gn/T/decodium-hamdrm-two-app-a-yh3fbtw4
+ 

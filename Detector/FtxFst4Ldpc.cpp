@@ -7,9 +7,11 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <mutex>
 #include <numeric>
 #include <vector>
 
@@ -43,10 +45,6 @@ namespace
   using GeneratorMatrix240_74 = std::array<GeneratorRow74, kCodewordBits - kFst4WMessageBits>;
   using BasisRows101 = std::array<Codeword240, kFst4MessageBits>;
   using BasisRows74 = std::array<Codeword240, kFst4WMessageBits>;
-
-  constexpr std::array<int, 25> kFst4Crc24Poly {{
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1
-  }};
 
   template <typename Matrix, size_t Rows>
   Matrix build_hex_generator_matrix (std::array<char const*, Rows> const& hex_rows, int tail_bits)
@@ -97,35 +95,17 @@ namespace
         return 0;
       }
 
-    std::array<int, 25> r {};
-    for (int i = 0; i < 25; ++i)
-      {
-        r[static_cast<size_t> (i)] = bits[i] != 0 ? 1 : 0;
-      }
-
+    // Polynomial 0x100065b includes the leading x^24 coefficient.
+    std::uint32_t remainder = 0;
+    for (int i = 0; i < 24; ++i)
+      remainder = (remainder << 1) | (bits[i] != 0 ? 1u : 0u);
     for (int i = 0; i <= len - 25; ++i)
       {
-        r[24] = bits[i + 24] != 0 ? 1 : 0;
-        int const lead = r[0];
-        for (int j = 0; j < 25; ++j)
-          {
-            r[static_cast<size_t> (j)] =
-                (r[static_cast<size_t> (j)] + lead * kFst4Crc24Poly[static_cast<size_t> (j)]) & 1;
-          }
-        int const wrapped = r[0];
-        for (int j = 0; j < 24; ++j)
-          {
-            r[static_cast<size_t> (j)] = r[static_cast<size_t> (j + 1)];
-          }
-        r[24] = wrapped;
+        bool const lead = (remainder & 0x800000u) != 0;
+        remainder = (remainder << 1) | (bits[i + 24] != 0 ? 1u : 0u);
+        if (lead) remainder ^= 0x100065bu;
       }
-
-    int crc = 0;
-    for (int i = 0; i < 24; ++i)
-      {
-        crc = (crc << 1) | r[static_cast<size_t> (i)];
-      }
-    return crc;
+    return static_cast<int> (remainder);
   }
 
   Codeword240 encode240_101_full (MessageBits101 const& bits)
@@ -175,10 +155,9 @@ namespace
   BasisRows101 const& basis_rows_240_101 (int keff)
   {
     static std::array<BasisRows101, kFst4MessageBits + 1> cache {};
-    static std::array<bool, kFst4MessageBits + 1> initialized {};
+    static std::array<std::once_flag, kFst4MessageBits + 1> initialized {};
     int const k = std::max (kFst4PayloadBits, std::min (keff, kFst4MessageBits));
-    if (!initialized[static_cast<size_t> (k)])
-      {
+    std::call_once (initialized[static_cast<size_t> (k)], [k] { 
         BasisRows101 rows {};
         for (int i = 0; i < k; ++i)
           {
@@ -200,18 +179,16 @@ namespace
             rows[static_cast<size_t> (i)] = encode240_101_full (message);
           }
         cache[static_cast<size_t> (k)] = rows;
-        initialized[static_cast<size_t> (k)] = true;
-      }
+      });
     return cache[static_cast<size_t> (k)];
   }
 
   BasisRows74 const& basis_rows_240_74 (int keff)
   {
     static std::array<BasisRows74, kFst4WMessageBits + 1> cache {};
-    static std::array<bool, kFst4WMessageBits + 1> initialized {};
+    static std::array<std::once_flag, kFst4WMessageBits + 1> initialized {};
     int const k = std::max (kFst4WPayloadBits, std::min (keff, kFst4WMessageBits));
-    if (!initialized[static_cast<size_t> (k)])
-      {
+    std::call_once (initialized[static_cast<size_t> (k)], [k] { 
         BasisRows74 rows {};
         for (int i = 0; i < k; ++i)
           {
@@ -233,15 +210,12 @@ namespace
             rows[static_cast<size_t> (i)] = encode240_74_full (message);
           }
         cache[static_cast<size_t> (k)] = rows;
-        initialized[static_cast<size_t> (k)] = true;
-      }
+      });
     return cache[static_cast<size_t> (k)];
   }
 
-  template <size_t MaxK>
-  Codeword240 encode_from_basis_rows (std::array<Codeword240, MaxK> const& rows,
-                                      std::array<signed char, MaxK> const& message,
-                                      int k)
+  Codeword240 encode_from_basis_rows (Codeword240 const* rows,
+                                      signed char const* message, int k)
   {
     Codeword240 codeword {};
     for (int bit = 0; bit < k; ++bit)
@@ -476,8 +450,7 @@ namespace
     float best_distance = std::numeric_limits<float>::max ();
     int best_order = -1;
 
-    auto try_message = [&] (std::array<signed char, MaxK> const& message, int order) {
-      Codeword240 const reordered = encode_from_basis_rows (basis.rows, message, k);
+    auto try_codeword = [&] (Codeword240 const& reordered, int order) {
       float const distance = weighted_distance (reordered, basis.hard, basis.absllr);
       if (distance >= best_distance)
         {
@@ -500,19 +473,19 @@ namespace
       message_out = decoded;
     };
 
-    try_message (m0, 0);
+    Codeword240 const baseCodeword = encode_from_basis_rows (basis.rows.data (), m0.data (), k);
+    try_codeword (baseCodeword, 0);
     int const order_limit = (maxosd < 0) ? 0 : std::max (0, std::min (norder, 4));
     int const span = std::max (0, std::min (search_span, k));
 
     if (!best_valid && order_limit > 0 && span > 0)
       {
-        std::array<int, 4> positions {};
-        std::function<void (int, int, int, std::array<signed char, MaxK>&)> search;
+        std::function<void (int, int, int, Codeword240&)> search;
         search = [&] (int start, int depth, int target_order,
-                      std::array<signed char, MaxK>& working) {
+                      Codeword240& working) {
           if (depth == target_order)
             {
-              try_message (working, target_order);
+              try_codeword (working, target_order);
               return;
             }
           for (int pos = start; pos < span; ++pos)
@@ -521,16 +494,18 @@ namespace
                 {
                   continue;
                 }
-              working[static_cast<size_t> (pos)] ^= 1;
-              positions[static_cast<size_t> (depth)] = pos;
+              Codeword240 const& row = basis.rows[static_cast<size_t> (pos)];
+              for (int col = 0; col < kCodewordBits; ++col)
+                working[static_cast<size_t> (col)] ^= row[static_cast<size_t> (col)];
               search (pos + 1, depth + 1, target_order, working);
-              working[static_cast<size_t> (pos)] ^= 1;
+              for (int col = 0; col < kCodewordBits; ++col)
+                working[static_cast<size_t> (col)] ^= row[static_cast<size_t> (col)];
             }
         };
 
         for (int order = 1; order <= order_limit && !best_valid; ++order)
           {
-            std::array<signed char, MaxK> working = m0;
+            Codeword240 working = baseCodeword;
             search (0, 0, order, working);
           }
       }

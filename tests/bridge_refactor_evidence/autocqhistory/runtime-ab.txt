@@ -1,0 +1,2 @@
+before {"abandoned": true, "cat": false, "cleared": true, "cooldown": true, "queue": 0, "tx": false, "worked": true}
+after {"abandoned": true, "cat": false, "cleared": true, "cooldown": true, "queue": 0, "tx": false, "worked": true}

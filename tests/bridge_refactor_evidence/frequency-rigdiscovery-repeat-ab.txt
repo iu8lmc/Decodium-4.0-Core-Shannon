@@ -1,0 +1,4 @@
+frequency before {"first": 14074000, "monitor": false, "second": 14200000, "tx": false}
+frequency after {"first": 14074000, "monitor": false, "second": 14200000, "tx": false}
+rigdiscovery before {"valid": true}
+rigdiscovery after {"valid": true}

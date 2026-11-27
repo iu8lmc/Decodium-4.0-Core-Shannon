@@ -1,0 +1,4 @@
+a write: isolated UI properties and quality passed with CAT disabled
+a restart: isolated UI properties and quality passed with CAT disabled
+b write: isolated UI properties and quality passed with CAT disabled
+b restart: isolated UI properties and quality passed with CAT disabled

@@ -1,0 +1,4 @@
+Focused A/B: overlay timer, frame ring, rate counters, reset and backend fallback: OK.
+Original app and refactored app, isolated macOS sessions: committed, disabled, enabled, rate, reset and samples all true; tx false.
+First fixed-delay baseline attempt missed the displayed rate; the repeated probe observed timer ticks and passed in both versions.
+Synthetic frame timestamps and decode row; CAT and monitoring disabled; no RF or GPU timing accuracy claim.

@@ -1,0 +1,2 @@
+before {"authenticated": true, "cat": false, "events": 1, "line": "123456 0 0.0 1500 CQ K1ABC FN42", "readback": "persisted", "resets": 1, "running": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"authenticated": true, "cat": false, "events": 1, "line": "123456 0 0.0 1500 CQ K1ABC FN42", "readback": "persisted", "resets": 1, "running": true, "shutdown": true, "tx": false, "wasShutdown": false}

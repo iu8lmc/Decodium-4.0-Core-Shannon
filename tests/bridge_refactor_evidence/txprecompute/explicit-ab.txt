@@ -1,0 +1,2 @@
+before {"first": {"cat": false, "message": "CQ 9H1SR JM75", "samples": 120960, "transmitting": false}, "second": {"cat": false, "message": "CQ 9H1SR JM75", "samples": 120960, "transmitting": false}}
+after {"first": {"cat": false, "message": "CQ 9H1SR JM75", "samples": 120960, "transmitting": false}, "second": {"cat": false, "message": "CQ 9H1SR JM75", "samples": 120960, "transmitting": false}}

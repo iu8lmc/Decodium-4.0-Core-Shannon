@@ -1,0 +1,2 @@
+before {"baseEmpty": true, "cat": false, "released": false, "started": false, "tx": false}
+after {"baseEmpty": true, "cat": false, "released": false, "started": false, "tx": false}

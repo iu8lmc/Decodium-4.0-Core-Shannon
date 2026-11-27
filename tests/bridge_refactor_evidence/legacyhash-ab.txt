@@ -1,0 +1,5 @@
+parse|1|0|120000|1500|K1ABC K2XYZ RR73
+match|K1ABC K2XYZ RR73|fixture
+ambiguous|<...> K2XYZ RR73|1
+outside|<...> K2XYZ RR73
+paths|1|1

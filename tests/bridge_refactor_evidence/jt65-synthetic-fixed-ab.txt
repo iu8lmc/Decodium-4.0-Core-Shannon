@@ -1,0 +1,4 @@
+before raw ['[JT65-RAW-AB] 1001 0218 -22 -0.0 1477 #  XM5979JQU-6E3             |0218  -1 -0.0 1500 #  CQ K1ABC FN42             '] callbacks []
+before {"displayedExpected": true, "expectedMessage": true}
+after raw ['[JT65-RAW-AB] 1001 0219 -22 -0.0 1477 #  XM5979JQU-6E3             |0219  -1 -0.0 1500 #  CQ K1ABC FN42             '] callbacks []
+after {"displayedExpected": true, "expectedMessage": true}

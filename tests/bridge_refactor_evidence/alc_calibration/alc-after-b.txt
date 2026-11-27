@@ -1,0 +1,1 @@
+{"calibrating": false, "status": "ALC not available (Hamlib CAT must be connected)", "target": 60, "tx": false}

@@ -1,0 +1,1 @@
+b: count, search filters, statistics, warmup, edit and deletion passed on synthetic QSO; CAT disabled

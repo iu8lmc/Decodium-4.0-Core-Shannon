@@ -1,0 +1,1 @@
+a: {"started":{"active":true,"waiting":true,"txEnabled":false,"dx":"K1ABC"},"stopped":true,"txEnabled":false}

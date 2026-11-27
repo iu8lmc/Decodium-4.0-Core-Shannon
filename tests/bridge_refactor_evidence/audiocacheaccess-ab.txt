@@ -1,0 +1,8 @@
+sync|1|sync|1|cached-in
+scheduled|0|cached-out
+fired|1|single-shot device refresh|0
+default|preferred-in|system-out|0
+verbose|2|0
+timer|1|0|1
+shutdown|0|0
+enumerate|1|enumerateAudioDevices|1|1

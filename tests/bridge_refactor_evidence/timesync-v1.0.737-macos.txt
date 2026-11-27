@@ -1,0 +1,1 @@
+time-sync enable, disable and offset passed with local NTP destination; CAT disabled

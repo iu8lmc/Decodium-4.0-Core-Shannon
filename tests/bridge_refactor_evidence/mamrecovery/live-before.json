@@ -1,0 +1,1 @@
+{"after": ["K2AAA 2000 -10"], "before": ["K2AAA 2000 -10", "W1AW 1500 -12"], "cat": false, "enabled": true, "slots": [{"ageSec": 0, "baseCall": "W1AW", "call": "W1AW", "freq": 1500, "grid": "", "logged": false, "msg": "", "progress": 3, "retry": 0, "rptRcvd": "-08", "rptSent": "-12", "snr": -12, "state": 0, "tx": 3}], "tx": false}

@@ -55,8 +55,16 @@ void EmulateSplitTransceiver::handle_update (TransceiverState const& state,
   else
     {
       TransceiverState new_state {state};
-      // Follow the rig if in RX mode.
-      if (state.ptt ()) new_state.frequency (rx_frequency_);
+      // Keep the requested RX frequency only while the rig is reporting the
+      // requested TX VFO as part of a Fake It echo.  Do not blanket-ignore
+      // every update while PTT is high: a different frequency is a genuine
+      // operator QSY and must remain visible even during transmit.
+      if (split_ && tx_frequency_
+          && state.frequency () == tx_frequency_
+          && state.frequency () != rx_frequency_)
+        {
+          new_state.frequency (rx_frequency_);
+        }
 
       // These are always what was requested in prior set state operation
       new_state.tx_frequency (tx_frequency_);

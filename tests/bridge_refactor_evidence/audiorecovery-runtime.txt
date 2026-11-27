@@ -1,0 +1,4 @@
+Focused A/B: mode capture preserve, legacy handoff, stale reopen and monitor recovery: OK (audio and legacy backends substituted).
+test_audio_mode_change_capture_policy: passed after updating source-location assertion.
+Original and refactored macOS two-app BlackHole tests: FT8 -> FT4 -> FT8, monitor=true, receiver gain reduced, receiver tx=false. Standalone and legacy receiver runs passed; legacy=true checked in legacy runs.
+CAT disabled. Virtual audio only; no physical RF or other OS runtime verification.

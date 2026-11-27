@@ -1,0 +1,1 @@
+{"input": "BlackHole 16ch", "inputId": "426c61636b486f6c65313663685f554944", "monitor": false, "output": "BlackHole 2ch", "outputId": "426c61636b486f6c653263685f554944", "tx": false}

@@ -1,0 +1,6 @@
+idle|0
+active|1|K1ABC|JN70|FN42
+closed|1|1|1
+reopen|2|FN31
+inferred|K2ABC|3
+self|1

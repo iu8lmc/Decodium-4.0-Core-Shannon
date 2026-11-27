@@ -1,0 +1,2 @@
+before {"cat": false, "cooldown": true, "hasCaller": true, "queued": 1, "remaining": 0, "tx": false, "worked": true}
+after {"cat": false, "cooldown": true, "hasCaller": true, "queued": 1, "remaining": 0, "tx": false, "worked": true}

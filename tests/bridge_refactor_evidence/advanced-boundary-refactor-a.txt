@@ -1,0 +1,1 @@
+a: manual, bootstrap, unchanged setting, average boundary, rolling history, reset and SNR threshold passed; CAT disabled

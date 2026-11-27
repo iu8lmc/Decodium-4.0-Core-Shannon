@@ -1,0 +1,4 @@
+before raw ['[FT4-RAW-AB] 1001 224007  83  0.1 1000 +  CQ K1ABC FN42                           '] callbacks ['[FT4-CALLBACK-AB] 1001 1 FT4 FT4 1 1 false']
+before {"displayed": true, "workerDecoded": true}
+after raw ['[FT4-RAW-AB] 1001 224030  83  0.1 1000 +  CQ K1ABC FN42                           '] callbacks ['[FT4-CALLBACK-AB] 1001 1 FT4 FT4 1 1 false']
+after {"displayed": true, "workerDecoded": true}

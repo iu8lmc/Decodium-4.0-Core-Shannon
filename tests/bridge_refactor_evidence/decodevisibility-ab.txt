@@ -1,0 +1,9 @@
+worked|0
+cq|1
+tx|1
+bypass|1|0
+ghost|0
+telemetry|0
+display|1
+empty|0
+yesterday|0

@@ -1,0 +1,26 @@
+[ANCHOR] line=0 anchor=10920 sample=11706 mapped=786 freq=1875.870 predicted=0
+[ANCHOR] line=0 anchor=10920 sample=11707 mapped=787 freq=1876.572 predicted=0
+[ANCHOR] line=0 anchor=10920 sample=11708 mapped=788 freq=1876.436 predicted=0
+[ANCHOR] line=0 anchor=10920 sample=11709 mapped=789 freq=1875.794 predicted=0
+[ANCHOR] line=1 anchor=12127 sample=12913 mapped=1986 freq=1876.395 predicted=0
+[ANCHOR] line=1 anchor=12127 sample=12914 mapped=1987 freq=1876.633 predicted=0
+[ANCHOR] line=1 anchor=12127 sample=12915 mapped=1988 freq=1876.224 predicted=0
+[ANCHOR] line=1 anchor=12127 sample=12916 mapped=1989 freq=1875.538 predicted=0
+[ANCHOR] line=2 anchor=13328 sample=14114 mapped=3186 freq=1875.792 predicted=0
+[ANCHOR] line=2 anchor=13328 sample=14115 mapped=3187 freq=1876.670 predicted=0
+[ANCHOR] line=2 anchor=13328 sample=14116 mapped=3188 freq=1875.895 predicted=0
+[ANCHOR] line=2 anchor=13328 sample=14117 mapped=3189 freq=1875.126 predicted=0
+[ANCHOR] line=3 anchor=14528 sample=15314 mapped=4386 freq=1875.996 predicted=0
+[ANCHOR] line=3 anchor=14528 sample=15315 mapped=4387 freq=1876.407 predicted=0
+[ANCHOR] line=3 anchor=14528 sample=15316 mapped=4388 freq=1876.754 predicted=0
+[ANCHOR] line=3 anchor=14528 sample=15317 mapped=4389 freq=1876.369 predicted=0
+[ANCHOR] line=4 anchor=15727 sample=16513 mapped=5586 freq=1876.673 predicted=0
+[ANCHOR] line=4 anchor=15727 sample=16514 mapped=5587 freq=1876.413 predicted=0
+[ANCHOR] line=4 anchor=15727 sample=16515 mapped=5588 freq=1876.107 predicted=0
+[ANCHOR] line=4 anchor=15727 sample=16516 mapped=5589 freq=1876.714 predicted=0
+[ANCHOR] line=5 anchor=16927 sample=17713 mapped=6786 freq=1876.649 predicted=0
+[ANCHOR] line=5 anchor=16927 sample=17714 mapped=6787 freq=1876.353 predicted=0
+[ANCHOR] line=5 anchor=16927 sample=17715 mapped=6788 freq=1875.596 predicted=0
+[ANCHOR] line=5 anchor=16927 sample=17716 mapped=6789 freq=1875.945 predicted=0
+QINFO  : TestSstvRxRuntime::robotColour12FullPcmCompletesAndMeasuresEdges() Robot12 PCM mean edge/interior RGB error: 155.25 0.333333
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 445ms

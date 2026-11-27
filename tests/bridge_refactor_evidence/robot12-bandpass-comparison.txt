@@ -1,0 +1,20 @@
+Robot 12 synthetic PCM edge diagnostic, 2026-11-09
+
+Command: build/tests/sstv/test_sstv_rx_runtime robotColour12FullPcmCompletesAndMeasuresEdges
+Comparison: repeat with DECODIUM_LAB_AVT_BANDPASS=off (Qt test mode).
+The off run logged "[LAB][AVT] band-pass disabled for diagnostic".
+Both runs: 3 passed, 0 failed; full decoded image reported complete.
+Mean absolute RGB error (source: solid RGB 210,70,145):
+                         filter on     filter off
+  interior x=80            0.333         0.333
+  column x=156            37.178         3.772
+  column x=157            37.178         3.772
+  column x=158           174.933        93.164
+  column x=159           155.250        95.606
+
+This is a controlled filter contrast in the same runtime, not a comparison
+of original and refactored Bridge versions. The remaining error without the
+filter rules out the filter as the sole necessary condition in this fixture.
+It does not establish the cause of intermittent incomplete audio loopbacks.
+The test currently asserts completion and reports errors; it does not enforce
+an edge-quality threshold.

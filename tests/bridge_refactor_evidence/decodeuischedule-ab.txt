@@ -1,0 +1,7 @@
+zero|0|1
+queued|7|2|1|1
+coalesced|1
+inflight|1|7
+cleared|0|0
+low|1
+stall|1

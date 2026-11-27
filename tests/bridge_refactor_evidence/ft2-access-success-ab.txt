@@ -1,0 +1,2 @@
+before {"bad": false, "cat": false, "good": true, "locked": true, "relocked": true, "tx": false, "unlocked": true}
+after {"bad": false, "cat": false, "good": true, "locked": true, "relocked": true, "tx": false, "unlocked": true}

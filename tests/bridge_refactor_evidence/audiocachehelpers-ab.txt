@@ -1,0 +1,3 @@
+names|Mic|Speaker
+signature|di=01;do=03;i=Mic|01;i=mic|02;i=|<empty>;o=Speaker|03
+empty|0|di=<empty>;do=<empty>

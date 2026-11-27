@@ -1,0 +1,2 @@
+before {"accepted": true, "audioPrepared": true, "cat": false, "enabled": false, "seen": true, "stopped": false, "tx": true}
+after {"accepted": true, "audioPrepared": true, "cat": false, "enabled": false, "seen": true, "stopped": true, "tx": false}

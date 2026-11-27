@@ -1,0 +1,1 @@
+{"connected": false, "enabled": false, "mode": "FT2", "output": "BlackHole 2ch", "tx": false}

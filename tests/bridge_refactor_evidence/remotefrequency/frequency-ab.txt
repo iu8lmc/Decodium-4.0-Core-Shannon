@@ -1,0 +1,1 @@
+Remote frequency A/B: invalid input, monitoring reset, band normalization and mode passed

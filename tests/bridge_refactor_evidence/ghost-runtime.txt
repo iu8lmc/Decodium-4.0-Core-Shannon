@@ -1,0 +1,1 @@
+{"disabled": true, "malformed": true, "telemetry": true, "text": true, "tx": false, "weak1": true, "weak2": true}

@@ -1,0 +1,1 @@
+{"baseline": [false, false, false, false, true, false, true], "cases": ["idle", "monitoring", "decoding", "transmitting", "safe_slot", "tuning", "ft4"], "current": [true, false, false, false, true, false, true]}

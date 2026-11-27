@@ -1,0 +1,34 @@
+UpdateCTestConfiguration  from :/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/DartConfiguration.tcl
+Parse Config file:/Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/DartConfiguration.tcl
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 46
+    Start 46: test_bridge_txwave_real_ab
+
+46: Test command: /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/tests/test_bridge_txwave_real_ab
+46: Working Directory: /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build/tests
+46: Test timeout computed to be: 1500
+46: FT2 120960 3b88507d723bbcc26753e64569b75c0bc98b65a7187d19df4473d0b099383582
+46: FT4 241920 e729625a9da4d44e3e9268a320308111455fa934cdbc20da27b18b7df7d9dca8
+46: FT8 606720 f9e7d0482900dddc808411008eae11f33b6d47548eeadd87265021b01e324768
+46: JT65 2246949 6b501aa5f9e9723f7c7b532eec596320948bf20d26cb60162e0a97dd669ea24e
+46: JT4 2260114 6b55cc827b97b5ca8d9a7dc56c4fa8a2726b28513e521e662583a22c49eb702b
+46: JT9 2350080 ed552ca34341d4b4eabf15e7c17f516c07bfd8c14d4d400f83c045a09e0d01a6
+46: MSK144 696000 7401f50150a26d813bd5eac944c3da7aa0d7d5a37b02141950c6db63d618b7d7
+46: WSPR 5308416 00d00ed5554ab09849d0bace7f8852e3107becbdc2805ea0383a68525d75f567
+46: FST4-15 466560 ce1adc2b7453f0e2ad2fb38ce02d8df7dd48a3512b4b68437efd95923c83c6aa
+46: FST4W-120 5313600 b5f860be790b2fdbc1a64b09239c8c379bf7883bfacf72806d2e13466c81cc8e
+46: Q65-15A 612000 fcd064247f55889672c52e1d6020c25872a240f95d3383297300f388d4a1c11a
+1/1 Test #46: test_bridge_txwave_real_ab .......   Passed    0.77 sec
+
+The following tests passed:
+	test_bridge_txwave_real_ab
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.79 sec

@@ -1,0 +1,1 @@
+{"pcm": "samples=2 rms=0.94901 peak=0.95682 nonzero=2 mode=FT8 monitor=0", "tx": false}

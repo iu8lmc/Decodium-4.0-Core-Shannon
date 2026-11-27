@@ -1,0 +1,1 @@
+{"active": true, "exit_code": 0, "exited_before_lab_timeout": true}

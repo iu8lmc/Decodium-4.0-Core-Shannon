@@ -1,0 +1,6 @@
+macOS isolated application sessions; modern backend; CAT and monitoring disabled; FT8 WAV fixture:
+baseline v1.0.737: {"decoded": true, "station": true, "tx": false}
+refactored: {"decoded": true, "station": true, "tx": false}
+Focused CTest: test_decode_list_model and test_decode_list_reset_qml passed (2/2).
+A/B decode-flow harness: decode caps and retained RX/TX rows; chunk drain, persistence and smooth-flow flush: OK.
+The app WAV probe does not establish execution of the multi-row smooth-release branch; collaborators in the focused harness are substitutes.

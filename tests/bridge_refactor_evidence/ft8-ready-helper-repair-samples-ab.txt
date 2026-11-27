@@ -1,0 +1,4 @@
+dedup before {"cat": false, "frequencies": ["1500", "1510"], "tx": false}
+dedup after {"cat": false, "frequencies": ["1500", "1510"], "tx": false}
+ft4 before {"displayed": true, "workerDecoded": true}
+ft4 after {"displayed": true, "workerDecoded": true}

@@ -1,0 +1,1 @@
+{"accepted": true, "audioPrepared": true, "cat": false, "enabled": false, "haltAt": 1794294744148, "rmsAfter": 0.0, "rmsBefore": 0.6363898515701294, "seen": true, "stopped": true, "tx": false}

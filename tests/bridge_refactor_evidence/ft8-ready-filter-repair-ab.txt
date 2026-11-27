@@ -1,0 +1,6 @@
+guards before {"cat": false, "mode": true, "session": true, "sstv": true, "tx": false}
+guards after {"cat": false, "mode": true, "session": true, "sstv": true, "tx": false}
+cq_filter before {"cat": false, "cq": true, "directed": false, "persistedKey": true, "tx": false, "worker": true}
+cq_filter after {"cat": false, "cq": true, "directed": false, "persistedKey": true, "tx": false, "worker": true}
+mycall_filter before {"cat": false, "cq": false, "directed": true, "persistedKey": true, "tx": false, "worker": true}
+mycall_filter after {"cat": false, "cq": false, "directed": true, "persistedKey": true, "tx": false, "worker": true}

@@ -1,0 +1,4 @@
+empty|0
+rtty|USB|1|0
+cat|1|2|1|DIGI
+offline|2|LSB

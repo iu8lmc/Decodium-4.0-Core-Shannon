@@ -1,0 +1,6 @@
+macOS local build: cmake --build build --target wsjtx decodium_qml -j 2: passed
+410 DecodiumBridge source files: 0 missing Ninja build edges and 0 missing object files in each target
+before {"cat": false, "modes": ["FT8", "FT2", "FT2-Link", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR", "RTTY", "JTTY", "CW", "SSB"], "ticks": {"FST4-60": 240, "FT2": 15, "FT4": 30, "FT8": 60, "Q65-30A": 120, "WSPR": 480}, "tx": false}
+after {"cat": false, "modes": ["FT8", "FT2", "FT2-Link", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR", "RTTY", "JTTY", "CW", "SSB"], "ticks": {"FST4-60": 240, "FT2": 15, "FT4": 30, "FT8": 60, "Q65-30A": 120, "WSPR": 480}, "tx": false}
+before {"cat": false, "states": [{"mode": "FT8", "period": 15000}, {"mode": "FT4", "period": 7500}, {"mode": "FT2", "period": 3750}, {"mode": "Q65-60A", "period": 60000}, {"mode": "Q65-60A", "period": 60000}], "tx": false}
+after {"cat": false, "states": [{"mode": "FT8", "period": 15000}, {"mode": "FT4", "period": 7500}, {"mode": "FT2", "period": 3750}, {"mode": "Q65-60A", "period": 60000}, {"mode": "Q65-60A", "period": 60000}], "tx": false}

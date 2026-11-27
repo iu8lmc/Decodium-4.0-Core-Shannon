@@ -1,0 +1,4 @@
+match|K1ABC K2XYZ RR73|ALL.TXT
+wrong-mode|<...> K2XYZ RR73|1
+no-match|<...> K2XYZ RR73|1
+ambiguous|<...> K2XYZ RR73|1

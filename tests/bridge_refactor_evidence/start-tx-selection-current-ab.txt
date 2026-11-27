@@ -1,0 +1,4 @@
+Command: python3 tests/tools/bridge_start_tx_selection_runtime_ab.py
+Exit code: 0; stopped before audio/PTT, CAT and TX disabled.
+before {"cat": false, "disabled": true, "fallback": true, "hound": true, "readback": "persisted", "swr": true, "tx": false}
+after {"cat": false, "disabled": true, "fallback": true, "hound": true, "readback": "persisted", "swr": true, "tx": false}

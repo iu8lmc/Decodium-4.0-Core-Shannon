@@ -1,0 +1,1 @@
+{"band": 0, "before": true, "rx": 0, "seen": true, "tx": false}

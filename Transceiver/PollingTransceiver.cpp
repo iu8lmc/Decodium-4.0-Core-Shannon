@@ -2,6 +2,7 @@
 
 #include <exception>
 
+#include <QtGlobal>      // qBound, per il passo di polling in trasmissione
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -13,7 +14,8 @@
 namespace
 {
   unsigned const polls_to_stabilize {3};
-  unsigned const transient_poll_failures_to_tolerate {3};
+  unsigned const generic_poll_failures_to_tolerate {3};
+  unsigned const transient_io_poll_failures_to_tolerate {8};
   int const ptt_fast_poll_first_ms {300};
   int const ptt_fast_poll_second_ms {800};
 
@@ -32,11 +34,41 @@ namespace
       }
     return seconds * 1000;
   }
+
+  // Cadenza durante la trasmissione. Un quarto dell'intervallo scelto
+  // dall'utente, ma mai sotto i 250 ms: piu' fitto di cosi' non lo si
+  // vedrebbe comunque sull'ago e si comincerebbe a caricare la seriale,
+  // che e' esattamente il male da cui si veniva (il polling PWR/SWR
+  // bloccava il thread principale su rig lenti, risolto in 1.0.204). In
+  // ricezione non cambia niente: li' l'intervallo resta quello pieno.
+  int tx_poll_interval_ms (int base_ms)
+  {
+    int const quarto = base_ms / 4;
+    return qBound (250, quarto > 0 ? quarto : 250, base_ms);
+  }
+
+  bool is_transient_poll_io_failure (QString const& message)
+  {
+    QString const lower = message.toLower ();
+    return lower.contains ("timed out")
+        || lower.contains ("timeout")
+        || lower.contains ("communication timed out")
+        || lower.contains ("io error")
+        || lower.contains ("input/output error")
+        || lower.contains ("device not configured")
+        || lower.contains ("device unavailable")
+        || lower.contains ("resource temporarily unavailable")
+        || lower.contains ("temporarily unavailable")
+        || lower.contains ("read_string_generic")
+        || lower.contains ("write_block")
+        || lower.contains ("read_block");
+  }
 }
 
 PollingTransceiver::PollingTransceiver (logger_type * logger, int poll_interval, QObject * parent)
   : TransceiverBase {logger, parent}
   , interval_ {base_poll_interval_ms (poll_interval)}
+  , tx_interval_ {tx_poll_interval_ms (base_poll_interval_ms (poll_interval))}
   , poll_timer_ {nullptr}
   , retries_ {0}
   , poll_failures_ {0}
@@ -56,7 +88,7 @@ void PollingTransceiver::start_timer ()
           connect (poll_timer_, &QTimer::timeout, this,
                    &PollingTransceiver::handle_timeout);
         }
-      poll_timer_->start (interval_);
+      poll_timer_->start (tx_fast_active_ ? tx_interval_ : interval_);
     }
   else
     {
@@ -156,6 +188,30 @@ void PollingTransceiver::do_post_ptt (bool p)
     {
       QTimer::singleShot (ptt_fast_poll_first_ms, this, &PollingTransceiver::handle_timeout);
       QTimer::singleShot (ptt_fast_poll_second_ms, this, &PollingTransceiver::handle_timeout);
+
+      // Le due letture qui sopra confermano in fretta il cambio di stato,
+      // ma poi si tornava a una lettura al secondo per tutto l'over: i
+      // misuratori di potenza e ROS restavano fermi sullo stesso numero, e
+      // da remoto sembrava che lo strumento non funzionasse. Finche' si
+      // trasmette si tiene il passo svelto, e appena si torna in ascolto
+      // si rimette quello pieno.
+      set_fast_tx_polling (p);
+    }
+}
+
+// Cambia la cadenza del timer senza fermarlo e riavviarlo: setInterval su
+// un timer attivo riprogramma il prossimo scatto, quindi non si perde il
+// giro in corso ne' si introduce uno scarto.
+void PollingTransceiver::set_fast_tx_polling (bool on)
+{
+  if (tx_fast_active_ == on)
+    {
+      return;
+    }
+  tx_fast_active_ = on;
+  if (poll_timer_ && poll_timer_->isActive ())
+    {
+      poll_timer_->setInterval (on ? tx_interval_ : interval_);
     }
 }
 
@@ -230,9 +286,15 @@ void PollingTransceiver::handle_timeout ()
     {
       // CAT backends can occasionally miss one poll (USB/serial jitter,
       // temporary rig busy, log/write contention). Avoid full disconnect
-      // unless failures are consecutive.
-      if (++poll_failures_ < transient_poll_failures_to_tolerate)
+      // unless failures are consecutive. Serial/USB timeout storms are common
+      // on Icom CI-V while the rig is busy; keep them local to polling so a
+      // single missed frequency read does not tear down and reopen CAT.
+      unsigned const tolerated_failures = is_transient_poll_io_failure (message)
+          ? transient_io_poll_failures_to_tolerate
+          : generic_poll_failures_to_tolerate;
+      if (++poll_failures_ < tolerated_failures)
         {
+          CAT_WARNING ("poll failure tolerated:" << poll_failures_ << "/" << tolerated_failures << message);
           return;
         }
       poll_failures_ = 0;

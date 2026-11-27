@@ -1,0 +1,9 @@
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+    Start 18: test_panadapter_gpu_recovery
+1/2 Test #18: test_panadapter_gpu_recovery ............   Passed    0.03 sec
+    Start 21: test_audio_mode_change_capture_policy
+2/2 Test #21: test_audio_mode_change_capture_policy ...   Passed    0.19 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.25 sec

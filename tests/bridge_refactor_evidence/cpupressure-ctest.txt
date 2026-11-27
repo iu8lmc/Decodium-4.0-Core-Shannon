@@ -1,0 +1,11 @@
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+    Start  16: test_qso_waterfall_recovery
+1/3 Test  #16: test_qso_waterfall_recovery ......   Passed    0.20 sec
+    Start  19: test_graphics_pipeline_cache
+2/3 Test  #19: test_graphics_pipeline_cache .....   Passed    0.22 sec
+    Start 105: test_ft_decode_thread_budget
+3/3 Test #105: test_ft_decode_thread_budget .....   Passed    0.21 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   0.63 sec

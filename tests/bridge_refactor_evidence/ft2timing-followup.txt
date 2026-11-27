@@ -1,0 +1,4 @@
+Original and refactored macOS apps, deliberately late manual FT2 request: requested=true, deferred=true, enabled=false, transmitted=false during five seconds; CAT disabled.
+One earlier refactored pair requested TX at 2519 ms, later than the logged 680 ms limit; sender did not enter TX. That explains this failed pair as a late request, not a receive-side decoding failure.
+Original and refactored two-app BlackHole pairs, request near slot start: sender TX observed and legacy receiver decoded CQ.
+Shared application diagnostic log was read and preserved. These observations do not prove all FT2 timing outcomes or RF behaviour.

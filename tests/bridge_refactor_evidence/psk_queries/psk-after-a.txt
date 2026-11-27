@@ -1,0 +1,1 @@
+{"bands": [], "call": "K1ABC", "found": false, "searching": false, "tx": false}

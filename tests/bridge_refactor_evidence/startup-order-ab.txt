@@ -1,0 +1,2 @@
+baseline: before-ready|1, after-ready|1, ready|1, fallback|1|0|1, shutdown|1
+current: before-ready|0, after-ready|1, ready|1, fallback|1|0|1, shutdown|0

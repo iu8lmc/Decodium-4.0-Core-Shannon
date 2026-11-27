@@ -1,0 +1,2 @@
+before {"input": "BlackHole 2ch", "monitor": false, "ok": true, "output": "Altoparlanti Mac mini", "tx": false}
+after {"input": "BlackHole 2ch", "monitor": false, "ok": true, "output": "Altoparlanti Mac mini", "tx": false}

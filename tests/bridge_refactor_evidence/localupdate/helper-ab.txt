@@ -1,0 +1,1 @@
+local update A/B: source identical; payload validation and local HTTP fallback passed

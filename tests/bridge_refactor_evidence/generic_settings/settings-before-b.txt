@@ -1,0 +1,1 @@
+{"autolog": false, "dxcc": true, "prompt": true, "tx": false, "value": "beta"}

@@ -1,0 +1,6 @@
+status|1|0
+disabled|0
+missing|1
+found|1
+started|1|1
+disabled-qso|2|1

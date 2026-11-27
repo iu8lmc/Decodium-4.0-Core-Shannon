@@ -35,7 +35,7 @@
 Workaround de cuarentena macOS:
 
 ```bash
-sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
+sudo xattr -r -d com.apple.quarantine /Applications/Decodium4.app
 ```
 
 Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.

@@ -1,0 +1,12 @@
+{
+  "role": "immediate",
+  "txcode": 0,
+  "rxcode": 0,
+  "peak": 0.4019775390625,
+  "active_windows": 127,
+  "first_active_mod15": 0.4621307849884033,
+  "matching_messages": [
+    "CQ 9H1SR JM75"
+  ],
+  "timing_check_passed": true
+}

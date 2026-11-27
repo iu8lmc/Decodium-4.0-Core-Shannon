@@ -1,0 +1,4 @@
+old|0|1
+fresh|1|1
+fallback|CQ K1ABC
+reset|3|0|0|0|1

@@ -1,0 +1,2 @@
+before {"blocked": true, "cat": false, "cqAccepted": true, "emptyAccepted": true, "houndBypass": true, "matchingAccepted": true, "noRequest": true, "tx": false}
+after {"blocked": true, "cat": false, "cqAccepted": true, "emptyAccepted": true, "houndBypass": true, "matchingAccepted": true, "noRequest": true, "tx": false}

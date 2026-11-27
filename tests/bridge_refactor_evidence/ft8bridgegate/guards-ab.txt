@@ -1,0 +1,1 @@
+FT8 bridge gate A/B: enable guards, decoded readiness and audio deadline passed

@@ -1,0 +1,2 @@
+before {"device": "synthetic-device", "high": 100, "low": 0, "volume": 37}
+after {"device": "synthetic-device", "high": 100, "low": 0, "volume": 37}

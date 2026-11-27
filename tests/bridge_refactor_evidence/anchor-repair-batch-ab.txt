@@ -1,0 +1,8 @@
+ntp-manual before ["NTP disabilitato","NTP disabilitato: abilitalo in Impostazioni > Avanzate","NTP abilitato: sincronizzazione in corso...","NTP sync in corso su 127.0.0.1..."]
+ntp-manual after ["NTP disabilitato","NTP disabilitato: abilitalo in Impostazioni > Avanzate","NTP abilitato: sincronizzazione in corso...","NTP sync in corso su 127.0.0.1..."]
+dxcluster before {"afterDisconnect": {"autospot": false, "connected": false}, "connected": {"autospot": true, "connected": true, "host": "127.0.0.1", "port": "local"}, "tcpAccepted": true}
+dxcluster after {"afterDisconnect": {"autospot": false, "connected": false}, "connected": {"autospot": true, "connected": true, "host": "127.0.0.1", "port": "local"}, "tcpAccepted": true}
+hubrefresh before {"count": true, "tcp": true, "udp": true}
+hubrefresh after {"count": true, "tcp": true, "udp": true}
+hubrows before {"count": true, "tcp": true, "udp": true}
+hubrows after {"count": true, "tcp": true, "udp": true}

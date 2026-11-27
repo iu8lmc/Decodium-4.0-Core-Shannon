@@ -1,0 +1,2 @@
+before {"audioPrepared": true, "boundaryObserved": false, "cat": false, "drainObserved": true, "message": "CQ 9H1SR JM75", "tx": false}
+after {"audioPrepared": true, "boundaryObserved": false, "cat": false, "drainObserved": true, "message": "CQ 9H1SR JM75", "tx": false}

@@ -1,0 +1,2 @@
+release {"decoded": true, "station": true, "tx": false}
+current {"decoded": true, "station": true, "tx": false}

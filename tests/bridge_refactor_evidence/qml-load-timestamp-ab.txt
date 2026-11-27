@@ -1,0 +1,2 @@
+before {"cat": false, "timestamp": true, "tx": false}
+after {"cat": false, "timestamp": true, "tx": false}

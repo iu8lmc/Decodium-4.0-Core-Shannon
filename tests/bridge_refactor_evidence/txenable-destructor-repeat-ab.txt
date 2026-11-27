@@ -1,0 +1,4 @@
+tx-enable before {"blocked": true, "cat": false, "disabled": true, "enabled": true, "invalid": true, "masked": true, "tx": false, "unmasked": true}
+tx-enable after {"blocked": true, "cat": false, "disabled": true, "enabled": true, "invalid": true, "masked": true, "tx": false, "unmasked": true}
+destructor before {"cat": false, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}
+destructor after {"cat": false, "readback": "persisted", "shutdown": true, "tx": false, "wasShutdown": false}

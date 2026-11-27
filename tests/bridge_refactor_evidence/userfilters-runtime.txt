@@ -1,0 +1,1 @@
+{"baseline": true, "bypass": true, "filtered": true, "tx": false}; diagnostic confirms blacklist rejection

@@ -1,23 +1,29 @@
 // -*- Mode: C++ -*-
 #include "Detector/Q65DecodeWorker.hpp"
 #include "wsjtx_config.h"
+#include "Detector/Q65DecodeCancellation.hpp"
 
 #include <algorithm>
 
 #include "commons.h"
 extern "C"
 {
-  void ftx_q65_async_decode_c (short const* iwave, int* nqd0, int* nutc, int* ntrperiod,
-                               int* nsubmode, int* nfqso, int* ntol, int* ndepth,
-                               int* nfa, int* nfb, int* nclearave, int* single_decode,
-                               int* nagain, int* max_drift, int* lnewdat, float* emedelay,
-                               char const* mycall, char const* hiscall, char const* hisgrid,
-                               int* nqsoprogress, int* ncontest, int* lapcqonly,
-                               int syncsnrs[], int snrs[], float dts[], float freqs[],
-                               int idecs[], int nuseds[], signed char bits77[],
-                               char decodeds[], int* nout,
-                               fortran_charlen_t, fortran_charlen_t,
-                               fortran_charlen_t, fortran_charlen_t);
+  void ftx_q65_async_decode_with_zap_len_c (short const* iwave, int iwave_samples,
+                                            int* nqd0, int* nutc, int* ntrperiod,
+                                            int* nsubmode, int* nfqso, int* ntol,
+                                            int* ndepth, int* nfa, int* nfb,
+                                            int* nclearave, int* single_decode,
+                                            int* nagain, int* max_drift, int* lnewdat,
+                                            float* emedelay, char const* mycall,
+                                            char const* hiscall, char const* hisgrid,
+                                            int* nqsoprogress, int* ncontest,
+                                            int* lapcqonly, int* lzap,
+                                            int syncsnrs[], int snrs[], float dts[],
+                                            float freqs[], int idecs[], int nuseds[],
+                                            signed char bits77[], char decodeds[],
+                                            int* nout, fortran_charlen_t,
+                                            fortran_charlen_t, fortran_charlen_t,
+                                            fortran_charlen_t);
 }
 
 namespace
@@ -124,8 +130,20 @@ Q65DecodeWorker::Q65DecodeWorker (QObject * parent)
 {
 }
 
+void Q65DecodeWorker::retireThrough (quint64 serial)
+{
+  auto previous = m_retiredSerial.load (std::memory_order_relaxed);
+  while (previous < serial && !m_retiredSerial.compare_exchange_weak (
+      previous, serial, std::memory_order_release, std::memory_order_relaxed)) {}
+}
+
 void Q65DecodeWorker::decode (DecodeRequest const& request)
 {
+  ScopedDecodeCancellation cancellation (m_retiredSerial, request.serial, !request.coherentAvgEnabled);
+  if (decodeCancelled ()) {
+    Q_EMIT decodeReady (request.serial, {});
+    return;
+  }
   QVector<short> localAudio = request.audio;
   int syncsnrs[kQ65MaxLines] {};
   int snrs[kQ65MaxLines] {};
@@ -140,6 +158,15 @@ void Q65DecodeWorker::decode (DecodeRequest const& request)
   int nutc = qMax (0, request.nutc);
   int ntrperiod = qBound (15, request.ntrperiod, 300);
   int nsubmode = qBound (0, request.nsubmode, 4);
+
+  // Fork 1.0.352 - guard over-read heap: ftx_q65_async_decode_with_zap_c legge sempre
+  // ntrperiod*RX_SAMPLE_RATE campioni da iwave SENZA conoscere la lunghezza reale
+  // dell'input (a differenza dei worker FT8/FST4 che clampano). Un buffer parziale
+  // (es. cambio modo a meta' periodo) causerebbe una lettura heap oltre il buffer fino
+  // a ~1.4 MB. Padding a zero fino alla dimensione attesa, come fa FST4DecodeWorker.
+  int const expectedSamples = ntrperiod * RX_SAMPLE_RATE;
+  if (localAudio.size () < static_cast<qsizetype> (expectedSamples))
+    localAudio.resize (expectedSamples);
   int nfqso = qBound (0, request.nfqso, 5000);
   int ntol = qMax (0, request.ntol);
   int ndepth = qMax (1, request.ndepth);
@@ -155,25 +182,28 @@ void Q65DecodeWorker::decode (DecodeRequest const& request)
   int nqsoprogress = qBound (0, request.nqsoprogress, 6);
   int ncontest = qBound (0, request.ncontest, 16);
   int lapcqonly = request.lapcqonly ? 1 : 0;
+  int lzap = request.zapEnabled ? 1 : 0;
   int nout = 0;
 
   auto mycall = to_fortran_field (request.mycall, 12);
   auto hiscall = to_fortran_field (request.hiscall, 12);
   auto hisgrid = to_fortran_field (request.hisgrid, 6);
 
-  ftx_q65_async_decode_c (localAudio.constData (), &nqd0, &nutc, &ntrperiod, &nsubmode,
-                     &nfqso, &ntol, &ndepth, &nfa, &nfb, &nclearave,
-                     &single_decode, &nagain, &max_drift, &lnewdat,
-                     &emedelay, mycall.constData (), hiscall.constData (), hisgrid.constData (),
-                     &nqsoprogress, &ncontest, &lapcqonly,
-                     &syncsnrs[0],
-                     &snrs[0], &dts[0], &freqs[0], &idecs[0], &nuseds[0],
-                     &bits77[0], &decodeds[0], &nout,
-                     static_cast<fortran_charlen_t> (12),
-                     static_cast<fortran_charlen_t> (12),
-                     static_cast<fortran_charlen_t> (6),
+  ftx_q65_async_decode_with_zap_len_c (localAudio.constData (), int (localAudio.size ()),
+                     &nqd0, &nutc, &ntrperiod,
+                     &nsubmode, &nfqso, &ntol, &ndepth, &nfa, &nfb, &nclearave,
+                     &single_decode, &nagain, &max_drift, &lnewdat, &emedelay,
+                     mycall.constData (), hiscall.constData (), hisgrid.constData (),
+                     &nqsoprogress, &ncontest, &lapcqonly, &lzap, &syncsnrs[0],
+                     &snrs[0], &dts[0], &freqs[0], &idecs[0], &nuseds[0], &bits77[0],
+                     &decodeds[0], &nout, static_cast<fortran_charlen_t> (12),
+                     static_cast<fortran_charlen_t> (12), static_cast<fortran_charlen_t> (6),
                      static_cast<fortran_charlen_t> (kQ65MaxLines * kDecodedChars));
 
+  if (request.serial != 0 && request.serial <= m_retiredSerial.load (std::memory_order_acquire)) {
+    Q_EMIT decodeReady (request.serial, {});
+    return;
+  }
   QString const utcPrefix = format_decode_utc (request.nutc);
   if (request.coherentAvgEnabled)
     {

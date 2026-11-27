@@ -1,0 +1,7 @@
+increment|0|1|1|CQ K1ABC FN42
+truncate|1|1
+rx|0
+upgrade|1|120030
+filtered|1|CQ K1ABC FN42
+msk|1|120045
+other-mode|1

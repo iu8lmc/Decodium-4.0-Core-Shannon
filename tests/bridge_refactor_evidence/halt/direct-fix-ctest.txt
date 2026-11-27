@@ -1,0 +1,11 @@
+Test project /Users/salvo/Desktop/Decodium4/Decodium-4.0-Core-Shannon/build
+    Start 30: test_tx_dispatch_guard
+1/3 Test #30: test_tx_dispatch_guard ...........   Passed    0.03 sec
+    Start 31: test_ft8_auto_tx_decode_gate
+2/3 Test #31: test_ft8_auto_tx_decode_gate .....   Passed    0.02 sec
+    Start 51: test_mam_tx_payload_policy
+3/3 Test #51: test_mam_tx_payload_policy .......   Passed    0.04 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   0.10 sec

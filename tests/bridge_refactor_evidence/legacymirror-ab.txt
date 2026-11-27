@@ -1,0 +1,1 @@
+Legacy mirror A/B: RX/TX parsing, enrichment reuse, filters and 384-row window match; real DecodedText parser, controlled bridge collaborators

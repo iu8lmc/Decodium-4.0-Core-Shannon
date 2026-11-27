@@ -1,0 +1,2 @@
+{"enabled": false, "mapMin": 5, "max": 60, "min": 5, "rounded": 15, "tx": false}
+{"enabled": false, "mapMin": 5, "max": 60, "min": 5, "rounded": 15, "tx": false}

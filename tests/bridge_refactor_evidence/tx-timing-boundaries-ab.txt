@@ -1,0 +1,1 @@
+synchronous/FT2 timing, exact boundaries, safe-slot retry, stale guard and phase lock: OK

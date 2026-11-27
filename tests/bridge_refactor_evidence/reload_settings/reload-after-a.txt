@@ -1,0 +1,1 @@
+{"input": 0, "loaded": true, "monitor": false, "output": 3, "saved": true, "tx": false}

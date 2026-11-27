@@ -1,0 +1,1 @@
+Synthetic legacy ALL.TXT row <...> FN42 did not surface in decodeList before timeout; application-level effect remains unverified.

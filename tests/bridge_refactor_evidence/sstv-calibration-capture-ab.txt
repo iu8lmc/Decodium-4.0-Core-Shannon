@@ -1,0 +1,6 @@
+before measured_hz=1195.31 rms=0.5674
+before {"cat": false, "completed": true, "invalid": true, "released": true, "safe": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false}
+before {"cat": false, "completed": true, "invalid": true, "readback": "persisted", "released": true, "safe": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false}
+after measured_hz=1195.31 rms=0.5674
+after {"cat": false, "completed": true, "invalid": true, "released": true, "safe": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "completed": true, "invalid": true, "readback": "persisted", "released": true, "safe": true, "shutdown": true, "started": true, "tx": false, "wasShutdown": false}

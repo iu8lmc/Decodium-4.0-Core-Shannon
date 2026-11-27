@@ -1,0 +1,4 @@
+Focused A/B: idle buffer TX/RX guards, pending data preservation and MAM invalidation: OK (bridge state substituted).
+test_mam_tx_payload_policy passed after updating source-location assertion.
+Original and refactored macOS two-app BlackHole runs: monitor stopped then restarted, sender TX observed after nominal idle-release interval, receiver gain reduced and receiver tx=false.
+The app probe does not directly observe the release timer callback or MAM payload clearing. CAT disabled; no physical RF.

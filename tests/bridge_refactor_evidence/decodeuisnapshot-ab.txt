@@ -1,0 +1,3 @@
+normal|19|7|A,SEP,B,TX|A,SEP,B,TX|A
+reverse|T,TX,B,A|A,T
+key|1|0

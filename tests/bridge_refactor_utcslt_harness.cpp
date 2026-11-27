@@ -1,0 +1,3 @@
+#include <QtCore>
+#include "bridge_refactor_under_test.inc"
+int main(){QTextStream o(stdout);for(int p:{15000,7500,3750,60000}){qint64 slot=QDateTime(QDate(2026,11,7),QTime(12,34,0),Qt::UTC).toMSecsSinceEpoch()/p;o<<"slot|"<<p<<'|'<<utcTokenForSlotStart(slot,p)<<'|'<<utcDisplayTokenForSlotStart(slot,p)<<'\n';}o<<"invalid|"<<utcTokenForSlotStart(-1,15000)<<'|'<<utcDisplayTokenForSlotStart(-1,15000).isEmpty()<<'|'<<utcDisplayTokenForSlotStart(1,0).isEmpty()<<'\n';qint64 last=QDateTime(QDate(2026,11,7),QTime(23,59,45),Qt::UTC).toMSecsSinceEpoch()/15000;o<<"midnight|"<<utcDisplayTokenForSlotStart(last,15000)<<'|'<<utcDisplayTokenForSlotStart(last+1,15000)<<'\n';}

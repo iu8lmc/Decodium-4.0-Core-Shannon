@@ -1,0 +1,4 @@
+Focused A/B: QSO live/pending/snapshot preview, reports, dates and comment policies: OK (dependencies substituted).
+Original and refactored isolated apps: synthetic call, grid, FT8 mode, default/manual comments and persisted test setting correct; TX false.
+A first default-comment test failed in both versions with unspecified competing settings; explicitly selecting the default policy passed in both.
+No QSO committed, CAT and monitoring disabled; real QSO and all snapshot branches not tested in app.

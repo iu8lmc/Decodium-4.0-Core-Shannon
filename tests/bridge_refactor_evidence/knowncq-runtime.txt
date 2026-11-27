@@ -1,0 +1,4 @@
+Focused A/B: ALL.TXT cursor, missing file, hash calls, source gate, age and CQ replay: OK (seeding functions substituted).
+Original app: startup synthetic ALL.TXT: hashCalls=1, CQ replay disabled, CAT disabled: OK.
+Refactored app: startup synthetic ALL.TXT: hashCalls=1, CQ replay disabled, CAT disabled: OK.
+Actual Fortran cache contents and RF not independently verified.

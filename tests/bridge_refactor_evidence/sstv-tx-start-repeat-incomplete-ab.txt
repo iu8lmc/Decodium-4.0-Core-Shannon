@@ -1,0 +1,3 @@
+before tx= {"durationMs": 14273, "modeId": "robot-c12", "state": "Completed", "success": true} rxCoverage= 0.9995833333333334 rxComplete= False endToEndPassed= False
+after tx= {"durationMs": 14290, "modeId": "robot-c12", "state": "Completed", "success": true} rxCoverage= 0.999375 rxComplete= False endToEndPassed= False
+RuntimeError: End-to-end image check failed: before, after

@@ -1,0 +1,1 @@
+CAT mode A/B: aliases, network/QSY guards, remote, post-PTT verification and RTTY restore passed

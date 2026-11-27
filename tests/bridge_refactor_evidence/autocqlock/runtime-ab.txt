@@ -1,0 +1,2 @@
+before {"accepted": true, "active": false, "cat": false, "count": 1, "duplicate": false, "locked": "K1ABC", "restoreBlocked": true, "tx": false}
+after {"accepted": true, "active": false, "cat": false, "count": 1, "duplicate": false, "locked": "K1ABC", "restoreBlocked": true, "tx": false}

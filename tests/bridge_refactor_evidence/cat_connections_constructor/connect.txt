@@ -1,0 +1,2 @@
+before {"cat": false, "changes": 2, "connected": true, "disconnected": true, "readback": "persisted", "realDisconnected": true, "shutdown": true, "tx": false, "wasShutdown": false}
+after {"cat": false, "changes": 2, "connected": true, "disconnected": true, "readback": "persisted", "realDisconnected": true, "shutdown": true, "tx": false, "wasShutdown": false}

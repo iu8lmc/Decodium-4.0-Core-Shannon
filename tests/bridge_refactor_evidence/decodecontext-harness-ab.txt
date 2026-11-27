@@ -1,0 +1,1 @@
+mode and band reset; small QSY; legacy mirror and ALL.TXT cursor; native reset: OK

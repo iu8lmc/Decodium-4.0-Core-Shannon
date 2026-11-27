@@ -1,0 +1,18 @@
+control
+[FT8-WAV-MESSAGE] legacyTX=true
+[WAV-DIAG] legacyRX= true forced= false mode= "FT8"
+[FT8-WAV-MESSAGE] FAIL no matching decode
+forced A
+[FT8-WAV-MESSAGE] legacyTX=true
+[WAV-DIAG] legacyRX= true forced= true mode= "FT8"
+[FT8-WAV-MESSAGE] PASS
+CQ K1ABC FN42: WAV decoded in app; CAT and monitoring disabled
+forced B self-call
+[FT8-WAV-MESSAGE] legacyTX=true
+[WAV-DIAG] legacyRX= true forced= true mode= "FT8"
+[FT8-WAV-MESSAGE] FAIL no matching decode
+forced B different local call
+[FT8-WAV-MESSAGE] legacyTX=true
+[WAV-DIAG] legacyRX= true forced= true mode= "FT8"
+[FT8-WAV-MESSAGE] PASS
+CQ 9H1SR JM75: WAV decoded in app; CAT and monitoring disabled

@@ -1,0 +1,1 @@
+{"started": true, "stopped": true, "tx": false, "wav_pcm_mono_12khz_with_audio": true}

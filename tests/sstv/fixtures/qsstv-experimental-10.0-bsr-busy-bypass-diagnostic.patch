@@ -1,0 +1,16 @@
+--- a/src/dispatch/dispatcher.cpp
++++ b/src/dispatch/dispatcher.cpp
+@@ -359,11 +359,12 @@
+     QFile f(qEnvironmentVariable("QSSTV_REVERSE_RECEIVED_BSR"));
+     if(f.open(QIODevice::WriteOnly | QIODevice::NewOnly)) f.write(ba);
+   }
+-  if(mainWindowPtr->busyMode()>=0) {
++  if(mainWindowPtr->busyMode()>=0 && qEnvironmentVariableIntValue("QSSTV_REVERSE_BYPASS_BUSY")!=1) {
+     if(qEnvironmentVariableIntValue("QSSTV_REVERSE_DEFER")==1)
+       QTimer::singleShot(1000,this,[this,ba]() {startDRMFIXTx(ba);});
+     return;
+   }
++  if(qEnvironmentVariableIntValue("QSSTV_REVERSE_BYPASS_BUSY")==1) fprintf(stderr,"LAB reverse bypass busy guard\n");
+   if(!txWidgetPtr->functionsPtr()->prepareFIX(ba)) return;
+   startTX(txFunctions::TXSENDDRMFIX);
+ }

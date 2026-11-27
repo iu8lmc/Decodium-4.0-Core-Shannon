@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+
+#include "SstvRadiofaxPhasing.h"
+#include "SstvRadiofaxRxSession.h"
+#include "SstvRadiofaxStop.h"
+#include <array>
+#include <deque>
+#include <memory>
+#include <optional>
+
+namespace decodium::sstv {
+
+enum class SstvRadiofaxAutoRxState : std::uint8_t {
+    SearchingPhasing, SearchingImage, Receiving, Complete, Partial, Cancelled, Failed
+};
+
+// Experimental in-process pipeline. IOC, output dimensions and clock rate are
+// explicitly configured. Image start and stop detection are heuristic: image
+// patterns can resemble either phasing or a sustained stop signal.
+class SstvRadiofaxAutoRx final {
+public:
+    explicit SstvRadiofaxAutoRx(SstvFaxConfig config, double frequencyOffsetHz = 0.0);
+    // Returns the observations consumed before reaching a terminal state.
+    std::size_t consume(const SstvFrequencyObservation* data, std::size_t count);
+    std::size_t consume(const std::vector<SstvFrequencyObservation>& data);
+    bool stopAtAudioSample(std::uint64_t sample);
+    SstvRadiofaxAutoRxState finish();
+    SstvRadiofaxAutoRxState notifyDiscontinuity();
+    void cancel() noexcept;
+    SstvRadiofaxAutoRxState state() const noexcept;
+    std::optional<std::uint64_t> imageStartSample() const noexcept;
+    std::optional<SstvRadiofaxPhaseLock> phasing() const noexcept;
+    std::optional<std::uint64_t> stopSample() const noexcept;
+    std::optional<SstvRadiofaxClockEstimate> imageClock() const noexcept;
+    bool imageClockProvisional() const noexcept;
+    bool usedWmoTimedPhasing() const noexcept;
+    bool wmoTimingArmed() const noexcept;
+    unsigned ignoredIrregularPhasingPulses() const noexcept;
+    bool phasingClockTrackerValid() const noexcept;
+    unsigned phasingClockRestarts() const noexcept;
+    std::optional<SstvRadiofaxLevels> imageLevels() const noexcept;
+    bool stopWasAudioTone() const noexcept;
+    std::size_t bufferedObservations() const noexcept;
+    std::size_t maximumBufferedObservations() const noexcept;
+    std::optional<SstvImageSnapshot> snapshot() const;
+    std::vector<SstvDirtyEvent> takeDirtyEvents();
+private:
+    void updateRxState() noexcept;
+    void buffer(const SstvFrequencyObservation& observation);
+    void beginImage(std::uint64_t sample);
+    void collectPhasingLevel(const SstvFrequencyObservation& observation) noexcept;
+    SstvRadiofaxLevels measuredLevels() const noexcept;
+    void consumeImageObservation(const SstvFrequencyObservation& observation);
+    void flushPending(std::optional<std::uint64_t> before = std::nullopt);
+    std::uint64_t refineStopBoundary(std::uint64_t candidate) const;
+    SstvFaxConfig config_;
+    double offset_;
+    SstvRadiofaxPhasingDetector phase_;
+    SstvRadiofaxAptStartDetector aptStart_;
+    SstvRadiofaxStopDetector stop_;
+    std::optional<SstvRadiofaxPhaseLock> lock_;
+    std::optional<std::uint64_t> wmoLockedPhasingLines_;
+    bool usedWmoTimedPhasing_ {false};
+    std::unique_ptr<SstvRadiofaxImageStartDetector> start_;
+    std::unique_ptr<SstvRadiofaxClockTracker> clockTracker_;
+    unsigned priorIgnoredPhasingPulses_ {0U};
+    unsigned phasingClockRestarts_ {0U};
+    bool hasConfirmedClock_ {false};
+    bool retainExhaustedClockAnchor_ {false};
+    std::optional<SstvRadiofaxClockEstimate> clock_;
+    std::optional<SstvRadiofaxClockEstimate> lastConfirmedClock_;
+    std::uint64_t lastConfirmedClockEdge_ {0U};
+    bool imageClockProvisional_ {false};
+    std::optional<SstvRadiofaxLevels> levels_;
+    std::array<std::uint64_t, 101> blackLevels_ {};
+    std::array<std::uint64_t, 101> whiteLevels_ {};
+    std::unique_ptr<SstvRadiofaxRxSession> receiver_;
+    std::deque<SstvFrequencyObservation> replay_;
+    std::deque<SstvFrequencyObservation> pendingImage_;
+    std::optional<std::uint64_t> stopSample_;
+    std::optional<std::uint64_t> imageStart_;
+    std::optional<std::uint64_t> whiteEndCandidate_;
+    std::uint64_t lastSample_ {0U};
+    bool hasLast_ {false};
+    bool stopWasAudioTone_ {false};
+    SstvRadiofaxAutoRxState state_ {SstvRadiofaxAutoRxState::SearchingPhasing};
+};
+
+} // namespace decodium::sstv

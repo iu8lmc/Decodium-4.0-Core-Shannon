@@ -1,0 +1,4 @@
+disabled=0
+empty=0
+payload=<CALL:5>K1ABC <BAND:3>20M <EOR>
+refused=1

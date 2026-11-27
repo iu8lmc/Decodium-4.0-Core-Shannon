@@ -1,0 +1,2 @@
+before {"count": 1, "device": "synthetic-lab-device", "status": "RTL-SDR: 1 receiver(s) detected"}
+after {"count": 1, "device": "synthetic-lab-device", "status": "RTL-SDR: 1 receiver(s) detected"}

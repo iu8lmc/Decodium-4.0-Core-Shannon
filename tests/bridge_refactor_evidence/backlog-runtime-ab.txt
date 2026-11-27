@@ -1,0 +1,2 @@
+{"created": ["FST4", "LegacyJT", "Q65", "WSPR"], "modes": ["FT8", "FT2", "FT4", "Q65-60A", "MSK144", "WSPR", "JT65", "FST4-120"], "resets": ["FT8 -> FT2", "FT2 -> FT4", "FT4 -> Q65-60A", "Q65-60A -> MSK144"]}
+{"created": ["FST4", "LegacyJT", "Q65", "WSPR"], "modes": ["FT8", "FT2", "FT4", "Q65-60A", "MSK144", "WSPR", "JT65", "FST4-120"], "resets": ["FT8 -> FT2", "FT2 -> FT4", "FT4 -> Q65-60A", "Q65-60A -> MSK144"]}

@@ -1,0 +1,1 @@
+{"found": [{"call": "K1ABC", "freq": "1500", "grid": "FN42", "isCQ": true, "message": "CQ K1ABC FN42"}], "tx": false}

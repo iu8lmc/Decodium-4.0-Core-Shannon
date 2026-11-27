@@ -1,0 +1,2 @@
+release {"band": true, "before": true, "rx": true, "tx": false}
+current {"band": true, "before": true, "rx": true, "tx": false}

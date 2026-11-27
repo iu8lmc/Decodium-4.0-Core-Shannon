@@ -1,0 +1,2 @@
+{"low": 2, "normal": 6, "tx": false}
+{"low": 2, "normal": 6, "tx": false}

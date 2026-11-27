@@ -1,0 +1,2 @@
+before {"cat": false, "notices": 2, "readback": "persisted", "removed": true, "safe": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false, "wav": true}
+after {"cat": false, "notices": 2, "readback": "persisted", "removed": true, "safe": true, "shutdown": true, "started": true, "stopped": true, "tx": false, "wasShutdown": false, "wav": true}

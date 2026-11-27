@@ -1,0 +1,1 @@
+QSO transition A/B: 49 state pairs, actual remap rules, Quick QSO and census passed

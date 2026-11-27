@@ -1,0 +1,11 @@
+--- sstv.cpp
++++ sstv.cpp
+@@ -229,7 +229,7 @@
+     // as long as the table does.
+     static std::deque<std::string> names;
+     avt(modes, names, "AVT 24", 64, 128, 120, 62.5, 0b010, false);
+-    avt(modes, names, "AVT 90", 68, 256, 240, 125.0, 0b101, false);
++    avt(modes, names, "AVT 90", 68, 320, 240, 125.0, 0b101, false);
+     avt(modes, names, "AVT 94", 72, 320, 200, 156.25, 0b011, false);
+     avt(modes, names, "AVT 188", 76, 320, 400, 156.25, 0b011, false);
+     avt(modes, names, "AVT 125 BW", 80, 320, 400, 312.5, 0b011, true);
