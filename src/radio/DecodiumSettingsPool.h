@@ -24,6 +24,15 @@
 // prima che esista QCoreApplication, ricevono un QSettings nuovo come prima.
 // Chiamate annidate sullo stesso file (getSetting -> profilo attivo) prendono
 // oggetti diversi della riserva: nessuno vede i gruppi aperti da un altro.
+//
+// La riserva e' spenta finche' qualcuno non chiama enableSettingsPool(),
+// quando i percorsi delle impostazioni sono definitivi. Un QSettings tenuto
+// aperto resta legato al file scelto quando e' stato costruito: dopo un
+// QSettings::setPath (modalita' laboratorio, test) leggerebbe ancora il file
+// vecchio. Il programma la accende dopo l'ultimo setPath dell'avvio; i test e
+// gli altri programmi che non la accendono costruiscono un QSettings nuovo a
+// ogni uso, come prima. Richiamarla dopo un altro setPath scarta gli oggetti
+// tenuti, cosi' le letture seguenti vanno al file nuovo.
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -47,14 +56,24 @@ struct Slot
     std::unique_ptr<QSettings> settings;
     QElapsedTimer sinceSync;
     bool inUse {false};
+    bool retired {false};
 };
 
-inline std::map<QString, std::vector<std::unique_ptr<Slot>>>& slotTable()
+struct Pool
+{
+    bool enabled {false};
+    // Non "slots": e' una macro di Qt.
+    std::map<QString, std::vector<std::unique_ptr<Slot>>> byFile;
+    // Oggetti scartati mentre qualcuno li usava: distrutti al rilascio.
+    std::vector<std::unique_ptr<Slot>> retired;
+};
+
+inline Pool& pool()
 {
     // Lasciata allocata fino all'uscita: i QSettings non vanno distrutti
     // nei distruttori statici, dopo QCoreApplication.
-    static auto* pool = new std::map<QString, std::vector<std::unique_ptr<Slot>>>;
-    return *pool;
+    static auto* instance = new Pool;
+    return *instance;
 }
 
 inline bool onMainThread()
@@ -62,7 +81,43 @@ inline bool onMainThread()
     auto const* app = QCoreApplication::instance();
     return app && QThread::currentThread() == app->thread();
 }
+
+inline void discardSlots(Pool& p)
+{
+    for (auto& entry : p.byFile) {
+        for (auto& slot : entry.second) {
+            if (slot->inUse) {
+                slot->retired = true;
+                p.retired.push_back(std::move(slot));
+            }
+        }
+    }
+    p.byFile.clear();
+}
 }  // namespace settings_pool_detail
+
+// Accende la riserva (o la svuota, se era gia' accesa). Da chiamare sul
+// thread principale, dopo QCoreApplication e dopo l'ultimo QSettings::setPath.
+inline void enableSettingsPool()
+{
+    if (!settings_pool_detail::onMainThread()) {
+        return;
+    }
+    auto& p = settings_pool_detail::pool();
+    settings_pool_detail::discardSlots(p);
+    p.enabled = true;
+}
+
+// Spegne la riserva: da qui ogni uso costruisce un QSettings nuovo.
+inline void disableSettingsPool()
+{
+    if (!settings_pool_detail::onMainThread()) {
+        return;
+    }
+    auto& p = settings_pool_detail::pool();
+    settings_pool_detail::discardSlots(p);
+    p.enabled = false;
+}
 
 class PooledSettings
 {
@@ -86,12 +141,23 @@ public:
 
     ~PooledSettings()
     {
-        if (m_slot) {
-            while (!m_slot->settings->group().isEmpty()) {
-                m_slot->settings->endGroup();
-            }
-            m_slot->inUse = false;
+        if (!m_slot) {
+            return;
         }
+        if (m_slot->retired) {
+            auto& retired = settings_pool_detail::pool().retired;
+            for (auto it = retired.begin(); it != retired.end(); ++it) {
+                if (it->get() == m_slot) {
+                    retired.erase(it);
+                    break;
+                }
+            }
+            return;
+        }
+        while (!m_slot->settings->group().isEmpty()) {
+            m_slot->settings->endGroup();
+        }
+        m_slot->inUse = false;
     }
 
     PooledSettings(PooledSettings const&) = delete;
@@ -104,12 +170,12 @@ private:
     template <typename Create>
     PooledSettings(QString const& key, Create create)
     {
-        if (!settings_pool_detail::onMainThread()) {
+        if (!settings_pool_detail::onMainThread() || !settings_pool_detail::pool().enabled) {
             m_owned.reset(create());
             m_settings = m_owned.get();
             return;
         }
-        auto& list = settings_pool_detail::slotTable()[key];
+        auto& list = settings_pool_detail::pool().byFile[key];
         for (auto& slot : list) {
             if (!slot->inUse) {
                 m_slot = slot.get();

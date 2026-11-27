@@ -177,6 +177,7 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #include "DecodiumLogging.hpp"
 #include "DecodiumStorageMigration.hpp"
 #include "DecodiumLabStorage.hpp"
+#include "DecodiumSettingsPool.h"
 #include "DecodiumUpdater.hpp"
 #include "GraphicsPipelineCache.hpp"
 #include "LinuxGraphicsSafety.hpp"
@@ -3214,6 +3215,9 @@ int main(int argc, char* argv[])
         QDir().mkpath(labSettingsRoot);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, labSettingsRoot);
     }
+    // I percorsi delle impostazioni sono definitivi: da qui i QSettings del
+    // thread principale possono restare aperti e venire riusati.
+    decodium::enableSettingsPool();
     DecodiumLogging::reopenDiagnosticLog();
     L(("Application identity: " + app.applicationName().toLocal8Bit()).constData());
     ensureLegacySqliteDatabase();

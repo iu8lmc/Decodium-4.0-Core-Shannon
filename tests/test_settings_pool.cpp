@@ -7,21 +7,83 @@
 #include <QThread>
 #include <QtTest>
 
+#include <memory>
+
 class TestSettingsPool : public QObject
 {
     Q_OBJECT
 
 private:
     QTemporaryDir dir_;
+    QTemporaryDir otherDir_;
 
     QString iniPath() const { return dir_.filePath(QStringLiteral("user/Decodium/Decodium3.ini")); }
+
+    void useDir(QTemporaryDir const& dir)
+    {
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.filePath(QStringLiteral("user")));
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, dir.filePath(QStringLiteral("system")));
+    }
 
 private slots:
     void initTestCase()
     {
         QVERIFY(dir_.isValid());
-        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir_.filePath(QStringLiteral("user")));
-        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, dir_.filePath(QStringLiteral("system")));
+        QVERIFY(otherDir_.isValid());
+        useDir(dir_);
+        decodium::enableSettingsPool();
+    }
+
+    void cleanupTestCase()
+    {
+        decodium::disableSettingsPool();
+    }
+
+    void switchedOffPoolFollowsSetPathAtOnce()
+    {
+        // Come test_settings_profile_restart: setPath fra un caso e l'altro.
+        decodium::disableSettingsPool();
+        {
+            decodium::PooledSettings pooled;
+            pooled->setValue(QStringLiteral("WhichDir"), QStringLiteral("first"));
+        }
+        useDir(otherDir_);
+        {
+            decodium::PooledSettings pooled;
+            QVERIFY(!pooled->contains(QStringLiteral("WhichDir")));
+        }
+        useDir(dir_);
+        {
+            decodium::PooledSettings pooled;
+            QCOMPARE(pooled->value(QStringLiteral("WhichDir")).toString(), QStringLiteral("first"));
+        }
+        decodium::enableSettingsPool();
+    }
+
+    void enablingAgainAfterSetPathDropsTheOldObjects()
+    {
+        auto held = std::make_unique<decodium::PooledSettings>();
+        (*held)->setValue(QStringLiteral("Moved"), QStringLiteral("old-dir"));
+        QSettings* const oldObject = &**held;
+        useDir(otherDir_);
+        decodium::enableSettingsPool();
+        {
+            decodium::PooledSettings pooled;
+            QVERIFY(&*pooled != oldObject);
+            QVERIFY(!pooled->contains(QStringLiteral("Moved")));
+            pooled->setValue(QStringLiteral("Moved"), QStringLiteral("new-dir"));
+        }
+        // L'oggetto scartato ma ancora in uso resta valido fino al rilascio.
+        QCOMPARE((*held)->value(QStringLiteral("Moved")).toString(), QStringLiteral("old-dir"));
+        held.reset();
+        {
+            decodium::PooledSettings pooled;
+            QCOMPARE(pooled->value(QStringLiteral("Moved")).toString(), QStringLiteral("new-dir"));
+        }
+        useDir(dir_);
+        decodium::enableSettingsPool();
+        decodium::PooledSettings pooled;
+        QCOMPARE(pooled->value(QStringLiteral("Moved")).toString(), QStringLiteral("old-dir"));
     }
 
     void writesElsewhereInTheProcessAreVisibleAtOnce()
